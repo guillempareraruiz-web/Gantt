@@ -122,7 +122,7 @@ type
     FMoveOrigCentreId: Integer;
     FMovePreviewStart, FMovePreviewEnd: TDateTime;
     FMovePreviewCentreId: Integer;
-    FMoveGrabOffsetMinutes: Integer; // per no “saltar” en clicar
+    FMoveGrabOffsetMins: Double; // offset en minuts visibles des del click fins l'inici del node
     FHasMoveNode: Boolean;
     FMoveRectS: TRectF;
     // si vols també per resize:
@@ -801,6 +801,67 @@ begin
 end;
 
 
+// Crea un brush de bitmap 8x8 amb línies diagonals '\' del color especificat
+function CreateDiagonalPatternBrush(const RT: ID2D1RenderTarget;
+  const R, G, B: Byte; const Alpha: Byte): ID2D1BitmapBrush;
+const
+  W = 8;
+  H = 8;
+var
+  Pixels: array[0..W * H - 1] of Cardinal;
+  bmp: ID2D1Bitmap;
+  bmpProps: TD2D1BitmapProperties;
+  brushProps: TD2D1BitmapBrushProperties;
+  pixFmt: TD2D1PixelFormat;
+  i: Integer;
+
+  function PremulBGRA(const PR, PG, PB, A: Byte): Cardinal;
+  var
+    pr2, pg2, pb2: Integer;
+  begin
+    pr2 := (PR * A + 127) div 255;
+    pg2 := (PG * A + 127) div 255;
+    pb2 := (PB * A + 127) div 255;
+    Result := Cardinal(pb2) or (Cardinal(pg2) shl 8) or
+              (Cardinal(pr2) shl 16) or (Cardinal(A) shl 24);
+  end;
+
+begin
+  for i := 0 to High(Pixels) do
+    Pixels[i] := 0;
+
+  // Dues línies diagonals '\' per tile de 8x8 (espaiat de 4 pixels)
+  Pixels[0*W+0] := PremulBGRA(R,G,B,Alpha);
+  Pixels[1*W+1] := PremulBGRA(R,G,B,Alpha);
+  Pixels[2*W+2] := PremulBGRA(R,G,B,Alpha);
+  Pixels[3*W+3] := PremulBGRA(R,G,B,Alpha);
+  Pixels[4*W+4] := PremulBGRA(R,G,B,Alpha);
+  Pixels[5*W+5] := PremulBGRA(R,G,B,Alpha);
+  Pixels[6*W+6] := PremulBGRA(R,G,B,Alpha);
+  Pixels[7*W+7] := PremulBGRA(R,G,B,Alpha);
+  Pixels[0*W+4] := PremulBGRA(R,G,B,Alpha);
+  Pixels[1*W+5] := PremulBGRA(R,G,B,Alpha);
+  Pixels[2*W+6] := PremulBGRA(R,G,B,Alpha);
+  Pixels[3*W+7] := PremulBGRA(R,G,B,Alpha);
+  Pixels[4*W+0] := PremulBGRA(R,G,B,Alpha);
+  Pixels[5*W+1] := PremulBGRA(R,G,B,Alpha);
+  Pixels[6*W+2] := PremulBGRA(R,G,B,Alpha);
+  Pixels[7*W+3] := PremulBGRA(R,G,B,Alpha);
+
+  pixFmt := D2D1PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+  bmpProps := D2D1BitmapProperties(pixFmt, 96, 96);
+
+  if Failed(RT.CreateBitmap(D2D1SizeU(W, H), @Pixels[0], W * SizeOf(Cardinal), bmpProps, bmp)) then
+    Exit(nil);
+
+  brushProps.extendModeX := D2D1_EXTEND_MODE_WRAP;
+  brushProps.extendModeY := D2D1_EXTEND_MODE_WRAP;
+  brushProps.interpolationMode := D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
+
+  if Failed(RT.CreateBitmapBrush(bmp, @brushProps, nil, Result)) then
+    Result := nil;
+end;
+
 
 procedure TGanttControl.DrawDependenciesD2D(
   const VisibleXLeft, VisibleXRight, VisibleYTop, VisibleYBottom: Single;
@@ -1451,6 +1512,32 @@ function TGanttControl.BuildNodeHintText(const NodeIndex: Integer): string;
 var
   n: TNode;
   d: TNodeData;
+
+  function CentresPermesosText: string;
+  var
+    i, k: Integer;
+    parts: TArray<string>;
+    nom: string;
+  begin
+    if Length(d.CentresPermesos) = 0 then
+      Exit('(tots)');
+    SetLength(parts, Length(d.CentresPermesos));
+    for i := 0 to High(d.CentresPermesos) do
+    begin
+      nom := '#' + IntToStr(d.CentresPermesos[i]); // fallback si no trobat
+      for k := 0 to High(FCentres) do
+        if FCentres[k].Id = d.CentresPermesos[i] then
+        begin
+          nom := FCentres[k].Nom;
+          if FCentres[k].Maquina <> '' then
+            nom := nom + ' / ' + FCentres[k].Maquina;
+          Break;
+        end;
+      parts[i] := nom;
+    end;
+    Result := String.Join(', ', parts);
+  end;
+
 begin
   Result := '';
   if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
@@ -1467,7 +1554,8 @@ begin
     'Node Id: ' + inttostr(n.Id) + sLineBreak +
     'Start time: ' + FormatDateTime('dd/mm/yyyy hh:nn:ss', n.StartTime) + sLineBreak +
     'End time: ' + FormatDateTime('dd/mm/yyyy hh:nn:ss', n.EndTime) + sLineBreak +
-    'Centro trabajo: ' + d.CentroTrabajo + sLineBreak +
+    'Centres treball: ' + String.Join(', ', d.CentresTrabajo) + sLineBreak +
+    'Centres permesos: ' + CentresPermesosText + sLineBreak +
     'Operación: ' + d.Operacion + sLineBreak +
     'Orden Fabricación: ' + IntToStr(d.NumeroOrdenFabricacion) + ' ' + d.SerieFabricacion + sLineBreak +
     'Orden Trabajo: ' + d.NumeroTrabajo + sLineBreak +
@@ -2220,7 +2308,7 @@ begin
   FPxPerMinute := ClampPxPerMinute(FPxPerMinute * zoomFactor);
 
   // mantenir el temps sota el cursor
-  newScroll := (((tUnderCursor - FStartTime) * 24 * 60) * FPxPerMinute) - xClient;
+  newScroll := (VisibleMinutesBetween(FStartTime, tUnderCursor) * FPxPerMinute) - xClient;
   //FScrollX := Max(0, newScroll);
   FScrollX := ClampScrollX(newScroll);
 
@@ -2883,11 +2971,36 @@ begin
 
       if FNodes[SuccIdx].StartTime < NewStart then
       begin
-        if MoveNodeKeepingDuration(SuccIdx, NewStart) then
+        // Si el successor està desactivat no es pot moure:
+        // restringim el predecessor perquè no sobrepassi la posició de col·lisió
+        if not FNodes[SuccIdx].Enabled then
         begin
-          Result := True;
-          ArrayAddUnique(MovedNodes, SuccIdx);
-          Enqueue(SuccIdx);
+          // Càlcul invers: PredStart màxim tal que GetDependencyMinStart = SuccIdx.StartTime
+          // MinStart = PredStart + DurDays*(Pct/100) => PredStart = SuccStart - DurDays*(Pct/100)
+          // Però la durada del predecessor és fixa (DurationMin), llavors:
+          // PredMaxStart = SuccIdx.StartTime - (PredDuration * Pct/100)
+          var PredDurDays: Double := FNodes[PredIdx].EndTime - FNodes[PredIdx].StartTime;
+          var PredPct: Double := LinkPct;
+          if PredPct < 0 then PredPct := 0;
+          if PredPct > 100 then PredPct := 100;
+          var PredMaxStart: TDateTime := FNodes[SuccIdx].StartTime - (PredDurDays * (PredPct / 100.0));
+          if FNodes[PredIdx].StartTime > PredMaxStart then
+          begin
+            if MoveNodeKeepingDuration(PredIdx, PredMaxStart) then
+            begin
+              Result := True;
+              ArrayAddUnique(MovedNodes, PredIdx);
+            end;
+          end;
+        end
+        else
+        begin
+          if MoveNodeKeepingDuration(SuccIdx, NewStart) then
+          begin
+            Result := True;
+            ArrayAddUnique(MovedNodes, SuccIdx);
+            Enqueue(SuccIdx);
+          end;
         end;
       end;
     end;
@@ -3382,8 +3495,8 @@ begin
   end;
   mins0 := (FScrollX / FPxPerMinute);
   mins1 := ((FScrollX + ClientWidth) / FPxPerMinute);
-  T0 := FStartTime + (mins0 / (24*60));
-  T1 := FStartTime + (mins1 / (24*60));
+  T0 := AddVisibleMinutes(FStartTime, mins0);
+  T1 := AddVisibleMinutes(FStartTime, mins1);
 
   FStartVisibleTime := T0;
   FEndVisibleTime := T1;
@@ -3633,8 +3746,8 @@ var
 
   function TimeToXWorld(const T: TDateTime): Single;
   begin
-    // WORLD coords: no scroll
-    Result := ((T - FStartTime) * 24 * 60) * FPxPerMinute;
+    // WORLD coords: no scroll, respecta HideWeekends
+    Result := VisibleMinutesBetween(FStartTime, T) * FPxPerMinute;
   end;
 
   function TryFindLane(const xLeft: Single): Integer;
@@ -3974,7 +4087,7 @@ begin
   if (FEndTime <= FStartTime) or (ClientWidth <= 1) then
     Exit(0);
 
-  totalMinutes := (FEndTime - FStartTime) * 24 * 60;
+  totalMinutes := VisibleMinutesBetween(FStartTime, FEndTime);
   contentWidth := totalMinutes * FPxPerMinute;   // world width (px)
 
   // max scroll perquè el final quedi dins pantalla
@@ -4991,16 +5104,25 @@ var
 
     if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then
     begin
-      Style.Fill := $00D0D0D0;
-      Style.Border := $00909090;
-      Style.Alpha := 0.3;
-      Style.Text := $00555555;
+      Style.Fill   := $00CCCCFF;  // vermell molt clar (BGR)
+      Style.Border := $002222AA;  // vermell fosc (BGR)
+      Style.Alpha  := 0.85;
+      Style.Text   := $00222288;
     end;
 
     SetBrushColor(FillBrush, Style.Fill, Style.Alpha);
     SetBrushColor(StrokeBrush, Style.Border, 1.0);
 
     RT.FillRectangle(RectFToD2D(ARectS), FillBrush);
+
+    // Línies diagonals per a nodes disabled
+    if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then
+    begin
+      var DiagBrush: ID2D1BitmapBrush :=
+        CreateDiagonalPatternBrush(RT, $AA, $22, $22, 120);
+      if Assigned(DiagBrush) then
+        RT.FillRectangle(RectFToD2D(ARectS), DiagBrush);
+    end;
 
     if FFastPaint then
       RT.DrawRectangle(RectFToD2D(ARectS), StrokeBrush, 1.0)
@@ -5476,7 +5598,8 @@ begin
         y1 := Round(row.TopY - FScrollY);
         y2 := Round((row.TopY + row.Height) - FScrollY);
 
-        SetBrushColor(FillBrush, $00FFFFFF, 1.0);
+        SetBrushColor(FillBrush, row.bkColor, 1.0);
+        RT.FillRectangle(RectFToD2D(TRectF.Create(0, y1, ClientWidth, y2)), FillBrush);
 
         // rect dret visible (screen coords)
         ganttRectS := TRectF.Create(0, y1, ClientWidth, y2);
@@ -6249,7 +6372,6 @@ procedure TGanttControl.StartMoveNode(const NodeIndex: Integer; const MouseX, Mo
 var
   node: TNode;
   tMouse: TDateTime;
-  mins: Integer;
 begin
   if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
 
@@ -6271,11 +6393,10 @@ begin
   FMovePreviewEnd   := FMoveOrigEnd;
   FMovePreviewCentreId := FMoveOrigCentreId;
 
-  // offset: on has clicat respecte l’inici del node
-  tMouse := XToTime(MouseX);
-  mins := Round((tMouse - FMoveOrigStart) * 24 * 60);
-  if mins < 0 then mins := 0;
-  FMoveGrabOffsetMinutes := mins;
+  // offset en minuts visibles: invariant a zoom i scroll
+  // = minuts visibles entre l’inici del node i la posició del mouse
+  FMoveGrabOffsetMins := VisibleMinutesBetween(FMoveOrigStart, XToTime(MouseX));
+  if FMoveGrabOffsetMins < 0 then FMoveGrabOffsetMins := 0;
 
   MouseCapture := True;
   Invalidate;
@@ -6284,7 +6405,6 @@ end;
 
 procedure TGanttControl.UpdateMovePreview(const MouseX, MouseY: Integer);
 var
-  tMouse: TDateTime;
   newStart: TDateTime;
   durMins: Integer;
 begin
@@ -6296,8 +6416,9 @@ begin
   durMins := Round((FMoveOrigEnd - FMoveOrigStart) * 24 * 60);
   if durMins < 1 then durMins := 1;
 
-  tMouse := XToTime(MouseX);
-  newStart := tMouse - (FMoveGrabOffsetMinutes / (24*60));
+  // Calculem en minuts visibles world: evita problemes amb HideWeekends
+  newStart := AddVisibleMinutes(FStartTime,
+    ((MouseX + FScrollX) / FPxPerMinute) - FMoveGrabOffsetMins);
 
   FMovePreviewStart := newStart;
   FMovePreviewEnd   := newStart + (durMins / (24*60));
@@ -6847,7 +6968,7 @@ var
   xCenter: Single;
 begin
   xCenter := ClientWidth * 0.5;
-  minutesFromStart := (ADate - FStartTime) * 24 * 60;
+  minutesFromStart := VisibleMinutesBetween(FStartTime, ADate);
   Result := (minutesFromStart * FPxPerMinute) - xCenter;
   Result := ClampScrollX(Result);
 end;
@@ -7296,15 +7417,30 @@ end;
 
 procedure TGanttControl.SetHideWeekends(const Value: Boolean);
 var
-  RefTime: TDateTime;
+  CenterTime: TDateTime;
+  xCenter: Single;
 begin
   if FHideWeekends = Value then Exit;
-  RefTime := XToTime(0);
+
+  // Guardem el temps que hi ha al centre de la pantalla ABANS de canviar
+  xCenter := ClientWidth * 0.5;
+  CenterTime := XToTime(xCenter);
+
   FHideWeekends := Value;
-  FStartTime := RefTime;
-  NormalizeStartTime;
+
+  // Recalculem FScrollX perquè CenterTime quedi al centre
+  // screenX(t) = VisibleMinutesBetween(FStartTime, t) * FPxPerMinute - FScrollX
+  // volem screenX(CenterTime) = xCenter =>
+  // FScrollX = VisibleMinutesBetween(FStartTime, CenterTime) * FPxPerMinute - xCenter
+  FScrollX := ClampScrollX(
+    VisibleMinutesBetween(FStartTime, CenterTime) * FPxPerMinute - xCenter
+  );
+
+  RebuildLayout;
+
   if Assigned(FTimeline) and (FTimeline.HideWeekends <> Value) then
-   FTimeline.HideWeekends := Value;
+    FTimeline.HideWeekends := Value;
+
   Invalidate;
 end;
 
@@ -7410,9 +7546,31 @@ begin
   // EndTime derivat de DurationMin
   newEnd := CalcEndTime(newCentreId, newStart, FNodes[idx].DurationMin);
 
+  // Restricció CentresPermesos: si el node no té LibreMoviment,
+  // només es pot moure a centres de CentresPermesos.
+  // Si newCentreId no és permès, revertim al centre original.
+  if newCentreId <> FNodes[idx].CentreId then
+  begin
+    var D: TNodeData;
+    if Assigned(FNodeRepo) and FNodeRepo.TryGetById(FNodes[idx].DataId, D) then
+    begin
+      if (not D.LibreMoviment) and (Length(D.CentresPermesos) > 0) then
+      begin
+        var allowed := False;
+        for var permId in D.CentresPermesos do
+          if permId = newCentreId then
+          begin
+            allowed := True;
+            Break;
+          end;
+        if not allowed then
+          newCentreId := FMoveOrigCentreId;
+      end;
+    end;
+  end;
+
   // només si realment el teu mapa depèn del centre
   bRebuildMap := (FNodes[idx].CentreId <> newCentreId);
-
 
   FNodes[idx].CentreId := newCentreId;
   FNodes[idx].StartTime := newStart;
@@ -8455,11 +8613,9 @@ begin
   // Screen → World
   worldX := X + FScrollX;
 
-  // píxels → minuts
+  // píxels → minuts visibles → TDateTime (respecta HideWeekends)
   minutesFromStart := worldX / FPxPerMinute;
-
-  // minuts → dies
-  Result := FStartTime + (minutesFromStart / (24 * 60));
+  Result := AddVisibleMinutes(FStartTime, minutesFromStart);
 end;
 
 

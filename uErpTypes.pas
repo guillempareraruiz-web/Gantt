@@ -23,8 +23,10 @@ type
     OpId: Integer;
 
     Operacion: string;
-    CentroTrabajo: string;   // pot ser buit => "Sin Centro"
+    CentresTrabajo: TArray<string>;  // centres ERP permesos; buit = tots els centres
     CodigoCliente: string;
+    CodigoColor: string;
+    CodigoTalla: string;
 
     StartTime: TDateTime;
     EndTime: TDateTime;

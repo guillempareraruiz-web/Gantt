@@ -177,6 +177,7 @@ type
     Label18: TLabel;
     Button21: TButton;
     Button22: TButton;
+    LibreMovimiento1: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
@@ -220,13 +221,22 @@ type
     procedure Button19Click(Sender: TObject);
     procedure Button22Click(Sender: TObject);
     procedure Button21Click(Sender: TObject);
+    procedure LibreMovimiento1Click(Sender: TObject);
   private
     { Private declarations }
 
 
     FUpdatingViewport: Boolean;
+
+    FKPIDebounceTimer : TTimer;
+
+
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
+
+
+    procedure KPIDebounceTimerFired(Sender: TObject);
+
 
     function WorkingMinutesBetweenFallback(
       const Cal: TCentreCalendar;
@@ -357,6 +367,25 @@ begin
 end;
 
 
+procedure TForm1.LibreMovimiento1Click(Sender: TObject);
+var
+  idx: Integer;
+  n: TNode;
+  d: TNodeData;
+begin
+  idx := FGantt.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  n := FGantt.SelectedNode;
+
+  if FNodeRepo.TryGetById(n.DataId, D) then
+  begin
+    D.LibreMoviment := LibreMovimiento1.Checked;
+    FNodeRepo.AddOrUpdate(D);
+  end;
+
+end;
+
 procedure TForm1.LogPerf(const S: string);
 begin
   OutputDebugString(PChar(S));
@@ -403,6 +432,13 @@ begin
      FGantt.SetViewport(StartTime, PxPerMinute, ScrollX);
 
     UpdateViewportInfo;
+
+    if Assigned(FCentrosControl) and FCentrosControl.VerIndicadores then
+    begin
+      FKPIDebounceTimer.Enabled := False;
+      FKPIDebounceTimer.Enabled := True;
+    end;
+
 
   finally
     FUpdatingViewport := False;
@@ -600,6 +636,11 @@ begin
 
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
 
+  FKPIDebounceTimer := TTimer.Create(Self);
+  FKPIDebounceTimer.Enabled := False;
+  FKPIDebounceTimer.Interval := 300;
+  FKPIDebounceTimer.OnTimer := KPIDebounceTimerFired;
+
 
   // Rang
   //T0 := dtFechaInicioGantt.Date; //EncodeDateTime(2026, 2, 19, 0, 0, 0, 0);
@@ -637,6 +678,7 @@ begin
   for i := 0 to iCentros-1 do
   begin
     FCentresRows[i].Id := i+1;
+    FCentresRows[i].CodiCentre := 'CENTRO-' + inttostr((i div 2) + 1); // agrupa de 2 en 2
     FCentresRows[i].IsSequencial := ((Random(999) Mod  2)=0);
     FCentresRows[i].Nom := 'CENTRO-' + inttostr(i+1);
     FCentresRows[i].Maquina := 'MAQUINA-' + inttostr(i+1);
@@ -1402,9 +1444,18 @@ begin
 
 end;
 
+procedure TForm1.KPIDebounceTimerFired(Sender: TObject);
+begin
+  FKPIDebounceTimer.Enabled := False;
+  RebuildCentreKPIs_Parallel(False);
+end;
+
 procedure TForm1.GanttViewportChanged(Sender: TObject;
   const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
 begin
+
+
+
 
   if not Assigned(FTimeline) then
    Exit;
@@ -1412,10 +1463,13 @@ begin
   if FUpdatingViewport then Exit;
    FUpdatingViewport := True;
 
+
+
   try
     FTimeline.SetViewport(StartTime, PxPerMinute, ScrollX);
 
     UpdateViewportInfo;
+
 
   finally
     FUpdatingViewport := False;

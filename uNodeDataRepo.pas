@@ -16,7 +16,8 @@ type
     NumeroPedido: Integer;
     SeriePedido: string;
 
-    CentroTrabajo: String;
+    CentresTrabajo: TArray<string>;    // noms ERP dels centres permesos; buit = tots
+    CentresPermesos: TArray<Integer>;  // ids Gantt dels centres permesos; buit = tots
 
     NumeroOrdenFabricacion: Integer;
     SerieFabricacion: string;
@@ -29,6 +30,7 @@ type
     CodigoCliente: String;
 
     CodigoColor: String;
+    CodigoTalla: String;
 
     Stock: Double;
 
@@ -53,6 +55,7 @@ type
 
     Selected: Boolean;
     Modified: Boolean;
+    LibreMoviment: Boolean;  // True = es pot moure a qualsevol centre; False = només CentresPermesos
   end;
 
 
@@ -100,8 +103,6 @@ type
   end;
 
 implementation
-
-
 
 { ============================================= }
 {                Constructor                    }

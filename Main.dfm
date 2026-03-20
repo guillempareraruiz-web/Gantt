@@ -1141,6 +1141,11 @@ object Form1: TForm1
       Checked = True
       OnClick = MenuItem3Click
     end
+    object LibreMovimiento1: TMenuItem
+      AutoCheck = True
+      Caption = 'Libre Movimiento'
+      OnClick = LibreMovimiento1Click
+    end
     object Move1h1: TMenuItem
       Caption = 'Move 1h'
       OnClick = Move1h1Click

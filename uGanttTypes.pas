@@ -8,10 +8,11 @@ uses
 type
   TCentreTreball = record
     Id: Integer;
+    CodiCentre: string;  // codi del centre ERP (agrupa múltiples màquines, p.ex. 'CENTRO1')
     Nom: string;
     Maquina: string;
-    IsSequencial: Boolean; // si False -> m�ltiples lanes
-    BaseHeight: Single;    // al�ada base fila
+    IsSequencial: Boolean; // si False -> m�ltiples lanes
+    BaseHeight: Single;    // al�ada base fila
     Order: Integer;
     Visible: Boolean;
     Enabled: Boolean;
@@ -20,7 +21,7 @@ type
 
   TNode = record
     Id: Integer;
-    CentreId: Integer;
+    CentreId: Integer;                  // centre actual on està planificat
     StartTime: TDateTime;
     EndTime: TDateTime;
     DurationMin: Double;
@@ -41,7 +42,8 @@ type
   TNodeData = record
     DataId: Integer;
     Operacion: String;
-    CentroTrabajo: String;
+    CentresTrabajo: TArray<string>;    // noms ERP dels centres permesos; buit = tots
+    CentresPermesos: TArray<Integer>;  // ids Gantt dels centres permesos; buit = tots
     NumeroPedido: Integer;
     SeriePedido: string;
     NumeroOrdenFabricacion: Integer;
@@ -52,6 +54,8 @@ type
     Stock: Double;
     CodigoArticulo: string;
     CodigoCliente: String;
+    CodigoColor: String;
+    CodigoTalla: String;
     DescripcionArticulo: string;
     PorcentajeDependencia: Double;
     UnidadesFabricadas: Double;
@@ -64,6 +68,7 @@ type
     Estado: TEstadoOF;
     Prioridad: Integer;  // 1 = alta, 2 = mitja, 3 = baixa (exemple)
     Modified: Boolean;
+    LibreMoviment: Boolean;  // True = es pot moure a qualsevol centre; False = només CentresPermesos
   end;
 
   TRowLayout = record

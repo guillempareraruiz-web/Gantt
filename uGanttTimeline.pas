@@ -622,7 +622,7 @@ begin
   px := usableWidth / minutesVisible;
   FPxPerMinute := ClampPxPerMinute(px);
 
-  newScroll := (((viewCenter - FStartTime) * 24.0 * 60.0) * FPxPerMinute) - xCenter;
+  newScroll := (VisibleMinutesBetween(FStartTime, viewCenter) * FPxPerMinute) - xCenter;
   FScrollX := ClampScrollX(newScroll);
 
   NotifyViewportChanged;
@@ -666,7 +666,7 @@ begin
   // 4) recalcula scroll perquè tCenter quedi EXACTE al centre
   // screenX(t) = ((t - FStartTime)*minuts)*FPxPerMinute - FScrollX
   // volem screenX(tCenter)=xCenter => FScrollX = ... - xCenter
-  newScroll := (((tCenter - FStartTime) * 24 * 60) * FPxPerMinute) - xCenter;
+  newScroll := (VisibleMinutesBetween(FStartTime, tCenter) * FPxPerMinute) - xCenter;
   FScrollX := ClampScrollX(newScroll);
 
   NotifyViewportChanged;
@@ -1463,7 +1463,7 @@ var
   xCenter: Single;
 begin
   xCenter := ClientWidth * 0.5;
-  minutesFromStart := (ADate - FStartTime) * 24 * 60;
+  minutesFromStart := VisibleMinutesBetween(FStartTime, ADate);
   Result := (minutesFromStart * FPxPerMinute) - xCenter;
   Result := ClampScrollX(Result);
 end;
@@ -1532,7 +1532,7 @@ begin
   if (FRangeEnd <= FRangeStart) or (ClientWidth <= 1) then
     Exit(0);
 
-  totalMinutes := (FRangeEnd - FRangeStart) * 24 * 60;
+  totalMinutes := VisibleMinutesBetween(FRangeStart, FRangeEnd);
   contentWidth := totalMinutes * FPxPerMinute;   // world width (px)
 
   // max scroll perquè el final quedi dins pantalla
@@ -1894,7 +1894,7 @@ begin
   FPxPerMinute := ClampPxPerMinute(FPxPerMinute * zoomFactor);
 
   // mantenir el temps sota el cursor
-  newScroll := (FLeftWidth + ((tUnderCursor - FStartTime) * 24 * 60) * FPxPerMinute) - xClient;
+  newScroll := (FLeftWidth + VisibleMinutesBetween(FStartTime, tUnderCursor) * FPxPerMinute) - xClient;
   //FScrollX := Max(0, newScroll);
   FScrollX := ClampScrollX(newScroll);
 

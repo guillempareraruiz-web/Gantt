@@ -61,7 +61,6 @@ type
 
     function BuildMergedNonWorkingIntervalsForWindow(
              const AStart, AEnd: TDateTime): TArray<TAbsInterval>;
-
     function WorkingMinutesBetweenPrecomputed(
               const AStart, AEnd: TDateTime;
               const AMergedNonWorking: TArray<TAbsInterval>

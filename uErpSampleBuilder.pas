@@ -21,7 +21,7 @@ function BuildRawSample(
   const MaxOPPerOT: Integer;
   const ProbSinCentro: Double;     // 0..1
   const ProbExtraLinks: Double;    // 0..1, links addicionals dins OT
-  const MinDurMin, MaxDurMin: Integer; // durada operació
+  const MinDurMin, MaxDurMin: Integer; // durada operaciï¿½
   const MinGapMin, MaxGapMin: Integer  // gap entre ops dins OT
 ): TErpRaw;
 
@@ -101,7 +101,7 @@ var
   h: Cardinal;
 begin
   h := $811C9DC5;
-  {$Q-}  // <<<<<< overflow checking OFF (això és el que cal)
+  {$Q-}  // <<<<<< overflow checking OFF (aixï¿½ ï¿½s el que cal)
   for i := 1 to Length(S) do
   begin
     h := h xor Cardinal(Ord(S[i]));
@@ -153,6 +153,30 @@ begin
   Result := CentreNames[Random(Length(CentreNames))];
 end;
 
+// Retorna un array de centres permesos per a una operaciÃ³ de mostra.
+// Amb probabilitat ProbSinCentro retorna [] (tots els centres permesos).
+// Altrament escull 1 o 2 centres aleatoris de CentreNames.
+function PickCentreNames(const CentreNames: TArray<string>; const ProbSinCentro: Double): TArray<string>;
+var
+  idx1, idx2: Integer;
+begin
+  if (Length(CentreNames) = 0) or (Random < ProbSinCentro) then
+  begin
+    Result := []; // buit = tots els centres permesos
+    Exit;
+  end;
+
+  idx1 := Random(Length(CentreNames));
+  // amb 30% de probabilitat assigna un segon centre diferent
+  if (Length(CentreNames) > 1) and (Random < 0.30) then
+  begin
+    repeat idx2 := Random(Length(CentreNames)); until idx2 <> idx1;
+    Result := [CentreNames[idx1], CentreNames[idx2]];
+  end
+  else
+    Result := [CentreNames[idx1]];
+end;
+
 function MakeClienteCode(const I: Integer): string;
 begin
   Result := 'CL' + FormatFloat('000', I);
@@ -177,7 +201,7 @@ end;
 
 
 
-//... _RAW per la càrrega de nodes inicial
+//... _RAW per la cï¿½rrega de nodes inicial
 function TryGetNonWorkingIntervalMergedAt_Raw(
   const Cal: TCentreCalendar;
   const T: TDateTime;
@@ -330,10 +354,10 @@ begin
   if Mins < MinMinutes then
     Mins := MinMinutes;
   AStart := FloorToMinute(AStart);
-  // només corregeix si realment comença en non-working
+  // nomï¿½s corregeix si realment comenï¿½a en non-working
   if Cal.IsNonWorkingTime(AStart) then
     AStart := Cal.NextWorkingTime(AStart);
-  // si l'end ja és coherent, no el toquis
+  // si l'end ja ï¿½s coherent, no el toquis
   if (AEnd <= AStart) then
     AEnd := Cal.AddWorkingMinutes(AStart, Mins)
   else
@@ -424,7 +448,7 @@ var
   begin
     if Length(createdOpIds) < 3 then Exit;
 
-    // uns quants intents, depèn de ProbExtraLinks
+    // uns quants intents, depï¿½n de ProbExtraLinks
     tries := Round(Length(createdOpIds) * 1.5);
     while tries > 0 do
     begin
@@ -452,7 +476,7 @@ begin
   NextOpId := 1000;
 
   // Normalitza T0/T1 (per seguretat)
-  // (assumim que ja venen com DayStart/DayEnd, però no fa mal)
+  // (assumim que ja venen com DayStart/DayEnd, perï¿½ no fa mal)
   // baseStart = un punt dins el rang per cada OF
 
   for ofIdx := 1 to Max(0, NumOFs) do
@@ -462,7 +486,7 @@ begin
 
     numOT := RandBetween(1, Max(1, MaxOTPerOF));
 
-    // començament "base" per aquesta OF
+    // comenï¿½ament "base" per aquesta OF
     baseStart := RandomTimeInRange(T0, T1);
 
     for otIdx := 1 to numOT do
@@ -472,7 +496,7 @@ begin
       numOP := RandBetween(1, Max(1, MaxOPPerOT));
       StartNewOTOpIds;
 
-      // cada OT comença un pèl desplaçada respecte baseStart
+      // cada OT comenï¿½a un pï¿½l desplaï¿½ada respecte baseStart
       curStart := IncMinute(baseStart, (otIdx - 1) * RandBetween(10, 60));
       curStart := ClampToRange(curStart, T0, T1);
 
@@ -521,7 +545,7 @@ begin
         opRec.NumeroTrabajo := Format('TR-%d-%d-%d', [ofIdx, otIdx, opIdx]);
 
         opRec.CodigoCliente := MakeClienteCode(1 + (ofIdx mod 12));
-        opRec.CentroTrabajo := PickCentreName(CentreNames, ProbSinCentro);
+        opRec.CentresTrabajo := PickCentreNames(CentreNames, ProbSinCentro);
 
         opRec.Operacion := Format('OP %d.%d.%d', [ofIdx, otIdx, opIdx]);
 
@@ -547,7 +571,7 @@ begin
         opRec.borderColorOp := AdjustColorBrightness(opRec.bkColorOp, -40);
 
 
-        // següent op (seqüència bàsica)
+        // segï¿½ent op (seqï¿½ï¿½ncia bï¿½sica)
         curStart := IncMinute(opRec.EndTime, gapMin);
         if curStart > T1 then
           curStart := T1;
@@ -643,11 +667,11 @@ var
     if opCount <= 1 then
       Exit;
 
-    // si hi ha exactament 2 operacions, només crear link si està permès
+    // si hi ha exactament 2 operacions, nomï¿½s crear link si estï¿½ permï¿½s
     if (opCount = 2) and (not AAllowTwoOpLinks) then
       Exit;
 
-    // si hi ha 3 o més operacions, crear tota la cadena
+    // si hi ha 3 o mï¿½s operacions, crear tota la cadena
     for k := 0 to opCount - 2 do
     begin
       lnk.FromNodeId := createdOps[k].OpId;
@@ -793,7 +817,7 @@ begin
         opRec.DurationMin := (opRec.TiempoUnidadFabSecs * opRec.UnidadesAFabricar) / 60;
         opRec.DurationMinOriginal := opRec.DurationMin;
 
-        // si vols forçar una mica la duració dins del rang passat per paràmetre:
+        // si vols forï¿½ar una mica la duraciï¿½ dins del rang passat per parï¿½metre:
         if opRec.DurationMin < MinDurMin then
           opRec.DurationMin := MinDurMin;
         if opRec.DurationMin > MaxDurMin then
@@ -814,7 +838,7 @@ begin
         opRec.NumeroTrabajo := Format('TR-%d-%d-%d', [ofIdx, otIdx, opIdx]);
 
         opRec.CodigoCliente := MakeClienteCode(1 + (ofIdx mod 12));
-        opRec.CentroTrabajo := PickCentreName(CentreNames, ProbSinCentro);
+        opRec.CentresTrabajo := PickCentreNames(CentreNames, ProbSinCentro);
 
         opRec.Operacion := Format('OP %d.%d.%d', [ofIdx, otIdx, opIdx]);
 
@@ -855,9 +879,9 @@ begin
 
         okC, okD:
           begin
-            // 3 o més operacions amb links
+            // 3 o mï¿½s operacions amb links
             AddChainLinksInOT(False); // amb 3+ crea igualment tots els links
-            // si vols enllaços extra:
+            // si vols enllaï¿½os extra:
             // AddExtraRandomLinksInOT;
           end;
       end;
@@ -898,7 +922,7 @@ var
 
     c.Id := id;
     c.Nom := key;
-    c.IsSequencial := False;   // ho pots decidir per CT o per configuració
+    c.IsSequencial := False;   // ho pots decidir per CT o per configuraciï¿½
     c.BaseHeight := 60;        // default
     c.Order := id;
     c.Visible := True;
@@ -936,12 +960,15 @@ begin
   nodesTmp := TList<TNode>.Create;
   ofColor := TDictionary<string, TColor>.Create;
   try
-    // crea “Sin Centro” al principi (opcional)
+    // crea ï¿½Sin Centroï¿½ al principi (opcional)
     GetOrCreateCentreId('Sin Centro');
 
     for op in Raw.Ops do
     begin
-      ctId := GetOrCreateCentreId(op.CentroTrabajo);
+      if Length(op.CentresTrabajo) > 0 then
+        ctId := GetOrCreateCentreId(op.CentresTrabajo[0])
+      else
+        ctId := GetOrCreateCentreId('Sin Centro');
 
       // NodeData (domini)
       d.DataId := op.OpId; // clau estable
@@ -955,9 +982,10 @@ begin
       d.FechaEntrega := 0; // si aplica
       d.FechaNecesaria := 0;
       d.Modified := False;
+      d.LibreMoviment := False;
 
       // Camps que has afegit:
-      // (si els has posat dins TNodeData, assigna’ls aquí)
+      // (si els has posat dins TNodeData, assignaï¿½ls aquï¿½)
       // d.Operacion := op.Operacion;
       // d.CentroTrabajo := op.CentroTrabajo;
       // d.CodigoCliente := op.CodigoCliente;
@@ -969,6 +997,7 @@ begin
 
       n.Id := op.OpId;
       n.CentreId := ctId;
+
       n.StartTime := op.StartTime;
       n.EndTime := op.EndTime;
       n.Caption := op.Operacion;
@@ -1040,7 +1069,7 @@ const
 
     c.Id := id;
     c.Nom := key;
-    c.IsSequencial :=  ((Random(999) Mod  2)=0);   // ho pots decidir per CT o per configuració
+    c.IsSequencial :=  ((Random(999) Mod  2)=0);   // ho pots decidir per CT o per configuraciï¿½
     c.BaseHeight := 32;
     c.Order := id;
     c.Visible := True;
@@ -1051,6 +1080,17 @@ const
     centreIdByName.Add(key, id);
     centresTmp.Add(c);
     Result := id;
+  end;
+
+  // Retorna array d'ids per un array de noms de centres.
+  // Si l'array Ã©s buit, retorna [] (= tots els centres permesos).
+  function GetOrCreateCentreIds(const CentreNames: TArray<string>): TArray<Integer>;
+  var
+    i: Integer;
+  begin
+    SetLength(Result, Length(CentreNames));
+    for i := 0 to High(CentreNames) do
+      Result[i] := GetOrCreateCentreId(CentreNames[i]);
   end;
 
   function GetOFColor64(const NumeroOF: Integer; const SerieOF: string): TColor;
@@ -1108,12 +1148,16 @@ begin
   ofColor64 := TDictionary<UInt64, TColor>.Create;
 
   try
-    // crea “Sin Centro” al principi (opcional)
+    // crea ï¿½Sin Centroï¿½ al principi (opcional)
     GetOrCreateCentreId('Sin Centro');
 
     for op in Raw.Ops do
     begin
-      ctId := GetOrCreateCentreId(op.CentroTrabajo);
+      // centre actual: el primer de la llista, o 'Sin Centro' si buida
+      if Length(op.CentresTrabajo) > 0 then
+        ctId := GetOrCreateCentreId(op.CentresTrabajo[0])
+      else
+        ctId := GetOrCreateCentreId('Sin Centro');
 
       // NodeData (domini)
       d.DataId := op.OpId; // clau estable
@@ -1122,10 +1166,14 @@ begin
       d.NumeroTrabajo := op.NumeroTrabajo;
 
       d.Operacion := op.Operacion;
-      d.CentroTrabajo := op.CentroTrabajo;
+      d.CentresTrabajo := op.CentresTrabajo;
+      d.CentresPermesos := GetOrCreateCentreIds(op.CentresTrabajo);
+      d.LibreMoviment := False;
 
-      d.CodigoArticulo := op.CodigoArticulo; // si el tens
+      d.CodigoArticulo := op.CodigoArticulo;
       d.DescripcionArticulo := op.DescripcionArticulo;
+      d.CodigoColor := op.CodigoColor;
+      d.CodigoTalla := op.CodigoTalla;
 
       d.FechaEntrega := op.FechaEntrega; // si aplica
       d.FechaNecesaria := op.FechaNecesaria;
@@ -1147,7 +1195,7 @@ begin
       d.Prioridad := op.Prioridad;
       d.Estado := op.Estado;
       // Camps que has afegit:
-      // (si els has posat dins TNodeData, assigna’ls aquí)
+      // (si els has posat dins TNodeData, assignaï¿½ls aquï¿½)
       // d.Operacion := op.Operacion;
       // d.CentroTrabajo := op.CentroTrabajo;
       // d.CodigoCliente := op.CodigoCliente;
@@ -1161,6 +1209,7 @@ begin
 
       n.Id := op.OpId;
       n.CentreId := ctId;
+
       n.StartTime := op.StartTime;
       n.DurationMin := op.DurationMin;
       n.EndTime := op.EndTime;
@@ -1175,7 +1224,7 @@ begin
 
       n.DataId := op.OpId; // apunta al NodeDataRepo
 
-      // >>> NORMALITZACIÓ CALENDARI <<<
+      // >>> NORMALITZACIï¿½ CALENDARI <<<
       if Assigned(GetCalendar) then
       begin
         cal := GetCalendar(ctId);
@@ -1264,6 +1313,15 @@ var
     Result := Id;
   end;
 
+  function GetOrCreateCentreIds(const CentreNames: TArray<string>): TArray<Integer>;
+  var
+    i: Integer;
+  begin
+    SetLength(Result, Length(CentreNames));
+    for i := 0 to High(CentreNames) do
+      Result[i] := GetOrCreateCentreId(CentreNames[i]);
+  end;
+
   function GetCalendarCached(const ACentreId: Integer): TCentreCalendar;
   begin
     if not calendarByCentre.TryGetValue(ACentreId, Result) then
@@ -1322,16 +1380,24 @@ begin
 
     for Op in Raw.Ops do
     begin
-      CtId := GetOrCreateCentreId(Op.CentroTrabajo);
+      // centre actual: el primer de la llista, o 'Sin Centro' si buida
+      if Length(Op.CentresTrabajo) > 0 then
+        CtId := GetOrCreateCentreId(Op.CentresTrabajo[0])
+      else
+        CtId := GetOrCreateCentreId('Sin Centro');
 
       D.DataId := Op.OpId;
       D.NumeroOrdenFabricacion := Op.NumeroOF;
       D.SerieFabricacion := Op.SerieOF;
       D.NumeroTrabajo := Op.NumeroTrabajo;
       D.Operacion := Op.Operacion;
-      D.CentroTrabajo := Op.CentroTrabajo;
+      D.CentresTrabajo := Op.CentresTrabajo;
+      D.CentresPermesos := GetOrCreateCentreIds(Op.CentresTrabajo);
+      D.LibreMoviment := False;
       D.CodigoArticulo := Op.CodigoArticulo;
       D.DescripcionArticulo := Op.DescripcionArticulo;
+      D.CodigoColor := Op.CodigoColor;
+      D.CodigoTalla := Op.CodigoTalla;
       D.FechaEntrega := Op.FechaEntrega;
       D.FechaNecesaria := Op.FechaNecesaria;
       D.Stock := Op.Stock;
