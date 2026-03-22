@@ -1064,6 +1064,24 @@ object Form1: TForm1
       TabOrder = 13
       OnClick = Button22Click
     end
+    object Button2: TButton
+      Left = 418
+      Top = 6
+      Width = 75
+      Height = 19
+      Caption = 'OF inversa'
+      TabOrder = 14
+      OnClick = Button2Click
+    end
+    object Button23: TButton
+      Left = 418
+      Top = 25
+      Width = 75
+      Height = 19
+      Caption = 'OT inversa'
+      TabOrder = 15
+      OnClick = Button23Click
+    end
   end
   object popCentros: TPopupMenu
     Left = 920
@@ -1158,9 +1176,51 @@ object Form1: TForm1
       Caption = 'ShiftRow'
       OnClick = ShiftRow2Click
     end
-    object ShiftNodeLinks1: TMenuItem
-      Caption = 'Shift Node Links'
-      OnClick = ShiftNodeLinks1Click
+    object CompactarOF1: TMenuItem
+      Caption = 'Compactar OF'
+      object odalaOF1: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OF'
+        OnClick = odalaOF1Click
+      end
+      object odalaOF2: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OF con prioridad'
+        HelpContext = 1
+        OnClick = odalaOF1Click
+      end
+      object CompactarOFapartirdelNodo1: TMenuItem
+        Caption = 'A partir del Nodo'
+        OnClick = odalaOF1Click
+      end
+      object ApartirdelNodoconprioridad1: TMenuItem
+        Caption = 'A partir del Nodo con prioridad'
+        HelpContext = 1
+        OnClick = odalaOF1Click
+      end
+    end
+    object CompactarOT1: TMenuItem
+      Caption = 'Compactar OT'
+      object otalaOT1: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OT'
+        OnClick = otalaOT1Click
+      end
+      object odalaOTconprioridad1: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OT con prioridad'
+        HelpContext = 1
+        OnClick = otalaOT1Click
+      end
+      object ApartirdelNodo1: TMenuItem
+        Caption = 'A partir del Nodo'
+        OnClick = otalaOT1Click
+      end
+      object ApartirdelNodoconprioridad2: TMenuItem
+        Caption = 'A partir del Nodo con prioridad'
+        HelpContext = 1
+        OnClick = otalaOT1Click
+      end
     end
     object N1: TMenuItem
       Caption = '-'
@@ -1196,5 +1256,10 @@ object Form1: TForm1
       Caption = 'Info'
       OnClick = Info1Click
     end
+  end
+  object tmr1Sec: TTimer
+    OnTimer = tmr1SecTimer
+    Left = 704
+    Top = 240
   end
 end

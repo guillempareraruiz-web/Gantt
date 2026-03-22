@@ -110,6 +110,7 @@ type
 
     procedure SetScrollY(const Value: Single);
     procedure NotifyScrollYChanged;
+    function GetMaxScrollY: Single;
 
     function FindCentreIndexById(const CentreId: Integer): Integer;
 
@@ -709,8 +710,8 @@ begin
   RLabel1 := RectF(PadX, y1 + 3, PadX + LabelW, y1 + 18);
   RValue1 := RectF(PadX + LabelW, y1 + 3, RCircle.Left - 6, y1 + 18);
 
-  RLabel2 := RectF(PadX, y1 + 19, PadX + LabelW, y2 - 3);
-  RValue2 := RectF(PadX + LabelW, y1 + 19, LeftTextWidth - PadX, y2 - 3);
+  RLabel2 := RectF(PadX, y1 + 19, PadX + LabelW, y1 + 34);
+  RValue2 := RectF(PadX + LabelW, y1 + 19, LeftTextWidth - PadX, y1 + 34);
 
   DrawTextD('CENTRO:', RLabel1, TextBrush, FTextFormat);
   DrawTextD(NomCentre, RValue1, TextBrush, FTextFormat);
@@ -769,7 +770,7 @@ begin
   V5 := GetBadgeVisualFloat( K.PercentOcupacio, FCurrentKPIRanges.PercentOcupacio.MinFloat, FCurrentKPIRanges.PercentOcupacio.MaxFloat );
 
   StartX := Round(RPanel.Left + 4);
-  StartY := Round(RPanel.Top + ((RPanel.Bottom - RPanel.Top - BH) * 0.5));
+  StartY := Round(RPanel.Top + 2);
 
   B1 := RectF(StartX,                    StartY, StartX + BW,                    StartY + BH);
   B2 := RectF(B1.Right + GAP,           StartY, B1.Right + GAP + BW,           StartY + BH);
@@ -798,6 +799,7 @@ begin
     Exit;
   FVerIndicadores := Value;
   UpdateControlWidth;
+
   Invalidate;
 end;
 procedure TGanttCentresControl.UpdateControlWidth;
@@ -873,7 +875,7 @@ end;
 
 procedure TGanttCentresControl.SetCentres(const ACentres: TArray<TCentreTreball>);
 begin
-  FCentres := Copy(ACentres);   // o sense Copy si vols referència directa
+  FCentres := Copy(ACentres);   // o sense Copy si vols referï¿½ncia directa
   Invalidate;
 end;
 
@@ -901,7 +903,7 @@ var
   yWorld: Single;
   midY: Single;
 begin
-  // devuelve el índice donde insertar (0..Length(FRows))
+  // devuelve el ï¿½ndice donde insertar (0..Length(FRows))
   yWorld := Y + FScrollY;
 
   // Por defecto: al final
@@ -927,7 +929,7 @@ begin
   if (ToIndex < 0) then Exit;
   if (ToIndex > Length(FRows)) then Exit;
 
-  // si insertas “después” y quitas antes, el destino se desplaza
+  // si insertas ï¿½despuï¿½sï¿½ y quitas antes, el destino se desplaza
   dst := ToIndex;
   if dst > FromIndex then
     Dec(dst);
@@ -1000,11 +1002,34 @@ begin
   inherited;
 end;
 
-procedure TGanttCentresControl.SetScrollY(const Value: Single);
+function TGanttCentresControl.GetMaxScrollY: Single;
+var
+  contentH: Single;
+  i: Integer;
 begin
-  if Abs(Value - FScrollY) > 0.5 then
+  contentH := 0;
+  if Length(FRows) > 0 then
   begin
-    FScrollY := Max(0, Value);
+    // L'Ãºltim row visible determina el ContentHeight
+    for i := High(FRows) downto 0 do
+      if FRows[i].Visible then
+      begin
+        contentH := FRows[i].TopY + FRows[i].Height;
+        Break;
+      end;
+  end;
+
+  Result := Max(0, contentH - ClientHeight);
+end;
+
+procedure TGanttCentresControl.SetScrollY(const Value: Single);
+var
+  clamped: Single;
+begin
+  clamped := Max(0, Min(Value, GetMaxScrollY));
+  if Abs(clamped - FScrollY) > 0.5 then
+  begin
+    FScrollY := clamped;
     Invalidate;
   end;
 end;
@@ -1189,7 +1214,7 @@ begin
   dx := Abs(X - FDragStartPt.X);
   dy := Abs(Y - FDragStartPt.Y);
 
-  // Si estamos armados para drag y movemos más que el umbral -> empezamos a arrastrar
+  // Si estamos armados para drag y movemos mï¿½s que el umbral -> empezamos a arrastrar
   if FDragArmed and not FDragging then
   begin
     if (dx >= GetSystemMetrics(SM_CXDRAG)) or (dy >= GetSystemMetrics(SM_CYDRAG)) then
@@ -1210,7 +1235,7 @@ begin
     Exit;
   end;
 
-  // Si no estamos draggeando, pan vertical como antes (si se activó)
+  // Si no estamos draggeando, pan vertical como antes (si se activï¿½)
   if FIsPanning then
   begin
     FScrollY := Max(0, FScrollStartY - (Y - FPanStartY));
@@ -1255,17 +1280,9 @@ begin
 end;
 
 procedure TGanttCentresControl.WMMouseWheel(var Message: TWMMouseWheel);
-var
-  f: Single;
 begin
-  // wheel vertical (igual que un scroll)
-
-  FScrollY := Max(0, FScrollY + (-Message.WheelDelta / 120) * 60);
-  if FScrollY<0 then
-   FScrollY :=0;
-
+  SetScrollY(FScrollY + (-Message.WheelDelta / 120) * 60);
   NotifyScrollYChanged;
-  Invalidate;
 
   Message.Result := 1;
 end;

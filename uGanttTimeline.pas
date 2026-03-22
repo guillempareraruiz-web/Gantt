@@ -1443,18 +1443,16 @@ function TGanttTimelineControl.GetStartVisibleTime: TDateTime;
 var
   minutesFromStart: Double;
 begin
-  // minuts des de FStartTime fins al pixel 0 visible
   minutesFromStart := FScrollX / FPxPerMinute;
-  Result := FStartTime + (minutesFromStart / (24 * 60));
+  Result := AddVisibleMinutes(FStartTime, minutesFromStart);
 end;
 
 function TGanttTimelineControl.GetEndVisibleTime: TDateTime;
 var
   minutesFromStart: Double;
 begin
-  // pixel dret visible = FScrollX + ClientWidth
   minutesFromStart := (FScrollX + ClientWidth) / FPxPerMinute;
-  Result := FStartTime + (minutesFromStart / (24 * 60));
+  Result := AddVisibleMinutes(FStartTime, minutesFromStart);
 end;
 
 function TGanttTimelineControl.CalcScrollXToCenterDate(const ADate: TDateTime): Single;

@@ -118,6 +118,9 @@
         <DCCReference Include="uErpTypes.pas"/>
         <DCCReference Include="uColorPalette64LayeredPopup.pas"/>
         <DCCReference Include="uGanttHistory.pas"/>
+        <DCCReference Include="uNodeInspector.pas">
+            <Form>frmNodeInspector</Form>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

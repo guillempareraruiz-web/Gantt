@@ -26,7 +26,8 @@ uses
   dxSkinXmas2008Blue, cxTextEdit, cxMaskEdit, cxSpinEdit, Vcl.ComCtrls, dxCore,
   cxDateUtils, cxDropDownEdit, cxCalendar, Vcl.Menus, Vcl.WinXCtrls, uNodeDataRepo,
   System.Generics.Collections, uErpTypes, uColorPalette64LayeredPopup,
-  System.Threading,  System.SyncObjs, System.Diagnostics;
+  System.Threading,  System.SyncObjs, System.Diagnostics, uNodeInspector,
+  cxStyles, cxFilter, dxScrollbarAnnotations, cxInplaceContainer, cxVGrid;
 
 type
 
@@ -131,7 +132,6 @@ type
     ShiftRow1: TMenuItem;
     ShiftRow2: TMenuItem;
     ShiftRowallimpact1: TMenuItem;
-    ShiftNodeLinks1: TMenuItem;
     Panel3: TPanel;
     Panel4: TPanel;
     Label9: TLabel;
@@ -178,6 +178,18 @@ type
     Button21: TButton;
     Button22: TButton;
     LibreMovimiento1: TMenuItem;
+    CompactarOFapartirdelNodo1: TMenuItem;
+    CompactarOF1: TMenuItem;
+    odalaOF1: TMenuItem;
+    odalaOF2: TMenuItem;
+    ApartirdelNodoconprioridad1: TMenuItem;
+    Button2: TButton;
+    CompactarOT1: TMenuItem;
+    otalaOT1: TMenuItem;
+    odalaOTconprioridad1: TMenuItem;
+    ApartirdelNodo1: TMenuItem;
+    ApartirdelNodoconprioridad2: TMenuItem;
+    Button23: TButton;tmr1Sec: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
@@ -206,7 +218,6 @@ type
     procedure ShiftRow2Click(Sender: TObject);
     procedure ShiftRow1Click(Sender: TObject);
     procedure ShiftRowallimpact1Click(Sender: TObject);
-    procedure ShiftNodeLinks1Click(Sender: TObject);
     procedure lblModifiedClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnUndoClick(Sender: TObject);
@@ -222,6 +233,11 @@ type
     procedure Button22Click(Sender: TObject);
     procedure Button21Click(Sender: TObject);
     procedure LibreMovimiento1Click(Sender: TObject);
+    procedure odalaOF1Click(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
+    procedure otalaOT1Click(Sender: TObject);
+    procedure Button23Click(Sender: TObject);
+    procedure tmr1SecTimer(Sender: TObject);
   private
     { Private declarations }
 
@@ -288,6 +304,7 @@ type
     procedure GanttScrollYChanged(Sender: TObject; const ScrollY: Single);
     procedure ConfiguraCalendariCentre(const Gantt: TGanttControl; const CentreId: Integer);
     procedure GanttStatsChanged( Sender: TObject );
+    procedure GanttLayoutChanged( Sender: TObject );
 
     function BuildNodeKPIItemsFromGanttNodes: TArray<TNodeKPIItem>;
 
@@ -446,6 +463,11 @@ begin
 end;
 
 
+procedure TForm1.tmr1SecTimer(Sender: TObject);
+begin
+ UpdateViewportInfo;
+end;
+
 procedure TForm1.UpdateViewportInfo;
 var
   S: string;
@@ -538,6 +560,32 @@ procedure TForm1.Button22Click(Sender: TObject);
 begin
   if Assigned(FGantt) then
     FGantt.GoToNextOF;
+end;
+
+procedure TForm1.Button23Click(Sender: TObject);
+var
+  idx: Integer;
+  iAllOF, iPrioridad: Integer;
+begin
+
+  idx := FGantt.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  FGantt.BackwardScheduleOT( idx, cxDateEdit1.Date, 0, TRUE  );
+
+end;
+
+procedure TForm1.Button2Click(Sender: TObject);
+var
+  idx: Integer;
+  iAllOF, iPrioridad: Integer;
+begin
+
+  idx := FGantt.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  FGantt.BackwardScheduleOF( idx, cxDateEdit1.Date, 0, TRUE  );
+
 end;
 
 procedure TForm1.Button3Click(Sender: TObject);
@@ -633,6 +681,7 @@ begin
   FGantt.OnScrollYChanged := GanttScrollYChanged;
   FGantt.OnNodeDblClick := GanttNodeDblClick;
   FGantt.OnStatsChanged := GanttStatsChanged;
+  FGantt.OnLayoutChanged := GanttLayoutChanged;
 
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
 
@@ -1394,6 +1443,12 @@ begin
   UpdateKPIs;
 end;
 
+procedure TForm1.GanttLayoutChanged(Sender: TObject);
+begin
+  FCentrosControl.SetRows(FGantt.GetRowsCopy);
+  FCentrosControl.Invalidate;
+end;
+
 
 procedure TForm1.UpdateKPIs;
 begin
@@ -1424,23 +1479,24 @@ begin
 end;
 
 procedure TForm1.chkShowKPIsClick(Sender: TObject);
-var
-  iw: Integer;
 begin
   if not Assigned(FGantt) then
    Exit;
 
 
-  if not chkShowKPIs.Checked then
-    iW := FCentrosControl.IndicadoresWidth*-1
-  else
-    iW := FCentrosControl.IndicadoresWidth;
-
-  pnlCentros.Width := pnlCentros.Width + iW;
-
   FCentrosControl.VerIndicadores := chkShowKPIs.Checked;
-  //FCentrosControl.BaseWidth := pnlCentros.Width;
-  FCentrosControl.Invalidate;
+
+  // Ajustar el panell al nou Width del control (BaseWidth + IndicadoresWidth o BaseWidth)
+  pnlCentros.Width := FCentrosControl.Width;
+
+  FGantt.NotifyViewportChanged;
+
+  if FCentrosControl.VerIndicadores then
+    RebuildCentreKPIs_Parallel( FALSE );
+
+  FCentrosControl.Repaint;
+
+
 
 end;
 
@@ -1480,9 +1536,19 @@ begin
 end;
 
 procedure TForm1.GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
+var
+  node: TNode;
+  ANodeData: uNodeDataRepo.TNodeData;
 begin
-  // obrir editor, mostrar detalls, etc.
-  ShowMessage('Doble click node: ' + NodeIndex.ToString);
+  if NodeIndex < 0 then Exit;
+  node := FGantt.SelectedNode;
+  if not FNodeRepo.TryGetById(node.DataId, ANodeData) then Exit;
+
+  if TfrmNodeInspector.Execute(ANodeData) then
+  begin
+    FNodeRepo.AddOrUpdate(ANodeData);
+    FGantt.Invalidate;
+  end;
 end;
 
 procedure TForm1.Info1Click(Sender: TObject);
@@ -1580,6 +1646,38 @@ begin
 
 end;
 
+procedure TForm1.odalaOF1Click(Sender: TObject);
+var
+  idx: Integer;
+  iAllOF, iPrioridad: Integer;
+begin
+
+  idx := FGantt.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  iAllOF := TMenuItem(Sender).Tag;
+  iPrioridad := TMenuItem(Sender).HelpContext;
+
+  FGantt.CompactOFFromNode( idx, 0, (iAllOF=1) , (iPrioridad=1) );
+
+end;
+
+procedure TForm1.otalaOT1Click(Sender: TObject);
+var
+  idx: Integer;
+  iAllOT, iPrioridad: Integer;
+begin
+
+  idx := FGantt.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  iAllOT := TMenuItem(Sender).Tag;
+  iPrioridad := TMenuItem(Sender).HelpContext;
+
+  FGantt.CompactOTFromNode( idx, 0, (iAllOT=1) , (iPrioridad=1) );
+
+end;
+
 procedure TForm1.pnlGanttContainerResize(Sender: TObject);
 begin
  if Assigned(FTimeline) then
@@ -1635,25 +1733,6 @@ begin
   FGantt.SetSearchResults(nodes, True);
   FGantt.SelectNodeByIndex(nodes[0], True);
   LblFind.Caption := 'Resultado búsqueda: ' + Format('%d / %d', [FGantt.SearchResultIndex+1, FGantt.SearchResultCount]);
-end;
-
-procedure TForm1.ShiftNodeLinks1Click(Sender: TObject);
- var
-  P: TPoint;
-  F: TColorPalette64LayeredPopup;
-  idx, i, iMAx: Integer;
-  iOT, iOF: Integer;
-  sOF: String;
-  node: TNode;
-  d: TNodeDAta;
-  iTag: Integer;
-begin
-
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
-  node := FGantt.SelectedNode;
-
-  FGantt.ShiftLeftAllImpactedSequentialFromNode( idx, 0);
 end;
 
 procedure TForm1.ShiftRow1Click(Sender: TObject);

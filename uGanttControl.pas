@@ -144,6 +144,7 @@ type
     FResizeRectS: TRectF;
 
     FOnStatsChanged: TGanttStatsChanged;
+    FOnLayoutChanged: TNotifyEvent;
 
     FMouseDownPos: TPoint;
     FMouseDownNodeIndex: Integer;
@@ -276,7 +277,7 @@ type
     procedure AddRowLayout(const Row: TRowLayout);
     procedure AddNodeLayout(const NL: TNodeLayout);
 
-    procedure NotifyViewportChanged;
+
     procedure TimelineViewportChanged(Sender: TObject;
                  const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
 
@@ -420,6 +421,7 @@ type
 
     procedure Paint; override;
     procedure PaintD2D; virtual;
+    procedure Resize; override;
 
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
 
@@ -468,6 +470,8 @@ type
     FClickPoint: TPoint;
     FClickDatetime: TDatetime;
 
+    procedure NotifyViewportChanged;
+
     procedure GoToNextNode;
     procedure GoToPreviousNode;
     procedure GoToFirstNode;
@@ -481,6 +485,7 @@ type
     procedure MarkAllNodesModified(const AValue: Boolean);
 
     function CalcEndTime(const CentreId: Integer; const StartTime: TDateTime; const DurationMin: Double): TDateTime;
+    function CalcStartFromEnd(const CentreId: Integer; const EndTime: TDateTime; const DurationMin: Double): TDateTime;
 
     function ApplyOpColorsByNode(
       const ADataID: Integer;
@@ -547,6 +552,11 @@ type
     function ShiftLeftSequentialCentresFromDate( const AFromTime: TDateTime; const MinGapMin: Integer): Boolean;
     function ShiftLeftAllImpactedSequentialFromDate( const AFromTime: TDateTime; const MinGapMin: Integer): Boolean;
     function ShiftLeftAllImpactedSequentialFromNode( const ANodeIdx: Integer;  const MinGapMin: Integer): Boolean;
+    function CompactOFFromNode(const ANodeIdx: Integer; const MinGapMin: Integer; const AllOF: Boolean = False; const bForce: Boolean = False): Boolean;
+    function BackwardScheduleOF(const ANodeIdx: Integer; const AEndDate: TDateTime; const MinGapMin: Integer; const bForce: Boolean = False): Boolean;
+
+    function CompactOTFromNode(const ANodeIdx: Integer; const MinGapMin: Integer; const AllOT: Boolean = False; const bForce: Boolean = False): Boolean;
+    function BackwardScheduleOT(const ANodeIdx: Integer; const AEndDate: TDateTime; const MinGapMin: Integer; const bForce: Boolean = False): Boolean;
 
     procedure SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean = True);
     procedure ScrollNodeIntoView(const NodeIndex: Integer; const Center: Boolean = True);
@@ -635,6 +645,7 @@ type
     property OnViewportChanged: TGanttViewportChangedEvent read FOnViewportChanged write FOnViewportChanged;
     property OnNodeDblClick: TNodeDblClickEvent read FOnNodeDblClick write FOnNodeDblClick;
     property OnStatsChanged: TGanttStatsChanged read FOnStatsChanged write FOnStatsChanged;
+    property OnLayoutChanged: TNotifyEvent read FOnLayoutChanged write FOnLayoutChanged;
   end;
 
 
@@ -3327,12 +3338,19 @@ begin
     end;
 end;
 
-procedure TGanttControl.NotifyViewportChanged;
+procedure TGanttControl.Resize;
 begin
-    OutputDebugString(PChar(Format(
-    'GANTT NotifyViewportChanged Start=%s Px=%f Scroll=%f',
-    [DateTimeToStr(FStartTime), FPxPerMinute, FScrollX]
-  )));
+  inherited;
+  UpdateScrollBars;
+  NotifyViewportChanged;
+  Invalidate;
+end;
+
+procedure TGanttControl.NotifyViewportChanged;
+var
+  T0, T1: TDateTime;
+begin
+  GetVisibleTimeRange(T0, T1);
 
   if Assigned(FOnViewportChanged) then
     FOnViewportChanged(Self, FStartTime, FPxPerMinute, FScrollX);
@@ -3965,6 +3983,9 @@ begin
     FContentHeight := ClientHeight;
 
   UpdateScrollBars;
+
+  if Assigned(FOnLayoutChanged) then
+    FOnLayoutChanged(Self);
 end;
 
 
@@ -6496,6 +6517,20 @@ begin
     Result := StartTime + (DurationMin / 1440.0);
 end;
 
+function TGanttControl.CalcStartFromEnd(const CentreId: Integer; const EndTime: TDateTime; const DurationMin: Double): TDateTime;
+var
+  cal: TCentreCalendar;
+  mins: Integer;
+begin
+  cal := GetCalendar(CentreId);
+  mins := Ceil(DurationMin);
+  if mins < 1 then mins := 1;
+  if cal <> nil then
+    Result := cal.SubtractWorkingMinutes(cal.PrevWorkingTime(EndTime), mins)
+  else
+    Result := EndTime - (DurationMin / 1440.0);
+end;
+
 
 procedure TGanttControl.CommitResize;
 const
@@ -7441,6 +7476,10 @@ begin
   if Assigned(FTimeline) and (FTimeline.HideWeekends <> Value) then
     FTimeline.HideWeekends := Value;
 
+  UpdateScrollBars;
+
+ // NotifyViewportChanged;
+
   Invalidate;
 end;
 
@@ -8059,6 +8098,830 @@ begin
 
       // successors lògics seqüencials
       EnqueueSequentialSuccessorsOfNode(CurrIdx);
+    end;
+  end;
+
+  if Result then
+  begin
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+
+function TGanttControl.CompactOFFromNode(
+  const ANodeIdx: Integer;
+  const MinGapMin: Integer;
+  const AllOF: Boolean = False;
+  const bForce: Boolean = False): Boolean;
+var
+  DStart: TNodeData;
+  NumOF: Integer;
+  SerieOF: string;
+  Visited: array of Boolean;
+  IsAnchor: array of Boolean;   // nodes que NO s'han de moure (arrels o seleccionat)
+  Queue: TIdxArray;
+  qHead: Integer;
+  i, CurrIdx, SuccIdx, PredIdx: Integer;
+  desiredStart, predMinStart: TDateTime;
+  hasPredConstraint: Boolean;
+  centreId: Integer;
+  prevIdxInCentre: Integer;
+
+  // ---------- helpers locals ----------
+
+  function MaxDate(const A, B: TDateTime): TDateTime;
+  begin
+    if A > B then Result := A else Result := B;
+  end;
+
+  procedure Enqueue(const Idx: Integer);
+  var L: Integer;
+  begin
+    if (Idx < 0) or (Idx > High(FNodes)) then Exit;
+    if Visited[Idx] then Exit;
+    L := Length(Queue);
+    SetLength(Queue, L + 1);
+    Queue[L] := Idx;
+    Visited[Idx] := True;
+  end;
+
+  function Dequeue(out Idx: Integer): Boolean;
+  begin
+    Result := qHead < Length(Queue);
+    if not Result then Exit;
+    Idx := Queue[qHead];
+    Inc(qHead);
+  end;
+
+  function ApplyOverlayAndCalendar(const ACentreId: Integer; const T: TDateTime): TDateTime;
+  var
+    c: TCentreCalendar;
+  begin
+    Result := T;
+    if (FFechaBloqueo <> 0) and (Result < FFechaBloqueo) then
+      Result := FFechaBloqueo;
+    c := GetCalendar(ACentreId);
+    if c <> nil then
+      Result := c.NextWorkingTime(Result);
+  end;
+
+  function IsOFNode(const Idx: Integer): Boolean;
+  var D: TNodeData;
+  begin
+    Result := False;
+    if not TryGetNodeData(Idx, D) then Exit;
+    Result := (D.NumeroOrdenFabricacion = NumOF) and SameText(D.SerieFabricacion, SerieOF);
+  end;
+
+  // Troba el node anterior al mateix centre seqüencial dins dels nodes de la OF
+  function FindPrevInCentreSeq(const Idx: Integer): Integer;
+  var
+    j: Integer;
+    bestTime: TDateTime;
+  begin
+    Result := -1;
+    if not IsCentreSequecial(FNodes[Idx].CentreId) then Exit;
+
+    // Cerquem entre TOTS els nodes del centre (no només OF) el predecessor directe
+    bestTime := 0;
+    for j := 0 to High(FNodes) do
+    begin
+      if j = Idx then Continue;
+      if FNodes[j].CentreId <> FNodes[Idx].CentreId then Continue;
+      if FNodes[j].EndTime > FNodes[Idx].StartTime then Continue;
+      if (Result = -1) or (FNodes[j].EndTime > bestTime) then
+      begin
+        Result := j;
+        bestTime := FNodes[j].EndTime;
+      end;
+    end;
+  end;
+
+begin
+  Result := False;
+
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+  if not TryGetNodeData(ANodeIdx, DStart) then Exit;
+
+  NumOF := DStart.NumeroOrdenFabricacion;
+  SerieOF := DStart.SerieFabricacion;
+
+  // Inicialitzar
+  SetLength(Visited, Length(FNodes));
+  SetLength(IsAnchor, Length(FNodes));
+  for i := 0 to High(Visited) do
+  begin
+    Visited[i] := False;
+    IsAnchor[i] := False;
+  end;
+
+  SetLength(Queue, 0);
+  qHead := 0;
+
+  // Encuem: tota la OF (arrels) o només a partir del node seleccionat
+  if AllOF then
+  begin
+    // Trobar nodes arrel de la OF (sense predecessors dins la OF)
+    for i := 0 to High(FNodes) do
+    begin
+      if not IsOFNode(i) then Continue;
+
+      // Comprovar si té algun predecessor dins la OF
+      hasPredConstraint := False;
+      for SuccIdx := 0 to High(FLinks) do
+      begin
+        if FLinks[SuccIdx].ToNodeId <> FNodes[i].Id then Continue;
+        PredIdx := FindNodeIndexById(FLinks[SuccIdx].FromNodeId);
+        if (PredIdx >= 0) and IsOFNode(PredIdx) then
+        begin
+          hasPredConstraint := True;
+          Break;
+        end;
+      end;
+
+      if not hasPredConstraint then
+      begin
+        IsAnchor[i] := True;  // arrel de la OF: no es mou
+        Enqueue(i);
+      end;
+    end;
+  end
+  else
+  begin
+    IsAnchor[ANodeIdx] := True;  // node seleccionat: no es mou
+    Enqueue(ANodeIdx);
+  end;
+
+  // BFS: recollir tots els nodes de la OF en ordre topològic (endavant)
+  while Dequeue(CurrIdx) do
+  begin
+    for i := 0 to High(FLinks) do
+    begin
+      if FLinks[i].FromNodeId <> FNodes[CurrIdx].Id then Continue;
+      SuccIdx := FindNodeIndexById(FLinks[i].ToNodeId);
+      if (SuccIdx >= 0) and IsOFNode(SuccIdx) then
+        Enqueue(SuccIdx);
+    end;
+  end;
+
+  // Queue conté tots els nodes en ordre topològic.
+  // Processar tots els nodes excepte els ancoratge (arrels o seleccionat) i els disabled.
+  for i := 0 to High(Queue) do
+  begin
+    CurrIdx := Queue[i];
+
+    // No moure nodes ancoratge (arrels de la OF o node seleccionat)
+    if IsAnchor[CurrIdx] then
+      Continue;
+
+    // No moure nodes disabled
+    if not FNodes[CurrIdx].Enabled then
+      Continue;
+
+    centreId := FNodes[CurrIdx].CentreId;
+    desiredStart := 0;
+
+    // 1) Constraint de predecessors lògics (links)
+    predMinStart := GetMinStartAllowedByPredecessors(CurrIdx, hasPredConstraint);
+    if hasPredConstraint then
+      desiredStart := predMinStart;
+
+    // 2) Constraint del centre seqüencial (node anterior al centre)
+    //    En mode bForce, ignorem nodes d'altres OFs al centre — els empenyerem després
+    if (not bForce) and IsCentreSequecial(centreId) then
+    begin
+      prevIdxInCentre := FindPrevInCentreSeq(CurrIdx);
+      if prevIdxInCentre >= 0 then
+      begin
+        if hasPredConstraint then
+          desiredStart := MaxDate(desiredStart, IncMinute(FNodes[prevIdxInCentre].EndTime, MinGapMin))
+        else
+        begin
+          desiredStart := IncMinute(FNodes[prevIdxInCentre].EndTime, MinGapMin);
+          hasPredConstraint := True;
+        end;
+      end;
+    end;
+
+    // Aplicar calendari i bloqueig
+    if hasPredConstraint then
+      desiredStart := ApplyOverlayAndCalendar(centreId, desiredStart);
+
+    // Moure només si podem acostar-lo (shift left)
+    if hasPredConstraint and (FNodes[CurrIdx].StartTime > desiredStart) then
+    begin
+      if MoveNodeKeepingDuration(CurrIdx, desiredStart) then
+      begin
+        Result := True;
+
+        // En mode Force, empenyem els nodes d'altres OFs que col·lisionin
+        if bForce then
+          ResolveAllConstraintsFromNode(CurrIdx, MinGapMin);
+      end;
+    end;
+  end;
+
+  if Result then
+  begin
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+
+function TGanttControl.BackwardScheduleOF(
+  const ANodeIdx: Integer;
+  const AEndDate: TDateTime;
+  const MinGapMin: Integer;
+  const bForce: Boolean = False): Boolean;
+var
+  DStart: TNodeData;
+  NumOF: Integer;
+  SerieOF: string;
+  Visited: array of Boolean;
+  Queue: TIdxArray;
+  qHead: Integer;
+  i, j, CurrIdx, PredIdx: Integer;
+  desiredEnd, desiredStart: TDateTime;
+  succMaxEnd: TDateTime;
+  hasSuccConstraint: Boolean;
+  centreId: Integer;
+
+  function MinDate(const A, B: TDateTime): TDateTime;
+  begin
+    if A < B then Result := A else Result := B;
+  end;
+
+  procedure Enqueue(const Idx: Integer);
+  var L: Integer;
+  begin
+    if (Idx < 0) or (Idx > High(FNodes)) then Exit;
+    if Visited[Idx] then Exit;
+    L := Length(Queue);
+    SetLength(Queue, L + 1);
+    Queue[L] := Idx;
+    Visited[Idx] := True;
+  end;
+
+  function Dequeue(out Idx: Integer): Boolean;
+  begin
+    Result := qHead < Length(Queue);
+    if not Result then Exit;
+    Idx := Queue[qHead];
+    Inc(qHead);
+  end;
+
+  function IsOFNode(const Idx: Integer): Boolean;
+  var D: TNodeData;
+  begin
+    Result := False;
+    if not TryGetNodeData(Idx, D) then Exit;
+    Result := (D.NumeroOrdenFabricacion = NumOF) and SameText(D.SerieFabricacion, SerieOF);
+  end;
+
+  // Troba el node posterior al mateix centre seqüencial (el que ve just després)
+  function FindNextInCentreSeq(const Idx: Integer): Integer;
+  var
+    k: Integer;
+    bestTime: TDateTime;
+  begin
+    Result := -1;
+    if not IsCentreSequecial(FNodes[Idx].CentreId) then Exit;
+    bestTime := 0;
+    for k := 0 to High(FNodes) do
+    begin
+      if k = Idx then Continue;
+      if FNodes[k].CentreId <> FNodes[Idx].CentreId then Continue;
+      if FNodes[k].StartTime < FNodes[Idx].EndTime then Continue;
+      if (Result = -1) or (FNodes[k].StartTime < bestTime) then
+      begin
+        Result := k;
+        bestTime := FNodes[k].StartTime;
+      end;
+    end;
+  end;
+
+  function ApplyOverlayAndCalendarBackward(const ACentreId: Integer; const T: TDateTime): TDateTime;
+  var
+    cal: TCentreCalendar;
+  begin
+    Result := T;
+    cal := GetCalendar(ACentreId);
+    if cal <> nil then
+      Result := cal.PrevWorkingTime(Result);
+  end;
+
+begin
+  Result := False;
+
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+  if not TryGetNodeData(ANodeIdx, DStart) then Exit;
+
+  NumOF := DStart.NumeroOrdenFabricacion;
+  SerieOF := DStart.SerieFabricacion;
+
+  // Inicialitzar
+  SetLength(Visited, Length(FNodes));
+  for i := 0 to High(Visited) do
+    Visited[i] := False;
+
+  SetLength(Queue, 0);
+  qHead := 0;
+
+  // Pas 1: Trobar nodes fulla de la OF (sense successors dins la OF) via BFS invers
+  //         Encuem les fulles primer per processar-les com a punt de partida.
+  for i := 0 to High(FNodes) do
+  begin
+    if not IsOFNode(i) then Continue;
+
+    // Comprovar si té algun successor dins la OF
+    hasSuccConstraint := False;
+    for j := 0 to High(FLinks) do
+    begin
+      if FLinks[j].FromNodeId <> FNodes[i].Id then Continue;
+      PredIdx := FindNodeIndexById(FLinks[j].ToNodeId);
+      if (PredIdx >= 0) and IsOFNode(PredIdx) then
+      begin
+        hasSuccConstraint := True;
+        Break;
+      end;
+    end;
+
+    if not hasSuccConstraint then
+      Enqueue(i);
+  end;
+
+  // Pas 2: BFS invers — des de les fulles cap a les arrels, recollir predecessors
+  while Dequeue(CurrIdx) do
+  begin
+    for j := 0 to High(FLinks) do
+    begin
+      if FLinks[j].ToNodeId <> FNodes[CurrIdx].Id then Continue;
+      PredIdx := FindNodeIndexById(FLinks[j].FromNodeId);
+      if (PredIdx >= 0) and IsOFNode(PredIdx) then
+        Enqueue(PredIdx);
+    end;
+  end;
+
+  // Pas 3: Queue conté tots els nodes en ordre topològic invers (fulles primer, arrels al final).
+  //         Processar en aquest ordre: cada node calcula el seu EndTime a partir dels successors.
+  for i := 0 to High(Queue) do
+  begin
+    CurrIdx := Queue[i];
+
+    // No moure nodes disabled
+    if not FNodes[CurrIdx].Enabled then
+      Continue;
+
+    centreId := FNodes[CurrIdx].CentreId;
+
+    // Calcular desiredEnd: el mínim entre AEndDate i el que permetin els successors
+    desiredEnd := AEndDate;
+
+    // 1) Constraint de successors lògics dins la OF (links sortints)
+    for j := 0 to High(FLinks) do
+    begin
+      if FLinks[j].FromNodeId <> FNodes[CurrIdx].Id then Continue;
+      PredIdx := FindNodeIndexById(FLinks[j].ToNodeId);
+      if (PredIdx < 0) or (not IsOFNode(PredIdx)) then Continue;
+
+      // El successor comença a StartTime; el nostre End ha de ser <= StartTime - MinGapMin
+      succMaxEnd := IncMinute(FNodes[PredIdx].StartTime, -MinGapMin);
+      desiredEnd := MinDate(desiredEnd, succMaxEnd);
+    end;
+
+    // 2) Constraint del centre seqüencial (node posterior al centre): no solapar-nos
+    if (not bForce) and IsCentreSequecial(centreId) then
+    begin
+      j := FindNextInCentreSeq(CurrIdx);
+      if j >= 0 then
+        desiredEnd := MinDate(desiredEnd, IncMinute(FNodes[j].StartTime, -MinGapMin));
+    end;
+
+    // Aplicar calendari enrere
+    desiredEnd := ApplyOverlayAndCalendarBackward(centreId, desiredEnd);
+
+    // Calcular start a partir de end i duració
+    desiredStart := CalcStartFromEnd(centreId, desiredEnd, FNodes[CurrIdx].DurationMin);
+
+    // Respectar FechaBloqueo
+    if (FFechaBloqueo <> 0) and (desiredStart < FFechaBloqueo) then
+      Continue;  // no podem col·locar-lo: quedaria abans del bloqueig
+
+    // Moure el node
+    if MoveNodeKeepingDuration(CurrIdx, desiredStart) then
+    begin
+      Result := True;
+
+      // En mode Force, empenyem els nodes d'altres OFs que col·lisionin
+      if bForce then
+        ResolveAllConstraintsFromNode(CurrIdx, MinGapMin);
+    end;
+  end;
+
+  if Result then
+  begin
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+
+function TGanttControl.CompactOTFromNode(
+  const ANodeIdx: Integer;
+  const MinGapMin: Integer;
+  const AllOT: Boolean = False;
+  const bForce: Boolean = False): Boolean;
+var
+  DStart: TNodeData;
+  NumOF: Integer;
+  SerieOF: string;
+  NumOT: string;
+  Visited: array of Boolean;
+  IsAnchor: array of Boolean;
+  Queue: TIdxArray;
+  qHead: Integer;
+  i, CurrIdx, SuccIdx, PredIdx: Integer;
+  desiredStart, predMinStart: TDateTime;
+  hasPredConstraint: Boolean;
+  centreId: Integer;
+  prevIdxInCentre: Integer;
+
+  function MaxDate(const A, B: TDateTime): TDateTime;
+  begin
+    if A > B then Result := A else Result := B;
+  end;
+
+  procedure Enqueue(const Idx: Integer);
+  var L: Integer;
+  begin
+    if (Idx < 0) or (Idx > High(FNodes)) then Exit;
+    if Visited[Idx] then Exit;
+    L := Length(Queue);
+    SetLength(Queue, L + 1);
+    Queue[L] := Idx;
+    Visited[Idx] := True;
+  end;
+
+  function Dequeue(out Idx: Integer): Boolean;
+  begin
+    Result := qHead < Length(Queue);
+    if not Result then Exit;
+    Idx := Queue[qHead];
+    Inc(qHead);
+  end;
+
+  function ApplyOverlayAndCalendar(const ACentreId: Integer; const T: TDateTime): TDateTime;
+  var
+    c: TCentreCalendar;
+  begin
+    Result := T;
+    if (FFechaBloqueo <> 0) and (Result < FFechaBloqueo) then
+      Result := FFechaBloqueo;
+    c := GetCalendar(ACentreId);
+    if c <> nil then
+      Result := c.NextWorkingTime(Result);
+  end;
+
+  function IsOTNode(const Idx: Integer): Boolean;
+  var D: TNodeData;
+  begin
+    Result := False;
+    if not TryGetNodeData(Idx, D) then Exit;
+    Result := (D.NumeroOrdenFabricacion = NumOF) and
+              SameText(D.SerieFabricacion, SerieOF) and
+              SameText(D.NumeroTrabajo, NumOT);
+  end;
+
+  function FindPrevInCentreSeq(const Idx: Integer): Integer;
+  var
+    j: Integer;
+    bestTime: TDateTime;
+  begin
+    Result := -1;
+    if not IsCentreSequecial(FNodes[Idx].CentreId) then Exit;
+    bestTime := 0;
+    for j := 0 to High(FNodes) do
+    begin
+      if j = Idx then Continue;
+      if FNodes[j].CentreId <> FNodes[Idx].CentreId then Continue;
+      if FNodes[j].EndTime > FNodes[Idx].StartTime then Continue;
+      if (Result = -1) or (FNodes[j].EndTime > bestTime) then
+      begin
+        Result := j;
+        bestTime := FNodes[j].EndTime;
+      end;
+    end;
+  end;
+
+begin
+  Result := False;
+
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+  if not TryGetNodeData(ANodeIdx, DStart) then Exit;
+
+  NumOF := DStart.NumeroOrdenFabricacion;
+  SerieOF := DStart.SerieFabricacion;
+  NumOT := DStart.NumeroTrabajo;
+
+  // Inicialitzar
+  SetLength(Visited, Length(FNodes));
+  SetLength(IsAnchor, Length(FNodes));
+  for i := 0 to High(Visited) do
+  begin
+    Visited[i] := False;
+    IsAnchor[i] := False;
+  end;
+
+  SetLength(Queue, 0);
+  qHead := 0;
+
+  // Encuem: tota la OT (arrels) o només a partir del node seleccionat
+  if AllOT then
+  begin
+    // Trobar nodes arrel de la OT (sense predecessors dins la OT)
+    for i := 0 to High(FNodes) do
+    begin
+      if not IsOTNode(i) then Continue;
+
+      hasPredConstraint := False;
+      for SuccIdx := 0 to High(FLinks) do
+      begin
+        if FLinks[SuccIdx].ToNodeId <> FNodes[i].Id then Continue;
+        PredIdx := FindNodeIndexById(FLinks[SuccIdx].FromNodeId);
+        if (PredIdx >= 0) and IsOTNode(PredIdx) then
+        begin
+          hasPredConstraint := True;
+          Break;
+        end;
+      end;
+
+      if not hasPredConstraint then
+      begin
+        IsAnchor[i] := True;
+        Enqueue(i);
+      end;
+    end;
+  end
+  else
+  begin
+    IsAnchor[ANodeIdx] := True;
+    Enqueue(ANodeIdx);
+  end;
+
+  // BFS: recollir tots els nodes de la OT en ordre topològic (endavant)
+  while Dequeue(CurrIdx) do
+  begin
+    for i := 0 to High(FLinks) do
+    begin
+      if FLinks[i].FromNodeId <> FNodes[CurrIdx].Id then Continue;
+      SuccIdx := FindNodeIndexById(FLinks[i].ToNodeId);
+      if (SuccIdx >= 0) and IsOTNode(SuccIdx) then
+        Enqueue(SuccIdx);
+    end;
+  end;
+
+  // Processar tots els nodes excepte ancoratges i disabled
+  for i := 0 to High(Queue) do
+  begin
+    CurrIdx := Queue[i];
+
+    if IsAnchor[CurrIdx] then
+      Continue;
+
+    if not FNodes[CurrIdx].Enabled then
+      Continue;
+
+    centreId := FNodes[CurrIdx].CentreId;
+    desiredStart := 0;
+
+    // 1) Constraint de predecessors lògics (links)
+    predMinStart := GetMinStartAllowedByPredecessors(CurrIdx, hasPredConstraint);
+    if hasPredConstraint then
+      desiredStart := predMinStart;
+
+    // 2) Constraint del centre seqüencial
+    if (not bForce) and IsCentreSequecial(centreId) then
+    begin
+      prevIdxInCentre := FindPrevInCentreSeq(CurrIdx);
+      if prevIdxInCentre >= 0 then
+      begin
+        if hasPredConstraint then
+          desiredStart := MaxDate(desiredStart, IncMinute(FNodes[prevIdxInCentre].EndTime, MinGapMin))
+        else
+        begin
+          desiredStart := IncMinute(FNodes[prevIdxInCentre].EndTime, MinGapMin);
+          hasPredConstraint := True;
+        end;
+      end;
+    end;
+
+    // Aplicar calendari i bloqueig
+    if hasPredConstraint then
+      desiredStart := ApplyOverlayAndCalendar(centreId, desiredStart);
+
+    // Moure només si podem acostar-lo (shift left)
+    if hasPredConstraint and (FNodes[CurrIdx].StartTime > desiredStart) then
+    begin
+      if MoveNodeKeepingDuration(CurrIdx, desiredStart) then
+      begin
+        Result := True;
+        if bForce then
+          ResolveAllConstraintsFromNode(CurrIdx, MinGapMin);
+      end;
+    end;
+  end;
+
+  if Result then
+  begin
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+
+function TGanttControl.BackwardScheduleOT(
+  const ANodeIdx: Integer;
+  const AEndDate: TDateTime;
+  const MinGapMin: Integer;
+  const bForce: Boolean = False): Boolean;
+var
+  DStart: TNodeData;
+  NumOF: Integer;
+  SerieOF: string;
+  NumOT: string;
+  Visited: array of Boolean;
+  Queue: TIdxArray;
+  qHead: Integer;
+  i, j, CurrIdx, PredIdx: Integer;
+  desiredEnd, desiredStart: TDateTime;
+  succMaxEnd: TDateTime;
+  hasSuccConstraint: Boolean;
+  centreId: Integer;
+
+  function MinDate(const A, B: TDateTime): TDateTime;
+  begin
+    if A < B then Result := A else Result := B;
+  end;
+
+  procedure Enqueue(const Idx: Integer);
+  var L: Integer;
+  begin
+    if (Idx < 0) or (Idx > High(FNodes)) then Exit;
+    if Visited[Idx] then Exit;
+    L := Length(Queue);
+    SetLength(Queue, L + 1);
+    Queue[L] := Idx;
+    Visited[Idx] := True;
+  end;
+
+  function Dequeue(out Idx: Integer): Boolean;
+  begin
+    Result := qHead < Length(Queue);
+    if not Result then Exit;
+    Idx := Queue[qHead];
+    Inc(qHead);
+  end;
+
+  function IsOTNode(const Idx: Integer): Boolean;
+  var D: TNodeData;
+  begin
+    Result := False;
+    if not TryGetNodeData(Idx, D) then Exit;
+    Result := (D.NumeroOrdenFabricacion = NumOF) and
+              SameText(D.SerieFabricacion, SerieOF) and
+              SameText(D.NumeroTrabajo, NumOT);
+  end;
+
+  function FindNextInCentreSeq(const Idx: Integer): Integer;
+  var
+    k: Integer;
+    bestTime: TDateTime;
+  begin
+    Result := -1;
+    if not IsCentreSequecial(FNodes[Idx].CentreId) then Exit;
+    bestTime := 0;
+    for k := 0 to High(FNodes) do
+    begin
+      if k = Idx then Continue;
+      if FNodes[k].CentreId <> FNodes[Idx].CentreId then Continue;
+      if FNodes[k].StartTime < FNodes[Idx].EndTime then Continue;
+      if (Result = -1) or (FNodes[k].StartTime < bestTime) then
+      begin
+        Result := k;
+        bestTime := FNodes[k].StartTime;
+      end;
+    end;
+  end;
+
+  function ApplyOverlayAndCalendarBackward(const ACentreId: Integer; const T: TDateTime): TDateTime;
+  var
+    cal: TCentreCalendar;
+  begin
+    Result := T;
+    cal := GetCalendar(ACentreId);
+    if cal <> nil then
+      Result := cal.PrevWorkingTime(Result);
+  end;
+
+begin
+  Result := False;
+
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+  if not TryGetNodeData(ANodeIdx, DStart) then Exit;
+
+  NumOF := DStart.NumeroOrdenFabricacion;
+  SerieOF := DStart.SerieFabricacion;
+  NumOT := DStart.NumeroTrabajo;
+
+  // Inicialitzar
+  SetLength(Visited, Length(FNodes));
+  for i := 0 to High(Visited) do
+    Visited[i] := False;
+
+  SetLength(Queue, 0);
+  qHead := 0;
+
+  // Pas 1: Trobar nodes fulla de la OT (sense successors dins la OT)
+  for i := 0 to High(FNodes) do
+  begin
+    if not IsOTNode(i) then Continue;
+
+    hasSuccConstraint := False;
+    for j := 0 to High(FLinks) do
+    begin
+      if FLinks[j].FromNodeId <> FNodes[i].Id then Continue;
+      PredIdx := FindNodeIndexById(FLinks[j].ToNodeId);
+      if (PredIdx >= 0) and IsOTNode(PredIdx) then
+      begin
+        hasSuccConstraint := True;
+        Break;
+      end;
+    end;
+
+    if not hasSuccConstraint then
+      Enqueue(i);
+  end;
+
+  // Pas 2: BFS invers — des de les fulles cap a les arrels
+  while Dequeue(CurrIdx) do
+  begin
+    for j := 0 to High(FLinks) do
+    begin
+      if FLinks[j].ToNodeId <> FNodes[CurrIdx].Id then Continue;
+      PredIdx := FindNodeIndexById(FLinks[j].FromNodeId);
+      if (PredIdx >= 0) and IsOTNode(PredIdx) then
+        Enqueue(PredIdx);
+    end;
+  end;
+
+  // Pas 3: Processar en ordre topològic invers (fulles primer)
+  for i := 0 to High(Queue) do
+  begin
+    CurrIdx := Queue[i];
+
+    if not FNodes[CurrIdx].Enabled then
+      Continue;
+
+    centreId := FNodes[CurrIdx].CentreId;
+    desiredEnd := AEndDate;
+
+    // 1) Constraint de successors lògics dins la OT
+    for j := 0 to High(FLinks) do
+    begin
+      if FLinks[j].FromNodeId <> FNodes[CurrIdx].Id then Continue;
+      PredIdx := FindNodeIndexById(FLinks[j].ToNodeId);
+      if (PredIdx < 0) or (not IsOTNode(PredIdx)) then Continue;
+
+      succMaxEnd := IncMinute(FNodes[PredIdx].StartTime, -MinGapMin);
+      desiredEnd := MinDate(desiredEnd, succMaxEnd);
+    end;
+
+    // 2) Constraint del centre seqüencial
+    if (not bForce) and IsCentreSequecial(centreId) then
+    begin
+      j := FindNextInCentreSeq(CurrIdx);
+      if j >= 0 then
+        desiredEnd := MinDate(desiredEnd, IncMinute(FNodes[j].StartTime, -MinGapMin));
+    end;
+
+    // Aplicar calendari enrere
+    desiredEnd := ApplyOverlayAndCalendarBackward(centreId, desiredEnd);
+
+    // Calcular start a partir de end i duració
+    desiredStart := CalcStartFromEnd(centreId, desiredEnd, FNodes[CurrIdx].DurationMin);
+
+    // Respectar FechaBloqueo
+    if (FFechaBloqueo <> 0) and (desiredStart < FFechaBloqueo) then
+      Continue;
+
+    // Moure el node
+    if MoveNodeKeepingDuration(CurrIdx, desiredStart) then
+    begin
+      Result := True;
+      if bForce then
+        ResolveAllConstraintsFromNode(CurrIdx, MinGapMin);
     end;
   end;
 

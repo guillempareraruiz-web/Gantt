@@ -1,4 +1,4 @@
-unit uErpSampleBuilder;
+﻿unit uErpSampleBuilder;
 
 interface
 
@@ -835,7 +835,9 @@ begin
         if opRec.PorcentajeDependencia > 100 then
           opRec.PorcentajeDependencia := 100;
 
-        opRec.NumeroTrabajo := Format('TR-%d-%d-%d', [ofIdx, otIdx, opIdx]);
+        //opRec.NumeroTrabajo := Format('TR-%d-%d', [ofIdx, otIdx]);
+
+        opRec.NumeroTrabajo := 'TR' + inttostr(ofIdx) + SerieOF + '.' + inttostr(otIdx);
 
         opRec.CodigoCliente := MakeClienteCode(1 + (ofIdx mod 12));
         opRec.CentresTrabajo := PickCentreNames(CentreNames, ProbSinCentro);

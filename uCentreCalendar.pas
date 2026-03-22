@@ -56,6 +56,7 @@ type
 
     function WorkingMinutesBetween(const AStart, AEnd: TDateTime): Integer;
     function AddWorkingMinutes(const Start: TDateTime; Minutes: Integer): TDateTime;
+    function SubtractWorkingMinutes(const FromEnd: TDateTime; Minutes: Integer): TDateTime;
 
     function NonWorkingPeriodsForDate(const ADate: TDateTime): TArray<TNonWorkingPeriod>;
 
@@ -100,7 +101,7 @@ begin
 end;
 function NormalizeTimeBoundary(const T: TDateTime): TDateTime;
 begin
-  // Si és 23:59:59 o molt proper, tracta-ho com 00:00
+  // Si ï¿½s 23:59:59 o molt proper, tracta-ho com 00:00
   if IsAlmostEndOfDay(T) then
     Result := 0
   else
@@ -180,7 +181,7 @@ begin
   D := DateOf(AStart);
   while D <= DateOf(AEnd) do
   begin
-    // OJO: usa la versión NO cacheada, así evitamos escrituras concurrentes
+    // OJO: usa la versiï¿½n NO cacheada, asï¿½ evitamos escrituras concurrentes
     DayInts := BuildNonWorkingIntervalsForDate(D);
 
     Base := Length(Tmp);
@@ -295,7 +296,7 @@ begin
     A := D0 + StartTOD;
     B := D0 + EndTOD;
 
-    // cas especial: acaba a "final de dia" => realment és 00:00 del dia següent
+    // cas especial: acaba a "final de dia" => realment ï¿½s 00:00 del dia segï¿½ent
     if (EndTOD = 0) and (StartTOD > 0) then
       B := IncDay(D0, 1)
     else if B <= A then
@@ -571,6 +572,63 @@ begin
   Result := Cur;
 end;
 
+function TCentreCalendar.SubtractWorkingMinutes(const FromEnd: TDateTime;
+  Minutes: Integer): TDateTime;
+var
+  Cur: TDateTime;
+  Remaining: Integer;
+  Ints: TArray<TAbsInterval>;
+  I: Integer;
+  PrevBreakEnd: TDateTime;
+  SpanMin: Integer;
+begin
+  if Minutes <= 0 then
+    Exit(FloorToMinute(FromEnd));
+
+  Remaining := Minutes;
+  Cur := PrevWorkingTime(FromEnd);
+
+  while Remaining > 0 do
+  begin
+    Cur := PrevWorkingTime(Cur);
+    Ints := GetMergedIntervalsAround(Cur);
+
+    // Cercar el tram non-working que acaba just abans (o al) de Cur
+    PrevBreakEnd := 0;
+    for I := High(Ints) downto 0 do
+    begin
+      if Ints[I].E <= Cur then
+      begin
+        PrevBreakEnd := Ints[I].E;
+        Break;
+      end;
+    end;
+
+    // No hi ha cap tall non-working anterior dins la finestra cachejada
+    if PrevBreakEnd = 0 then
+    begin
+      Result := FloorToMinute(Cur - (Remaining / 1440.0));
+      Exit;
+    end;
+
+    SpanMin := MinuteSpan(PrevBreakEnd, Cur);
+
+    if SpanMin <= 0 then
+    begin
+      Cur := PrevWorkingTime(PrevBreakEnd);
+      Continue;
+    end;
+
+    if Remaining <= SpanMin then
+      Exit(FloorToMinute(Cur - (Remaining / 1440.0)));
+
+    Cur := PrevBreakEnd;
+    Dec(Remaining, SpanMin);
+  end;
+
+  Result := Cur;
+end;
+
 
 procedure NormalizeByDuration(
   const Cal: TCentreCalendar;
@@ -631,7 +689,7 @@ begin
 
   S := AStart;
 
-  // Si l'inici cau dins non-working, el saltem al següent working merged
+  // Si l'inici cau dins non-working, el saltem al segï¿½ent working merged
   if Cal.IsNonWorkingTime(S) then
     S := Cal.NextWorkingTime(S);
 

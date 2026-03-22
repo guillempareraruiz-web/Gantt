@@ -16,7 +16,8 @@ uses
   uGanttNodeHint in 'uGanttNodeHint.pas',
   uErpTypes in 'uErpTypes.pas',
   uColorPalette64LayeredPopup in 'uColorPalette64LayeredPopup.pas',
-  uGanttHistory in 'uGanttHistory.pas';
+  uGanttHistory in 'uGanttHistory.pas',
+  uNodeInspector in 'uNodeInspector.pas' {frmNodeInspector};
 
 {$R *.res}
 
