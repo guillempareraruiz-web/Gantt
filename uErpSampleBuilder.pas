@@ -73,6 +73,12 @@ procedure BuildGanttFromRawNew2(
 
 implementation
 
+const
+  OP_NAMES: array[0..11] of string = (
+    'PINTAR', 'BRONCEAR', 'LACAR', 'PULIR', 'CORTAR', 'EMBALAR',
+    'SOLDAR', 'FRESAR', 'TORNEAR', 'TALADRAR', 'RECTIFICAR', 'MONTAR'
+  );
+
 type
   TOpList = TArray<TErpOp>;
   TLinkList = TArray<TErpLink>;
@@ -547,7 +553,7 @@ begin
         opRec.CodigoCliente := MakeClienteCode(1 + (ofIdx mod 12));
         opRec.CentresTrabajo := PickCentreNames(CentreNames, ProbSinCentro);
 
-        opRec.Operacion := Format('OP %d.%d.%d', [ofIdx, otIdx, opIdx]);
+        opRec.Operacion := OP_NAMES[opIdx mod Length(OP_NAMES)];
 
         opRec.StartTime := curStart;
         //opRec.EndTime := IncMinute(opRec.StartTime, durMin);
@@ -828,8 +834,8 @@ begin
 
         opRec.OperariosAsignados := 0;
         opRec.OperariosNecesarios := Random(3);
-        if opRec.OperariosNecesarios > 0 then
-          opRec.OperariosAsignados := Random(opRec.OperariosNecesarios + 1);
+        //if opRec.OperariosNecesarios > 0 then
+        //  opRec.OperariosAsignados := Random(opRec.OperariosNecesarios + 1);
 
         opRec.PorcentajeDependencia := RandomQuarterPercent;
         if opRec.PorcentajeDependencia > 100 then
@@ -842,7 +848,7 @@ begin
         opRec.CodigoCliente := MakeClienteCode(1 + (ofIdx mod 12));
         opRec.CentresTrabajo := PickCentreNames(CentreNames, ProbSinCentro);
 
-        opRec.Operacion := Format('OP %d.%d.%d', [ofIdx, otIdx, opIdx]);
+        opRec.Operacion := OP_NAMES[opIdx mod Length(OP_NAMES)];
 
         opRec.StartTime := curStart;
         opRec.EndTime := opRec.StartTime + (opRec.DurationMin / 1440.0);

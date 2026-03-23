@@ -27,7 +27,9 @@ uses
   cxDateUtils, cxDropDownEdit, cxCalendar, Vcl.Menus, Vcl.WinXCtrls, uNodeDataRepo,
   System.Generics.Collections, uErpTypes, uColorPalette64LayeredPopup,
   System.Threading,  System.SyncObjs, System.Diagnostics, uNodeInspector,
-  cxStyles, cxFilter, dxScrollbarAnnotations, cxInplaceContainer, cxVGrid;
+  cxStyles, cxFilter, dxScrollbarAnnotations, cxInplaceContainer, cxVGrid,
+  uOperariosTypes, uOperariosRepo, uAssignOperaris, uGestionOperaris,
+  cxCheckComboBox, cxCheckBox, uOperarioFilterPopup, uLinkEditor;
 
 type
 
@@ -190,6 +192,9 @@ type
     ApartirdelNodo1: TMenuItem;
     ApartirdelNodoconprioridad2: TMenuItem;
     Button23: TButton;tmr1Sec: TTimer;
+    FchkSoloFiltrados: TcxCheckBox;
+    FcxFilterOperarios: TcxCheckComboBox;
+
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
@@ -238,11 +243,15 @@ type
     procedure otalaOT1Click(Sender: TObject);
     procedure Button23Click(Sender: TObject);
     procedure tmr1SecTimer(Sender: TObject);
+    procedure FchkSoloFiltradosPropertiesChange(Sender: TObject);
+    procedure FcxFilterOperariosPropertiesChange(Sender: TObject);
   private
     { Private declarations }
 
 
     FUpdatingViewport: Boolean;
+    FFilterPopup: TfrmOperarioFilterPopup;
+    FBtnFilterOperarios: TButton;
 
     FKPIDebounceTimer : TTimer;
 
@@ -310,6 +319,16 @@ type
 
     procedure UpdateKPIs;
 
+    procedure AssignarOperarisClick(Sender: TObject);
+    procedure GestionOperarisClick(Sender: TObject);
+    procedure EditarLinksClick(Sender: TObject);
+
+    // Filtro operarios
+    procedure BtnFilterOperariosClick(Sender: TObject);
+    procedure FilterPopupChanged(Sender: TObject; const SelectedIds: TArray<Integer>);
+    procedure RefreshOperarioFilterItems;
+    procedure ApplyOperarioFilter;
+
   public
     { Public declarations }
     procedure GoToDate(const ADate: TDateTime);
@@ -322,8 +341,12 @@ var
   FTimeline: TGanttTimelineControl;
   FCentrosControl: TGanttCentresControl;
   FNodeRepo: TNodeDataRepo;
+  FOperariosRepo: TOperariosRepo;
   FCentresRows: TArray<TCentreTreball>;
   FRaw: TErpRaw;
+
+
+    Label19: TLabel;
 
 implementation
 
@@ -828,6 +851,8 @@ begin
 
   FGantt.RecalcCounters;
   UpdateHistoryButtons;
+
+  RefreshOperarioFilterItems;
 
   Screen.Cursor := crDefault;
 
@@ -1976,15 +2001,408 @@ begin
 
   FNodeRepo := TNodeDataRepo.Create;
 
+  FOperariosRepo := TOperariosRepo.Create;
+  FOperariosRepo.LoadSampleData;
+
   pnlCentros.Width := 220;
 
+  // Afegir opció "Assignar Operaris" al menú contextual del node
+  begin
+    var mi: TMenuItem;
+    mi := TMenuItem.Create(popNode);
+    mi.Caption := '-';
+    popNode.Items.Add(mi);
+
+    mi := TMenuItem.Create(popNode);
+    mi.Caption := 'Asignar Operarios...';
+    mi.OnClick := AssignarOperarisClick;
+    popNode.Items.Add(mi);
+
+    mi := TMenuItem.Create(popNode);
+    mi.Caption := 'Gesti'#243'n Operarios y Departamentos...';
+    mi.OnClick := GestionOperarisClick;
+    popNode.Items.Add(mi);
+
+    mi := TMenuItem.Create(popNode);
+    mi.Caption := '-';
+    popNode.Items.Add(mi);
+
+    mi := TMenuItem.Create(popNode);
+    mi.Caption := 'Editar Links (Dependencias)...';
+    mi.OnClick := EditarLinksClick;
+    popNode.Items.Add(mi);
+  end;
+
+  // Afegir també al menú del Gantt (fons)
+  begin
+    var mi2: TMenuItem;
+    mi2 := TMenuItem.Create(popGantt);
+    mi2.Caption := '-';
+    popGantt.Items.Add(mi2);
+
+    mi2 := TMenuItem.Create(popGantt);
+    mi2.Caption := 'Gesti'#243'n Operarios y Departamentos...';
+    mi2.OnClick := GestionOperarisClick;
+    popGantt.Items.Add(mi2);
+  end;
+
+  // Popup grid de filtro de operarios
+  FFilterPopup := TfrmOperarioFilterPopup.CreatePopup(Self, FOperariosRepo);
+  FFilterPopup.OnFilterChanged := FilterPopupChanged;
+
+  // Botón para abrir el popup (al lado del cxCheckComboBox existente)
+  FBtnFilterOperarios := TButton.Create(Self);
+  FBtnFilterOperarios.Parent := pnlToolbar;
+  FBtnFilterOperarios.SetBounds(FcxFilterOperarios.Left + FcxFilterOperarios.Width + 4,
+    FcxFilterOperarios.Top, 26, FcxFilterOperarios.Height);
+  FBtnFilterOperarios.Caption := '...';
+  FBtnFilterOperarios.Font.Style := [fsBold];
+  FBtnFilterOperarios.OnClick := BtnFilterOperariosClick;
+
+end;
+
+procedure TForm1.EditarLinksClick(Sender: TObject);
+var
+  idx: Integer;
+  node: TNode;
+  D: uNodeDataRepo.TNodeData;
+  AllLinks: TArray<TErpLink>;
+  LinkIdxs: TArray<Integer>;
+  Items: TArray<TLinkEditItem>;
+  I, J: Integer;
+  OtherNode: TNode;
+  OtherData: uNodeDataRepo.TNodeData;
+  LResult: TLinkEditorResult;
+  OtherIdx: Integer;
+begin
+  idx := FGantt.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  node := FGantt.SelectedNode;
+  if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+
+  AllLinks := FGantt.GetLinks;
+  LinkIdxs := FGantt.GetLinksForNode(node.Id);
+
+  // Construir items per l'editor
+  SetLength(Items, Length(LinkIdxs));
+  for I := 0 to High(LinkIdxs) do
+  begin
+    J := LinkIdxs[I];
+    Items[I].LinkIndex := J;
+    Items[I].FromNodeId := AllLinks[J].FromNodeId;
+    Items[I].ToNodeId := AllLinks[J].ToNodeId;
+    Items[I].LinkType := AllLinks[J].LinkType;
+    Items[I].PorcentajeDependencia := AllLinks[J].PorcentajeDependencia;
+    Items[I].Deleted := False;
+
+    // Resolucionar noms
+    if AllLinks[J].FromNodeId = node.Id then
+    begin
+      Items[I].FromCaption := D.Operacion;
+      OtherIdx := FGantt.FindNodeIndexById(AllLinks[J].ToNodeId);
+      if (OtherIdx >= 0) then
+      begin
+        OtherNode := FGantt.GetNodeAt(OtherIdx);
+        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
+          Items[I].ToCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
+        else
+          Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
+      end
+      else
+        Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
+    end
+    else
+    begin
+      Items[I].ToCaption := D.Operacion;
+      OtherIdx := FGantt.FindNodeIndexById(AllLinks[J].FromNodeId);
+      if (OtherIdx >= 0) then
+      begin
+        OtherNode := FGantt.GetNodeAt(OtherIdx);
+        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
+          Items[I].FromCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
+        else
+          Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
+      end
+      else
+        Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
+    end;
+  end;
+
+  if TfrmLinkEditor.Execute(node.Id,
+    D.Operacion + ' (OF ' + IntToStr(D.NumeroOrdenFabricacion) + ')',
+    Items, LResult) then
+  begin
+    // Reconstruir array de links complet
+    var NewLinks: TArray<TErpLink>;
+    var EditedSet: TDictionary<Integer, Integer>; // LinkIndex -> index dins LResult.Items
+    var DeletedSet: TDictionary<Integer, Boolean>;
+    EditedSet := TDictionary<Integer, Integer>.Create;
+    DeletedSet := TDictionary<Integer, Boolean>.Create;
+    try
+      for I := 0 to High(LResult.Items) do
+      begin
+        J := LResult.Items[I].LinkIndex;
+        if J < 0 then Continue;
+        if LResult.Items[I].Deleted then
+          DeletedSet.AddOrSetValue(J, True)
+        else
+          EditedSet.AddOrSetValue(J, I);
+      end;
+
+      SetLength(NewLinks, 0);
+      for I := 0 to High(AllLinks) do
+      begin
+        if DeletedSet.ContainsKey(I) then
+          Continue; // eliminat
+
+        var L: TErpLink;
+        L := AllLinks[I];
+        if EditedSet.ContainsKey(I) then
+          L.PorcentajeDependencia := LResult.Items[EditedSet[I]].PorcentajeDependencia;
+
+        SetLength(NewLinks, Length(NewLinks) + 1);
+        NewLinks[High(NewLinks)] := L;
+      end;
+
+      FGantt.SetLinks(NewLinks);
+
+      // Forçar recàlcul: per cada link editat, moure el successor
+      // a la posició mínima que marca el nou percentatge
+      var K: Integer;
+      var MovedNodes: TIdxArray;
+      for K := 0 to High(NewLinks) do
+      begin
+        // Links on aquest node és predecessor (sortida)
+        if NewLinks[K].FromNodeId = node.Id then
+        begin
+          var SuccNodeIdx: Integer;
+          SuccNodeIdx := FGantt.FindNodeIndexById(NewLinks[K].ToNodeId);
+          if SuccNodeIdx >= 0 then
+          begin
+            var MinStart: TDateTime;
+            MinStart := FGantt.GetDependencyMinStart(idx, NewLinks[K].PorcentajeDependencia);
+            FGantt.MoveNodeKeepingDuration(SuccNodeIdx, MinStart);
+            FGantt.ResolveDependenciesFromNode(SuccNodeIdx, MovedNodes);
+          end;
+        end;
+        // Links on aquest node és successor (entrada)
+        if NewLinks[K].ToNodeId = node.Id then
+        begin
+          var PredNodeIdx: Integer;
+          PredNodeIdx := FGantt.FindNodeIndexById(NewLinks[K].FromNodeId);
+          if PredNodeIdx >= 0 then
+          begin
+            var MinStart: TDateTime;
+            MinStart := FGantt.GetDependencyMinStart(PredNodeIdx, NewLinks[K].PorcentajeDependencia);
+            FGantt.MoveNodeKeepingDuration(idx, MinStart);
+            FGantt.ResolveDependenciesFromNode(idx, MovedNodes);
+          end;
+        end;
+      end;
+      FGantt.RebuildLayout;
+    finally
+      EditedSet.Free;
+      DeletedSet.Free;
+    end;
+  end;
+end;
+
+procedure TForm1.GestionOperarisClick(Sender: TObject);
+begin
+  TfrmGestionOperaris.Execute(FOperariosRepo);
+  RefreshOperarioFilterItems;
+end;
+
+procedure TForm1.RefreshOperarioFilterItems;
+var
+  Ops: TArray<TOperario>;
+  I: Integer;
+  SelIds: TArray<Integer>;
+begin
+  // Guardar selección del popup antes de recargar
+  SelIds := FFilterPopup.GetSelectedIds;
+
+  // Recargar cxCheckComboBox
+  FcxFilterOperarios.Properties.Items.Clear;
+  Ops := FOperariosRepo.GetOperarios;
+  for I := 0 to High(Ops) do
+    FcxFilterOperarios.Properties.Items.AddCheckItem(Ops[I].Nombre);
+
+  // Recrear popup con datos actualizados
+  FFilterPopup.Free;
+  FFilterPopup := TfrmOperarioFilterPopup.CreatePopup(Self, FOperariosRepo);
+  FFilterPopup.OnFilterChanged := FilterPopupChanged;
+  FFilterPopup.SetSelectedIds(SelIds);
+end;
+
+procedure TForm1.BtnFilterOperariosClick(Sender: TObject);
+var
+  Pt: TPoint;
+begin
+  Pt := FBtnFilterOperarios.ClientToScreen(Point(0, FBtnFilterOperarios.Height));
+  FFilterPopup.ShowAt(Pt.X, Pt.Y);
+end;
+
+procedure TForm1.FilterPopupChanged(Sender: TObject; const SelectedIds: TArray<Integer>);
+begin
+  ApplyOperarioFilter;
+end;
+
+procedure TForm1.FchkSoloFiltradosPropertiesChange(Sender: TObject);
+begin
+ ApplyOperarioFilter;
+end;
+
+procedure TForm1.FcxFilterOperariosPropertiesChange(Sender: TObject);
+begin
+  ApplyOperarioFilter;
+end;
 
 
+procedure TForm1.ApplyOperarioFilter;
+var
+  Ops: TArray<TOperario>;
+  I, J: Integer;
+  SelOperarioIds: TArray<Integer>;
+  PopupIds: TArray<Integer>;
+  Asigs: TArray<TAsignacionOperario>;
+  DataIdSet: TDictionary<Integer, Byte>;
+  IdSet: TDictionary<Integer, Byte>;
+  DataIds: TArray<Integer>;
+  AnyChecked: Boolean;
+begin
+  Ops := FOperariosRepo.GetOperarios;
+  IdSet := TDictionary<Integer, Byte>.Create;
+  try
+    // Fuente 1: cxCheckComboBox
+    for I := 0 to FcxFilterOperarios.Properties.Items.Count - 1 do
+      if FcxFilterOperarios.States[I] = cbsChecked then
+        if I <= High(Ops) then
+          IdSet.AddOrSetValue(Ops[I].Id, 1);
+
+    // Fuente 2: Popup grid
+    PopupIds := FFilterPopup.GetSelectedIds;
+    for I := 0 to High(PopupIds) do
+      IdSet.AddOrSetValue(PopupIds[I], 1);
+
+    AnyChecked := IdSet.Count > 0;
+    if not AnyChecked then
+    begin
+      FGantt.ClearOperarioFilter;
+      Exit;
+    end;
+
+    // IDs seleccionados
+    SetLength(SelOperarioIds, IdSet.Count);
+    I := 0;
+    for J in IdSet.Keys do
+    begin
+      SelOperarioIds[I] := J;
+      Inc(I);
+    end;
+  finally
+    IdSet.Free;
+  end;
+
+  // Recoger DataIds de los nodos asignados a esos operarios
+  DataIdSet := TDictionary<Integer, Byte>.Create;
+  try
+    for I := 0 to High(SelOperarioIds) do
+    begin
+      Asigs := FOperariosRepo.GetAsignacionsByOperario(SelOperarioIds[I]);
+      for J := 0 to High(Asigs) do
+        DataIdSet.AddOrSetValue(Asigs[J].DataId, 1);
+    end;
+
+    SetLength(DataIds, DataIdSet.Count);
+    I := 0;
+    for J in DataIdSet.Keys do
+    begin
+      DataIds[I] := J;
+      Inc(I);
+    end;
+  finally
+    DataIdSet.Free;
+  end;
+
+  FGantt.SetOperarioFilter(DataIds, FchkSoloFiltrados.Checked);
+end;
+
+procedure TForm1.AssignarOperarisClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  I: Integer;
+  node: TNode;
+  D: uNodeDataRepo.TNodeData;
+  AssignCount: Integer;
+  DataIds: TArray<Integer>;
+  Operaciones: TArray<string>;
+  TotalDur: Double;
+  TotalNec: Integer;
+begin
+  SelIndexes := FGantt.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then Exit;
+
+  // Modo single
+  if Length(SelIndexes) = 1 then
+  begin
+    node := FGantt.GetNodeAt(SelIndexes[0]);
+    if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+
+    if TfrmAssignOperaris.Execute(
+      FOperariosRepo, D.DataId, D.Operacion,
+      D.DurationMin, D.OperariosNecesarios, AssignCount) then
+    begin
+      D.OperariosAsignados := AssignCount;
+      FNodeRepo.AddOrUpdate(D);
+      FGantt.Invalidate;
+    end;
+    Exit;
+  end;
+
+  // Modo multi: recoger DataIds, sumar duraciones y necesarios
+  SetLength(DataIds, 0);
+  SetLength(Operaciones, 0);
+  TotalDur := 0;
+  TotalNec := 0;
+  for I := 0 to High(SelIndexes) do
+  begin
+    if (SelIndexes[I] < 0) or (SelIndexes[I] > FGantt.NodeCount - 1) then
+      Continue;
+    node := FGantt.GetNodeAt(SelIndexes[I]);
+    if not FNodeRepo.TryGetById(node.DataId, D) then Continue;
+
+    SetLength(DataIds, Length(DataIds) + 1);
+    DataIds[High(DataIds)] := D.DataId;
+    SetLength(Operaciones, Length(Operaciones) + 1);
+    Operaciones[High(Operaciones)] := D.Operacion;
+    TotalDur := TotalDur + D.DurationMin;
+    TotalNec := TotalNec + D.OperariosNecesarios;
+  end;
+
+  if Length(DataIds) = 0 then Exit;
+
+  if TfrmAssignOperaris.ExecuteMulti(
+    FOperariosRepo, DataIds, Operaciones, TotalDur, TotalNec) then
+  begin
+    // Actualizar OperariosAsignados de cada nodo
+    for I := 0 to High(DataIds) do
+    begin
+      if FNodeRepo.TryGetById(DataIds[I], D) then
+      begin
+        D.OperariosAsignados := FOperariosRepo.CountAssignatsAlNode(DataIds[I]);
+        FNodeRepo.AddOrUpdate(D);
+      end;
+    end;
+    FGantt.Invalidate;
+  end;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   FNodeRepo.Free;
+  FOperariosRepo.Free;
 
   if Assigned(FCentreKPIs) then
    FreeAndNil(FCentreKPIs);

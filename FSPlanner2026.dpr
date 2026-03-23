@@ -17,7 +17,13 @@ uses
   uErpTypes in 'uErpTypes.pas',
   uColorPalette64LayeredPopup in 'uColorPalette64LayeredPopup.pas',
   uGanttHistory in 'uGanttHistory.pas',
-  uNodeInspector in 'uNodeInspector.pas' {frmNodeInspector};
+  uNodeInspector in 'uNodeInspector.pas' {frmNodeInspector},
+  uOperariosTypes in 'uOperariosTypes.pas',
+  uOperariosRepo in 'uOperariosRepo.pas',
+  uAssignOperaris in 'uAssignOperaris.pas' {frmAssignOperaris},
+  uGestionOperaris in 'uGestionOperaris.pas' {frmGestionOperaris},
+  uOperarioFilterPopup in 'uOperarioFilterPopup.pas',
+  uLinkEditor in 'uLinkEditor.pas' {frmLinkEditor};
 
 {$R *.res}
 

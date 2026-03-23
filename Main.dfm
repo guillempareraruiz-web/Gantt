@@ -19,14 +19,15 @@ object Form1: TForm1
     Left = 0
     Top = 0
     Width = 1092
-    Height = 95
+    Height = 108
     Align = alTop
     Color = 15395562
     ParentBackground = False
     TabOrder = 0
+    ExplicitLeft = -8
     DesignSize = (
       1092
-      95)
+      108)
     object Label1: TLabel
       Left = 283
       Top = 7
@@ -116,6 +117,13 @@ object Form1: TForm1
       Font.Name = 'Segoe UI'
       Font.Style = []
       ParentFont = False
+    end
+    object Label19: TLabel
+      Left = 150
+      Top = 62
+      Width = 51
+      Height = 15
+      Caption = 'Operarios'
     end
     object btnRefresh: TButton
       Left = 1004
@@ -441,6 +449,23 @@ object Form1: TForm1
       TabOrder = 24
       OnClick = Button13Click
     end
+    object FcxFilterOperarios: TcxCheckComboBox
+      Left = 149
+      Top = 78
+      Properties.DropDownRows = 30
+      Properties.Items = <>
+      Properties.OnChange = FcxFilterOperariosPropertiesChange
+      TabOrder = 25
+      Width = 185
+    end
+    object FchkSoloFiltrados: TcxCheckBox
+      Left = 224
+      Top = 59
+      Caption = 'Ver solo filtrados'
+      Properties.Alignment = taRightJustify
+      Style.TransparentBorder = False
+      TabOrder = 26
+    end
   end
   object Panel1: TPanel
     Left = 0
@@ -497,13 +522,15 @@ object Form1: TForm1
   end
   object pnlCentros: TPanel
     Left = 0
-    Top = 145
+    Top = 158
     Width = 226
-    Height = 567
+    Height = 554
     Align = alLeft
     BevelOuter = bvNone
     Caption = 'pnlCentros'
     TabOrder = 2
+    ExplicitTop = 145
+    ExplicitHeight = 567
     object Panel2: TPanel
       Left = 0
       Top = 0
@@ -615,13 +642,14 @@ object Form1: TForm1
   end
   object Panel3: TPanel
     Left = 0
-    Top = 95
+    Top = 108
     Width = 1092
     Height = 50
     Align = alTop
     Color = 15395562
     ParentBackground = False
     TabOrder = 4
+    ExplicitTop = 95
     object Label12: TLabel
       Left = 10
       Top = 4

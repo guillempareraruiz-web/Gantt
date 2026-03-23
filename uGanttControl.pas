@@ -7,7 +7,8 @@ uses
   System.Classes, System.SysUtils, System.Types, System.UITypes,
   Vcl.Controls, Vcl.Graphics, System.Generics.Collections, System.Generics.Defaults,
   uGanttTypes, uCentreCalendar, Vcl.Menus, uNodeDataRepo, uGanttNodeHint,
-  Vcl.Forms, Vcl.Direct2D, Winapi.D2D1, Winapi.DXGIFormat, uErpTypes, uGanttHistory;
+  Vcl.Forms, Vcl.Direct2D, Winapi.D2D1, Winapi.DXGIFormat, uErpTypes, uGanttHistory,
+  Vcl.ExtCtrls;
 
 type
   TGanttViewportChangedEvent = procedure(Sender: TObject; const StartTime: TDateTime;
@@ -157,6 +158,16 @@ type
     FSearchResults: TArray<Integer>;
     FSearchPos: Integer;
     FHighlightSet: TDictionary<Integer, Byte>; // NodeIndex -> 1
+
+    FOpFilterDataIds: TDictionary<Integer, Byte>; // DataId -> 1 (nodes a resaltar)
+    FOpFilterActive: Boolean;
+    FOpFilterHideMode: Boolean; // True = ocultar no filtrados; False = atenuar
+    FOpFilterPulsePhase: Single; // 0..2*PI oscilación
+    FOpFilterTimer: TTimer;
+
+    // Link hover
+    FHoverLinkIndex: Integer; // -1 = cap link hovered
+    FLinkScreenPts: TArray<TPair<TPointF, TPointF>>; // from/to screen points per link
 
     FMarqueeSelecting: Boolean;
     FMarqueeStartPt: TPoint;
@@ -401,6 +412,8 @@ type
 
     function IsCentreVisible(const ACentreId: Integer): Boolean;
 
+    procedure OpFilterTimerTick(Sender: TObject);
+    function HitTestLink(const X, Y: Single; const Tolerance: Single = 6.0): Integer;
     procedure GetNodeStyle(
                     const Node: TNode; const D: TNodeData; const HasData: Boolean;
                     const IsSel, IsHover, IsHi: Boolean; out S: TGanttNodeStyle);
@@ -510,11 +523,18 @@ type
     procedure RecalcCounters;
 
     procedure SetLinks(const ALinks: TArray<TErpLink>);
+    function GetLinks: TArray<TErpLink>;
+    procedure UpdateLinkDependencia(const AToNodeId: Integer; const ANewPct: Double);
+    procedure UpdateLinkAt(const AIndex: Integer; const ALink: TErpLink);
+    procedure AddLink(const ALink: TErpLink);
+    procedure RemoveLinkAt(const AIndex: Integer);
+    function GetLinksForNode(const ANodeId: Integer): TArray<Integer>; // indices dins FLinks
 
     procedure UpdateNode(const NodeIndex: Integer; const ANode: TNode);
     function GetRowsCopy: TArray<TRowLayout>;
     function SelectedNodeIndex: Integer;
     function SelectedNode: TNode;
+    function GetSelectedNodeIndexes: TArray<Integer>;
 
     function XToTime(const AX: Single): TDateTime;
 
@@ -612,6 +632,10 @@ type
     procedure SearchNext(const Wrap: Boolean = True);
     procedure SearchPrev(const Wrap: Boolean = True);
     function IsNodeHighlighted(const NodeIndex: Integer): Boolean;
+
+    procedure SetOperarioFilter(const ADataIds: TArray<Integer>; AHideMode: Boolean);
+    procedure ClearOperarioFilter;
+    function IsNodeOperarioFiltered(const ADataId: Integer): Boolean;
 
 
 
@@ -997,6 +1021,8 @@ var
   end;
 
 begin
+  SetLength(FLinkScreenPts, 0); // netejar punts hover del frame anterior
+
   if Length(FLinks) = 0 then Exit;
   if (FOpIdToNodeIndex = nil) then Exit;
   if (FNodeIndexToLayoutIndex = nil) then Exit;
@@ -1061,16 +1087,39 @@ begin
       fromPt := PointF(rFromS.Right, (rFromS.Top + rFromS.Bottom) * 0.5);
       toPt   := PointF(rToS.Left,    (rToS.Top + rToS.Bottom) * 0.5);
 
+      // Guardar punts per hit-test hover
+      SetLength(FLinkScreenPts, Length(FLinkScreenPts) + 1);
+      FLinkScreenPts[High(FLinkScreenPts)] := TPair<TPointF, TPointF>.Create(fromPt, toPt);
+
+      // Resaltar si hovered
+      var linkDrawIdx: Integer := High(FLinkScreenPts);
+      var sw: Single;
+      var linkStyle: ID2D1StrokeStyle;
+      if linkDrawIdx = FHoverLinkIndex then
+      begin
+        sw := 3.5;
+        StrokeBrush.SetColor(D2D1ColorF(0.35, 0.60, 0.95, 1.0)); // blau clar
+        FillBrush.SetColor(D2D1ColorF(0.35, 0.60, 0.95, 1.0));
+        linkStyle := nil; // línia contínua
+      end
+      else
+      begin
+        sw := 1.2;
+        StrokeBrush.SetColor(D2D1ColorF(0.45, 0.45, 0.45, 0.85));
+        FillBrush.SetColor(D2D1ColorF(0.45, 0.45, 0.45, 0.85));
+        linkStyle := dotted;
+      end;
+
       DrawCurvedArrowD2D(
         RT,
         StrokeBrush,
         FillBrush,
         fromPt,
         toPt,
-        dotted,
-        1.2,  // stroke width
-        10,   // arrow size
-        8     // arrow width
+        linkStyle,
+        sw,
+        10,
+        8
       );
     end;
 
@@ -1407,12 +1456,21 @@ begin
   FStartTime := Now;
 
   FHoverNodeIndex := -1;
+  FHoverLinkIndex := -1;
   FSelectedNodeIndexes := TDictionary<Integer, Byte>.Create;
   FFocusedNodeIndex := -1;
 
   FCalendars := TDictionary<Integer, TCentreCalendar>.Create;
   FCentreNodeIdx := TDictionary<Integer, TArray<Integer>>.Create;
   FHighlightSet := TDictionary<Integer, Byte>.Create;
+  FOpFilterDataIds := TDictionary<Integer, Byte>.Create;
+  FOpFilterActive := False;
+  FOpFilterHideMode := False;
+  FOpFilterPulsePhase := 0;
+  FOpFilterTimer := TTimer.Create(Self);
+  FOpFilterTimer.Interval := 25; // ~40 fps
+  FOpFilterTimer.Enabled := False;
+  FOpFilterTimer.OnTimer := OpFilterTimerTick;
   FSearchPos := -1;
 
   FHintWnd := TGanttNodeHintWindow.Create(Self);
@@ -1433,6 +1491,7 @@ begin
   FCalendars.Free;
   FCentreNodeIdx.Free;
   FHighlightSet.Free;
+  FOpFilterDataIds.Free;
 
   FSelectedNodeIndexes.Free;
 
@@ -1640,6 +1699,63 @@ procedure TGanttControl.SetLinks(const ALinks: TArray<TErpLink>);
 begin
   FLinks := Copy(ALinks);
   Invalidate;
+end;
+
+function TGanttControl.GetLinks: TArray<TErpLink>;
+begin
+  Result := Copy(FLinks);
+end;
+
+procedure TGanttControl.UpdateLinkDependencia(const AToNodeId: Integer; const ANewPct: Double);
+var
+  I: Integer;
+begin
+  for I := 0 to High(FLinks) do
+    if FLinks[I].ToNodeId = AToNodeId then
+      FLinks[I].PorcentajeDependencia := ANewPct;
+end;
+
+procedure TGanttControl.UpdateLinkAt(const AIndex: Integer; const ALink: TErpLink);
+begin
+  if (AIndex >= 0) and (AIndex <= High(FLinks)) then
+  begin
+    FLinks[AIndex] := ALink;
+    Invalidate;
+  end;
+end;
+
+procedure TGanttControl.AddLink(const ALink: TErpLink);
+begin
+  SetLength(FLinks, Length(FLinks) + 1);
+  FLinks[High(FLinks)] := ALink;
+  Invalidate;
+end;
+
+procedure TGanttControl.RemoveLinkAt(const AIndex: Integer);
+var
+  I: Integer;
+begin
+  if (AIndex < 0) or (AIndex > High(FLinks)) then Exit;
+  for I := AIndex to High(FLinks) - 1 do
+    FLinks[I] := FLinks[I + 1];
+  SetLength(FLinks, Length(FLinks) - 1);
+  Invalidate;
+end;
+
+function TGanttControl.GetLinksForNode(const ANodeId: Integer): TArray<Integer>;
+var
+  I: Integer;
+  List: TList<Integer>;
+begin
+  List := TList<Integer>.Create;
+  try
+    for I := 0 to High(FLinks) do
+      if (FLinks[I].FromNodeId = ANodeId) or (FLinks[I].ToNodeId = ANodeId) then
+        List.Add(I);
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
 end;
 
 
@@ -2134,6 +2250,8 @@ var
   end;
 
 begin
+  SetLength(FLinkScreenPts, 0); // netejar punts hover del frame anterior
+
   if Length(FLinks) = 0 then Exit;
   if (FOpIdToNodeIndex = nil) then Exit;
   if (FNodeIndexToLayoutIndex = nil) then Exit;
@@ -2184,7 +2302,6 @@ begin
       rFromW := GetNodeRectWorldForLinks(fromNodeIdx);
       rToW   := GetNodeRectWorldForLinks(toNodeIdx);
 
-
       if rFromW.IsEmpty or rToW.IsEmpty then
         Continue;
 
@@ -2198,16 +2315,39 @@ begin
       fromPt := PointF(rFromS.Right, (rFromS.Top + rFromS.Bottom) * 0.5);
       toPt   := PointF(rToS.Left,    (rToS.Top + rToS.Bottom) * 0.5);
 
+      // Guardar punts per hit-test hover
+      SetLength(FLinkScreenPts, Length(FLinkScreenPts) + 1);
+      FLinkScreenPts[High(FLinkScreenPts)] := TPair<TPointF, TPointF>.Create(fromPt, toPt);
+
+      // Resaltar si hovered
+      var linkDrawIdx: Integer := High(FLinkScreenPts);
+      var sw: Single;
+      var linkStyle: ID2D1StrokeStyle;
+      if linkDrawIdx = FHoverLinkIndex then
+      begin
+        sw := 3.5;
+        StrokeBrush.SetColor(D2D1ColorF(0.35, 0.60, 0.95, 1.0)); // blau clar
+        FillBrush.SetColor(D2D1ColorF(0.35, 0.60, 0.95, 1.0));
+        linkStyle := nil; // línia contínua
+      end
+      else
+      begin
+        sw := 1.2;
+        StrokeBrush.SetColor(D2D1ColorF(0.45, 0.45, 0.45, 0.85));
+        FillBrush.SetColor(D2D1ColorF(0.45, 0.45, 0.45, 0.85));
+        linkStyle := dotted;
+      end;
+
       DrawCurvedArrowD2D(
         RT,
         StrokeBrush,
         FillBrush,
         fromPt,
         toPt,
-        dotted,
-        1.2,  // stroke width
-        10,   // arrow size
-        8     // arrow width
+        linkStyle,
+        sw,
+        10,
+        8
       );
     end;
 
@@ -2390,6 +2530,20 @@ begin
     FillChar(Result, SizeOf(Result), 0);
 end;
 
+function TGanttControl.GetSelectedNodeIndexes: TArray<Integer>;
+var
+  K: Integer;
+  I: Integer;
+begin
+  SetLength(Result, FSelectedNodeIndexes.Count);
+  I := 0;
+  for K in FSelectedNodeIndexes.Keys do
+  begin
+    Result[I] := K;
+    Inc(I);
+  end;
+end;
+
 
 procedure TGanttControl.DrawProgressBarD2D(const RT: ID2D1RenderTarget; const Brush: ID2D1SolidColorBrush;
   const R: TRectF; const P: Single);
@@ -2436,7 +2590,7 @@ begin
   bh := 12;
 
   bx := R.Right - bw - 3;
-  by := R.Top + 3;
+  by := R.Top - bh;
 
   badgeR := TRectF.Create(bx, by, bx + bw, by + bh);
 
@@ -2722,6 +2876,117 @@ var
   dummy: Byte;
 begin
   Result := FHighlightSet.TryGetValue(NodeIndex, dummy);
+end;
+
+procedure TGanttControl.OpFilterTimerTick(Sender: TObject);
+begin
+  FOpFilterPulsePhase := FOpFilterPulsePhase + 0.15; // ciclo rapido ~1s
+  if FOpFilterPulsePhase > 2 * PI then
+    FOpFilterPulsePhase := FOpFilterPulsePhase - 2 * PI;
+  Invalidate;
+end;
+
+procedure TGanttControl.SetOperarioFilter(const ADataIds: TArray<Integer>; AHideMode: Boolean);
+var
+  I: Integer;
+begin
+  FOpFilterDataIds.Clear;
+  for I := 0 to High(ADataIds) do
+    FOpFilterDataIds.AddOrSetValue(ADataIds[I], 1);
+  FOpFilterActive := Length(ADataIds) > 0;
+  FOpFilterHideMode := AHideMode;
+  FOpFilterPulsePhase := 0;
+  FOpFilterTimer.Enabled := FOpFilterActive and (not FOpFilterHideMode);
+  Invalidate;
+end;
+
+procedure TGanttControl.ClearOperarioFilter;
+begin
+  FOpFilterDataIds.Clear;
+  FOpFilterActive := False;
+  FOpFilterHideMode := False;
+  FOpFilterTimer.Enabled := False;
+  Invalidate;
+end;
+
+function TGanttControl.HitTestLink(const X, Y: Single; const Tolerance: Single): Integer;
+const
+  SAMPLES = 16;
+
+  function BezierPt(const P0, C1, C2, P3: TPointF; t: Single): TPointF;
+  var
+    u: Single;
+  begin
+    u := 1 - t;
+    Result.X := u*u*u*P0.X + 3*u*u*t*C1.X + 3*u*t*t*C2.X + t*t*t*P3.X;
+    Result.Y := u*u*u*P0.Y + 3*u*u*t*C1.Y + 3*u*t*t*C2.Y + t*t*t*P3.Y;
+  end;
+
+var
+  I, S: Integer;
+  D, MinD: Single;
+  Pt, Prev, Cur: TPointF;
+  FromPt, ToPt, C1, C2: TPointF;
+  dx, pullX: Single;
+begin
+  Result := -1;
+  Pt := PointF(X, Y);
+  for I := 0 to High(FLinkScreenPts) do
+  begin
+    FromPt := FLinkScreenPts[I].Key;
+    ToPt := FLinkScreenPts[I].Value;
+
+    // Reconstruir els control points (mateixa lògica que BuildNaturalBezier)
+    dx := ToPt.X - FromPt.X;
+    pullX := EnsureRange(Abs(dx) * 0.35, 30, 200);
+    if dx >= 0 then
+    begin
+      C1 := PointF(FromPt.X + pullX, FromPt.Y);
+      C2 := PointF(ToPt.X - pullX, ToPt.Y);
+    end
+    else
+    begin
+      C1 := PointF(FromPt.X + pullX, FromPt.Y);
+      C2 := PointF(ToPt.X - pullX, ToPt.Y);
+    end;
+
+    // Samplear la bézier i trobar distància mínima
+    MinD := 1e10;
+    Prev := FromPt;
+    for S := 1 to SAMPLES do
+    begin
+      Cur := BezierPt(FromPt, C1, C2, ToPt, S / SAMPLES);
+      // Distància punt a segment Prev-Cur
+      var sdx, sdy, st, spx, spy, lenSq: Single;
+      sdx := Cur.X - Prev.X;
+      sdy := Cur.Y - Prev.Y;
+      lenSq := sdx*sdx + sdy*sdy;
+      if lenSq < 0.001 then
+        D := Sqrt(Sqr(Pt.X - Prev.X) + Sqr(Pt.Y - Prev.Y))
+      else
+      begin
+        st := ((Pt.X - Prev.X)*sdx + (Pt.Y - Prev.Y)*sdy) / lenSq;
+        if st < 0 then st := 0;
+        if st > 1 then st := 1;
+        spx := Prev.X + st*sdx;
+        spy := Prev.Y + st*sdy;
+        D := Sqrt(Sqr(Pt.X - spx) + Sqr(Pt.Y - spy));
+      end;
+      if D < MinD then MinD := D;
+      if MinD <= Tolerance then Break;
+      Prev := Cur;
+    end;
+
+    if MinD <= Tolerance then
+      Exit(I);
+  end;
+end;
+
+function TGanttControl.IsNodeOperarioFiltered(const ADataId: Integer): Boolean;
+var
+  dummy: Byte;
+begin
+  Result := FOpFilterDataIds.TryGetValue(ADataId, dummy);
 end;
 
 
@@ -4739,43 +5004,35 @@ begin
       begin
         if HasData then
         begin
-          // Badge: "2/4 op" o "0 op"
-          if D.OperariosNecesarios > 0 then
-            S.BadgeText := Format('%d/%d op', [D.OperariosAsignados, D.OperariosNecesarios])
-          else
-            S.BadgeText := Format('%d op', [D.OperariosAsignados]);
+          S.BadgeText := '';
 
-          // Colors:
-          // - Vermell: cap assignat
-          // - Groc: assignats però insuficients (si hi ha necessaris)
-          // - Verd: suficients o no es requereix
-          // - Gris: Cap necesari
-          if D.OperariosNecesarios<=0 then
+          if D.OperariosNecesarios <= 0 then
           begin
             S.Fill := COL_NEUTRAL_FILL;
             S.Border := COL_NEUTRAL_BORDER;
           end
           else
           begin
-              if D.OperariosAsignados <= 0 then
-              begin
-                S.Fill := COL_BAD_FILL;
-                S.Border := COL_BAD_BORDER;
-                S.BadgeText := 'Sense op';
-              end
-              else if (D.OperariosNecesarios > 0) and (D.OperariosAsignados < D.OperariosNecesarios) then
-              begin
-                S.Fill := COL_WARN_FILL;
-                S.Border := COL_WARN_BORDER;
-              end
-              else
-              begin
-                S.Fill := COL_OK_FILL;
-                S.Border := COL_OK_BORDER;
-              end;
+            if D.OperariosAsignados <= 0 then
+            begin
+              S.Fill := COL_BAD_FILL;
+              S.Border := COL_BAD_BORDER;
+            end
+            else if D.OperariosAsignados < D.OperariosNecesarios then
+            begin
+              // Amarillo: badge con cantidad
+              S.Fill := COL_WARN_FILL;
+              S.Border := COL_WARN_BORDER;
+              S.BadgeText := Format('%d/%d', [D.OperariosAsignados, D.OperariosNecesarios]);
+              S.BadgeFill := S.Border;
+              S.BadgeTextColor := clWhite;
+            end
+            else
+            begin
+              S.Fill := COL_OK_FILL;
+              S.Border := COL_OK_BORDER;
+            end;
           end;
-          S.BadgeFill := S.Border;
-          S.BadgeTextColor := clWhite;
         end;
       end;
 
@@ -4975,6 +5232,13 @@ begin
 
   if IsHi and (not IsSel) then
     S.Border := COL_INFO_BORDER;
+
+  // Filtro de operarios: atenuar nodos no filtrados (mantener colores de estado)
+  if FOpFilterActive and (not FOpFilterHideMode) then
+  begin
+    if not IsNodeOperarioFiltered(Node.DataId) then
+      S.Alpha := 0.45;
+  end;
 end;
 
 
@@ -5110,8 +5374,22 @@ var
     end;
   end;
 
-  procedure PaintNodeRect(const ANodeLayout: TNodeLayout; const ARectS: TRectF; const ANode: TNode);
+  procedure PaintNodeRect(const ANodeLayout: TNodeLayout; var ARectS: TRectF; const ANode: TNode);
+  var
+    inflate: Single;
   begin
+    // Filtro operarios: ocultar nodos no filtrados
+    if FOpFilterActive and FOpFilterHideMode and (ANode.DataId > 0) then
+      if not IsNodeOperarioFiltered(ANode.DataId) then
+        Exit;
+
+    // Filtro operarios: inflate/pulse suave en nodos filtrados
+    if FOpFilterActive and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
+    begin
+      inflate := 2.0 * (0.5 + 0.5 * Sin(FOpFilterPulsePhase)); // oscila suave entre 0 y 2 px
+      ARectS.Inflate(inflate, inflate);
+    end;
+
     D.DataId := -1;
     if ANode.DataId > 0 then
       FNodeRepo.TryGetById(ANode.DataId, D);
@@ -5145,13 +5423,25 @@ var
         RT.FillRectangle(RectFToD2D(ARectS), DiagBrush);
     end;
 
+    // Borde: mas grueso para nodos filtrados
+    var borderWidth: Single;
+    if FOpFilterActive and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
+    begin
+      borderWidth := 3.0;
+      SetBrushColor(StrokeBrush, clBlack, 1.0);
+    end
+    else if IsSel then
+      borderWidth := 2.0
+    else
+      borderWidth := 1.0;
+
     if FFastPaint then
-      RT.DrawRectangle(RectFToD2D(ARectS), StrokeBrush, 1.0)
+      RT.DrawRectangle(RectFToD2D(ARectS), StrokeBrush, borderWidth)
     else
       RT.DrawRoundedRectangle(
         RoundedRectToD2D(ARectS, 3),
         StrokeBrush,
-        IfThen(IsSel, 2.0, 1.0)
+        borderWidth
       );
 
     if (Style.Progress >= 0) and (not FFastPaint) then
@@ -7783,7 +8073,27 @@ begin
     end;
 
     HideNodeHint;
+
+    // Hit-test de links quan no hi ha node sota el cursor
+    var linkHit: Integer := HitTestLink(X, Y);
+    if linkHit <> FHoverLinkIndex then
+    begin
+      FHoverLinkIndex := linkHit;
+      if linkHit >= 0 then
+        SetGanttCursor(crHandPoint)
+      else
+        SetGanttCursor(crDefault);
+      Invalidate;
+    end;
+
     Exit;
+  end;
+
+  // Si estem sobre un node, treure hover del link
+  if FHoverLinkIndex <> -1 then
+  begin
+    FHoverLinkIndex := -1;
+    Invalidate;
   end;
 
   // Aquí hit >= 0
