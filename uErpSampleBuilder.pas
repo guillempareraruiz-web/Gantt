@@ -929,7 +929,7 @@ var
     id := centreIdByName.Count + 1;
 
     c.Id := id;
-    c.Nom := key;
+    c.Titulo := key;
     c.IsSequencial := False;   // ho pots decidir per CT o per configuraci�
     c.BaseHeight := 60;        // default
     c.Order := id;
@@ -1076,7 +1076,7 @@ const
     id := centreIdByName.Count + 1;
 
     c.Id := id;
-    c.Nom := key;
+    c.Titulo := key;
     c.IsSequencial :=  ((Random(999) Mod  2)=0);   // ho pots decidir per CT o per configuraci�
     c.BaseHeight := 32;
     c.Order := id;
@@ -1307,14 +1307,14 @@ var
     Id := centreIdByName.Count + 1;
 
     C.Id := Id;
-    C.Nom := Key;
+    C.Titulo := Key;
     C.IsSequencial := ((Random(999) mod 2) = 0);
     C.BaseHeight := 32;
     C.Order := Id;
     C.Visible := True;
     C.Enabled := True;
     C.BkColor := $00EEEEEE;
-    C.Maquina := 'Maquina' + inttostr(Id);
+    C.Subtitulo := 'Maquina' + inttostr(Id);
 
     centreIdByName.Add(Key, Id);
     centresTmp.Add(C);

@@ -648,8 +648,8 @@ begin
 
   if iCentreIdx >= 0 then
   begin
-    NomCentre := FCentres[iCentreIdx].Nom;
-    NomMaquina := FCentres[iCentreIdx].Maquina;
+    NomCentre := FCentres[iCentreIdx].Titulo;
+    NomMaquina := FCentres[iCentreIdx].Subtitulo;
     CircleColor := FCentres[iCentreIdx].BkColor;
   end
   else

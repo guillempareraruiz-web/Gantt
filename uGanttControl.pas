@@ -169,6 +169,12 @@ type
     FHoverLinkIndex: Integer; // -1 = cap link hovered
     FLinkScreenPts: TArray<TPair<TPointF, TPointF>>; // from/to screen points per link
 
+    // Link drag (Ctrl+drag des d'un handle per crear un link)
+    FLinkDragging: Boolean;
+    FLinkFromNodeIndex: Integer;
+    FLinkFromEdge: TResizeEdge;   // reRight = FinishStart, reLeft = StartStart/StartFinish
+    FLinkPreviewEnd: TPointF;     // posició actual del cursor (screen)
+
     FMarqueeSelecting: Boolean;
     FMarqueeStartPt: TPoint;
     FMarqueeCurrentPt: TPoint;
@@ -262,6 +268,11 @@ type
               const CentreId: Integer;
               const ChangedIdx: Integer;
               const MinGapMin: Integer;
+              out MovedNodes: TIdxArray): Boolean;
+
+    function ResolveNonSequentialCollisionsFromNode(
+              const CentreId: Integer;
+              const ChangedIdx: Integer;
               out MovedNodes: TIdxArray): Boolean;
 
     function ResolveAllConstraintsFromNode( const ChangedIdx: Integer; const MinGapMin: Integer): Boolean;
@@ -578,6 +589,9 @@ type
     function CompactOTFromNode(const ANodeIdx: Integer; const MinGapMin: Integer; const AllOT: Boolean = False; const bForce: Boolean = False): Boolean;
     function BackwardScheduleOT(const ANodeIdx: Integer; const AEndDate: TDateTime; const MinGapMin: Integer; const bForce: Boolean = False): Boolean;
 
+    function ReplanAllFromDate(const AFromDate: TDateTime; const MinGapMin: Integer;
+      out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
+
     procedure SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean = True);
     procedure ScrollNodeIntoView(const NodeIndex: Integer; const Center: Boolean = True);
 
@@ -709,7 +723,130 @@ const
 
 implementation
 
-uses uGanttHelpers, uErpSampleBuilder, uGanttTimeline, Main;
+uses uGanttHelpers, uErpSampleBuilder, uGanttTimeline, Main, System.Diagnostics;
+
+{ ── TLaneOccupancy: registre temporal d'ocupació per lanes (centres no-seqüencials) ── }
+
+type
+  TLaneSlot = record
+    StartT, EndT: TDateTime;
+  end;
+
+  TLaneOccupancy = class
+    Lanes: TDictionary<Integer, TList<TLaneSlot>>;
+    MaxLanes: Integer;
+    constructor Create(AMaxLanes: Integer);
+    destructor Destroy; override;
+    function Collides(ALane: Integer; AStart, AEnd: TDateTime): Boolean;
+    procedure Add(ALane: Integer; AStart, AEnd: TDateTime);
+    function FindFreeLaneOrShift(var AStart: TDateTime; ADurationMin: Double;
+      ACentreId: Integer; AGantt: TGanttControl): Integer;
+  end;
+
+constructor TLaneOccupancy.Create(AMaxLanes: Integer);
+begin
+  inherited Create;
+  Lanes := TDictionary<Integer, TList<TLaneSlot>>.Create;
+  MaxLanes := AMaxLanes;
+end;
+
+destructor TLaneOccupancy.Destroy;
+var L: TList<TLaneSlot>;
+begin
+  for L in Lanes.Values do
+    L.Free;
+  Lanes.Free;
+  inherited;
+end;
+
+function TLaneOccupancy.Collides(ALane: Integer; AStart, AEnd: TDateTime): Boolean;
+var
+  Slots: TList<TLaneSlot>;
+  S: TLaneSlot;
+begin
+  Result := False;
+  if not Lanes.TryGetValue(ALane, Slots) then Exit;
+  for S in Slots do
+    if (AStart < S.EndT) and (AEnd > S.StartT) then
+      Exit(True);
+end;
+
+procedure TLaneOccupancy.Add(ALane: Integer; AStart, AEnd: TDateTime);
+var
+  Slots: TList<TLaneSlot>;
+  S: TLaneSlot;
+begin
+  if not Lanes.TryGetValue(ALane, Slots) then
+  begin
+    Slots := TList<TLaneSlot>.Create;
+    Lanes.Add(ALane, Slots);
+  end;
+  S.StartT := AStart;
+  S.EndT := AEnd;
+  Slots.Add(S);
+end;
+
+function TLaneOccupancy.FindFreeLaneOrShift(var AStart: TDateTime;
+  ADurationMin: Double; ACentreId: Integer; AGantt: TGanttControl): Integer;
+var
+  LaneIdx, NumLanes, Attempt: Integer;
+  TestStart, TestEnd: TDateTime;
+  EarliestEnd: TDateTime;
+  Slots: TList<TLaneSlot>;
+  S: TLaneSlot;
+begin
+  if MaxLanes > 0 then
+    NumLanes := MaxLanes
+  else
+    NumLanes := Lanes.Count + 1;
+
+  TestStart := AStart;
+
+  for Attempt := 0 to 999 do
+  begin
+    TestEnd := AGantt.CalcEndTime(ACentreId, TestStart, ADurationMin);
+
+    // Provar cada lane
+    for LaneIdx := 0 to NumLanes - 1 do
+    begin
+      if not Collides(LaneIdx, TestStart, TestEnd) then
+      begin
+        AStart := TestStart;
+        Result := LaneIdx;
+        Exit;
+      end;
+    end;
+
+    // Si MaxLanes = 0, crear lane nova
+    if MaxLanes = 0 then
+    begin
+      AStart := TestStart;
+      Result := NumLanes;
+      Exit;
+    end;
+
+    // Totes les lanes ocupades: buscar el primer forat temporal
+    EarliestEnd := TestStart + 365;
+    for LaneIdx := 0 to NumLanes - 1 do
+    begin
+      if Lanes.TryGetValue(LaneIdx, Slots) then
+        for S in Slots do
+          if (TestStart < S.EndT) and (TestEnd > S.StartT) then
+            if S.EndT < EarliestEnd then
+              EarliestEnd := S.EndT;
+    end;
+
+    TestStart := AGantt.ApplyNodeCalendarAndOverlay(ACentreId, EarliestEnd);
+
+    if TestStart <= AStart then
+      TestStart := IncMinute(AStart, 1);
+
+    AStart := TestStart;
+  end;
+
+  // Fallback
+  Result := 0;
+end;
 
 
 { TGanttControl Helpers}
@@ -1457,6 +1594,8 @@ begin
 
   FHoverNodeIndex := -1;
   FHoverLinkIndex := -1;
+  FLinkDragging := False;
+  FLinkFromNodeIndex := -1;
   FSelectedNodeIndexes := TDictionary<Integer, Byte>.Create;
   FFocusedNodeIndex := -1;
 
@@ -1598,9 +1737,9 @@ var
       for k := 0 to High(FCentres) do
         if FCentres[k].Id = d.CentresPermesos[i] then
         begin
-          nom := FCentres[k].Nom;
-          if FCentres[k].Maquina <> '' then
-            nom := nom + ' / ' + FCentres[k].Maquina;
+          nom := FCentres[k].Titulo;
+          if FCentres[k].Subtitulo <> '' then
+            nom := nom + ' / ' + FCentres[k].Subtitulo;
           Break;
         end;
       parts[i] := nom;
@@ -3571,6 +3710,246 @@ begin
     FOnScrollYChanged(Self, FScrollY);
 end;
 
+function TGanttControl.ReplanAllFromDate(const AFromDate: TDateTime;
+  const MinGapMin: Integer; out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
+type
+  TReplanRec = record
+    NodeIdx: Integer;
+    FechaEntrega: TDateTime;
+    Prioridad: Integer;
+    InDegree: Integer;
+  end;
+var
+  SW: TStopwatch;
+  I, J, K, N: Integer;
+  D: TNodeData;
+  Recs: TArray<TReplanRec>;
+  NodeIdToRecIdx: TDictionary<Integer, Integer>;
+  Successors: TDictionary<Integer, TList<Integer>>;
+  Queue: TList<Integer>;
+  RecIdx, SuccRecIdx: Integer;
+  CentreId: Integer;
+  NewStart, PrevEnd, DepMinStart: TDateTime;
+  CentreLast: TDictionary<Integer, TDateTime>;  // per centres seqüencials
+  CentreLaneOcc: TDictionary<Integer, TLaneOccupancy>; // per centres no-seqüencials
+  SuccList: TList<Integer>;
+  PredNodeIdx: Integer;
+  Occ: TLaneOccupancy;
+  Centre: TCentreTreball;
+  CIdx: Integer;
+begin
+  Result := False;
+  MovedCount := 0;
+
+  SW := TStopwatch.StartNew;
+  try
+    if FNodeRepo = nil then Exit;
+
+    // ─── 1) Construir Recs amb dades de prioritat ───
+    N := 0;
+    SetLength(Recs, Length(FNodes));
+    NodeIdToRecIdx := TDictionary<Integer, Integer>.Create;
+    try
+      for I := 0 to High(FNodes) do
+      begin
+        if not FNodes[I].Visible then Continue;
+        if FNodes[I].DataId = 0 then Continue;
+        if not FNodeRepo.TryGetById(FNodes[I].DataId, D) then Continue;
+
+        Recs[N].NodeIdx := I;
+        Recs[N].FechaEntrega := D.FechaEntrega;
+        Recs[N].Prioridad := D.Prioridad;
+        Recs[N].InDegree := 0;
+        NodeIdToRecIdx.AddOrSetValue(FNodes[I].Id, N);
+        Inc(N);
+      end;
+      SetLength(Recs, N);
+      if N = 0 then Exit;
+
+      // ─── 2) Construir graf de dependències i calcular InDegree ───
+      Successors := TDictionary<Integer, TList<Integer>>.Create;
+      try
+        for I := 0 to N - 1 do
+          Successors.Add(FNodes[Recs[I].NodeIdx].Id, TList<Integer>.Create);
+
+        for I := 0 to High(FLinks) do
+        begin
+          if not NodeIdToRecIdx.ContainsKey(FLinks[I].FromNodeId) then Continue;
+          if not NodeIdToRecIdx.ContainsKey(FLinks[I].ToNodeId) then Continue;
+
+          SuccRecIdx := NodeIdToRecIdx[FLinks[I].ToNodeId];
+
+          if Successors.TryGetValue(FLinks[I].FromNodeId, SuccList) then
+            SuccList.Add(SuccRecIdx);
+
+          Inc(Recs[SuccRecIdx].InDegree);
+        end;
+
+        // ─── 3) Topological sort (Kahn) ───
+        Queue := TList<Integer>.Create;
+        CentreLast := TDictionary<Integer, TDateTime>.Create;
+        CentreLaneOcc := TDictionary<Integer, TLaneOccupancy>.Create;
+        try
+          for I := 0 to N - 1 do
+            if Recs[I].InDegree = 0 then
+              Queue.Add(I);
+
+          Queue.Sort(TComparer<Integer>.Construct(
+            function(const A, B: Integer): Integer
+            begin
+              if Recs[A].FechaEntrega < Recs[B].FechaEntrega then Exit(-1);
+              if Recs[A].FechaEntrega > Recs[B].FechaEntrega then Exit(1);
+              if Recs[A].Prioridad < Recs[B].Prioridad then Exit(-1);
+              if Recs[A].Prioridad > Recs[B].Prioridad then Exit(1);
+              Result := 0;
+            end));
+
+          // ─── 4) Processar la cua ───
+          J := 0;
+          while J < Queue.Count do
+          begin
+            RecIdx := Queue[J];
+            Inc(J);
+
+            K := Recs[RecIdx].NodeIdx;
+            CentreId := FNodes[K].CentreId;
+
+            // a) Data mínima: AFromDate
+            NewStart := AFromDate;
+
+            // b) Dependències: el node no pot començar abans que els seus predecessors permetin
+            for I := 0 to High(FLinks) do
+            begin
+              if FLinks[I].ToNodeId <> FNodes[K].Id then Continue;
+              PredNodeIdx := FindNodeIndexById(FLinks[I].FromNodeId);
+              if PredNodeIdx < 0 then Continue;
+              DepMinStart := GetDependencyMinStart(PredNodeIdx, FLinks[I].PorcentajeDependencia);
+              if DepMinStart > NewStart then
+                NewStart := DepMinStart;
+            end;
+
+            // c) Aplicar calendari laboral i fecha de bloqueo
+            NewStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+
+            // d) Col·lisions segons tipus de centre
+            if IsCentreSequecial(CentreId) then
+            begin
+              // Centre seqüencial: últim EndTime + gap
+              if CentreLast.TryGetValue(CentreId, PrevEnd) then
+              begin
+                if PrevEnd > NewStart then
+                  NewStart := PrevEnd;
+                if MinGapMin > 0 then
+                  NewStart := IncMinute(NewStart, MinGapMin);
+              end;
+              NewStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+            end
+            else
+            begin
+              // Centre NO seqüencial: buscar lane lliure o avançar en el temps
+              if not CentreLaneOcc.TryGetValue(CentreId, Occ) then
+              begin
+                // Crear occupancy per aquest centre
+                CIdx := FindCentreIndexById(CentreId);
+                if CIdx >= 0 then
+                  Occ := TLaneOccupancy.Create(FCentres[CIdx].MaxLaneCount)
+                else
+                  Occ := TLaneOccupancy.Create(0);
+                CentreLaneOcc.Add(CentreId, Occ);
+              end;
+
+              // Buscar lane lliure; si totes plenes, avança NewStart
+              Occ.FindFreeLaneOrShift(NewStart, FNodes[K].DurationMin, CentreId, Self);
+              NewStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+            end;
+
+            // e) Moure el node
+            if MoveNodeKeepingDuration(K, NewStart) then
+              Inc(MovedCount);
+
+            // f) Registrar ocupació
+            if IsCentreSequecial(CentreId) then
+            begin
+              CentreLast.AddOrSetValue(CentreId, FNodes[K].EndTime);
+            end
+            else
+            begin
+              if CentreLaneOcc.TryGetValue(CentreId, Occ) then
+              begin
+                // Re-buscar la lane (FindFreeLaneOrShift ja ha ajustat NewStart)
+                var FinalLane: Integer := 0;
+                var FinalEnd: TDateTime := FNodes[K].EndTime;
+                for var L := 0 to 999 do
+                begin
+                  if not Occ.Collides(L, FNodes[K].StartTime, FinalEnd) then
+                  begin
+                    FinalLane := L;
+                    Break;
+                  end;
+                end;
+                Occ.Add(FinalLane, FNodes[K].StartTime, FinalEnd);
+              end;
+            end;
+
+            // g) Alliberar successors
+            if Successors.TryGetValue(FNodes[K].Id, SuccList) then
+            begin
+              for I := 0 to SuccList.Count - 1 do
+              begin
+                SuccRecIdx := SuccList[I];
+                Dec(Recs[SuccRecIdx].InDegree);
+                if Recs[SuccRecIdx].InDegree <= 0 then
+                begin
+                  var InsPos: Integer := Queue.Count;
+                  for var P := J to Queue.Count - 1 do
+                  begin
+                    var QRec: Integer := Queue[P];
+                    if (Recs[SuccRecIdx].FechaEntrega < Recs[QRec].FechaEntrega) or
+                       ((Recs[SuccRecIdx].FechaEntrega = Recs[QRec].FechaEntrega) and
+                        (Recs[SuccRecIdx].Prioridad < Recs[QRec].Prioridad)) then
+                    begin
+                      InsPos := P;
+                      Break;
+                    end;
+                  end;
+                  Queue.Insert(InsPos, SuccRecIdx);
+                end;
+              end;
+            end;
+          end;
+
+        finally
+          CentreLast.Free;
+          for Occ in CentreLaneOcc.Values do
+            Occ.Free;
+          CentreLaneOcc.Free;
+          Queue.Free;
+        end;
+
+      finally
+        for SuccList in Successors.Values do
+          SuccList.Free;
+        Successors.Free;
+      end;
+
+    finally
+      NodeIdToRecIdx.Free;
+    end;
+
+    // ─── 5) Rebuild layout i repintar ───
+    if MovedCount > 0 then
+    begin
+      RebuildLayout;
+      Invalidate;
+      Result := True;
+    end;
+
+  finally
+    SW.Stop;
+    ElapsedMs := SW.ElapsedMilliseconds;
+  end;
+end;
+
 procedure TGanttControl.SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean);
 begin
   if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
@@ -4106,6 +4485,9 @@ begin
       end;
 
       laneCount := Max(1, Length(laneRight));
+      // Limitar si MaxLaneCount > 0
+      if (centre.MaxLaneCount > 0) and (laneCount > centre.MaxLaneCount) then
+        laneCount := centre.MaxLaneCount;
     end;
 
     // ===== Mides verticals =====
@@ -4182,9 +4564,15 @@ begin
         laneIdx := TryFindLane(TimeToXWorld(node.StartTime));
         if laneIdx < 0 then
         begin
-          laneIdx := Length(laneRight);
-          SetLength(laneRight, laneIdx + 1);
-          laneRight[laneIdx] := 0;
+          // Si MaxLaneCount > 0 i ja hem arribat al límit, forçar última lane
+          if (centre.MaxLaneCount > 0) and (Length(laneRight) >= centre.MaxLaneCount) then
+            laneIdx := centre.MaxLaneCount - 1
+          else
+          begin
+            laneIdx := Length(laneRight);
+            SetLength(laneRight, laneIdx + 1);
+            laneRight[laneIdx] := 0;
+          end;
         end;
 
         //nl.NodeId := node.Id;
@@ -5666,6 +6054,27 @@ begin
 
       DrawDependenciesD2D(VisibleXLeft, VisibleXRight, VisibleYTop, VisibleYBottom, RT, StrokeBrush, FillBrush);
 
+      // Preview del link mentre s'arrossega (Ctrl+handle)
+      if FLinkDragging and (FLinkFromNodeIndex >= 0) then
+      begin
+        var liLayoutIdx: Integer;
+        if FNodeIndexToLayoutIndex.TryGetValue(FLinkFromNodeIndex, liLayoutIdx) then
+        begin
+          var liRect: TRectF := FNodeLayouts[liLayoutIdx].Rect;
+          liRect.Offset(-FScrollX, -FScrollY);
+          var liFromPt: TPointF;
+          if FLinkFromEdge = reRight then
+            liFromPt := PointF(liRect.Right, (liRect.Top + liRect.Bottom) * 0.5)
+          else
+            liFromPt := PointF(liRect.Left, (liRect.Top + liRect.Bottom) * 0.5);
+
+          SetBrushColor(StrokeBrush, $0040CC40, 0.85);
+          SetBrushColor(FillBrush, $0040CC40, 0.85);
+          DrawCurvedArrowD2D(RT, StrokeBrush, FillBrush,
+            liFromPt, FLinkPreviewEnd, nil, 2.5, 10, 8);
+        end;
+      end;
+
       if FFocusedNodeIndex >= 0 then
         DrawSelectedNodeHandlesD2D(RT, FillBrush, StrokeBrush);
 
@@ -6175,6 +6584,27 @@ begin
 
 
       DrawDependenciesD2D(VisibleXLeft, VisibleXRight, VisibleYTop, VisibleYBottom, RT, StrokeBrush, FillBrush);
+
+      // Preview del link mentre s'arrossega (Ctrl+handle)
+      if FLinkDragging and (FLinkFromNodeIndex >= 0) then
+      begin
+        var liLayoutIdx2: Integer;
+        if FNodeIndexToLayoutIndex.TryGetValue(FLinkFromNodeIndex, liLayoutIdx2) then
+        begin
+          var liRect2: TRectF := FNodeLayouts[liLayoutIdx2].Rect;
+          liRect2.Offset(-FScrollX, -FScrollY);
+          var liFromPt2: TPointF;
+          if FLinkFromEdge = reRight then
+            liFromPt2 := PointF(liRect2.Right, (liRect2.Top + liRect2.Bottom) * 0.5)
+          else
+            liFromPt2 := PointF(liRect2.Left, (liRect2.Top + liRect2.Bottom) * 0.5);
+
+          SetBrushColor(StrokeBrush, $0040CC40, 0.85);
+          SetBrushColor(FillBrush, $0040CC40, 0.85);
+          DrawCurvedArrowD2D(RT, StrokeBrush, FillBrush,
+            liFromPt2, FLinkPreviewEnd, nil, 2.5, 10, 8);
+        end;
+      end;
 
       if FFocusedNodeIndex>=0 then
        DrawSelectedNodeHandlesD2D(RT, FillBrush, StrokeBrush);
@@ -7640,6 +8070,103 @@ begin
   end;
 end;
 
+function TGanttControl.ResolveNonSequentialCollisionsFromNode(
+  const CentreId: Integer;
+  const ChangedIdx: Integer;
+  out MovedNodes: TIdxArray): Boolean;
+var
+  CIdx, MaxLanes, I, Overlap: Integer;
+  Idxs: TArray<Integer>;
+  IdxCount: Integer;
+  TestStart, TestEnd, OtherStart, OtherEnd: TDateTime;
+  EarliestEnd, NewStart: TDateTime;
+  DurMin: Double;
+  Attempt: Integer;
+
+  function CountOverlapsAt(AStart, AEnd: TDateTime): Integer;
+  var J: Integer;
+  begin
+    Result := 0;
+    for J := 0 to IdxCount - 1 do
+    begin
+      if Idxs[J] = ChangedIdx then Continue;
+      if (AStart < FNodes[Idxs[J]].EndTime) and (AEnd > FNodes[Idxs[J]].StartTime) then
+        Inc(Result);
+    end;
+  end;
+
+  function FindEarliestEndAt(AStart, AEnd: TDateTime): TDateTime;
+  var J: Integer;
+  begin
+    Result := AEnd + 365;
+    for J := 0 to IdxCount - 1 do
+    begin
+      if Idxs[J] = ChangedIdx then Continue;
+      if (AStart < FNodes[Idxs[J]].EndTime) and (AEnd > FNodes[Idxs[J]].StartTime) then
+        if FNodes[Idxs[J]].EndTime < Result then
+          Result := FNodes[Idxs[J]].EndTime;
+    end;
+  end;
+
+begin
+  Result := False;
+  ArrayClear(MovedNodes);
+
+  // Només centres NO seqüencials amb MaxLaneCount > 0
+  if IsCentreSequecial(CentreId) then Exit;
+
+  CIdx := FindCentreIndexById(CentreId);
+  if CIdx < 0 then Exit;
+  MaxLanes := FCentres[CIdx].MaxLaneCount;
+  if MaxLanes <= 0 then Exit;
+
+  // Recollir tots els nodes del centre
+  IdxCount := 0;
+  SetLength(Idxs, Length(FNodes));
+  for I := 0 to High(FNodes) do
+    if (FNodes[I].CentreId = CentreId) and FNodes[I].Visible then
+    begin
+      Idxs[IdxCount] := I;
+      Inc(IdxCount);
+    end;
+  SetLength(Idxs, IdxCount);
+
+  DurMin := FNodes[ChangedIdx].DurationMin;
+  TestStart := FNodes[ChangedIdx].StartTime;
+  TestEnd := FNodes[ChangedIdx].EndTime;
+
+  // Buscar un slot temporal on el solapament sigui < MaxLanes
+  for Attempt := 0 to 500 do
+  begin
+    Overlap := CountOverlapsAt(TestStart, TestEnd);
+
+    // Si el nombre de solapaments (excloent el node canviat) < MaxLanes, hi cap
+    if Overlap < MaxLanes then
+    begin
+      // Hem trobat un lloc vàlid
+      if TestStart > FNodes[ChangedIdx].StartTime then
+      begin
+        if MoveNodeKeepingDuration(ChangedIdx, TestStart) then
+        begin
+          Result := True;
+          ArrayAddUnique(MovedNodes, ChangedIdx);
+        end;
+      end;
+      Exit;
+    end;
+
+    // Totes les lanes ocupades: avançar al primer forat
+    EarliestEnd := FindEarliestEndAt(TestStart, TestEnd);
+    NewStart := ApplyNodeCalendarAndOverlay(CentreId, EarliestEnd);
+
+    if NewStart <= TestStart then
+      NewStart := IncMinute(TestStart, 1); // safety
+
+    TestStart := NewStart;
+    TestEnd := CalcEndTime(CentreId, TestStart, DurMin);
+  end;
+end;
+
 function TGanttControl.ResolveAllConstraintsFromNode(
   const ChangedIdx: Integer;
   const MinGapMin: Integer): Boolean;
@@ -7714,11 +8241,25 @@ begin
       end;
     end;
 
-    // 2) Resol seqüència del centre
+    // 2) Resol seqüència del centre (centres seqüencials)
     if ResolveSequentialCollisionsFromNode(
          FNodes[CurrIdx].CentreId,
          CurrIdx,
          MinGapMin,
+         MovedSeq) then
+    begin
+      Result := True;
+      for i := 0 to High(MovedSeq) do
+      begin
+        MarkNodeModified(MovedSeq[i]);
+        Enqueue(MovedSeq[i]);
+      end;
+    end;
+
+    // 3) Resol solapaments a centres NO seqüencials amb MaxLaneCount
+    if ResolveNonSequentialCollisionsFromNode(
+         FNodes[CurrIdx].CentreId,
+         CurrIdx,
          MovedSeq) then
     begin
       Result := True;
@@ -7965,6 +8506,16 @@ begin
     FScrollY := Max(0, FScrollStartY - (Y - FPanStart.Y));
     Invalidate;
     NotifyViewportChanged;
+    Exit;
+  end;
+
+  // Link drag preview
+  if FLinkDragging then
+  begin
+    FLinkPreviewEnd := PointF(X, Y);
+    HideNodeHint;
+    SetGanttCursor(crCross);
+    Invalidate;
     Exit;
   end;
 
@@ -9985,8 +10536,23 @@ begin
   if (FMouseDownOnHandle = nhLeft) OR
      (FMouseDownOnHandle = nhRight) then
   begin
-     //aqui hem de detectar si node esta ENABLED i ignorar
      if not FNodes[FFocusedNodeIndex].Enabled then Exit;
+
+     // Ctrl+handle → iniciar link drag
+     if ssCtrl in Shift then
+     begin
+       FLinkDragging := True;
+       FLinkFromNodeIndex := FFocusedNodeIndex;
+       if FMouseDownOnHandle = nhRight then
+         FLinkFromEdge := reRight
+       else
+         FLinkFromEdge := reLeft;
+       FLinkPreviewEnd := PointF(X, Y);
+       FMouseDownNodeIndex := -1; // evitar que s'interpreti com a move/resize
+       MouseCapture := True;
+       Invalidate;
+       Exit;
+     end;
 
      FResizing := True;
      FMouseDownNodeIndex := FFocusedNodeIndex;
@@ -10102,6 +10668,50 @@ begin
 
   if Button <> mbLeft then
    Exit;
+
+  // Finalitzar link drag
+  if FLinkDragging then
+  begin
+    FLinkDragging := False;
+    MouseCapture := False;
+    SetGanttCursor(crDefault);
+
+    // Hit-test: on hem deixat anar?
+    var targetNodeIdx: Integer := HitTestNodeIndex(X, Y);
+    if (targetNodeIdx >= 0) and (targetNodeIdx <> FLinkFromNodeIndex) then
+    begin
+      var fromId: Integer := FNodes[FLinkFromNodeIndex].Id;
+      var toId: Integer := FNodes[targetNodeIdx].Id;
+
+      // Comprovar que no existeixi ja un link entre aquests dos nodes
+      var linkExists: Boolean := False;
+      var li: Integer;
+      for li := 0 to High(FLinks) do
+        if (FLinks[li].FromNodeId = fromId) and (FLinks[li].ToNodeId = toId) then
+        begin
+          linkExists := True;
+          Break;
+        end;
+
+      if not linkExists then
+      begin
+        var newLink: TErpLink;
+        newLink.FromNodeId := fromId;
+        newLink.ToNodeId := toId;
+        newLink.PorcentajeDependencia := 0;
+
+        if FLinkFromEdge = reRight then
+          newLink.LinkType := ltFinishStart
+        else
+          newLink.LinkType := ltStartStart;
+
+        AddLink(newLink);
+      end;
+    end;
+
+    Invalidate;
+    Exit;
+  end;
 
   if FDraggingBloqueo then
   begin

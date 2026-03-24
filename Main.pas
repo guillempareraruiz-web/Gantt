@@ -29,7 +29,7 @@ uses
   System.Threading,  System.SyncObjs, System.Diagnostics, uNodeInspector,
   cxStyles, cxFilter, dxScrollbarAnnotations, cxInplaceContainer, cxVGrid,
   uOperariosTypes, uOperariosRepo, uAssignOperaris, uGestionOperaris,
-  cxCheckComboBox, cxCheckBox, uOperarioFilterPopup, uLinkEditor;
+  cxCheckComboBox, cxCheckBox, uOperarioFilterPopup, uLinkEditor, uHelpGuide, uCentreInspector;
 
 type
 
@@ -194,6 +194,7 @@ type
     Button23: TButton;tmr1Sec: TTimer;
     FchkSoloFiltrados: TcxCheckBox;
     FcxFilterOperarios: TcxCheckComboBox;
+    Button24: TButton;
 
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
@@ -245,6 +246,8 @@ type
     procedure tmr1SecTimer(Sender: TObject);
     procedure FchkSoloFiltradosPropertiesChange(Sender: TObject);
     procedure FcxFilterOperariosPropertiesChange(Sender: TObject);
+    procedure Button20Click(Sender: TObject);
+    procedure Button24Click(Sender: TObject);
   private
     { Private declarations }
 
@@ -350,7 +353,7 @@ var
 
 implementation
 
-uses uErpSampleBuilder;
+uses uErpSampleBuilder, uGestionCentres;
 
 {$R *.dfm}
 
@@ -573,6 +576,26 @@ begin
   GoToDate( Now );
 end;
 
+procedure TForm1.Button20Click(Sender: TObject);
+var
+  Centres: TArray<TCentreTreball>;
+  I: Integer;
+begin
+  if not Assigned(FCentrosControl) then Exit;
+
+  Centres := Copy(FCentresRows);
+  if TfrmGestionCentres.Execute(Centres) then
+  begin
+    FCentresRows := Centres;
+    // Aplicar canvis al Gantt
+    for I := 0 to High(FCentresRows) do
+      FGantt.UpdateCentre(FCentresRows[I].Id, FCentresRows[I]);
+    // Actualitzar panel de centres amb les rows recalculades
+    FCentrosControl.SetCentres(FCentresRows);
+    FCentrosControl.SetRows(FGantt.GetRowsCopy);
+  end;
+end;
+
 procedure TForm1.Button21Click(Sender: TObject);
 begin
   if Assigned(FGantt) then
@@ -596,6 +619,16 @@ begin
 
   FGantt.BackwardScheduleOT( idx, cxDateEdit1.Date, 0, TRUE  );
 
+end;
+
+procedure TForm1.Button24Click(Sender: TObject);
+var ms: Int64; moved: Integer;
+begin
+  if not Assigned(FGantt) then
+   Exit;
+
+  FGantt.ReplanAllFromDate(Now, 0, ms, moved);
+  ShowMessage(Format('Moguts: %d en %d ms', [moved, ms]));
 end;
 
 procedure TForm1.Button2Click(Sender: TObject);
@@ -739,7 +772,7 @@ begin
     Result := '';
     for k := 0 to High(FCentresRows) do
       if FCentresRows[k].Id = CentreId then
-        Exit(FCentresRows[k].Nom);
+        Exit(FCentresRows[k].Titulo);
   end;
 
 
@@ -752,11 +785,17 @@ begin
     FCentresRows[i].Id := i+1;
     FCentresRows[i].CodiCentre := 'CENTRO-' + inttostr((i div 2) + 1); // agrupa de 2 en 2
     FCentresRows[i].IsSequencial := ((Random(999) Mod  2)=0);
-    FCentresRows[i].Nom := 'CENTRO-' + inttostr(i+1);
-    FCentresRows[i].Maquina := 'MAQUINA-' + inttostr(i+1);
+    FCentresRows[i].Titulo := 'CENTRO-' + inttostr(i+1);
+    FCentresRows[i].Subtitulo := 'MAQUINA-' + inttostr(i+1);
     FCentresRows[i].Order := i;       // o i+1
     FCentresRows[i].Visible := True;
     FCentresRows[i].Enabled := True;
+
+    // MaxLaneCount: limitar lanes als centres no-seqüencials per testejar col·lisions
+    if FCentresRows[i].IsSequencial then
+      FCentresRows[i].MaxLaneCount := 0
+    else
+      FCentresRows[i].MaxLaneCount := 3;
 
     case i of
     0: FCentresRows[i].BkColor := TColor($005252FF);
@@ -764,6 +803,15 @@ begin
     2: FCentresRows[i].BkColor := TColor($00FFE6CC);
     else
       FCentresRows[i].BkColor := TColor($003366CC);
+    end;
+
+    // Assignar area per defecte segons index
+    case (i mod 5) of
+      0: FCentresRows[i].Area := 'F'#225'brica';
+      1: FCentresRows[i].Area := 'Log'#237'stica';
+      2: FCentresRows[i].Area := 'Oficina T'#233'cnica';
+      3: FCentresRows[i].Area := 'F'#225'brica';
+      4: FCentresRows[i].Area := 'Calidad';
     end;
 
     if FCentresRows[i].IsSequencial then
@@ -778,7 +826,7 @@ begin
     ConfiguraCalendariCentre(FGantt, i+1);
     //FCentresRows[i].BaseHeight := 28 + Random(150);
 
-    CTNames[i] := FCentresRows[i].Nom;
+    CTNames[i] := FCentresRows[i].Titulo;
 
   end;
 
@@ -808,6 +856,7 @@ begin
 
   for i := 0 to iCentros-1 do
   begin
+    FCentresRows[i].MaxLaneCount := 0;
     case i of
     0: FCentresRows[i].BkColor := TColor($005252FF);
     1: FCentresRows[i].BkColor := TColor($002828DC);
@@ -1395,7 +1444,7 @@ begin
   cal := FGantt.GetCalendar( CentreId );
 
   Fechayhora1.Caption := 'Fecha hora: ' + DAtetimetostr( dt );
-  CentroAAA1.Caption := 'Centro: (' + inttostr(CentreId) + ') ' + FCentresRows[centreIDX].Nom;
+  CentroAAA1.Caption := 'Centro: (' + inttostr(CentreId) + ') ' + FCentresRows[centreIDX].Titulo;
   NombreAAA1.Caption := 'Nombre Calendario: ' + cal.Name;
   FranjalaborableSi1.Caption := 'Franja horaria: ' + sFranjahoraria;
   PeriodoNoLaborableInicio1.Caption := 'Periodo NoLaborable Inicio:  ' + DAtetimetostr( AStart );
@@ -1607,14 +1656,24 @@ begin
   cIdx := FGantt.FindCentreIndexById(centreId);
   if cIdx < 0 then Exit;
 
+
   c := FGantt.GetCentreByIndex(cIdx);
 
-  ShowMessage( 'Id: ' + Inttostr(c.Id) + chr(13) + chr(10) +
-               'Order: ' + Inttostr(c.Order) + chr(13) + chr(10) +
-               'Nombre: ' + c.Nom + chr(13) + chr(10) +
-               'Sequencial: ' + Inttostr( Integer(c.IsSequencial) )  + chr(13) + chr(10) +
-               'Enabled: ' + Inttostr( Integer(c.Enabled) )  + chr(13) + chr(10) +
-               'BaseHeight: ' + floattostr(c.BaseHeight) + chr(13) + chr(10)  );
+  if TfrmCentreInspector.Execute(c) then
+  begin
+    // Aplicar al Gantt (fa RebuildLayout si cal)
+    FGantt.UpdateCentre(c.Id, c);
+    // Actualitzar FCentresRows local
+    for cIdx := 0 to High(FCentresRows) do
+      if FCentresRows[cIdx].Id = c.Id then
+      begin
+        FCentresRows[cIdx] := c;
+        Break;
+      end;
+    // Sincronitzar panel lateral
+    FCentrosControl.SetCentres(FCentresRows);
+    FCentrosControl.SetRows(FGantt.GetRowsCopy);
+  end;
 
 
 end;
@@ -1780,54 +1839,50 @@ procedure TForm1.Colordelnode1Click(Sender: TObject);
  var
   P: TPoint;
   F: TColorPalette64LayeredPopup;
-  idx, i, iMAx: Integer;
-  iOT, iOF: Integer;
-  sOF: String;
-  node: TNode;
-  d: TNodeDAta;
   iTag: Integer;
+  SelIndexes: TArray<Integer>;
 begin
 
   iTag := TMenuItem(Sender).Tag;
 
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
-  node := FGantt.SelectedNode;
+  SelIndexes := FGantt.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then Exit;
 
   P := Mouse.CursorPos; // coordenades de pantalla
 
   F := TColorPalette64LayeredPopup.Create(Self);
   F.PopupAtScreen(P.X, P.Y,
     procedure(const C: TColor)
+    var
+      I: Integer;
+      node: TNode;
+      d: TNodeData;
+      iOT, iOF: Integer;
+      sOF: String;
     begin
+        for I := 0 to High(SelIndexes) do
+        begin
+          node := FGantt.GetNodeAt(SelIndexes[I]);
 
+          if (node.DataId = 0) or (not FNodeRepo.TryGetById(node.DataId, d)) then
+            Continue;
 
+          iOT := strtointdef(d.NumeroTrabajo,0);
+          iOF := d.NumeroOrdenFabricacion;
+          sOF := d.SerieFabricacion;
 
-        if (node.DataId = 0) or (not FNodeRepo.TryGetById(node.DataId, d)) then
-         Exit;
-
-        iOT := strtointdef(d.NumeroTrabajo,0);
-        iOF := d.NumeroOrdenFabricacion;
-        sOF := d.SerieFabricacion;
-
-        case iTag of
-        0: begin //...assignem color a node
-             FGantt.ApplyOpColorsByNode(node.DataId, octOnlyNode, c, AdjustColorBrightness(c, -40));
-           end;
-        1: begin //...assignem color a node i OT
-             FGantt.ApplyOpColorsByNode(node.DataId, octByTrabajo, c, AdjustColorBrightness(c, -40));
-           end;
-        2: begin //...assignem color a node i OF
-             FGantt.ApplyOpColorsByNode( node.DataId, octByFabricacionSerie, c, AdjustColorBrightness(c, -40), 0, sOF, iOF);
-           end;
+          case iTag of
+          0: begin //...assignem color a node
+               FGantt.ApplyOpColorsByNode(node.DataId, octOnlyNode, c, AdjustColorBrightness(c, -40));
+             end;
+          1: begin //...assignem color a node i OT
+               FGantt.ApplyOpColorsByNode(node.DataId, octByTrabajo, c, AdjustColorBrightness(c, -40));
+             end;
+          2: begin //...assignem color a node i OF
+               FGantt.ApplyOpColorsByNode(node.DataId, octByFabricacionSerie, c, AdjustColorBrightness(c, -40), 0, sOF, iOF);
+             end;
+          end;
         end;
-
-
-
-       // d.bkColorOp            := c;
-       // d.borderColorOp        := ;
-       // FNodeRepo.AddOrUpdate(D);
-
 
         FGantt.Invalidate;
     end,
@@ -2426,7 +2481,12 @@ begin
   if NOT assigned(FGantt) then
    Exit;
 
-  if (ssCtrl in Shift) and (Key = Ord('Z')) then
+  if Key = VK_F1 then
+  begin
+    TfrmHelpGuide.Execute;
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('Z')) then
   begin
     FGantt.UndoLastAction;
     UpdateHistoryButtons;

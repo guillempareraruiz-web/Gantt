@@ -10,6 +10,7 @@ object Form1: TForm1
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
+  KeyPreview = True
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnKeyDown = FormKeyDown
@@ -24,7 +25,6 @@ object Form1: TForm1
     Color = 15395562
     ParentBackground = False
     TabOrder = 0
-    ExplicitLeft = -8
     DesignSize = (
       1092
       108)
@@ -529,8 +529,6 @@ object Form1: TForm1
     BevelOuter = bvNone
     Caption = 'pnlCentros'
     TabOrder = 2
-    ExplicitTop = 145
-    ExplicitHeight = 567
     object Panel2: TPanel
       Left = 0
       Top = 0
@@ -625,6 +623,7 @@ object Form1: TForm1
         Font.Style = []
         ParentFont = False
         TabOrder = 3
+        OnClick = Button20Click
       end
     end
   end
@@ -649,7 +648,6 @@ object Form1: TForm1
     Color = 15395562
     ParentBackground = False
     TabOrder = 4
-    ExplicitTop = 95
     object Label12: TLabel
       Left = 10
       Top = 4
@@ -1109,6 +1107,15 @@ object Form1: TForm1
       Caption = 'OT inversa'
       TabOrder = 15
       OnClick = Button23Click
+    end
+    object Button24: TButton
+      Left = 224
+      Top = 19
+      Width = 75
+      Height = 25
+      Caption = 'Replan'
+      TabOrder = 16
+      OnClick = Button24Click
     end
   end
   object popCentros: TPopupMenu

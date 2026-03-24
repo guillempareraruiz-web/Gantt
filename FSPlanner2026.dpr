@@ -23,7 +23,10 @@ uses
   uAssignOperaris in 'uAssignOperaris.pas' {frmAssignOperaris},
   uGestionOperaris in 'uGestionOperaris.pas' {frmGestionOperaris},
   uOperarioFilterPopup in 'uOperarioFilterPopup.pas',
-  uLinkEditor in 'uLinkEditor.pas' {frmLinkEditor};
+  uLinkEditor in 'uLinkEditor.pas' {frmLinkEditor},
+  uHelpGuide in 'uHelpGuide.pas' {frmHelpGuide},
+  uCentreInspector in 'uCentreInspector.pas' {frmCentreInspector},
+  uGestionCentres in 'uGestionCentres.pas' {frmGestionCentres};
 
 {$R *.res}
 

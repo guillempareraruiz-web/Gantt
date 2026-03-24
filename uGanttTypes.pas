@@ -5,18 +5,24 @@ interface
 uses
   System.Types, System.SysUtils, System.UITypes, System.DateUtils;
 
+const
+  CENTRE_ID_SIN_CENTRO   = -1;
+  CENTRE_ID_CENTRO_EXTERNO = -2;
+
 type
   TCentreTreball = record
     Id: Integer;
-    CodiCentre: string;  // codi del centre ERP (agrupa múltiples màquines, p.ex. 'CENTRO1')
-    Nom: string;
-    Maquina: string;
-    IsSequencial: Boolean; // si False -> m�ltiples lanes
-    BaseHeight: Single;    // al�ada base fila
+    CodiCentre: string;     // codi del centre ERP (agrupa múltiples màquines, p.ex. 'CENTRO1')
+    Titulo: string;          // text principal (superior) — p.ex. nom del centre
+    Subtitulo: string;       // text secundari (inferior) — p.ex. nom de la màquina
+    IsSequencial: Boolean;   // si False -> múltiples lanes
+    MaxLaneCount: Integer;   // límit de lanes (0 = sense límit). Només aplica si NOT IsSequencial
+    BaseHeight: Single;      // alçada base fila
     Order: Integer;
     Visible: Boolean;
     Enabled: Boolean;
     BkColor: TColor;
+    Area: string;            // àrea de l'empresa (p.ex. 'Fabricación', 'Logística', 'OficinaTécnica')
   end;
 
   TNode = record
@@ -123,7 +129,46 @@ GanttColorPalette: array[0..63] of TColor = (
     $00D9F2C2, $00C2C6F2, $00FFCCE6, $00E0B3F2, $00B3E0FF, $00E6F2C2, $00FFD9B3, $00B3F0F2
   );
 
+function CreateDefaultCentres: TArray<TCentreTreball>;
+
 implementation
+
+function CreateDefaultCentres: TArray<TCentreTreball>;
+var
+  C: TCentreTreball;
+begin
+  SetLength(Result, 2);
+
+  FillChar(C, SizeOf(C), 0);
+  C.Id := CENTRE_ID_SIN_CENTRO;
+  C.CodiCentre := 'SINCENTRO';
+  C.Titulo := 'Sin Centro';
+  C.Subtitulo := '';
+  C.IsSequencial := False;
+  C.MaxLaneCount := 0;
+  C.BaseHeight := 40;
+  C.Order := 9998;
+  C.Visible := True;
+  C.Enabled := True;
+  C.BkColor := $00E0E0E0;
+  C.Area := '';
+  Result[0] := C;
+
+  FillChar(C, SizeOf(C), 0);
+  C.Id := CENTRE_ID_CENTRO_EXTERNO;
+  C.CodiCentre := 'EXTERNO';
+  C.Titulo := 'Centro Externo';
+  C.Subtitulo := '';
+  C.IsSequencial := False;
+  C.MaxLaneCount := 0;
+  C.BaseHeight := 40;
+  C.Order := 9999;
+  C.Visible := True;
+  C.Enabled := True;
+  C.BkColor := $00D0D0F0;
+  C.Area := '';
+  Result[1] := C;
+end;
 
 function DayStart(const D: TDateTime): TDateTime;
 begin
