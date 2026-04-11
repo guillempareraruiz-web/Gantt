@@ -536,7 +536,7 @@ begin
         opRec.DurationMinOriginal := opRec.DurationMin;
 
         opRec.Prioridad := Random(3);
-        opRec.Estado := TEstadoOF(Random(Ord(High(TEstadoOF)) + 1));
+        opRec.Estado := TNodoEstado(Random(Ord(High(TNodoEstado)) + 1));
 
         opRec.OperariosAsignados := 0;
         opRec.OperariosNecesarios := Random(3);
@@ -791,6 +791,8 @@ begin
       NumeroOT := 5000 + (ofIdx * 10) + otIdx;
       numOP := DecideNumOpsForOT(OfKind);
 
+
+
       StartNewOTOps;
 
       curStart := IncMinute(baseStart, (otIdx - 1) * RandBetween(10, 60));
@@ -830,7 +832,7 @@ begin
           opRec.DurationMin := MaxDurMin;
 
         opRec.Prioridad := Random(3);
-        opRec.Estado := TEstadoOF(Random(Ord(High(TEstadoOF)) + 1));
+        opRec.Estado := TNodoEstado(Random(Ord(High(TNodoEstado)) + 1));
 
         opRec.OperariosAsignados := 0;
         opRec.OperariosNecesarios := Random(3);

@@ -1,9 +1,10 @@
-unit uGanttTypes;
+﻿unit uGanttTypes;
 
 interface
 
 uses
-  System.Types, System.SysUtils, System.UITypes, System.DateUtils;
+  System.Types, System.SysUtils, System.UITypes, System.DateUtils,
+  System.Generics.Collections, System.Variants;
 
 const
   CENTRE_ID_SIN_CENTRO   = -1;
@@ -43,38 +44,108 @@ type
     DataId: Integer; // clau cap a les dades de domini
   end;
 
-  TEstadoOF = (eoPendiente, eoEnCurso, eoFinalizado, eoBloqueado);
+  TNodoTipo   = (ntOF, ntPedido, ntProyecto, ntOferta);
+  TNodoEstado = (nePendiente, neEnCurso, neFinalizado, neBloqueado);
+
+  // ── Campos personalizados ──
+  TCustomFieldType = (cftString, cftInteger, cftFloat, cftDate, cftBoolean, cftList);
+
+  TCustomFieldDef = record
+    FieldName: string;
+    Caption: string;
+    FieldType: TCustomFieldType;
+    DefaultValue: Variant;
+    ListValues: TArray<string>;
+    Required: Boolean;
+    ReadOnly: Boolean;
+    Order: Integer;
+    Visible: Boolean;
+    Grupo: string;
+    Tooltip: string;
+    MinValue: Double;
+    MaxValue: Double;
+    FormatMask: string;
+  end;
+
+  TCustomFieldValue = record
+    FieldName: string;
+    Value: Variant;
+  end;
 
   TNodeData = record
     DataId: Integer;
+
     Operacion: String;
-    CentresTrabajo: TArray<string>;    // noms ERP dels centres permesos; buit = tots
-    CentresPermesos: TArray<Integer>;  // ids Gantt dels centres permesos; buit = tots
     NumeroPedido: Integer;
     SeriePedido: string;
+
+    CentresTrabajo: TArray<string>;    // noms ERP dels centres permesos; buit = tots
+    CentresPermesos: TArray<Integer>;  // ids Gantt dels centres permesos; buit = tots
+
     NumeroOrdenFabricacion: Integer;
     SerieFabricacion: string;
+
     NumeroTrabajo: string;
+
     FechaEntrega: TDateTime;
     FechaNecesaria: TDateTime;
-    Stock: Double;
-    CodigoArticulo: string;
+
     CodigoCliente: String;
+
     CodigoColor: String;
     CodigoTalla: String;
+
+    Stock: Double;
+
+    CodigoArticulo: string;
     DescripcionArticulo: string;
+
     PorcentajeDependencia: Double;
+
     UnidadesFabricadas: Double;
     UnidadesAFabricar: Double;
     TiempoUnidadFabSecs: Double; //...tiempo en segundos para fabricar una unidad
-    DurationMin: Double;
-    DurationMinOriginal: Double;
+    DurationMin: Double; //...minutos
+    DurationMinOriginal: Double; //...minutos
     OperariosNecesarios: Integer;
     OperariosAsignados: Integer;
-    Estado: TEstadoOF;
-    Prioridad: Integer;  // 1 = alta, 2 = mitja, 3 = baixa (exemple)
+
+    Estado: TNodoEstado;
+    Tipo: TNodoTipo;
+    Prioridad: Integer;
+
+    bkColorOp: TColor;
+    borderColorOp: TColor;
+
+    Selected: Boolean;
     Modified: Boolean;
     LibreMoviment: Boolean;  // True = es pot moure a qualsevol centre; False = només CentresPermesos
+
+    CustomFields: TArray<TCustomFieldValue>;
+  end;
+
+  TMarkerStyle = (msLine, msDashed, msDotted);
+  TMarkerTextOrientation = (mtoHorizontal, mtoVertical);
+  TMarkerTextAlign = (mtaTop, mtaCenter, mtaBottom);
+
+  TGanttMarker = record
+    Id: Integer;
+    DateTime: TDateTime;
+    Caption: string;
+    Color: TColor;
+    Style: TMarkerStyle;
+    StrokeWidth: Single;
+    Moveable: Boolean;
+    Visible: Boolean;
+    Tag: Integer;
+    // Font
+    FontName: string;
+    FontSize: Integer;
+    FontColor: TColor;
+    FontStyle: TFontStyles;
+    // Text layout
+    TextOrientation: TMarkerTextOrientation;
+    TextAlign: TMarkerTextAlign;
   end;
 
   TRowLayout = record
@@ -102,6 +173,14 @@ type
 
 function DayStart(const D: TDateTime): TDateTime;
 function DayEnd(const D: TDateTime): TDateTime;
+
+// Custom fields helpers
+function GetCustomFieldValue(const AFields: TArray<TCustomFieldValue>;
+  const AFieldName: string): Variant;
+procedure SetCustomFieldValue(var AFields: TArray<TCustomFieldValue>;
+  const AFieldName: string; const AValue: Variant);
+function CustomFieldTypeToStr(AType: TCustomFieldType): string;
+function StrToCustomFieldType(const S: string): TCustomFieldType;
 
 
 
@@ -181,6 +260,58 @@ begin
 end;
 
 
+
+function GetCustomFieldValue(const AFields: TArray<TCustomFieldValue>;
+  const AFieldName: string): Variant;
+var
+  I: Integer;
+begin
+  for I := 0 to High(AFields) do
+    if SameText(AFields[I].FieldName, AFieldName) then
+      Exit(AFields[I].Value);
+  Result := Null;
+end;
+
+procedure SetCustomFieldValue(var AFields: TArray<TCustomFieldValue>;
+  const AFieldName: string; const AValue: Variant);
+var
+  I: Integer;
+begin
+  for I := 0 to High(AFields) do
+    if SameText(AFields[I].FieldName, AFieldName) then
+    begin
+      AFields[I].Value := AValue;
+      Exit;
+    end;
+  // No existeix, afegir
+  SetLength(AFields, Length(AFields) + 1);
+  AFields[High(AFields)].FieldName := AFieldName;
+  AFields[High(AFields)].Value := AValue;
+end;
+
+function CustomFieldTypeToStr(AType: TCustomFieldType): string;
+begin
+  case AType of
+    cftString:  Result := 'Texto';
+    cftInteger: Result := 'Entero';
+    cftFloat:   Result := 'Decimal';
+    cftDate:    Result := 'Fecha';
+    cftBoolean: Result := 'S'#237'/No';
+    cftList:    Result := 'Lista';
+  else
+    Result := 'Texto';
+  end;
+end;
+
+function StrToCustomFieldType(const S: string): TCustomFieldType;
+begin
+  if SameText(S, 'Entero') then Result := cftInteger
+  else if SameText(S, 'Decimal') then Result := cftFloat
+  else if SameText(S, 'Fecha') then Result := cftDate
+  else if SameText(S, 'S'#237'/No') then Result := cftBoolean
+  else if SameText(S, 'Lista') then Result := cftList
+  else Result := cftString;
+end;
 
 end.
 

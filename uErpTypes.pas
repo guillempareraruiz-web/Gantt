@@ -24,7 +24,6 @@ type
 
     Operacion: string;
     CentresTrabajo: TArray<string>;  // centres ERP permesos; buit = tots els centres
-    CodigoCliente: string;
     CodigoColor: string;
     CodigoTalla: string;
 
@@ -34,12 +33,17 @@ type
     NumeroOF: Integer;
     SerieOF: string;
 
-    NumeroOT: Integer;
+    CodigoProyecto: String;
 
+    NumeroOT: Integer;
     NumeroTrabajo: String;
 
+    EjercicioPedido: SmallInt;
     NumeroPedido: Integer;
     SeriePedido: string;
+
+    CodigoCliente: string;
+
     FechaEntrega: TDateTime;
     FechaNecesaria: TDateTime;
     Stock: Double;
@@ -54,7 +58,9 @@ type
     DurationMinOriginal: Double; //...Segundos;
     OperariosNecesarios: Integer;
     OperariosAsignados: Integer;
-    Estado: TEstadoOF;
+    Estado: TNodoEstado;
+    Tipo: TNodoTipo;
+
     Prioridad: Integer;  // 1 = alta, 2 = mitja, 3 = baixa (exemple)
 
     bkColorOp: TColor;

@@ -11,6 +11,7 @@ object Form1: TForm1
   Font.Name = 'Segoe UI'
   Font.Style = []
   KeyPreview = True
+  Menu = MainMenu1
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnKeyDown = FormKeyDown
@@ -466,6 +467,16 @@ object Form1: TForm1
       Style.TransparentBorder = False
       TabOrder = 26
     end
+    object Button25: TButton
+      Left = 717
+      Top = 21
+      Width = 51
+      Height = 25
+      Anchors = [akTop, akRight]
+      Caption = 'BUSCAR'
+      TabOrder = 27
+      OnClick = Button25Click
+    end
   end
   object Panel1: TPanel
     Left = 0
@@ -522,9 +533,9 @@ object Form1: TForm1
   end
   object pnlCentros: TPanel
     Left = 0
-    Top = 158
+    Top = 209
     Width = 226
-    Height = 554
+    Height = 503
     Align = alLeft
     BevelOuter = bvNone
     Caption = 'pnlCentros'
@@ -648,6 +659,9 @@ object Form1: TForm1
     Color = 15395562
     ParentBackground = False
     TabOrder = 4
+    DesignSize = (
+      1092
+      50)
     object Label12: TLabel
       Left = 10
       Top = 4
@@ -1095,6 +1109,7 @@ object Form1: TForm1
       Top = 6
       Width = 75
       Height = 19
+      Anchors = [akTop, akRight]
       Caption = 'OF inversa'
       TabOrder = 14
       OnClick = Button2Click
@@ -1104,29 +1119,483 @@ object Form1: TForm1
       Top = 25
       Width = 75
       Height = 19
+      Anchors = [akTop, akRight]
       Caption = 'OT inversa'
       TabOrder = 15
       OnClick = Button23Click
     end
     object Button24: TButton
-      Left = 224
+      Left = 157
       Top = 19
-      Width = 75
+      Width = 183
       Height = 25
       Caption = 'Replan'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
       TabOrder = 16
       OnClick = Button24Click
+    end
+    object btnResaltarOF: TcxButton
+      Left = 346
+      Top = 6
+      Width = 66
+      Height = 19
+      Anchors = [akTop, akRight]
+      Caption = 'RESALTAR OF'
+      SpeedButtonOptions.GroupIndex = 2
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.AllowAllUp = True
+      TabOrder = 17
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      OnClick = btnResaltarOFClick
+    end
+    object btnResaltarOT: TcxButton
+      Tag = 1
+      Left = 346
+      Top = 26
+      Width = 66
+      Height = 19
+      Anchors = [akTop, akRight]
+      Caption = 'RESALTAR OT'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.AllowAllUp = True
+      TabOrder = 18
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      OnClick = btnResaltarOFClick
+    end
+  end
+  object pnlBuscar: TPanel
+    Left = 0
+    Top = 158
+    Width = 1092
+    Height = 51
+    Align = alTop
+    Color = 15332811
+    ParentBackground = False
+    TabOrder = 5
+    Visible = False
+    DesignSize = (
+      1092
+      51)
+    object cxScrollBox1: TcxScrollBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 1
+      Width = 907
+      Height = 49
+      Margins.Top = 0
+      Margins.Right = 180
+      Margins.Bottom = 0
+      Align = alClient
+      BorderStyle = cxcbsNone
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = ''
+      TabOrder = 0
+      Transparent = True
+      VertScrollBar.Visible = False
+      object Label20: TLabel
+        Left = 16
+        Top = 3
+        Width = 93
+        Height = 13
+        Caption = 'Orden fabricaci'#243'n'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label21: TLabel
+        Left = 141
+        Top = 3
+        Width = 73
+        Height = 13
+        Caption = 'Orden trabajo'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label22: TLabel
+        Left = 268
+        Top = 3
+        Width = 36
+        Height = 13
+        Caption = 'Pedido'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label23: TLabel
+        Left = 396
+        Top = 3
+        Width = 44
+        Height = 13
+        Caption = 'Proyecto'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label24: TLabel
+        Left = 523
+        Top = 3
+        Width = 36
+        Height = 13
+        Caption = 'Cliente'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label25: TLabel
+        Left = 650
+        Top = 3
+        Width = 40
+        Height = 13
+        Caption = 'Art'#237'culo'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label26: TLabel
+        Left = 777
+        Top = 3
+        Width = 33
+        Height = 13
+        Caption = 'Molde'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Label27: TLabel
+        Left = 904
+        Top = 3
+        Width = 36
+        Height = 13
+        Caption = 'Utillaje'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clGray
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object cxButtonEdit1: TcxButtonEdit
+        Left = 14
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 0
+        Width = 121
+      end
+      object cxButtonEdit2: TcxButtonEdit
+        Left = 141
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 1
+        Width = 121
+      end
+      object cxButtonEdit3: TcxButtonEdit
+        Left = 268
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 2
+        Width = 121
+      end
+      object cxButtonEdit4: TcxButtonEdit
+        Left = 395
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 3
+        Width = 121
+      end
+      object cxButtonEdit5: TcxButtonEdit
+        Left = 522
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 4
+        Width = 121
+      end
+      object cxButtonEdit6: TcxButtonEdit
+        Left = 649
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 5
+        Width = 121
+      end
+      object cxButtonEdit7: TcxButtonEdit
+        Left = 776
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 6
+        Width = 121
+      end
+      object cxButtonEdit8: TcxButtonEdit
+        Left = 903
+        Top = 17
+        ParentFont = False
+        Properties.Buttons = <
+          item
+            Default = True
+            Kind = bkEllipsis
+          end>
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = [fsBold]
+        Style.IsFontAssigned = True
+        TabOrder = 7
+        Width = 121
+      end
+    end
+    object cxButton1: TcxButton
+      Left = 1048
+      Top = 19
+      Width = 24
+      Height = 24
+      Anchors = [akTop, akRight]
+      Caption = 'cxButton1'
+      Colors.Normal = 12903279
+      LookAndFeel.SkinName = ''
+      OptionsImage.Glyph.SourceDPI = 96
+      OptionsImage.Glyph.Data = {
+        89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+        610000001974455874536F6674776172650041646F626520496D616765526561
+        647971C9653C0000000B744558745469746C65005A6F6F6D3BCF09FEBC000000
+        A449444154785EA5D2C10984301484616F426A7AF73461115BC1C2369093772B
+        1272F36A031690537690811D1E44B244F879A0E62368A65AEB50376066ECBE12
+        CAA87026647CFE082CE840D5C7FBCB1360B278431105CE4D106B014916CF4877
+        360B925A402610D1A4008B04720B2804827F81502050867730FA0D7641FFFB0B
+        EC12A0FB1CF8DE04BA4FE28E2E8F28D0CAE31F87ACDD00A747CE2E8088B6A213
+        BD7EC0405F9BEBFFA1F53765600000000049454E44AE426082}
+      PaintStyle = bpsGlyph
+      TabOrder = 1
+    end
+    object cxButton2: TcxButton
+      Left = 1072
+      Top = 1
+      Width = 18
+      Height = 18
+      Anchors = [akTop, akRight]
+      Colors.Default = 15332811
+      Colors.Normal = 15332811
+      Colors.Hot = 15332811
+      Colors.Pressed = 15332811
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = ''
+      OptionsImage.Glyph.SourceDPI = 96
+      OptionsImage.Glyph.Data = {
+        89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+        610000001974455874536F6674776172650041646F626520496D616765526561
+        647971C9653C0000001D744558745469746C6500436C6F73653B457869743B42
+        6172733B526962626F6E3B4603B9E80000007E49444154785EA593C109C0200C
+        453B98E0D5A90259ACD2A37B088E91A6A5D8102C31F5F03C7CF0210FDC886889
+        FB082144A630344961A21434869C342920C531B37D09F0D970B45982DC03BD12
+        545BB65E0052A28460BCA003C66553800301BA226AFE46840B77C44130F046DC
+        AD4D0B2A434EAA1424E77F684CEA82154E7DE61EFB935AC9E50000000049454E
+        44AE426082}
+      PaintStyle = bpsGlyph
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      SpeedButtonOptions.Transparent = True
+      TabOrder = 2
+      OnClick = cxButton2Click
+    end
+    object cxButton3: TcxButton
+      Left = 945
+      Top = 19
+      Width = 24
+      Height = 24
+      Anchors = [akTop, akRight]
+      Caption = 'cxButton1'
+      Colors.Normal = 12903279
+      Colors.Pressed = 14930543
+      LookAndFeel.SkinName = ''
+      OptionsImage.Glyph.SourceDPI = 96
+      OptionsImage.Glyph.Data = {
+        89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+        610000001974455874536F6674776172650041646F626520496D616765526561
+        647971C9653C00000014744558745469746C65004D61737465723B46696C7465
+        723B0120528C0000005049444154785ED5CCB10D002008055106633926C7C600
+        CD99883416BF827BE2EE4F9B0154D53B1B05AC015805AE90FD2B15008463022A
+        C231038960CC00231933000B404E002D00B87F04581BC898B700DF681E5F5E4F
+        2ABA0000000049454E44AE426082}
+      PaintStyle = bpsGlyph
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.AllowAllUp = True
+      SpeedButtonOptions.Down = True
+      TabOrder = 3
+    end
+    object cxButton4: TcxButton
+      Left = 971
+      Top = 19
+      Width = 24
+      Height = 24
+      Anchors = [akTop, akRight]
+      Caption = 'cxButton1'
+      Colors.Normal = 12903279
+      Colors.Pressed = 14930543
+      LookAndFeel.SkinName = ''
+      OptionsImage.Glyph.SourceDPI = 96
+      OptionsImage.Glyph.Data = {
+        89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+        610000001974455874536F6674776172650041646F626520496D616765526561
+        647971C9653C0000000F744558745469746C650053686F773B4579653B49E307
+        25000000B449444154785ECDD3BB09C3301006E0A4CA1AAA33836A2D90D2CBB8
+        74A1F4EA0C4EE5495CC4AD20631834C0E537FC86E340B85091145F710F0E3D2F
+        22D2E40F0678EFAD004F5860A385B960FB75E0204201A928EC71768083179B4E
+        B1D7E9015115DF8C47F8D0089135A1780C086AD909EED083183D6B496D27EC03
+        5626E6E36411671023ABFACCDCAA5790E07A3660EF616F8160CFA0835B6D0BAC
+        758C63ED162678C0009906E626730BCDEFA0FD25FEFE337D01EA94DB206117C5
+        C60000000049454E44AE426082}
+      PaintStyle = bpsGlyph
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.AllowAllUp = True
+      TabOrder = 4
+    end
+    object cxButton5: TcxButton
+      Left = 1023
+      Top = 19
+      Width = 24
+      Height = 24
+      Anchors = [akTop, akRight]
+      Caption = 'cxButton1'
+      Colors.Normal = 12698092
+      LookAndFeel.SkinName = ''
+      OptionsImage.Glyph.SourceDPI = 96
+      OptionsImage.Glyph.SourceHeight = 16
+      OptionsImage.Glyph.SourceWidth = 16
+      OptionsImage.Glyph.Data = {
+        89504E470D0A1A0A0000000D4948445200000020000000200806000000737A7A
+        F40000001974455874536F6674776172650041646F626520496D616765526561
+        647971C9653C00000029744558745469746C650052656D6F76653B44656C6574
+        653B426172733B526962626F6E3B5374616E646172643B63564830000000C249
+        444154785EEDD7310AC3300C40D11ECC84F462069FDCAD27413DC8AFA1A48307
+        9149FC4786883C7AEFB7CEFF0136A094F239C7787E39C755407D4F1F4F8FC7AE
+        01E67877C4BC8B80880322DD5D059C1164444D76CFD537D05284C7DB40AE0000
+        6171000002E2000004C4010008880300101067802322FE2B405D00D42B008803
+        020010070400200E0802F8E7B5650801681C6E0700248E0838C7104F10708E03
+        D13C1E083DC70942E281A0739C2322EE88FC1C6788670470E6DDFD6734CD06BC
+        00DEB20CDD4F9D67C10000000049454E44AE426082}
+      PaintStyle = bpsGlyph
+      TabOrder = 5
     end
   end
   object popCentros: TPopupMenu
     Left = 920
     Top = 204
-    object PopCentros1: TMenuItem
-      Caption = 'Enabled'
-      OnClick = PopCentros1Click
-    end
     object INFO3: TMenuItem
-      Caption = 'INFO'
+      Caption = 'Propiedades...'
       OnClick = INFO3Click
     end
   end
@@ -1141,32 +1610,26 @@ object Form1: TForm1
       Caption = 'Desactivar fecha bloqueo'
       OnClick = Desactivarfechabloqueo1Click
     end
-    object INFO2: TMenuItem
-      Caption = 'INFO'
-      object Calendario1: TMenuItem
-        Caption = 'Calendario'
-        OnClick = Calendario1Click
-        object Fechayhora1: TMenuItem
-          Caption = 'Fecha y hora:'
-        end
-        object CentroAAA1: TMenuItem
-          Caption = 'Centro:'
-        end
-        object NombreAAA1: TMenuItem
-          Caption = 'Nombre Calendario: AAA'
-        end
-        object FranjalaborableSi1: TMenuItem
-          Caption = 'Franja laborable: Si'
-        end
-        object PeriodoNoLaborableInicio1: TMenuItem
-          Caption = 'Periodo NoLaborable Inicio:'
-        end
-        object PeriodoNoLaborableFin1: TMenuItem
-          Caption = 'Periodo NoLaborable Fin:'
-        end
+    object Calendario1: TMenuItem
+      Caption = 'Calendario'
+      OnClick = Calendario1Click
+      object Fechayhora1: TMenuItem
+        Caption = 'Fecha y hora:'
       end
-      object aa1: TMenuItem
-        Caption = 'xxx'
+      object CentroAAA1: TMenuItem
+        Caption = 'Centro:'
+      end
+      object NombreAAA1: TMenuItem
+        Caption = 'Nombre Calendario: AAA'
+      end
+      object FranjalaborableSi1: TMenuItem
+        Caption = 'Franja laborable: Si'
+      end
+      object PeriodoNoLaborableInicio1: TMenuItem
+        Caption = 'Periodo NoLaborable Inicio:'
+      end
+      object PeriodoNoLaborableFin1: TMenuItem
+        Caption = 'Periodo NoLaborable Fin:'
       end
     end
     object ShiftRow1: TMenuItem
@@ -1176,6 +1639,22 @@ object Form1: TForm1
     object ShiftRowallimpact1: TMenuItem
       Caption = 'Shift Row all impact'
       OnClick = ShiftRowallimpact1Click
+    end
+    object N2: TMenuItem
+      Caption = '-'
+    end
+    object Aadirmarcador1: TMenuItem
+      Caption = 'A'#241'adir marcador...'
+      OnClick = Aadirmarcador1Click
+    end
+    object Gestionmarcadores1: TMenuItem
+      Caption = 'Gesti'#243'n de marcadores...'
+      OnClick = Gestionmarcadores1Click
+    end
+    object Marcadoresautomaticos1: TMenuItem
+      AutoCheck = True
+      Caption = 'Marcadores autom'#225'ticos (Entrega/Necesaria)'
+      OnClick = Marcadoresautomaticos1Click
     end
   end
   object popTimeline: TPopupMenu
@@ -1190,7 +1669,7 @@ object Form1: TForm1
     Top = 268
     object MenuItem3: TMenuItem
       AutoCheck = True
-      Caption = 'Enabled'
+      Caption = 'Activar / bloquear'
       Checked = True
       OnClick = MenuItem3Click
     end
@@ -1199,17 +1678,9 @@ object Form1: TForm1
       Caption = 'Libre Movimiento'
       OnClick = LibreMovimiento1Click
     end
-    object Move1h1: TMenuItem
-      Caption = 'Move 1h'
-      OnClick = Move1h1Click
-    end
     object Resetduracinoriginal1: TMenuItem
-      Caption = 'Reset duraci'#243'n original'
+      Caption = 'Restablecer duraci'#243'n original'
       OnClick = Resetduracinoriginal1Click
-    end
-    object ShiftRow2: TMenuItem
-      Caption = 'ShiftRow'
-      OnClick = ShiftRow2Click
     end
     object CompactarOF1: TMenuItem
       Caption = 'Compactar OF'
@@ -1257,6 +1728,10 @@ object Form1: TForm1
         OnClick = otalaOT1Click
       end
     end
+    object ShiftRow2: TMenuItem
+      Caption = 'ShiftRow'
+      OnClick = ShiftRow2Click
+    end
     object N1: TMenuItem
       Caption = '-'
     end
@@ -1287,6 +1762,10 @@ object Form1: TForm1
         Enabled = False
       end
     end
+    object ResaltarOF1: TMenuItem
+      Caption = 'Resaltar OF'
+      OnClick = ResaltarOF1Click
+    end
     object Info1: TMenuItem
       Caption = 'Info'
       OnClick = Info1Click
@@ -1296,5 +1775,80 @@ object Form1: TForm1
     OnTimer = tmr1SecTimer
     Left = 704
     Top = 240
+  end
+  object MainMenu1: TMainMenu
+    Left = 736
+    Top = 368
+    object Archivo1: TMenuItem
+      Caption = 'Archivo'
+      object N3: TMenuItem
+        Caption = '-'
+      end
+      object Salir1: TMenuItem
+        Caption = 'Salir'
+      end
+    end
+    object Entidades1: TMenuItem
+      Caption = 'Entidades'
+      object Centros1: TMenuItem
+        Caption = 'Centros'
+        OnClick = Centros1Click
+      end
+      object Operarios1: TMenuItem
+        Caption = 'Operarios'
+        OnClick = Operarios1Click
+      end
+      object Calendarios1: TMenuItem
+        Caption = 'Calendarios'
+        OnClick = Calendarios1Click
+      end
+      object Moldes1: TMenuItem
+        Caption = 'Moldes y utillajes'
+        OnClick = Moldes1Click
+      end
+      object N4: TMenuItem
+        Caption = '-'
+      end
+      object Utillajes1: TMenuItem
+        Caption = 'Marcadores'
+        OnClick = Gestionmarcadores1Click
+      end
+      object Links1: TMenuItem
+        Caption = 'Links'
+        Enabled = False
+      end
+      object N10: TMenuItem
+        Caption = '-'
+      end
+      object CamposPersonalizados1: TMenuItem
+        Caption = 'Campos Personalizados'
+        OnClick = CamposPersonalizados1Click
+      end
+      object ReglasPlanificacion1: TMenuItem
+        Caption = 'Reglas de Planificaci'#243'n'
+        OnClick = ReglasPlanificacion1Click
+      end
+    end
+    object Vistas1: TMenuItem
+      Caption = 'Vistas'
+      object Kanban1: TMenuItem
+        Caption = 'Kanban'
+        OnClick = Kanban1Click
+      end
+      object DispatchList1: TMenuItem
+        Caption = 'Lista de Prioridades'
+        OnClick = DispatchList1Click
+      end
+      object FiniteCapacity1: TMenuItem
+        Caption = 'Planificador Capacidad Finita'
+        OnClick = FiniteCapacity1Click
+      end
+    end
+    object Ayuda1: TMenuItem
+      Caption = 'Ayuda'
+      object Acercade1: TMenuItem
+        Caption = 'Acerca de...'
+      end
+    end
   end
 end

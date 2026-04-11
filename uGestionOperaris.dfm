@@ -110,7 +110,7 @@ object frmGestionOperaris: TfrmGestionOperaris
     Height = 520
     Align = alClient
     TabOrder = 1
-    Properties.ActivePage = tabDepartaments
+    Properties.ActivePage = tabOperaris
     Properties.CustomButtons.Buttons = <>
     ClientRectBottom = 518
     ClientRectLeft = 2
@@ -118,14 +118,10 @@ object frmGestionOperaris: TfrmGestionOperaris
     ClientRectTop = 25
     object tabDepartaments: TcxTabSheet
       Caption = 'Departamentos'
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object pnlDeptToolbar: TPanel
         Left = 0
         Top = 0
-        Width = 892
+        Width = 896
         Height = 32
         Align = alTop
         BevelOuter = bvNone
@@ -161,8 +157,8 @@ object frmGestionOperaris: TfrmGestionOperaris
       object gridDepts: TcxGrid
         Left = 0
         Top = 32
-        Width = 892
-        Height = 456
+        Width = 896
+        Height = 461
         Align = alClient
         TabOrder = 1
         object tvDepts: TcxGridTableView
@@ -200,14 +196,10 @@ object frmGestionOperaris: TfrmGestionOperaris
     end
     object tabOperaris: TcxTabSheet
       Caption = 'Operarios'
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object pnlOpToolbar: TPanel
         Left = 0
         Top = 0
-        Width = 892
+        Width = 896
         Height = 32
         Align = alTop
         BevelOuter = bvNone
@@ -243,8 +235,8 @@ object frmGestionOperaris: TfrmGestionOperaris
       object gridOperaris: TcxGrid
         Left = 0
         Top = 32
-        Width = 892
-        Height = 456
+        Width = 896
+        Height = 461
         Align = alClient
         TabOrder = 1
         object tvOperaris: TcxGridTableView
@@ -286,21 +278,18 @@ object frmGestionOperaris: TfrmGestionOperaris
     end
     object tabCapacitacions: TcxTabSheet
       Caption = 'Capacitaciones'
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object splCap: TSplitter
         Left = 250
         Top = 0
         Width = 6
-        Height = 488
+        Height = 493
+        ExplicitHeight = 488
       end
       object pnlCapLeft: TPanel
         Left = 0
         Top = 0
         Width = 250
-        Height = 488
+        Height = 493
         Align = alLeft
         BevelOuter = bvNone
         TabOrder = 0
@@ -321,7 +310,7 @@ object frmGestionOperaris: TfrmGestionOperaris
           Left = 0
           Top = 26
           Width = 250
-          Height = 462
+          Height = 467
           Align = alBottom
           Anchors = [akLeft, akTop, akRight, akBottom]
           TabOrder = 0
@@ -353,8 +342,8 @@ object frmGestionOperaris: TfrmGestionOperaris
       object pnlCapRight: TPanel
         Left = 256
         Top = 0
-        Width = 636
-        Height = 488
+        Width = 640
+        Height = 493
         Align = alClient
         BevelOuter = bvNone
         TabOrder = 1
@@ -374,8 +363,8 @@ object frmGestionOperaris: TfrmGestionOperaris
         object gridCapOps: TcxGrid
           Left = 0
           Top = 26
-          Width = 636
-          Height = 462
+          Width = 640
+          Height = 467
           Align = alBottom
           Anchors = [akLeft, akTop, akRight, akBottom]
           TabOrder = 0

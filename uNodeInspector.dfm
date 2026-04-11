@@ -28,6 +28,9 @@ object frmNodeInspector: TfrmNodeInspector
     Color = clWhite
     ParentBackground = False
     TabOrder = 0
+    DesignSize = (
+      520
+      60)
     object lblTitle: TLabel
       Left = 16
       Top = 8
@@ -57,16 +60,6 @@ object frmNodeInspector: TfrmNodeInspector
       Font.Style = []
       ParentFont = False
     end
-    object chkDarkMode: TCheckBox
-      Left = 430
-      Top = 8
-      Width = 80
-      Height = 17
-      Anchors = [akTop, akRight]
-      Caption = 'Oscuro'
-      TabOrder = 0
-      OnClick = chkDarkModeClick
-    end
     object shpHeaderLine: TShape
       Left = 0
       Top = 58
@@ -76,6 +69,16 @@ object frmNodeInspector: TfrmNodeInspector
       Brush.Color = 15061727
       Pen.Style = psClear
       ExplicitTop = 57
+    end
+    object chkDarkMode: TCheckBox
+      Left = 430
+      Top = 8
+      Width = 80
+      Height = 17
+      Anchors = [akTop, akRight]
+      Caption = 'Oscuro'
+      TabOrder = 0
+      OnClick = chkDarkModeClick
     end
   end
   object pnlBottom: TPanel
@@ -112,17 +115,63 @@ object frmNodeInspector: TfrmNodeInspector
       OnClick = btnCancelClick
     end
   end
-  object vg: TcxVerticalGrid
+  object pcMain: TPageControl
     Left = 0
     Top = 60
     Width = 520
     Height = 580
+    ActivePage = tabGeneral
     Align = alClient
-    OptionsView.RowHeaderWidth = 180
-    OptionsView.ValueWidth = 300
-    OptionsBehavior.AlwaysShowEditor = True
     TabOrder = 1
-    Version = 1
+    object tabGeneral: TTabSheet
+      Caption = 'General'
+      object vg: TcxVerticalGrid
+        Left = 0
+        Top = 0
+        Width = 512
+        Height = 550
+        Align = alClient
+        OptionsView.RowHeaderWidth = 180
+        OptionsView.ValueWidth = 300
+        OptionsBehavior.AlwaysShowEditor = True
+        TabOrder = 0
+        Version = 1
+      end
+    end
+    object tabCustomFields: TTabSheet
+      Caption = 'Campos Personalizados'
+      ImageIndex = 1
+      object pnlCustomTop: TPanel
+        Left = 0
+        Top = 0
+        Width = 512
+        Height = 32
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 1
+        object btnEditFields: TButton
+          Left = 4
+          Top = 3
+          Width = 140
+          Height = 25
+          Caption = 'Editar campos...'
+          TabOrder = 0
+          OnClick = btnEditFieldsClick
+        end
+      end
+      object vgCustom: TcxVerticalGrid
+        Left = 0
+        Top = 32
+        Width = 512
+        Height = 518
+        Align = alClient
+        OptionsView.RowHeaderWidth = 180
+        OptionsView.ValueWidth = 300
+        OptionsBehavior.AlwaysShowEditor = True
+        TabOrder = 0
+        Version = 1
+      end
+    end
   end
   object LookAndFeel: TcxLookAndFeelController
     NativeStyle = False

@@ -103,6 +103,8 @@ type
     procedure btnOpDelClick(Sender: TObject);
   private
     FRepo: TOperariosRepo;
+    FOperaciones: TArray<string>;
+    FCalendarios: TArray<string>;
 
     // Refresh
     procedure RefreshDepts;
@@ -132,7 +134,8 @@ type
     function InputOperari(var Nom, Cal: string; var DeptIds: TArray<Integer>;
       const ATitle: string): Boolean;
   public
-    class procedure Execute(ARepo: TOperariosRepo);
+    class procedure Execute(ARepo: TOperariosRepo;
+      const AOperaciones, ACalendarios: TArray<string>);
   end;
 
 var
@@ -142,21 +145,18 @@ implementation
 
 {$R *.dfm}
 
-const
-  ALL_OPS: array[0..11] of string = (
-    'PINTAR', 'BRONCEAR', 'LACAR', 'PULIR', 'CORTAR', 'EMBALAR',
-    'SOLDAR', 'FRESAR', 'TORNEAR', 'TALADRAR', 'RECTIFICAR', 'MONTAR'
-  );
-
 { TfrmGestionOperaris }
 
-class procedure TfrmGestionOperaris.Execute(ARepo: TOperariosRepo);
+class procedure TfrmGestionOperaris.Execute(ARepo: TOperariosRepo;
+  const AOperaciones, ACalendarios: TArray<string>);
 var
   F: TfrmGestionOperaris;
 begin
   F := TfrmGestionOperaris.Create(Application);
   try
     F.FRepo := ARepo;
+    F.FOperaciones := AOperaciones;
+    F.FCalendarios := ACalendarios;
     F.RefreshAll;
     F.ShowModal;
   finally
@@ -265,11 +265,11 @@ begin
   tvCapOps.BeginUpdate;
   try
     tvCapOps.DataController.RecordCount := 0;
-    tvCapOps.DataController.RecordCount := Length(ALL_OPS);
-    for I := 0 to High(ALL_OPS) do
+    tvCapOps.DataController.RecordCount := Length(FOperaciones);
+    for I := 0 to High(FOperaciones) do
     begin
-      HasCap := (OpId > 0) and FRepo.OperarioPotFerOperacio(OpId, ALL_OPS[I]);
-      tvCapOps.DataController.Values[I, colCapOpsNom.Index] := ALL_OPS[I];
+      HasCap := (OpId > 0) and FRepo.OperarioPotFerOperacio(OpId, FOperaciones[I]);
+      tvCapOps.DataController.Values[I, colCapOpsNom.Index] := FOperaciones[I];
       tvCapOps.DataController.Values[I, colCapOpsCheck.Index] := HasCap;
     end;
     // Deshabilitar edici'on si no hay operario seleccionado
@@ -614,7 +614,8 @@ function TfrmGestionOperaris.InputOperari(var Nom, Cal: string;
   var DeptIds: TArray<Integer>; const ATitle: string): Boolean;
 var
   Dlg: TForm;
-  edNom, edCal: TEdit;
+  edNom: TEdit;
+  cbCal: TComboBox;
   lblN, lblC, lblD: TLabel;
   clbDepts: TCheckListBox;
   btnOk, btnCa: TButton;
@@ -646,10 +647,15 @@ begin
     lblC.SetBounds(16, 52, 80, 20);
     lblC.Caption := 'Calendario:';
 
-    edCal := TEdit.Create(Dlg);
-    edCal.Parent := Dlg;
-    edCal.SetBounds(110, 50, 280, 24);
-    edCal.Text := Cal;
+    cbCal := TComboBox.Create(Dlg);
+    cbCal.Parent := Dlg;
+    cbCal.Style := csDropDownList;
+    cbCal.SetBounds(110, 50, 280, 24);
+    for I := 0 to High(FCalendarios) do
+      cbCal.Items.Add(FCalendarios[I]);
+    cbCal.ItemIndex := cbCal.Items.IndexOf(Cal);
+    if cbCal.ItemIndex < 0 then
+      cbCal.ItemIndex := 0;
 
     lblD := TLabel.Create(Dlg);
     lblD.Parent := Dlg;
@@ -691,7 +697,10 @@ begin
     if Result then
     begin
       Nom := Trim(edNom.Text);
-      Cal := Trim(edCal.Text);
+      if cbCal.ItemIndex >= 0 then
+        Cal := cbCal.Items[cbCal.ItemIndex]
+      else
+        Cal := '';
       if Nom = '' then
       begin
         Result := False;

@@ -1,0 +1,440 @@
+1. Estructura del producte
+Capa 1: Model universal
+
+Aquest és el nucli que hauria de servir per a tots els casos.
+
+Demanda
+
+Comanda
+OF
+OT
+Operació
+Projecte / fase / tasca
+
+Recurs
+
+Centre de treball
+Màquina
+Persona
+Equip humà
+Motlle
+Utillatge
+Línia
+Subcontracta
+
+Restriccions
+
+Calendari
+Torns
+Capacitat finita
+Skills / habilitacions
+Disponibilitat de material
+Dependències
+Setup / canvi
+Manteniment
+Temps de transport / espera
+
+Agrupadors
+
+Projecte
+Família
+Campanya
+Client
+Línia
+Ordre mare
+
+Objectius
+
+minimitzar retard
+minimitzar setups
+maximitzar ús de capacitat
+prioritzar OT urgents
+respectar data compromesa
+
+Aquesta separació encaixa amb com els motors de planificació industrial moderns representen els treballs com a “jobs + constraints”, i després els projecten sobre recursos, calendaris i capacitat.
+
+2. Tipus d’objecte planificable
+
+Per no encallar-te amb clients molt diferents, jo faria que el sistema pogués treballar amb 3 nivells:
+
+Nivell A: ordre simple
+
+Casos on:
+
+cada OF = 1 OT = 1 operació
+
+Ideal per clients petits o processos simples.
+
+Nivell B: ordre amb operacions
+
+Casos on:
+
+OF → diverses OT o diverses operacions
+seqüència tècnica
+temps de setup, execució, espera
+
+Ideal per taller i producció clàssica.
+
+Nivell C: projecte / xarxa
+
+Casos on:
+
+hi ha fases
+precedències
+dependències creuades
+recursos compartits
+
+Ideal per fabricació sota projecte, muntatges, instal·lacions, prototips.
+
+A nivell d’UX, això vol dir que la mateixa app pot mostrar una feina com:
+
+una peça única
+una cadena d’operacions
+una xarxa de tasques
+
+3. Modes de planificació que hauria de suportar el motor
+
+Això és més important que afegir 20 pantalles.
+
+Modes bàsics
+manual
+semiassistit
+automàtic per regles
+Modes temporals
+cap endavant des d’ara
+cap enrere des de la data d’entrega
+
+Els ERPs i schedulers industrials acostumen a suportar explícitament aquestes direccions de planificació. Dynamics, per exemple, documenta opcions forward i backward per a l’operació i job scheduling.
+
+Modes de capacitat
+capacitat infinita
+capacitat finita
+coll d’ampolla
+recurs crític
+
+La capacitat finita és clau per fer plans executables: el sistema no pot assignar més feina que la disponibilitat real del recurs.
+
+Modes d’optimització
+per prioritat
+per data compromesa
+per setup mínim
+per campanya
+per càrrega equilibrada
+per camí crític / dependències
+
+Oracle destaca explícitament l’ús de regles de changeover per reduir setups, augmentar throughput i reduir retards.
+
+4. Vistes que jo deixaria al producte
+
+Tu ja tens:
+
+Gantt
+Kanban
+Llista de prioritats
+
+Jo hi afegiria aquestes 4:
+
+A. Càrrega / capacitat
+
+Vista per:
+
+centre
+màquina
+persona
+línia
+setmana/dia/torn
+
+Ha de mostrar:
+
+hores disponibles
+hores assignades
+saturació %
+coll d’ampolla
+retard previst
+
+Aquesta vista et farà compatible amb clients que planifiquen “per càrrega”.
+
+B. Seqüència de recurs
+
+Vista per a un únic recurs o centre:
+
+cua d’ordres
+ordre exacte
+setup entre feines
+drag & drop
+recalcul ràpid
+
+Això cobreix el cas típic de taller: “quina és la següent feina de la màquina X?”
+
+C. Dependències / xarxa
+
+Vista tipus projecte:
+
+precedències
+bloquejos
+camí crític
+tasques successors/predecessors
+
+Per clients orientats a projecte o muntatge complex.
+
+D. Campanyes / setups
+
+Vista específica per:
+
+color
+família
+motlle
+recepta
+gruix
+format
+
+Objectiu:
+
+agrupar
+minimitzar canvis
+crear campanyes viables
+
+Oracle Production Scheduling tracta explícitament changeovers, disponibilitat de recursos i dependències multietapa.
+
+5. Configuració funcional per tipus de client
+
+Jo faria una cosa així:
+
+Perfil 1: producció simple
+
+Per clients petits.
+Actives:
+
+Llista de prioritats
+Kanban
+Gantt simple
+OF simple
+capacitat opcional
+Perfil 2: taller / mecanitzat / centres de treball
+
+Actives:
+
+Gantt
+càrrega/capacitat
+seqüència de recurs
+OF amb operacions
+setup
+calendari de màquina
+motlles/utillatges opcionals
+Perfil 3: intensiu en mà d’obra
+
+Actives:
+
+planificació per persones/equips
+skills
+torns
+absències
+polivalència
+càrrega de persones
+Perfil 4: projectes / muntatge
+
+Actives:
+
+xarxa de dependències
+Gantt projecte
+camí crític
+recursos compartits
+milestones
+Perfil 5: processos amb campanyes
+
+Actives:
+
+campanyes
+seqüència per atributs
+setups
+lots mínims
+restriccions de canvi
+neteges
+6. Menú funcional que jo dissenyaria
+Mestres
+Articles
+Recursos
+Centres
+Persones
+Motlles / utillatges
+Calendaris
+Skills
+Regles de setup
+Regles de prioritat
+Estructures
+Rutes / processos
+Operacions
+Dependències
+Alternatives de recurs
+Temps estàndard
+Planificació
+Inbox de feina pendent
+Gantt
+Kanban
+Llista de prioritats
+Capacitat
+Seqüenciació
+Projectes / dependències
+Campanyes
+Execució
+Llançament
+Replanificació
+Incidències
+Parades
+Substitució de recurs
+Seguiment d’avanç
+Control
+OT retardades
+Recursos saturats
+Feines bloquejades
+Falta material
+KPI OTIF / càrrega / setup / lead time
+7. Disseny de dades mínim
+
+Jo tindria aquestes entitats base:
+
+PlanItem
+PlanItemLink
+Resource
+ResourceCalendar
+ResourceSkill
+SecondaryResource
+SetupRule
+Constraint
+Allocation
+Scenario
+PriorityRule
+PlanItem
+
+Un registre genèric que pot ser:
+
+OF
+OT
+operació
+fase de projecte
+tasca
+
+Camps útils:
+
+tipus
+ordre pare
+projecte pare
+article
+quantitat
+durada
+data límit
+prioritat
+estat
+recurs requerit
+recurs alternatiu
+atributs de setup
+percentatge completat
+PlanItemLink
+
+Per dependències:
+
+predecessor
+successor
+tipus de dependència
+retard / solapament
+Allocation
+
+La reserva real:
+
+item
+recurs
+inici
+fi
+setup
+run time
+quantitat
+estat
+
+Això et permet representar tant un client simple com un client amb multietapa i restriccions de recurs.
+
+8. Quines funcionalitats jo faria “core” sí o sí
+Imprescindibles
+capacitat finita
+calendaris per recurs
+dependències entre operacions
+recursos alternatius
+seqüenciació manual
+replanificació parcial
+escenaris
+Molt recomanables
+restriccions secundàries: motlle, eina, operari
+setup dependent de seqüència
+campanyes
+absències / torns
+bloqueig per falta de material
+
+Oracle posa molt pes en disponibilitat de components, recursos i dependències multistage per generar plans factibles.
+
+9. Escenaris: per mi, molt important
+
+Afegiria una peça que molts obliden:
+
+Escenaris de planificació
+pla base
+simulació
+“què passa si”
+comparativa entre dos plans
+publicar escenari
+
+Exemples:
+
+si afegeixo un torn?
+si canvio el recurs?
+si agrupo per color?
+si avanço una OF urgent?
+
+Això et dona valor comercial molt gran sense multiplicar pantalles.
+
+10. Recomanació clara per al teu roadmap
+
+Jo faria aquest ordre:
+
+Fase 1
+consolidar model universal
+Gantt + Kanban + Llista
+capacitat finita
+calendaris
+operacions i dependències
+Fase 2
+vista de càrrega/capacitat
+vista de seqüència de recurs
+recursos alternatius
+escenaris
+Fase 3
+setups / campanyes
+motlles / utillatges com a recurs secundari
+skills i planificació per persones
+Fase 4
+projecte / xarxa / camí crític
+optimització automàtica més avançada
+Conclusió
+
+Si vols que la teva app sigui compatible amb molts clients, jo no la vendria com “3 o 7 maneres de planificar”, sinó com:
+
+un motor únic de planificació multi-model amb:
+
+ordres simples
+ordres amb operacions
+projectes
+recursos múltiples
+capacitat finita
+dependències
+setups
+calendaris
+
+i després vistes activables:
+
+Gantt
+Kanban
+prioritats
+capacitat
+seqüència
+projecte
+campanyes
+
+Això et dona molta cobertura sense convertir el producte en un monstre.

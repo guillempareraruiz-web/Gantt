@@ -16,6 +16,8 @@ type
 
   TGanttScrollYChangedEvent = procedure(Sender: TObject; const ScrollY: Single) of object;
   TNodeDblClickEvent = procedure(Sender: TObject; const NodeIndex: Integer) of object;
+  TMarkerEvent = procedure(Sender: TObject; const MarkerId: Integer) of object;
+  TMarkerMovedEvent = procedure(Sender: TObject; const MarkerId: Integer; const NewDateTime: TDateTime) of object;
 
   TGanttStatsChanged = procedure(Sender: TObject) of object;
 
@@ -146,6 +148,8 @@ type
 
     FOnStatsChanged: TGanttStatsChanged;
     FOnLayoutChanged: TNotifyEvent;
+    FOnNodeSelected: TNotifyEvent;
+    FOnVoid: TNotifyEvent;
 
     FMouseDownPos: TPoint;
     FMouseDownNodeIndex: Integer;
@@ -190,10 +194,29 @@ type
     FOpIdToNodeIndex: TDictionary<Integer, Integer>;
     FNodeIndexToLayoutIndex: TDictionary<Integer, Integer>;
 
+    // --- índexos ràpids per resolució de constraints ---
+    FNodeIdToIndex: TDictionary<Integer, Integer>;         // NodeId -> NodeIndex
+    FSuccessors: TDictionary<Integer, TList<Integer>>;     // NodeId -> llista de link-index a FLinks (sortints)
+    FPredecessors: TDictionary<Integer, TList<Integer>>;   // NodeId -> llista de link-index a FLinks (entrants)
+    FCentreIdToIsSeq: TDictionary<Integer, Boolean>;       // CentreId -> IsSequencial
+    FCentreIdToIdx: TDictionary<Integer, Integer>;         // CentreId -> index dins FCentres
+
     FFechaBloqueo: TDateTime;
     FDraggingBloqueo: Boolean;
     FDragOffsetX: Single;      // offset entre click i la línia
     FHoverBloqueo: Boolean;
+
+    // Markers
+    FMarkers: TArray<TGanttMarker>;
+    FNextMarkerId: Integer;
+    FDraggingMarkerId: Integer;   // -1 = cap
+    FMarkerDragOffsetX: Single;
+    FHoverMarkerId: Integer;      // -1 = cap
+    FMouseDownMarkerId: Integer;  // -1 = cap (pendent de drag threshold)
+    FAutoMarkersEnabled: Boolean;
+    FOnMarkerClick: TMarkerEvent;
+    FOnMarkerDblClick: TMarkerEvent;
+    FOnMarkerMoved: TMarkerMovedEvent;
 
     FVista: TGanttViewMode;
 
@@ -251,6 +274,8 @@ type
 
     procedure ClearDataIdIndex;
     procedure BuildDataIdIndex;
+
+    procedure RebuildGraphIndex;
 
     procedure StartScrollInvalidateTimer;
     procedure StopScrollInvalidateTimer;
@@ -326,7 +351,6 @@ type
     function AdjustToWorkingBackward(const CentreId: Integer; const T: TDateTime): TDateTime;
 
     procedure TimelineNeedRepaint(Sender: TObject);
-    procedure TimelineInteraction(Sender: TObject; const Interacting: Boolean);
 
     function ComputeFastPaint(const Interacting: Boolean;
                  const StartVis, EndVis: TDateTime): Boolean;
@@ -383,6 +407,16 @@ type
                 const RT: ID2D1RenderTarget;
                 const FillBrush, HatchBrush: ID2D1SolidColorBrush;
                 const ClientW, ClientH: Single);
+
+    procedure DrawMarkersD2D(
+                const D2D: TDirect2DCanvas;
+                const RT: ID2D1RenderTarget;
+                const LineBrush: ID2D1SolidColorBrush;
+                const ClientW, ClientH: Single);
+    function HitTestMarker(const ScreenX: Single; const Tolerance: Single = 5.0): Integer;
+    procedure SetAutoMarkersEnabled(const Value: Boolean);
+    procedure UpdateAutoMarkers;
+    procedure ClearAutoMarkers;
 
 
     //...per RESIZE NODES
@@ -494,6 +528,7 @@ type
     FClickPoint: TPoint;
     FClickDatetime: TDatetime;
 
+    procedure TimelineInteraction(Sender: TObject; const Interacting: Boolean);
     procedure NotifyViewportChanged;
 
     procedure GoToNextNode;
@@ -515,7 +550,7 @@ type
       const ADataID: Integer;
       const AType: TOpColorApplyType;
       const ANewBkColorOp, ANewBorderColorOp: TColor;
-      const AiOT: Integer = 0;
+      const AsOT: string = '';
       const AsOF: string = '';
       const AiOF: Integer = 0
     ): Integer;
@@ -523,6 +558,7 @@ type
     procedure RebuildOpIdIndex;
     procedure RebuildNodeLayoutIndex;
     procedure RebuildAfterModelChange(const RebuildNodeIndexMap: Boolean);
+    procedure ResetNodeDuration(const ANodeIndex: Integer);
 
     //...SELECT functions
     procedure ClearSelection;
@@ -591,6 +627,8 @@ type
 
     function ReplanAllFromDate(const AFromDate: TDateTime; const MinGapMin: Integer;
       out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
+    function ReplanAllFromDateV2(const AFromDate: TDateTime; const MinGapMin: Integer;
+      out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
 
     procedure SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean = True);
     procedure ScrollNodeIntoView(const NodeIndex: Integer; const Center: Boolean = True);
@@ -646,6 +684,8 @@ type
     procedure SearchNext(const Wrap: Boolean = True);
     procedure SearchPrev(const Wrap: Boolean = True);
     function IsNodeHighlighted(const NodeIndex: Integer): Boolean;
+    procedure HighlightOF(const ANodeIndex: Integer);
+    procedure HighlightOT(const ANodeIndex: Integer);
 
     procedure SetOperarioFilter(const ADataIds: TArray<Integer>; AHideMode: Boolean);
     procedure ClearOperarioFilter;
@@ -657,6 +697,19 @@ type
     property CanRedo: Boolean read GetCanRedo;
     property UndoCount: Integer read GetUndoCount;
     property RedoCount: Integer read GetRedoCount;
+
+    // Markers
+    function AddMarker(const AMarker: TGanttMarker): Integer;
+    procedure RemoveMarker(const AMarkerId: Integer);
+    procedure ClearMarkers;
+    function GetMarkers: TArray<TGanttMarker>;
+    function MarkerCount: Integer;
+    function FindMarkerAt(const ScreenX: Single; const Tolerance: Single = 5.0): Integer;
+
+    property AutoMarkersEnabled: Boolean read FAutoMarkersEnabled write SetAutoMarkersEnabled;
+    property OnMarkerClick: TMarkerEvent read FOnMarkerClick write FOnMarkerClick;
+    property OnMarkerDblClick: TMarkerEvent read FOnMarkerDblClick write FOnMarkerDblClick;
+    property OnMarkerMoved: TMarkerMovedEvent read FOnMarkerMoved write FOnMarkerMoved;
 
   published
     property PopupMenu;
@@ -684,6 +737,8 @@ type
     property OnNodeDblClick: TNodeDblClickEvent read FOnNodeDblClick write FOnNodeDblClick;
     property OnStatsChanged: TGanttStatsChanged read FOnStatsChanged write FOnStatsChanged;
     property OnLayoutChanged: TNotifyEvent read FOnLayoutChanged write FOnLayoutChanged;
+    property OnNodeSelected: TNotifyEvent read FOnNodeSelected write FOnNodeSelected;
+    property OnVoid: TNotifyEvent read FOnVoid write FOnVoid;
   end;
 
 
@@ -700,6 +755,7 @@ const
   LANEGAP = 5;
 
   DRAG_THRESHOLD = 4;
+  TAG_AUTO_MARKER = -999;  // Tag reservat per markers automàtics
 
   //...colors Nodes segons Vista
 // Verd viu
@@ -1618,6 +1674,13 @@ begin
 
   FDraggingBloqueo := False;
 
+  // Markers
+  FNextMarkerId := 1;
+  FDraggingMarkerId := -1;
+  FHoverMarkerId := -1;
+  FMouseDownMarkerId := -1;
+  FAutoMarkersEnabled := False;
+
   FHistory := TGanttHistoryManager.Create(200);
 end;
 
@@ -1637,6 +1700,21 @@ begin
   HideNodeHint;
 
   FHistory.Free;
+
+  // Alliberar índexos de graf
+  FNodeIdToIndex.Free;
+  if FSuccessors <> nil then
+  begin
+    for var lst in FSuccessors.Values do lst.Free;
+    FSuccessors.Free;
+  end;
+  if FPredecessors <> nil then
+  begin
+    for var lst in FPredecessors.Values do lst.Free;
+    FPredecessors.Free;
+  end;
+  FCentreIdToIsSeq.Free;
+  FCentreIdToIdx.Free;
 
   inherited;
 end;
@@ -1837,6 +1915,7 @@ end;
 procedure TGanttControl.SetLinks(const ALinks: TArray<TErpLink>);
 begin
   FLinks := Copy(ALinks);
+  RebuildGraphIndex;
   Invalidate;
 end;
 
@@ -1859,6 +1938,7 @@ begin
   if (AIndex >= 0) and (AIndex <= High(FLinks)) then
   begin
     FLinks[AIndex] := ALink;
+    RebuildGraphIndex;
     Invalidate;
   end;
 end;
@@ -1867,6 +1947,7 @@ procedure TGanttControl.AddLink(const ALink: TErpLink);
 begin
   SetLength(FLinks, Length(FLinks) + 1);
   FLinks[High(FLinks)] := ALink;
+  RebuildGraphIndex;
   Invalidate;
 end;
 
@@ -1931,6 +2012,36 @@ begin
     RebuildOpIdIndex;     // només si has canviat l’ordre de FNodes o has afegit/treu nodes
 end;
 
+procedure TGanttControl.ResetNodeDuration(const ANodeIndex: Integer);
+var
+  D: TNodeData;
+  cal: TCentreCalendar;
+  newStart, newEnd: TDateTime;
+  newDurMin: Integer;
+begin
+  if not IsValidNodeIndex(ANodeIndex) then Exit;
+  if not TryGetNodeData(ANodeIndex, D) then Exit;
+
+  // Restaurar duració original
+  newDurMin := Round(D.DurationMinOriginal);
+  newStart := FNodes[ANodeIndex].StartTime;
+
+  // Ajustar start a horari laboral
+  cal := GetCalendar(FNodes[ANodeIndex].CentreId);
+  if cal <> nil then
+    newStart := cal.NextWorkingTime(newStart);
+
+  // Calcular nou EndTime
+  newEnd := CalcEndTime(FNodes[ANodeIndex].CentreId, newStart, newDurMin);
+
+  // Aplicar al model
+  ApplyResizeToModel(ANodeIndex, newStart, newEnd, newDurMin);
+  CommitNodeMoveOrResize(ANodeIndex);
+
+  RebuildAfterModelChange(False);
+  Invalidate;
+end;
+
 procedure TGanttControl.ClearDataIdIndex;
 var
   kv: TPair<Integer, TList<Integer>>;
@@ -1971,6 +2082,68 @@ begin
   end;
 end;
 
+
+procedure TGanttControl.RebuildGraphIndex;
+var
+  i: Integer;
+  lst: TList<Integer>;
+begin
+  // --- FNodeIdToIndex ---
+  if FNodeIdToIndex = nil then
+    FNodeIdToIndex := TDictionary<Integer, Integer>.Create(Length(FNodes))
+  else
+    FNodeIdToIndex.Clear;
+  for i := 0 to High(FNodes) do
+    FNodeIdToIndex.AddOrSetValue(FNodes[i].Id, i);
+
+  // --- FSuccessors / FPredecessors  (emmagatzemen índex dins FLinks) ---
+  if FSuccessors = nil then
+    FSuccessors := TDictionary<Integer, TList<Integer>>.Create
+  else
+  begin
+    for lst in FSuccessors.Values do lst.Free;
+    FSuccessors.Clear;
+  end;
+  if FPredecessors = nil then
+    FPredecessors := TDictionary<Integer, TList<Integer>>.Create
+  else
+  begin
+    for lst in FPredecessors.Values do lst.Free;
+    FPredecessors.Clear;
+  end;
+  for i := 0 to High(FLinks) do
+  begin
+    // Successors: FromNodeId -> llista de link-index
+    if not FSuccessors.TryGetValue(FLinks[i].FromNodeId, lst) then
+    begin
+      lst := TList<Integer>.Create;
+      FSuccessors.Add(FLinks[i].FromNodeId, lst);
+    end;
+    lst.Add(i);
+    // Predecessors: ToNodeId -> llista de link-index
+    if not FPredecessors.TryGetValue(FLinks[i].ToNodeId, lst) then
+    begin
+      lst := TList<Integer>.Create;
+      FPredecessors.Add(FLinks[i].ToNodeId, lst);
+    end;
+    lst.Add(i);
+  end;
+
+  // --- FCentreIdToIsSeq / FCentreIdToIdx ---
+  if FCentreIdToIsSeq = nil then
+    FCentreIdToIsSeq := TDictionary<Integer, Boolean>.Create
+  else
+    FCentreIdToIsSeq.Clear;
+  if FCentreIdToIdx = nil then
+    FCentreIdToIdx := TDictionary<Integer, Integer>.Create
+  else
+    FCentreIdToIdx.Clear;
+  for i := 0 to High(FCentres) do
+  begin
+    FCentreIdToIsSeq.AddOrSetValue(FCentres[i].Id, FCentres[i].IsSequencial);
+    FCentreIdToIdx.AddOrSetValue(FCentres[i].Id, i);
+  end;
+end;
 
 procedure TGanttControl.ScrollByPixels(const dx, dy: Integer; const ScrollRect: TRect);
 var
@@ -2728,8 +2901,11 @@ begin
   bw := Max(22, Length(Text) * 5.2 + padX*2);
   bh := 12;
 
-  bx := R.Right - bw - 3;
-  by := R.Top - bh;
+  // No pintar badge si el node és massa estret
+  if (R.Right - R.Left) < bw + 4 then Exit;
+
+  bx := R.Right - bw + 2;
+  by := R.Top + 1;
 
   badgeR := TRectF.Create(bx, by, bx + bw, by + bh);
 
@@ -2764,6 +2940,7 @@ begin
 
   BuildCentreNodeIndex;
   BuildDataIdIndex;
+  RebuildGraphIndex;
 
   RebuildLayout;
   Invalidate;
@@ -2914,6 +3091,373 @@ begin
 end;
 
 
+{ ============================================= }
+{              MARKERS                          }
+{ ============================================= }
+
+function TGanttControl.AddMarker(const AMarker: TGanttMarker): Integer;
+var
+  M: TGanttMarker;
+begin
+  M := AMarker;
+  M.Id := FNextMarkerId;
+  Inc(FNextMarkerId);
+  if M.StrokeWidth <= 0 then
+    M.StrokeWidth := 1.5;
+  if M.FontName = '' then
+    M.FontName := 'Segoe UI';
+  if M.FontSize <= 0 then
+    M.FontSize := 8;
+  if M.FontColor = 0 then
+    M.FontColor := M.Color;
+  SetLength(FMarkers, Length(FMarkers) + 1);
+  FMarkers[High(FMarkers)] := M;
+  Result := M.Id;
+  Invalidate;
+end;
+
+procedure TGanttControl.RemoveMarker(const AMarkerId: Integer);
+var
+  i, last: Integer;
+begin
+  for i := 0 to High(FMarkers) do
+  begin
+    if FMarkers[i].Id = AMarkerId then
+    begin
+      last := High(FMarkers);
+      if i <> last then
+        FMarkers[i] := FMarkers[last];
+      SetLength(FMarkers, last);
+      Invalidate;
+      Exit;
+    end;
+  end;
+end;
+
+procedure TGanttControl.ClearMarkers;
+begin
+  SetLength(FMarkers, 0);
+  FDraggingMarkerId := -1;
+  FHoverMarkerId := -1;
+  Invalidate;
+end;
+
+function TGanttControl.GetMarkers: TArray<TGanttMarker>;
+var
+  i, cnt: Integer;
+begin
+  cnt := 0;
+  for i := 0 to High(FMarkers) do
+    if FMarkers[i].Tag <> TAG_AUTO_MARKER then
+      Inc(cnt);
+  SetLength(Result, cnt);
+  cnt := 0;
+  for i := 0 to High(FMarkers) do
+    if FMarkers[i].Tag <> TAG_AUTO_MARKER then
+    begin
+      Result[cnt] := FMarkers[i];
+      Inc(cnt);
+    end;
+end;
+
+function TGanttControl.MarkerCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(FMarkers) do
+    if FMarkers[i].Tag <> TAG_AUTO_MARKER then
+      Inc(Result);
+end;
+
+function TGanttControl.HitTestMarker(const ScreenX: Single; const Tolerance: Single): Integer;
+var
+  i: Integer;
+  mx: Single;
+begin
+  Result := -1;
+  for i := 0 to High(FMarkers) do
+  begin
+    if not FMarkers[i].Visible then Continue;
+    mx := TimeToX(FMarkers[i].DateTime);
+    if Abs(mx - ScreenX) <= Tolerance then
+    begin
+      Result := FMarkers[i].Id;
+      Exit;
+    end;
+  end;
+end;
+
+function TGanttControl.FindMarkerAt(const ScreenX: Single; const Tolerance: Single): Integer;
+begin
+  Result := HitTestMarker(ScreenX, Tolerance);
+end;
+
+procedure TGanttControl.SetAutoMarkersEnabled(const Value: Boolean);
+begin
+  if FAutoMarkersEnabled = Value then Exit;
+  FAutoMarkersEnabled := Value;
+  if Value then
+    UpdateAutoMarkers
+  else
+  begin
+    ClearAutoMarkers;
+    Invalidate;
+  end;
+end;
+
+procedure TGanttControl.ClearAutoMarkers;
+var
+  i: Integer;
+begin
+  i := 0;
+  while i <= High(FMarkers) do
+  begin
+    if FMarkers[i].Tag = TAG_AUTO_MARKER then
+    begin
+      if i < High(FMarkers) then
+        FMarkers[i] := FMarkers[High(FMarkers)];
+      SetLength(FMarkers, Length(FMarkers) - 1);
+    end
+    else
+      Inc(i);
+  end;
+end;
+
+procedure TGanttControl.UpdateAutoMarkers;
+var
+  D: TNodeData;
+  M: TGanttMarker;
+  hasData: Boolean;
+begin
+  // Eliminar markers automàtics anteriors
+  ClearAutoMarkers;
+
+  if not FAutoMarkersEnabled then Exit;
+  if FFocusedNodeIndex < 0 then Exit;
+
+  hasData := TryGetNodeData(FFocusedNodeIndex, D);
+  if not hasData then Exit;
+
+  // Marker: Fecha Entrega (vermell, dashed)
+  if D.FechaEntrega > 1 then
+  begin
+    M := Default(TGanttMarker);
+    M.DateTime := D.FechaEntrega;
+    M.Caption := 'Entrega ' + FormatDateTime('dd/mm', D.FechaEntrega);
+    M.Color := $002020FF; // vermell BGR
+    M.Style := msDashed;
+    M.StrokeWidth := 1.5;
+    M.Moveable := False;
+    M.Visible := True;
+    M.Tag := TAG_AUTO_MARKER;
+    M.FontName := 'Segoe UI';
+    M.FontSize := 7;
+    M.FontColor := $002020FF;
+    M.FontStyle := [fsBold];
+    M.TextOrientation := mtoHorizontal;
+    M.TextAlign := mtaTop;
+    AddMarker(M);
+  end;
+
+  // Marker: Fecha Necesaria (taronja, dashed)
+  if D.FechaNecesaria > 1 then
+  begin
+    M := Default(TGanttMarker);
+    M.DateTime := D.FechaNecesaria;
+    M.Caption := 'Necesaria ' + FormatDateTime('dd/mm', D.FechaNecesaria);
+    M.Color := $000080FF; // taronja BGR
+    M.Style := msDashed;
+    M.StrokeWidth := 1.5;
+    M.Moveable := False;
+    M.Visible := True;
+    M.Tag := TAG_AUTO_MARKER;
+    M.FontName := 'Segoe UI';
+    M.FontSize := 7;
+    M.FontColor := $000080FF;
+    M.FontStyle := [fsBold];
+    M.TextOrientation := mtoHorizontal;
+    M.TextAlign := mtaTop;
+    AddMarker(M);
+  end;
+
+  Invalidate;
+end;
+
+procedure TGanttControl.DrawMarkersD2D(
+  const D2D: TDirect2DCanvas;
+  const RT: ID2D1RenderTarget;
+  const LineBrush: ID2D1SolidColorBrush;
+  const ClientW, ClientH: Single);
+var
+  i: Integer;
+  oldM, M2: TD2D1Matrix3x2F;
+  x, y, penW: Single;
+  DashLen, GapLen: Single;
+  marker: TGanttMarker;
+  isHover, isDragging: Boolean;
+  captionW, captionH: Single;
+  captionX, captionY: Single;
+  txtSize: TSize;
+begin
+  if Length(FMarkers) = 0 then Exit;
+  if (ClientW <= 1) or (ClientH <= 1) then Exit;
+  if FPxPerMinute <= 1e-6 then Exit;
+
+  RT.GetTransform(oldM);
+  M2._11 := 1; M2._12 := 0;
+  M2._21 := 0; M2._22 := 1;
+  M2._31 := 0; M2._32 := 0;
+  RT.SetTransform(M2);
+
+  RT.PushAxisAlignedClip(D2D1RectF(0, 0, ClientW, ClientH), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+  try
+    for i := 0 to High(FMarkers) do
+    begin
+      marker := FMarkers[i];
+      if not marker.Visible then Continue;
+
+      x := TimeToX(marker.DateTime);
+      if (x < -2) or (x > ClientW + 2) then Continue;
+
+      isHover := (marker.Id = FHoverMarkerId);
+      isDragging := (marker.Id = FDraggingMarkerId);
+
+      penW := marker.StrokeWidth;
+      if isHover or isDragging then
+        penW := penW + 1.0;
+
+      SetBrushColor(LineBrush, marker.Color, 1.0);
+
+      case marker.Style of
+        msLine:
+          RT.DrawLine(D2D1PointF(x, 0), D2D1PointF(x, ClientH), LineBrush, penW);
+
+        msDashed:
+        begin
+          DashLen := 10;
+          GapLen := 6;
+          y := 0;
+          while y < ClientH do
+          begin
+            RT.DrawLine(
+              D2D1PointF(x, y),
+              D2D1PointF(x, Min(y + DashLen, ClientH)),
+              LineBrush, penW);
+            y := y + DashLen + GapLen;
+          end;
+        end;
+
+        msDotted:
+        begin
+          DashLen := 3;
+          GapLen := 4;
+          y := 0;
+          while y < ClientH do
+          begin
+            RT.DrawLine(
+              D2D1PointF(x, y),
+              D2D1PointF(x, Min(y + DashLen, ClientH)),
+              LineBrush, penW);
+            y := y + DashLen + GapLen;
+          end;
+        end;
+      end;
+
+      // petit triangle/diamant a dalt per indicar el marker
+      RT.FillRectangle(
+        D2D1RectF(x - 4, 0, x + 4, 6),
+        LineBrush);
+
+      // Caption (si n'hi ha)
+      if marker.Caption <> '' then
+      begin
+        // Configurar font del marker
+        D2D.Font.Name := marker.FontName;
+        D2D.Font.Size := marker.FontSize;
+        D2D.Font.Style := marker.FontStyle;
+        D2D.Font.Color := marker.FontColor;
+
+        txtSize := D2D.TextExtent(marker.Caption);
+        captionW := txtSize.cx;
+        captionH := txtSize.cy;
+
+        if marker.TextOrientation = mtoHorizontal then
+        begin
+          // Posicio X: a la dreta de la linia, o a l'esquerra si no cap
+          captionX := x + 5;
+          if captionX + captionW > ClientW then
+            captionX := x - captionW - 5;
+
+          // Posicio Y segons alineacio
+          case marker.TextAlign of
+            mtaTop:    captionY := 8;
+            mtaCenter: captionY := (ClientH - captionH) / 2;
+            mtaBottom: captionY := ClientH - captionH - 8;
+          else
+            captionY := 8;
+          end;
+
+          // Fons semitransparent
+          SetBrushColor(LineBrush, clWhite, 0.80);
+          RT.FillRectangle(
+            D2D1RectF(captionX - 2, captionY - 1,
+                      captionX + captionW + 2, captionY + captionH + 1),
+            LineBrush);
+
+          // Text
+          D2D.Font.Color := marker.FontColor;
+          D2D.TextOut(Round(captionX), Round(captionY), marker.Caption);
+        end
+        else
+        begin
+          // TEXT VERTICAL (rotat -90 graus)
+          // Posicio Y segons alineacio (el text rota, W i H s'intercanvien)
+          case marker.TextAlign of
+            mtaTop:    captionY := 8 + captionW;
+            mtaCenter: captionY := (ClientH + captionW) / 2;
+            mtaBottom: captionY := ClientH - 8;
+          else
+            captionY := 8 + captionW;
+          end;
+
+          captionX := x + 5;
+          if captionX + captionH > ClientW then
+            captionX := x - captionH - 5;
+
+          // Fons semitransparent (rotated area)
+          SetBrushColor(LineBrush, clWhite, 0.80);
+          RT.FillRectangle(
+            D2D1RectF(captionX - 1, captionY - captionW - 2,
+                      captionX + captionH + 1, captionY + 2),
+            LineBrush);
+
+          // Rotar per pintar text vertical
+          var rotM: TD2D1Matrix3x2F;
+          // Rotacio -90 graus al voltant del punt (captionX, captionY)
+          var cosA: Single := 0;   // cos(-90) = 0
+          var sinA: Single := -1;  // sin(-90) = -1
+          rotM._11 := cosA;  rotM._12 := sinA;
+          rotM._21 := -sinA; rotM._22 := cosA;
+          rotM._31 := captionX - cosA * captionX + sinA * captionY;
+          rotM._32 := captionY - sinA * captionX - cosA * captionY;
+          RT.SetTransform(rotM);
+
+          D2D.Font.Color := marker.FontColor;
+          D2D.TextOut(Round(captionX), Round(captionY), marker.Caption);
+
+          // Restaurar transformacio identitat
+          RT.SetTransform(M2);
+        end;
+      end;
+    end;
+  finally
+    RT.PopAxisAlignedClip;
+    RT.SetTransform(oldM);
+  end;
+end;
+
+
 procedure TGanttControl.ClearSearch;
 begin
   SetLength(FSearchResults, 0);
@@ -3015,6 +3559,49 @@ var
   dummy: Byte;
 begin
   Result := FHighlightSet.TryGetValue(NodeIndex, dummy);
+end;
+
+procedure TGanttControl.HighlightOF(const ANodeIndex: Integer);
+var
+  DStart, D: TNodeData;
+  i: Integer;
+begin
+  FHighlightSet.Clear;
+  if not TryGetNodeData(ANodeIndex, DStart) then
+  begin
+    Invalidate;
+    Exit;
+  end;
+  for i := 0 to High(FNodes) do
+  begin
+    if TryGetNodeData(i, D) and
+       (D.NumeroOrdenFabricacion = DStart.NumeroOrdenFabricacion) and
+       SameText(D.SerieFabricacion, DStart.SerieFabricacion) then
+      FHighlightSet.AddOrSetValue(i, 1);
+  end;
+  Invalidate;
+end;
+
+procedure TGanttControl.HighlightOT(const ANodeIndex: Integer);
+var
+  DStart, D: TNodeData;
+  i: Integer;
+begin
+  FHighlightSet.Clear;
+  if not TryGetNodeData(ANodeIndex, DStart) then
+  begin
+    Invalidate;
+    Exit;
+  end;
+  for i := 0 to High(FNodes) do
+  begin
+    if TryGetNodeData(i, D) and
+       SameText(D.NumeroTrabajo, DStart.NumeroTrabajo) and
+       (D.NumeroOrdenFabricacion = DStart.NumeroOrdenFabricacion) and
+       SameText(D.SerieFabricacion, DStart.SerieFabricacion) then
+      FHighlightSet.AddOrSetValue(i, 1);
+  end;
+  Invalidate;
 end;
 
 procedure TGanttControl.OpFilterTimerTick(Sender: TObject);
@@ -3334,66 +3921,66 @@ function TGanttControl.ResolveDependenciesFromNode(
   const ChangedIdx: Integer;
   out MovedNodes: TIdxArray): Boolean;
 var
-  Queue: TIdxArray;
-  Processed: TIdxArray;
-  qHead: Integer;
-  PredIdx, SuccIdx: Integer;
-  i: Integer;
+  Queue: TArray<Integer>;
+  qHead, qTail: Integer;
+  IsProcessed, IsQueued: array of Boolean;
+  PredIdx, SuccIdx, li: Integer;
   MinStart, NewStart: TDateTime;
   LinkPct: Double;
+  SuccLinks: TList<Integer>;
+  N: Integer;
 
   procedure Enqueue(const AIdx: Integer);
   begin
-    if AIdx < 0 then Exit;
-    if not ArrayContainsIdx(Queue, AIdx) then
-      ArrayAddUnique(Queue, AIdx);
+    if (AIdx < 0) or (AIdx > N) then Exit;
+    if IsQueued[AIdx] then Exit;
+    IsQueued[AIdx] := True;
+    Queue[qTail] := AIdx;
+    Inc(qTail);
   end;
 
 begin
   Result := False;
-  ArrayClear(MovedNodes);
-  ArrayClear(Queue);
-  ArrayClear(Processed);
+  SetLength(MovedNodes, 0);
+  N := High(FNodes);
 
-  if (ChangedIdx < 0) or (ChangedIdx > High(FNodes)) then Exit;
+  if (ChangedIdx < 0) or (ChangedIdx > N) then Exit;
+
+  SetLength(Queue, Length(FNodes));
+  SetLength(IsProcessed, Length(FNodes));
+  SetLength(IsQueued, Length(FNodes));
+  qHead := 0;
+  qTail := 0;
 
   Enqueue(ChangedIdx);
-  qHead := 0;
 
-  while qHead < Length(Queue) do
+  while qHead < qTail do
   begin
     PredIdx := Queue[qHead];
     Inc(qHead);
 
-    if ArrayContainsIdx(Processed, PredIdx) then
+    if IsProcessed[PredIdx] then
       Continue;
-    ArrayAddUnique(Processed, PredIdx);
+    IsProcessed[PredIdx] := True;
 
-    for i := 0 to High(FLinks) do
+    if (FSuccessors = nil) or not FSuccessors.TryGetValue(FNodes[PredIdx].Id, SuccLinks) then
+      Continue;
+
+    for li in SuccLinks do
     begin
-      // adapta aquests noms al teu model real
-      if FLinks[i].FromNodeId <> FNodes[PredIdx].Id then
-        Continue;
-
-      SuccIdx := FindNodeIndexById(FLinks[i].ToNodeId);
+      SuccIdx := FindNodeIndexById(FLinks[li].ToNodeId);
       if SuccIdx < 0 then
         Continue;
 
-      LinkPct := FLinks[i].PorcentajeDependencia;
+      LinkPct := FLinks[li].PorcentajeDependencia;
 
       MinStart := GetDependencyMinStart(PredIdx, LinkPct);
       NewStart := ApplyNodeCalendarAndOverlay(FNodes[SuccIdx].CentreId, MinStart);
 
       if FNodes[SuccIdx].StartTime < NewStart then
       begin
-        // Si el successor està desactivat no es pot moure:
-        // restringim el predecessor perquè no sobrepassi la posició de col·lisió
         if not FNodes[SuccIdx].Enabled then
         begin
-          // Càlcul invers: PredStart màxim tal que GetDependencyMinStart = SuccIdx.StartTime
-          // MinStart = PredStart + DurDays*(Pct/100) => PredStart = SuccStart - DurDays*(Pct/100)
-          // Però la durada del predecessor és fixa (DurationMin), llavors:
-          // PredMaxStart = SuccIdx.StartTime - (PredDuration * Pct/100)
           var PredDurDays: Double := FNodes[PredIdx].EndTime - FNodes[PredIdx].StartTime;
           var PredPct: Double := LinkPct;
           if PredPct < 0 then PredPct := 0;
@@ -3404,7 +3991,8 @@ begin
             if MoveNodeKeepingDuration(PredIdx, PredMaxStart) then
             begin
               Result := True;
-              ArrayAddUnique(MovedNodes, PredIdx);
+              SetLength(MovedNodes, Length(MovedNodes) + 1);
+              MovedNodes[High(MovedNodes)] := PredIdx;
             end;
           end;
         end
@@ -3413,7 +4001,8 @@ begin
           if MoveNodeKeepingDuration(SuccIdx, NewStart) then
           begin
             Result := True;
-            ArrayAddUnique(MovedNodes, SuccIdx);
+            SetLength(MovedNodes, Length(MovedNodes) + 1);
+            MovedNodes[High(MovedNodes)] := SuccIdx;
             Enqueue(SuccIdx);
           end;
         end;
@@ -3428,42 +4017,50 @@ procedure TGanttControl.CollectDependentNodeIndexes(
   const AStartIdx: Integer;
   var AResult: TIdxArray);
 var
-  Queue: TIdxArray;
-  Head: Integer;
-  CurrIdx, NextIdx: Integer;
-  L: TErpLink;
+  Queue: TArray<Integer>;
+  Visited: array of Boolean;
+  qHead, qTail, ResCount: Integer;
+  CurrIdx, NextIdx, li: Integer;
+  SuccLinks: TList<Integer>;
 begin
-  ArrayClear(AResult);
-  ArrayClear(Queue);
+  SetLength(AResult, 0);
+  if (AStartIdx < 0) or (AStartIdx > High(FNodes)) then Exit;
 
-  if (AStartIdx < 0) or (AStartIdx > High(FNodes)) then
-    Exit;
+  SetLength(Queue, Length(FNodes));
+  SetLength(Visited, Length(FNodes));
+  qHead := 0;
+  qTail := 0;
+  ResCount := 0;
 
-  ArrayAddUnique(AResult, AStartIdx);
-  ArrayAddUnique(Queue, AStartIdx);
-  Head := 0;
+  Visited[AStartIdx] := True;
+  Queue[qTail] := AStartIdx;
+  Inc(qTail);
+  SetLength(AResult, Length(FNodes));
+  AResult[ResCount] := AStartIdx;
+  Inc(ResCount);
 
-  while Head < Length(Queue) do
+  while qHead < qTail do
   begin
-    CurrIdx := Queue[Head];
-    Inc(Head);
+    CurrIdx := Queue[qHead];
+    Inc(qHead);
 
-    for L in FLinks do
+    if (FSuccessors <> nil) and FSuccessors.TryGetValue(FNodes[CurrIdx].Id, SuccLinks) then
     begin
-      if L.FromNodeId = FNodes[CurrIdx].Id then
+      for li in SuccLinks do
       begin
-        NextIdx := FindNodeIndexById(L.ToNodeId);
-        if NextIdx >= 0 then
+        NextIdx := FindNodeIndexById(FLinks[li].ToNodeId);
+        if (NextIdx >= 0) and not Visited[NextIdx] then
         begin
-          if not ArrayContainsIdx(AResult, NextIdx) then
-          begin
-            ArrayAddUnique(AResult, NextIdx);
-            ArrayAddUnique(Queue, NextIdx);
-          end;
+          Visited[NextIdx] := True;
+          Queue[qTail] := NextIdx;
+          Inc(qTail);
+          AResult[ResCount] := NextIdx;
+          Inc(ResCount);
         end;
       end;
     end;
   end;
+  SetLength(AResult, ResCount);
 end;
 
 
@@ -3471,14 +4068,25 @@ procedure TGanttControl.CollectCentreNodeIndexes(
   const ACentreId: Integer;
   var AResult: TIdxArray);
 var
-  i: Integer;
+  cachedArr: TArray<Integer>;
+  i, idx, L: Integer;
 begin
   if ACentreId = 0 then
     Exit;
 
-  for i := 0 to High(FNodes) do
-    if FNodes[i].CentreId = ACentreId then
-      ArrayAddUnique(AResult, i);
+  if FCentreNodeIdx.TryGetValue(ACentreId, cachedArr) then
+  begin
+    for i := 0 to High(cachedArr) do
+    begin
+      idx := cachedArr[i];
+      if not ArrayContainsIdx(AResult, idx) then
+      begin
+        L := Length(AResult);
+        SetLength(AResult, L + 1);
+        AResult[L] := idx;
+      end;
+    end;
+  end;
 end;
 
 
@@ -3624,12 +4232,9 @@ begin
 end;
 
 function TGanttControl.FindNodeIndexById(const NodeId: Integer): Integer;
-var
-  j: Integer;
 begin
-  for j := 0 to High(FNodes) do
-    if FNodes[j].Id = NodeId then
-      Exit(j);
+  if (FNodeIdToIndex <> nil) and FNodeIdToIndex.TryGetValue(NodeId, Result) then
+    Exit;
   Result := -1;
 end;
 
@@ -3950,6 +4555,305 @@ begin
   end;
 end;
 
+function TGanttControl.ReplanAllFromDateV2(const AFromDate: TDateTime;
+  const MinGapMin: Integer; out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
+{  Versió optimitzada: elimina cerques lineals repetides usant diccionaris
+   pre-construïts i substitueix Queue.Insert per un heap binari. }
+type
+  TReplanRec = record
+    NodeIdx: Integer;
+    FechaEntrega: TDateTime;
+    Prioridad: Integer;
+    InDegree: Integer;
+    CentreId: Integer;
+    DurationMin: Double;
+  end;
+  TCentreInfo = record
+    IsSeq: Boolean;
+    MaxLanes: Integer;
+    CentreIdx: Integer;
+  end;
+  TPredLink = record
+    PredRecIdx: Integer;
+    PctDep: Double;
+  end;
+var
+  SW: TStopwatch;
+  I, N: Integer;
+  D: TNodeData;
+  Recs: TArray<TReplanRec>;
+  NodeIdToRecIdx: TDictionary<Integer, Integer>;
+  // Predecessors i successors indexats per RecIdx
+  Preds: TArray<TArray<TPredLink>>;
+  Succs: TArray<TArray<Integer>>;
+  // Centre lookup
+  CentreInfoMap: TDictionary<Integer, TCentreInfo>;
+  CI: TCentreInfo;
+  // Kahn amb heap
+  Heap: TList<Integer>;
+  HeapSize: Integer;
+  RecIdx, SuccRecIdx: Integer;
+  CentreId: Integer;
+  NewStart, DepMinStart: TDateTime;
+  CentreLast: TDictionary<Integer, TDateTime>;
+  CentreLaneOcc: TDictionary<Integer, TLaneOccupancy>;
+  PrevEnd: TDateTime;
+  Occ: TLaneOccupancy;
+  AdjStart, NewEnd: TDateTime;
+
+  // ── Heap helpers (min-heap per FechaEntrega, després Prioridad) ──
+  function HeapLess(A, B: Integer): Boolean;
+  begin
+    if Recs[A].FechaEntrega < Recs[B].FechaEntrega then Exit(True);
+    if Recs[A].FechaEntrega > Recs[B].FechaEntrega then Exit(False);
+    Result := Recs[A].Prioridad < Recs[B].Prioridad;
+  end;
+
+  procedure HeapPush(Idx: Integer);
+  var P, C: Integer;
+  begin
+    if HeapSize >= Heap.Count then
+      Heap.Add(Idx)
+    else
+      Heap[HeapSize] := Idx;
+    C := HeapSize;
+    Inc(HeapSize);
+    while C > 0 do
+    begin
+      P := (C - 1) shr 1;
+      if HeapLess(Heap[C], Heap[P]) then
+      begin
+        // swap
+        Idx := Heap[P]; Heap[P] := Heap[C]; Heap[C] := Idx;
+        C := P;
+      end
+      else
+        Break;
+    end;
+  end;
+
+  function HeapPop: Integer;
+  var P, L, R, S, Tmp: Integer;
+  begin
+    Result := Heap[0];
+    Dec(HeapSize);
+    if HeapSize > 0 then
+    begin
+      Heap[0] := Heap[HeapSize];
+      P := 0;
+      while True do
+      begin
+        L := P * 2 + 1;
+        R := L + 1;
+        S := P;
+        if (L < HeapSize) and HeapLess(Heap[L], Heap[S]) then S := L;
+        if (R < HeapSize) and HeapLess(Heap[R], Heap[S]) then S := R;
+        if S = P then Break;
+        Tmp := Heap[P]; Heap[P] := Heap[S]; Heap[S] := Tmp;
+        P := S;
+      end;
+    end;
+  end;
+
+begin
+  Result := False;
+  MovedCount := 0;
+  SW := TStopwatch.StartNew;
+  try
+    if FNodeRepo = nil then Exit;
+
+    // ─── 1) Pre-construir CentreInfoMap ───
+    CentreInfoMap := TDictionary<Integer, TCentreInfo>.Create(Length(FCentres));
+    try
+      for I := 0 to High(FCentres) do
+      begin
+        CI.IsSeq := FCentres[I].IsSequencial;
+        CI.MaxLanes := FCentres[I].MaxLaneCount;
+        CI.CentreIdx := I;
+        CentreInfoMap.AddOrSetValue(FCentres[I].Id, CI);
+      end;
+
+      // ─── 2) Construir Recs ───
+      N := 0;
+      SetLength(Recs, Length(FNodes));
+      NodeIdToRecIdx := TDictionary<Integer, Integer>.Create(Length(FNodes));
+      try
+        for I := 0 to High(FNodes) do
+        begin
+          if not FNodes[I].Visible then Continue;
+          if FNodes[I].DataId = 0 then Continue;
+          if not FNodeRepo.TryGetById(FNodes[I].DataId, D) then Continue;
+
+          Recs[N].NodeIdx := I;
+          Recs[N].FechaEntrega := D.FechaEntrega;
+          Recs[N].Prioridad := D.Prioridad;
+          Recs[N].InDegree := 0;
+          Recs[N].CentreId := FNodes[I].CentreId;
+          Recs[N].DurationMin := FNodes[I].DurationMin;
+          NodeIdToRecIdx.AddOrSetValue(FNodes[I].Id, N);
+          Inc(N);
+        end;
+        SetLength(Recs, N);
+        if N = 0 then Exit;
+
+        // ─── 3) Construir Preds[] i Succs[] (arrays, no diccionaris) ───
+        SetLength(Preds, N);
+        SetLength(Succs, N);
+        for I := 0 to High(FLinks) do
+        begin
+          var FromRec, ToRec: Integer;
+          if not NodeIdToRecIdx.TryGetValue(FLinks[I].FromNodeId, FromRec) then Continue;
+          if not NodeIdToRecIdx.TryGetValue(FLinks[I].ToNodeId, ToRec) then Continue;
+
+          // Afegir successor
+          var SLen := Length(Succs[FromRec]);
+          SetLength(Succs[FromRec], SLen + 1);
+          Succs[FromRec][SLen] := ToRec;
+
+          // Afegir predecessor
+          var PLen := Length(Preds[ToRec]);
+          SetLength(Preds[ToRec], PLen + 1);
+          Preds[ToRec][PLen].PredRecIdx := FromRec;
+          Preds[ToRec][PLen].PctDep := FLinks[I].PorcentajeDependencia;
+
+          Inc(Recs[ToRec].InDegree);
+        end;
+
+        // ─── 4) Kahn amb min-heap ───
+        Heap := TList<Integer>.Create(N);
+        CentreLast := TDictionary<Integer, TDateTime>.Create;
+        CentreLaneOcc := TDictionary<Integer, TLaneOccupancy>.Create;
+        try
+          HeapSize := 0;
+          for I := 0 to N - 1 do
+            if Recs[I].InDegree = 0 then
+              HeapPush(I);
+
+          while HeapSize > 0 do
+          begin
+            RecIdx := HeapPop;
+            CentreId := Recs[RecIdx].CentreId;
+
+            // a) Data mínima
+            NewStart := AFromDate;
+
+            // b) Dependències (usant Preds[] pre-construït)
+            for I := 0 to High(Preds[RecIdx]) do
+            begin
+              var PredRec := Preds[RecIdx][I].PredRecIdx;
+              var PredNodeIdx := Recs[PredRec].NodeIdx;
+              var Pct := Preds[RecIdx][I].PctDep;
+              if Pct < 0 then Pct := 0;
+              if Pct > 100 then Pct := 100;
+              DepMinStart := FNodes[PredNodeIdx].StartTime +
+                (FNodes[PredNodeIdx].EndTime - FNodes[PredNodeIdx].StartTime) * (Pct / 100.0);
+              if DepMinStart > NewStart then
+                NewStart := DepMinStart;
+            end;
+
+            // c) Calendari
+            NewStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+
+            // d) Col·lisions (usant CentreInfoMap pre-construït)
+            if CentreInfoMap.TryGetValue(CentreId, CI) then
+            begin
+              if CI.IsSeq then
+              begin
+                if CentreLast.TryGetValue(CentreId, PrevEnd) then
+                begin
+                  if PrevEnd > NewStart then
+                    NewStart := PrevEnd;
+                  if MinGapMin > 0 then
+                    NewStart := IncMinute(NewStart, MinGapMin);
+                end;
+                NewStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+              end
+              else
+              begin
+                if not CentreLaneOcc.TryGetValue(CentreId, Occ) then
+                begin
+                  Occ := TLaneOccupancy.Create(CI.MaxLanes);
+                  CentreLaneOcc.Add(CentreId, Occ);
+                end;
+                Occ.FindFreeLaneOrShift(NewStart, Recs[RecIdx].DurationMin, CentreId, Self);
+                NewStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+              end;
+            end;
+
+            // e) Moure node INLINE (evita doble ApplyNodeCalendarAndOverlay)
+            var K := Recs[RecIdx].NodeIdx;
+            AdjStart := ApplyNodeCalendarAndOverlay(CentreId, NewStart);
+            NewEnd := CalcEndTime(CentreId, AdjStart, FNodes[K].DurationMin);
+            if (FNodes[K].StartTime <> AdjStart) or (FNodes[K].EndTime <> NewEnd) then
+            begin
+              FNodes[K].StartTime := AdjStart;
+              FNodes[K].EndTime := NewEnd;
+              Inc(MovedCount);
+            end;
+
+            // f) Registrar ocupació
+            if CentreInfoMap.TryGetValue(CentreId, CI) and CI.IsSeq then
+            begin
+              CentreLast.AddOrSetValue(CentreId, FNodes[K].EndTime);
+            end
+            else
+            begin
+              if CentreLaneOcc.TryGetValue(CentreId, Occ) then
+              begin
+                var FinalLane: Integer := 0;
+                var FinalEnd: TDateTime := FNodes[K].EndTime;
+                for var L := 0 to 999 do
+                begin
+                  if not Occ.Collides(L, FNodes[K].StartTime, FinalEnd) then
+                  begin
+                    FinalLane := L;
+                    Break;
+                  end;
+                end;
+                Occ.Add(FinalLane, FNodes[K].StartTime, FinalEnd);
+              end;
+            end;
+
+            // g) Alliberar successors
+            for I := 0 to High(Succs[RecIdx]) do
+            begin
+              SuccRecIdx := Succs[RecIdx][I];
+              Dec(Recs[SuccRecIdx].InDegree);
+              if Recs[SuccRecIdx].InDegree <= 0 then
+                HeapPush(SuccRecIdx);
+            end;
+          end;
+
+        finally
+          CentreLast.Free;
+          for Occ in CentreLaneOcc.Values do
+            Occ.Free;
+          CentreLaneOcc.Free;
+          Heap.Free;
+        end;
+
+      finally
+        NodeIdToRecIdx.Free;
+      end;
+
+    finally
+      CentreInfoMap.Free;
+    end;
+
+    // ─── 5) Rebuild ───
+    if MovedCount > 0 then
+    begin
+      RebuildLayout;
+      Invalidate;
+      Result := True;
+    end;
+
+  finally
+    SW.Stop;
+    ElapsedMs := SW.ElapsedMilliseconds;
+  end;
+end;
+
 procedure TGanttControl.SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean);
 begin
   if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
@@ -3995,6 +4899,7 @@ var
   T0, T1: TDateTime;
 begin
   GetVisibleTimeRange(T0, T1);
+  RecalcCounters;
 
   if Assigned(FOnViewportChanged) then
     FOnViewportChanged(Self, FStartTime, FPxPerMinute, FScrollX);
@@ -4017,10 +4922,25 @@ end;
 procedure TGanttControl.WMLButtonDblClk(var Message: TWMLButtonDblClk);
 var
   nodeIdx: Integer;
+  mId: Integer;
 begin
   inherited;
-  // Missatge té coords client
-  nodeIdx := HitTestNodeIndex(Message.XPos, Message.YPos); // <-- ha de retornar nl.NodeIndex o -1
+
+  // Doble clic a marker? Cancel·lar qualsevol drag en curs
+  mId := HitTestMarker(Message.XPos);
+  if (mId >= 0) then
+  begin
+    FDraggingMarkerId := -1;
+    FMouseDownMarkerId := -1;
+    MouseCapture := False;
+    if Assigned(FOnMarkerDblClick) then
+      FOnMarkerDblClick(Self, mId);
+    Invalidate;
+    Exit;
+  end;
+
+  // Doble clic a node?
+  nodeIdx := HitTestNodeIndex(Message.XPos, Message.YPos);
   if (nodeIdx >= 0) and Assigned(FOnNodeDblClick) then
     FOnNodeDblClick(Self, nodeIdx);
 end;
@@ -4249,7 +5169,7 @@ begin
   si.nPos := NewPos;
   SetScrollInfo(Handle, SB_HORZ, si, True);
   isTracking := (Message.ScrollCode = SB_THUMBTRACK);
-  FFastPaint := isTracking;
+  FFastPaint := isTracking and (FCNT_TotalVisibleNodes > 50);
 
   if isTracking then
   begin
@@ -4301,7 +5221,7 @@ begin
 
   isTracking := (Message.ScrollCode = SB_THUMBTRACK);
 
-  FFastPaint := isTracking;
+  FFastPaint := isTracking and (FCNT_TotalVisibleNodes > 50);
 
   if isTracking then
     StartScrollInvalidateTimer
@@ -4727,12 +5647,9 @@ begin
 end;
 
 function TGanttControl.FindCentreIndexById(const CentreId: Integer): Integer;
-var
-  i: Integer;
 begin
-  for i := 0 to High(FCentres) do
-    if FCentres[i].Id = CentreId then
-      Exit(i);
+  if (FCentreIdToIdx <> nil) and FCentreIdToIdx.TryGetValue(CentreId, Result) then
+    Exit;
   Result := -1;
 end;
 
@@ -4793,11 +5710,12 @@ begin
   FCentres[idx] := ACentre;
 
   if needLayout then
+  begin
+    RebuildGraphIndex;
     RebuildLayout;
+  end;
 
   Invalidate;
-
-  // si tens event OnLayoutRebuilt o similar, pots disparar-lo aquí si vols
 end;
 
 
@@ -4941,12 +5859,9 @@ begin
 end;
 
 function TGanttControl.IsCentreSequecial(const CentreId: Integer): Boolean;
-var
-  k: Integer;
 begin
-  for k := 0 to High(FCentres) do
-    if FCentres[k].Id = CentreId then
-      Exit(FCentres[k].IsSequencial);
+  if (FCentreIdToIsSeq <> nil) and FCentreIdToIsSeq.TryGetValue(CentreId, Result) then
+    Exit;
   Result := True;
 end;
 
@@ -5154,7 +6069,7 @@ function TGanttControl.ApplyOpColorsByNode(
   const ADataID: Integer;
   const AType: TOpColorApplyType;
   const ANewBkColorOp, ANewBorderColorOp: TColor;
-  const AiOT: Integer = 0;
+  const AsOT: string = '';
   const AsOF: string = '';
   const AiOF: Integer = 0
 ): Integer;
@@ -5162,7 +6077,7 @@ var
   i: Integer;
   baseIdx: Integer;
   keyOT, keyOF: Integer;
-  keySOF: string;
+  keySOF, keySOT: string;
   dataIds: TArray<Integer>;
   dataId: Integer;
   d: TNodeDAta;
@@ -5184,7 +6099,7 @@ begin
   // Type 0: només aquest node
   if AType = octOnlyNode then
   begin
-    if FNodeRepo.TryGetById(dataId, d) then
+    if FNodeRepo.TryGetById(AdataId, d) then
      PaintNode( d );
     Exit;
   end;
@@ -5193,9 +6108,27 @@ begin
   case AType of
     octByTrabajo:
       begin
-        keyOT := AiOT;
+        keyOF := AiOF;
+        keySOT := AsOT;
+        keySOF := AsOF;
 
-        dataIds := FNodeRepo.FindByTrabajo(inttostr(keyOT));
+
+        {
+        nodes: TArray<Integer>;
+  iVal: Integer;
+begin
+  if not Assigned(FGantt) then
+   Exit;
+
+  iVal := 20000 + strtointdef( SearchBox1.Text, 0);
+
+  if radiobutton1.checked then
+   nodes := FGantt.FindNodesByOF( iVal, 'A')
+  else
+   nodes := FGantt.FindNodesByTrabajo('TR-001');
+   }
+        dataIds := FNodeRepo.FindByTrabajo(keySOT);
+        //dataIds := FNodeRepo.FindByTrabajo(inttostr(keyOT));
         if Length(dataIds) = 0 then Exit;
 
         try
@@ -5327,34 +6260,33 @@ begin
       begin
         if HasData and (D.FechaEntrega > 0) then
         begin
-          if Node.EndTime > D.FechaEntrega then
+          slackDays := (Node.EndTime - D.FechaEntrega);
+          var diffDays: Integer := Round(slackDays);
+
+          if slackDays > 0 then
           begin
+            // Tard: estem passats de la data d'entrega
             S.Fill := COL_BAD_FILL;
             S.Border := COL_BAD_BORDER;
-            S.BadgeText := 'Tard';
+            S.BadgeText := '+' + IntToStr(diffDays);
+          end
+          else if (-slackDays) <= 1 then
+          begin
+            // Just: queda 1 dia o menys
+            S.Fill := COL_WARN_FILL;
+            S.Border := COL_WARN_BORDER;
+            S.BadgeText := IntToStr(diffDays);
           end
           else
           begin
-            slackDays := (D.FechaEntrega - Node.EndTime);
-
-            if slackDays <= 1 then
-            begin
-              S.Fill := COL_WARN_FILL;
-              S.Border := COL_WARN_BORDER;
-              S.BadgeText := 'Just';
-            end
-            else
-            begin
-              S.Fill := COL_OK_FILL;
-              S.Border := COL_OK_BORDER;
-            end;
+            // OK: queden dies de marge
+            S.Fill := COL_OK_FILL;
+            S.Border := COL_OK_BORDER;
+            S.BadgeText := IntToStr(diffDays);
           end;
 
-          if S.BadgeText <> '' then
-          begin
-            S.BadgeFill := S.Border;
-            S.BadgeTextColor := clWhite;
-          end;
+          S.BadgeFill := S.Border;
+          S.BadgeTextColor := clWhite;
         end;
       end;
 
@@ -5463,28 +6395,28 @@ begin
         begin
           case D.Estado of
 
-            eoPendiente:
+            nePendiente:
               begin
                 S.Fill := COL_NEUTRAL_FILL;
                 S.Border := COL_NEUTRAL_BORDER;
                 S.BadgeText := 'Pend';
               end;
 
-            eoEnCurso:
+            neEnCurso:
               begin
                 S.Fill := COL_INFO_FILL;
                 S.Border := COL_INFO_BORDER;
                 S.BadgeText := 'Curs';
               end;
 
-            eoFinalizado:
+            neFinalizado:
               begin
                 S.Fill := COL_OK_FILL;
                 S.Border := COL_OK_BORDER;
                 S.BadgeText := 'OK';
               end;
 
-            eoBloqueado:
+            neBloqueado:
               begin
                 S.Fill := COL_BAD_FILL;
                 S.Border := COL_BAD_BORDER;
@@ -5619,7 +6551,7 @@ begin
     S.Border := clBlack;
 
   if IsHi and (not IsSel) then
-    S.Border := COL_INFO_BORDER;
+    S.Border := $0000CCFF; // groc daurat (BGR)
 
   // Filtro de operarios: atenuar nodos no filtrados (mantener colores de estado)
   if FOpFilterActive and (not FOpFilterHideMode) then
@@ -5820,6 +6752,8 @@ var
     end
     else if IsSel then
       borderWidth := 2.0
+    else if IsHi then
+      borderWidth := 2.2
     else
       borderWidth := 1.0;
 
@@ -5886,6 +6820,10 @@ begin
 
       DrawNowLineDashedD2D(RT, NowBrush, ClientWidth, ClientHeight);
       DrawDayGridLinesD2D(RT, GridBrush, ClientWidth, ClientHeight);
+
+      // Markers (entre grid lines i nodes)
+      if Length(FMarkers) > 0 then
+        DrawMarkersD2D(D2D, RT, FillBrush, ClientWidth, ClientHeight);
 
       FHasResizeNode := False;
       FHasMoveNode := False;
@@ -6072,6 +7010,40 @@ begin
           SetBrushColor(FillBrush, $0040CC40, 0.85);
           DrawCurvedArrowD2D(RT, StrokeBrush, FillBrush,
             liFromPt, FLinkPreviewEnd, nil, 2.5, 10, 8);
+        end;
+      end;
+
+      // Passada overlay: glow groc per a nodes highlighted (OF)
+      if (FHighlightSet.Count > 0) and (not FFastPaint) then
+      begin
+        var hlIdx: Integer;
+        var hlLayoutIdx: Integer;
+        var hlRect: TRectF;
+        for hlIdx in FHighlightSet.Keys do
+        begin
+          if FNodeIndexToLayoutIndex.TryGetValue(hlIdx, hlLayoutIdx) then
+          begin
+            hlRect := FNodeLayouts[hlLayoutIdx].Rect;
+            hlRect.Offset(-FScrollX, -FScrollY);
+            // Glow difuminat: capes expandides amb opacitat decreixent
+            // Capes de borde difuminat (només traç, sense fill)
+            var gi: Integer;
+            for gi := 3 downto 1 do
+            begin
+              var Expand: Single := gi * 2.0;
+              var GlowAlpha: Single := 0.10 + (0.20 * (1.0 - gi / 3));
+              var GlowR: TRectF := RectF(
+                hlRect.Left - Expand, hlRect.Top - Expand,
+                hlRect.Right + Expand, hlRect.Bottom + Expand);
+              SetBrushColor(StrokeBrush, $0000D4FF, GlowAlpha); // groc daurat (BGR)
+              RT.DrawRoundedRectangle(
+                RoundedRectToD2D(GlowR, 3 + Expand), StrokeBrush, 1.5);
+            end;
+            // Borde groc sòlid per sobre
+            SetBrushColor(StrokeBrush, $0000CCFF, 0.85);
+            RT.DrawRoundedRectangle(
+              RoundedRectToD2D(hlRect, 3), StrokeBrush, 1.5);
+          end;
         end;
       end;
 
@@ -6500,7 +7472,7 @@ begin
               if FFastPaint then
                 RT.DrawRectangle(RectFToD2D(drawRect), StrokeBrush, 1.0)
               else
-                RT.DrawRoundedRectangle(RoundedRectToD2D(drawRect, 3), StrokeBrush, IfThen(isSel, 2.0, 1.0));
+                RT.DrawRoundedRectangle(RoundedRectToD2D(drawRect, 3), StrokeBrush, IfThen(isSel, 2.0, IfThen(isHi, 1.5, 1.0)));
 
               // progress (ex: Fabricació)
               if (style.Progress >= 0) and (not FFastPaint) then
@@ -6778,9 +7750,10 @@ end;
 function TGanttControl.ComputeFastPaint(const Interacting: Boolean;
   const StartVis, EndVis: TDateTime): Boolean;
 begin
-  if Interacting then
-    Exit(True);
-  Result := (EndVis - StartVis) > 7.0; // > 7 dies visibles
+  if not Interacting then
+    Exit(False);
+  // FastPaint només si estem interactuant I hi ha més de 50 nodes visibles
+  Result := (FCNT_TotalVisibleNodes > 50);
 end;
 function TGanttControl.UpdateFastPaint(const Interacting: Boolean;
   const StartVis, EndVis: TDateTime): Boolean;
@@ -6806,20 +7779,9 @@ var
 begin
   TL := TGanttTimelineControl(Sender);
   FTimelineInteracting  :=  Interacting;
-  if Interacting then
-    FFastPaint  := True
-  else
-    FFastPaint  := (TL.EndVisibleTime - TL.StartVisibleTime) > 7.0;
-  // només si realment canvia
-  {
-  if NewFast <> FFastPaint then
-  begin
-    FFastPaint := NewFast;
-    // NO Invalidate aquí
-    // el repaint ja vindrà del viewport changed
-    // i en el "settle" final, si no hi ha viewport changed, ho tractem amb Opció 2 o 3
-  end;
-  }
+  FFastPaint := Interacting and (FCNT_TotalVisibleNodes > 50);
+  if not Interacting then
+    Invalidate;
 end;
 
 
@@ -7411,74 +8373,32 @@ function TGanttControl.ResolveSequentialCollisionsFromNode(
   out MovedNodes: TIdxArray): Boolean;
 var
   list: TIdxArray;
-  i, k, posC, posB: Integer;
+  cachedArr: TArray<Integer>;
+  i, posC, posB, MovedCount: Integer;
   prevEnd, desiredStart: TDateTime;
   cal: TCentreCalendar;
-
-
-  function CmpIdx(const L, R: Integer): Integer;
-  var
-    a, b: TDateTime;
-  begin
-    a := FNodes[L].StartTime;
-    b := FNodes[R].StartTime;
-    if a < b then Exit(-1);
-    if a > b then Exit( 1);
-
-    if FNodes[L].Id < FNodes[R].Id then Exit(-1);
-    if FNodes[L].Id > FNodes[R].Id then Exit( 1);
-    Result := 0;
-  end;
-
-  procedure SortIdx(var A: TIdxArray);
-  var
-    swapped: Boolean;
-    t, j: Integer;
-  begin
-    if Length(A) <= 1 then Exit;
-    repeat
-      swapped := False;
-      for j := 0 to High(A)-1 do
-        if CmpIdx(A[j], A[j+1]) > 0 then
-        begin
-          t := A[j]; A[j] := A[j+1]; A[j+1] := t;
-          swapped := True;
-        end;
-    until not swapped;
-  end;
+  Nodes: TArray<TNode>;
 
   function FindPos(const A: TIdxArray; const NodeIdx: Integer): Integer;
-  var
-    j: Integer;
+  var j: Integer;
   begin
-    Result := -1;
     for j := 0 to High(A) do
       if A[j] = NodeIdx then Exit(j);
+    Result := -1;
   end;
 
   procedure MoveElement(var A: TIdxArray; const FromPos, ToPos: Integer);
-  var
-    tmp, j, toP: Integer;
+  var tmp, j: Integer;
   begin
-    if (FromPos < 0) or (FromPos > High(A)) then Exit;
-    if (ToPos   < 0) or (ToPos   > High(A)) then Exit;
-    if FromPos = ToPos then Exit;
-
+    if (FromPos < 0) or (FromPos > High(A)) or
+       (ToPos < 0)   or (ToPos > High(A))   or
+       (FromPos = ToPos) then Exit;
     tmp := A[FromPos];
-    toP := ToPos;
-
     if FromPos < ToPos then
-    begin
-      for j := FromPos to toP - 1 do
-        A[j] := A[j + 1];
-      A[toP] := tmp;
-    end
+      for j := FromPos to ToPos - 1 do A[j] := A[j + 1]
     else
-    begin
-      for j := FromPos downto toP + 1 do
-        A[j] := A[j - 1];
-      A[toP] := tmp;
-    end;
+      for j := FromPos downto ToPos + 1 do A[j] := A[j - 1];
+    A[ToPos] := tmp;
   end;
 
   function ApplyOverlayAndCalendar(const T: TDateTime): TDateTime;
@@ -7490,34 +8410,32 @@ var
       Result := cal.NextWorkingTime(Result);
   end;
 
-  function StartInsideNode(const AStart: TDateTime; const OtherIdx: Integer): Boolean;
-  begin
-    Result := (AStart >= FNodes[OtherIdx].StartTime) and
-              (AStart <  FNodes[OtherIdx].EndTime);
-  end;
-
 begin
   Result := False;
-  ArrayClear(MovedNodes);
+  SetLength(MovedNodes, 0);
+  MovedCount := 0;
   if not IsCentreSequecial(CentreId) then Exit;
-
   if (ChangedIdx < 0) or (ChangedIdx > High(FNodes)) then Exit;
   if FNodes[ChangedIdx].CentreId <> CentreId then Exit;
 
   cal := GetCalendar(CentreId);
+  Nodes := FNodes; // referència local per accés ràpid
 
-  SetLength(list, 0);
-  for i := 0 to High(FNodes) do
-    if FNodes[i].CentreId = CentreId then
-    begin
-      k := Length(list);
-      SetLength(list, k + 1);
-      list[k] := i;
-    end;
-
+  // Obtenir nodes del centre des del cache existent
+  if not FCentreNodeIdx.TryGetValue(CentreId, cachedArr) then Exit;
+  list := Copy(cachedArr);
   if Length(list) <= 1 then Exit;
 
-  SortIdx(list);
+  // Quicksort O(n log n) en lloc de bubble sort O(n²)
+  TArray.Sort<Integer>(list, TComparer<Integer>.Construct(
+    function(const L, R: Integer): Integer
+    begin
+      if Nodes[L].StartTime < Nodes[R].StartTime then Exit(-1);
+      if Nodes[L].StartTime > Nodes[R].StartTime then Exit(1);
+      if Nodes[L].Id < Nodes[R].Id then Exit(-1);
+      if Nodes[L].Id > Nodes[R].Id then Exit(1);
+      Result := 0;
+    end));
 
   posC := FindPos(list, ChangedIdx);
   if posC < 0 then Exit;
@@ -7526,27 +8444,28 @@ begin
   for i := 0 to High(list) do
   begin
     if list[i] = ChangedIdx then Continue;
-    if StartInsideNode(FNodes[ChangedIdx].StartTime, list[i]) then
+    if (Nodes[ChangedIdx].StartTime >= Nodes[list[i]].StartTime) and
+       (Nodes[ChangedIdx].StartTime <  Nodes[list[i]].EndTime) then
     begin
-      if (posB < 0) or (FNodes[list[i]].EndTime > FNodes[list[posB]].EndTime) then
+      if (posB < 0) or (Nodes[list[i]].EndTime > Nodes[list[posB]].EndTime) then
         posB := i;
     end;
   end;
 
   if posB >= 0 then
   begin
-    desiredStart := IncMinute(FNodes[list[posB]].EndTime, MinGapMin);
+    desiredStart := IncMinute(Nodes[list[posB]].EndTime, MinGapMin);
     desiredStart := ApplyOverlayAndCalendar(desiredStart);
-
     if FNodes[ChangedIdx].StartTime < desiredStart then
     begin
       if MoveNodeKeepingDuration(ChangedIdx, desiredStart) then
       begin
         Result := True;
-        ArrayAddUnique(MovedNodes, ChangedIdx);
+        SetLength(MovedNodes, MovedCount + 1);
+        MovedNodes[MovedCount] := ChangedIdx;
+        Inc(MovedCount);
       end;
     end;
-
     posC := FindPos(list, ChangedIdx);
     if posC >= 0 then
     begin
@@ -7554,28 +8473,26 @@ begin
         MoveElement(list, posC, posB)
       else
         MoveElement(list, posC, posB + 1);
-
       posC := FindPos(list, ChangedIdx);
       if posC < 0 then Exit;
     end;
   end;
 
   prevEnd := FNodes[list[posC]].EndTime;
-
   for i := posC + 1 to High(list) do
   begin
     desiredStart := IncMinute(prevEnd, MinGapMin);
     desiredStart := ApplyOverlayAndCalendar(desiredStart);
-
     if FNodes[list[i]].StartTime < desiredStart then
     begin
       if MoveNodeKeepingDuration(list[i], desiredStart) then
       begin
         Result := True;
-        ArrayAddUnique(MovedNodes, list[i]);
+        SetLength(MovedNodes, MovedCount + 1);
+        MovedNodes[MovedCount] := list[i];
+        Inc(MovedCount);
       end;
     end;
-
     prevEnd := FNodes[list[i]].EndTime;
   end;
 end;
@@ -8041,24 +8958,25 @@ function TGanttControl.GetMinStartAllowedByPredecessors(
   const NodeIdx: Integer;
   out HasConstraint: Boolean): TDateTime;
 var
-  i, PredIdx: Integer;
+  PredIdx, li: Integer;
   T: TDateTime;
+  PredLinks: TList<Integer>;
 begin
   Result := 0;
   HasConstraint := False;
 
   if (NodeIdx < 0) or (NodeIdx > High(FNodes)) then Exit;
 
-  for i := 0 to High(FLinks) do
-  begin
-    if FLinks[i].ToNodeId <> FNodes[NodeIdx].Id then
-      Continue;
+  if (FPredecessors = nil) or not FPredecessors.TryGetValue(FNodes[NodeIdx].Id, PredLinks) then
+    Exit;
 
-    PredIdx := FindNodeIndexById(FLinks[i].FromNodeId);
+  for li in PredLinks do
+  begin
+    PredIdx := FindNodeIndexById(FLinks[li].FromNodeId);
     if PredIdx < 0 then
       Continue;
 
-    T := GetDependencyMinStart(PredIdx, FLinks[i].PorcentajeDependencia);
+    T := GetDependencyMinStart(PredIdx, FLinks[li].PorcentajeDependencia);
 
     if not HasConstraint then
     begin
@@ -8120,16 +9038,22 @@ begin
   MaxLanes := FCentres[CIdx].MaxLaneCount;
   if MaxLanes <= 0 then Exit;
 
-  // Recollir tots els nodes del centre
-  IdxCount := 0;
-  SetLength(Idxs, Length(FNodes));
-  for I := 0 to High(FNodes) do
-    if (FNodes[I].CentreId = CentreId) and FNodes[I].Visible then
-    begin
-      Idxs[IdxCount] := I;
-      Inc(IdxCount);
-    end;
-  SetLength(Idxs, IdxCount);
+  // Recollir nodes del centre des del cache
+  if FCentreNodeIdx.TryGetValue(CentreId, Idxs) then
+  begin
+    // Filtrar només visibles
+    IdxCount := 0;
+    for I := 0 to High(Idxs) do
+      if FNodes[Idxs[I]].Visible then
+      begin
+        Idxs[IdxCount] := Idxs[I];
+        Inc(IdxCount);
+      end;
+  end
+  else
+  begin
+    IdxCount := 0;
+  end;
 
   DurMin := FNodes[ChangedIdx].DurationMin;
   TestStart := FNodes[ChangedIdx].StartTime;
@@ -8171,25 +9095,28 @@ function TGanttControl.ResolveAllConstraintsFromNode(
   const ChangedIdx: Integer;
   const MinGapMin: Integer): Boolean;
 var
-  Queue: TIdxArray;
+  Queue: TArray<Integer>;
   ProcessedCount: array of Integer;
-  qHead: Integer;
+  IsQueued: array of Boolean;
+  qHead, qTail: Integer;
   CurrIdx: Integer;
-  i: Integer;
+  i, N: Integer;
   MovedDeps, MovedSeq: TIdxArray;
 
   procedure Enqueue(const AIdx: Integer);
   begin
-    if (AIdx < 0) or (AIdx > High(FNodes)) then Exit;
-    if not ArrayContainsIdx(Queue, AIdx) then
-      ArrayAddUnique(Queue, AIdx);
+    if (AIdx < 0) or (AIdx > N) then Exit;
+    if IsQueued[AIdx] then Exit;
+    IsQueued[AIdx] := True;
+    Queue[qTail] := AIdx;
+    Inc(qTail);
   end;
 
   procedure MarkNodeModified(const AIdx: Integer);
   var
     D: TNodeData;
   begin
-    if (AIdx < 0) or (AIdx > High(FNodes)) then
+    if (AIdx < 0) or (AIdx > N) then
       Exit;
 
     if (FNodes[AIdx].DataId = 0) then
@@ -8198,30 +9125,35 @@ var
     if FNodeRepo.TryGetById(FNodes[AIdx].DataId, D) then
     begin
       D.Modified := True;
-      FNodeRepo.AddOrUpdate(D); // adapta això al teu repo real
+      FNodeRepo.AddOrUpdate(D);
     end;
   end;
 
 begin
   Result := False;
-  ArrayClear(Queue);
+  N := High(FNodes);
+  SetLength(Queue, Length(FNodes));
   SetLength(ProcessedCount, Length(FNodes));
+  SetLength(IsQueued, Length(FNodes));
+  qHead := 0;
+  qTail := 0;
 
   Enqueue(ChangedIdx);
   MarkNodeModified(ChangedIdx);
-  qHead := 0;
 
-  while qHead < Length(Queue) do
+  while qHead < qTail do
   begin
     CurrIdx := Queue[qHead];
     Inc(qHead);
 
-    if (CurrIdx < 0) or (CurrIdx > High(FNodes)) then
+    if (CurrIdx < 0) or (CurrIdx > N) then
       Continue;
 
     Inc(ProcessedCount[CurrIdx]);
     if ProcessedCount[CurrIdx] > 20 then
       Continue;
+    // Permetre re-enqueueing si torna a ser mogut
+    IsQueued[CurrIdx] := False;
 
     // 0) El node actual ha de respectar els seus predecessors
     if ClampNodeToPredecessors(CurrIdx) then
@@ -8538,6 +9470,52 @@ begin
     Exit;
   end;
 
+  // Marker: iniciar drag si supera threshold
+  if (FMouseDownMarkerId >= 0) and (FDraggingMarkerId < 0) and (ssLeft in Shift) then
+  begin
+    if (Abs(X - FMouseDownPos.X) >= DRAG_THRESHOLD) or
+       (Abs(Y - FMouseDownPos.Y) >= DRAG_THRESHOLD) then
+    begin
+      // Verificar que sigui moveable
+      var mkStart: Integer;
+      for mkStart := 0 to High(FMarkers) do
+      begin
+        if FMarkers[mkStart].Id = FMouseDownMarkerId then
+        begin
+          if FMarkers[mkStart].Moveable then
+          begin
+            FDraggingMarkerId := FMouseDownMarkerId;
+            var mkXs: Single := TimeToX(FMarkers[mkStart].DateTime);
+            FMarkerDragOffsetX := mkXs - FMouseDownPos.X;
+            FDidDrag := True;
+            MouseCapture := True;
+          end;
+          Break;
+        end;
+      end;
+      FMouseDownMarkerId := -1;
+    end;
+  end;
+
+  // Marker drag
+  if FDraggingMarkerId >= 0 then
+  begin
+    var mkX: Single := X + FMarkerDragOffsetX;
+    var mkT: TDateTime := XToTime(mkX);
+    var mk: Integer;
+    for mk := 0 to High(FMarkers) do
+    begin
+      if FMarkers[mk].Id = FDraggingMarkerId then
+      begin
+        FMarkers[mk].DateTime := mkT;
+        Break;
+      end;
+    end;
+    SetGanttCursor(crSizeWE);
+    Invalidate;
+    Exit;
+  end;
+
   // si ja estàs arrossegant, segueix...
   if FDragMode <> dmNone then
   begin
@@ -8567,9 +9545,32 @@ begin
         begin
           SetGanttCursor(crHSplit);
           Exit;
-        end
-        else
-          SetGanttCursor(crDefault);
+        end;
+
+        // Marker hover
+        var hoverMk: Integer := HitTestMarker(X);
+        if hoverMk <> FHoverMarkerId then
+        begin
+          FHoverMarkerId := hoverMk;
+          Invalidate;
+        end;
+        if (FHoverMarkerId >= 0) then
+        begin
+          // Check si és moveable
+          var mkm: Integer;
+          for mkm := 0 to High(FMarkers) do
+            if FMarkers[mkm].Id = FHoverMarkerId then
+            begin
+              if FMarkers[mkm].Moveable then
+                SetGanttCursor(crSizeWE)
+              else
+                SetGanttCursor(crHandPoint);
+              Break;
+            end;
+          Exit;
+        end;
+
+        SetGanttCursor(crDefault);
   end;
 
   // iniciar drag només si supera llindar
@@ -10500,6 +11501,10 @@ begin
   if FClickDatetime < FFechaBloqueo then
    Abort;
 
+  //...si marquem al fons del gantt a un lloc buit
+  if (Length(FSearchResults)>0) OR (FHighlightSet.Count>0) then
+   ClearSearch;
+
 
   //...si fem clic al Fecha Bloqueo
   if HitTestBloqueo(X, Y) then
@@ -10512,6 +11517,17 @@ begin
     Exit;
   end;
 
+  //...si fem clic a un Marker (no iniciem drag aquí, esperem DRAG_THRESHOLD a MouseMove)
+  begin
+    var mId: Integer := HitTestMarker(X);
+    if mId >= 0 then
+    begin
+      FMouseDownMarkerId := mId;
+      FMouseDownPos := Point(X, Y);
+      FDidDrag := False;
+      Exit;
+    end;
+  end;
 
   FMouseDownPos := Point(X, Y);
   FDidDrag := False;
@@ -10721,6 +11737,38 @@ begin
       Exit;
   end;
 
+  // Finalitzar marker drag
+  if FDraggingMarkerId >= 0 then
+  begin
+    var mkId: Integer := FDraggingMarkerId;
+    FDraggingMarkerId := -1;
+    FMouseDownMarkerId := -1;
+    MouseCapture := False;
+    if Assigned(FOnMarkerMoved) then
+    begin
+      var mkk: Integer;
+      for mkk := 0 to High(FMarkers) do
+        if FMarkers[mkk].Id = mkId then
+        begin
+          FOnMarkerMoved(Self, mkId, FMarkers[mkk].DateTime);
+          Break;
+        end;
+    end;
+    Invalidate;
+    Exit;
+  end;
+
+  // Clic simple a marker (sense drag): disparar OnMarkerClick
+  if FMouseDownMarkerId >= 0 then
+  begin
+    var mkClickId: Integer := FMouseDownMarkerId;
+    FMouseDownMarkerId := -1;
+    if Assigned(FOnMarkerClick) then
+      FOnMarkerClick(Self, mkClickId);
+    Invalidate;
+    Exit;
+  end;
+
   if FMarqueeSelecting then
   begin
     FMarqueeCurrentPt := Point(X, Y);
@@ -10766,9 +11814,21 @@ begin
        ToggleNodeIndexSelection(nodeIdx)
       else
        SelectNodeIndex(nodeIdx, True);
+
+      UpdateAutoMarkers;
+
+      if Assigned(FOnNodeSelected) then
+        FOnNodeSelected(Self);
     end
     else
-     ClearSelection;
+    begin
+      ClearSelection;
+      ClearAutoMarkers;
+      Invalidate;
+
+      if Assigned(FOnVoid) then
+        FOnVoid(Self);
+    end;
 
     Invalidate;
   end;

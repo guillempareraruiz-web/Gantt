@@ -5,7 +5,8 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
-  Vcl.ExtCtrls, Vcl.Buttons, System.DateUtils, System.Variants,
+  Vcl.ExtCtrls, Vcl.Buttons, Vcl.ComCtrls, System.DateUtils, System.Variants,
+  System.Generics.Collections,
   // DevExpress
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
   cxContainer, cxEdit, cxStyles, cxVGrid, cxInplaceContainer,
@@ -13,7 +14,7 @@ uses
   cxDateUtils, cxMaskEdit,
   dxSkinsCore, dxSkinMetropolis, dxSkinOffice2019Colorful,
   // Project
-  uGanttTypes, uNodeDataRepo, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  uGanttTypes, uNodeDataRepo, uCustomFieldDefs, uCustomFieldEditor, dxSkinBasic, dxSkinBlack, dxSkinBlue,
   dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
@@ -33,7 +34,13 @@ uses
 
 type
   TfrmNodeInspector = class(TForm)
+    pcMain: TPageControl;
+    tabGeneral: TTabSheet;
     vg: TcxVerticalGrid;
+    tabCustomFields: TTabSheet;
+    pnlCustomTop: TPanel;
+    btnEditFields: TButton;
+    vgCustom: TcxVerticalGrid;
     pnlBottom: TPanel;
     btnOK: TButton;
     btnCancel: TButton;
@@ -44,6 +51,7 @@ type
     shpHeaderLine: TShape;
     chkDarkMode: TCheckBox;
     procedure chkDarkModeClick(Sender: TObject);
+    procedure btnEditFieldsClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -52,6 +60,11 @@ type
   private
     FNodeData: TNodeData;
     FReadOnly: Boolean;
+    FCustomFieldDefs: TCustomFieldDefs;
+    FCustomRows: TArray<TcxEditorRow>;
+    FCatCustom: TcxCategoryRow;
+    FStyleReadOnly: TcxStyle;
+    FStyleRequired: TcxStyle;
     // Category rows
     FCatIdentitat: TcxCategoryRow;
     FCatComanda: TcxCategoryRow;
@@ -95,32 +108,35 @@ type
     FRowModified: TcxEditorRow;
     FRowLibreMoviment: TcxEditorRow;
     procedure BuildRows;
-    function AddCategory(const ACaption: string): TcxCategoryRow;
+    function AddCategory(const ACaption: string; AGrid: TcxVerticalGrid = nil): TcxCategoryRow;
     function AddTextRow(AParent: TcxCategoryRow; const ACaption, AValue: string;
-      AReadOnly: Boolean = False): TcxEditorRow;
+      AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddIntRow(AParent: TcxCategoryRow; const ACaption: string; AValue: Integer;
-      AReadOnly: Boolean = False): TcxEditorRow;
+      AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddFloatRow(AParent: TcxCategoryRow; const ACaption: string; AValue: Double;
-      AReadOnly: Boolean = False): TcxEditorRow;
+      AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddBoolRow(AParent: TcxCategoryRow; const ACaption: string; AValue: Boolean;
-      AReadOnly: Boolean = False): TcxEditorRow;
+      AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddDateRow(AParent: TcxCategoryRow; const ACaption: string; AValue: TDateTime;
-      AReadOnly: Boolean = False): TcxEditorRow;
+      AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddComboRow(AParent: TcxCategoryRow; const ACaption, AValue: string;
-      const AItems: array of string; AReadOnly: Boolean = False): TcxEditorRow;
+      const AItems: array of string; AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddColorRow(AParent: TcxCategoryRow; const ACaption: string; AValue: TColor;
-      AReadOnly: Boolean = False): TcxEditorRow;
+      AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     procedure ApplyDarkMode(ADark: Boolean);
+    procedure BuildCustomRows;
+    procedure ApplyCustomFields;
     procedure ApplyToNodeData;
     function GetRowText(ARow: TcxEditorRow): string;
     function GetRowInt(ARow: TcxEditorRow): Integer;
     function GetRowFloat(ARow: TcxEditorRow): Double;
     function GetRowBool(ARow: TcxEditorRow): Boolean;
     function GetRowDate(ARow: TcxEditorRow): TDateTime;
-    function EstadoToStr(E: TEstadoOF): string;
-    function StrToEstado(const S: string): TEstadoOF;
+    function EstadoToStr(E: TNodoEstado): string;
+    function StrToEstado(const S: string): TNodoEstado;
   public
-    class function Execute(var ANodeData: TNodeData; AReadOnly: Boolean = False): Boolean;
+    class function Execute(var ANodeData: TNodeData; AReadOnly: Boolean = False;
+      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
   end;
 
 var
@@ -132,7 +148,8 @@ implementation
 
 { TfrmNodeInspector }
 
-class function TfrmNodeInspector.Execute(var ANodeData: TNodeData; AReadOnly: Boolean): Boolean;
+class function TfrmNodeInspector.Execute(var ANodeData: TNodeData;
+  AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs): Boolean;
 var
   F: TfrmNodeInspector;
 begin
@@ -140,6 +157,7 @@ begin
   try
     F.FNodeData := ANodeData;
     F.FReadOnly := AReadOnly;
+    F.FCustomFieldDefs := ACustomFieldDefs;
 
     // Header
     F.lblTitle.Caption := 'OF ' + ANodeData.NumeroOrdenFabricacion.ToString +
@@ -153,6 +171,10 @@ begin
     end;
 
     F.BuildRows;
+    F.BuildCustomRows;
+
+    // Ocultar tab si no hay campos personalizados
+    F.tabCustomFields.TabVisible := (ACustomFieldDefs <> nil) and (ACustomFieldDefs.Count > 0);
 
     Result := F.ShowModal = mrOk;
     if Result then
@@ -164,12 +186,19 @@ end;
 
 procedure TfrmNodeInspector.FormCreate(Sender: TObject);
 begin
-  //
+  FStyleReadOnly := TcxStyle.Create(Self);
+  FStyleReadOnly.Color := $00F0F0F0;       // gris clar de fons
+  FStyleReadOnly.Font.Color := clGrayText;  // text gris
+
+  FStyleRequired := TcxStyle.Create(Self);
+  FStyleRequired.Font.Style := [fsBold];
+  FStyleRequired.TextColor := $000060C0;    // taronja fosc per destacar
 end;
 
 procedure TfrmNodeInspector.FormDestroy(Sender: TObject);
 begin
-  //
+  FStyleReadOnly.Free;
+  FStyleRequired.Free;
 end;
 
 procedure TfrmNodeInspector.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -180,16 +209,22 @@ end;
 
 { --- Row creation helpers --- }
 
-function TfrmNodeInspector.AddCategory(const ACaption: string): TcxCategoryRow;
+function TfrmNodeInspector.AddCategory(const ACaption: string; AGrid: TcxVerticalGrid): TcxCategoryRow;
+var
+  G: TcxVerticalGrid;
 begin
-  Result := vg.Add(TcxCategoryRow) as TcxCategoryRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.Add(TcxCategoryRow) as TcxCategoryRow;
   Result.Properties.Caption := ACaption;
 end;
 
 function TfrmNodeInspector.AddTextRow(AParent: TcxCategoryRow;
-  const ACaption, AValue: string; AReadOnly: Boolean): TcxEditorRow;
+  const ACaption, AValue: string; AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
+var
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxTextEditProperties';
   (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := AReadOnly or FReadOnly;
@@ -199,11 +234,13 @@ begin
 end;
 
 function TfrmNodeInspector.AddIntRow(AParent: TcxCategoryRow;
-  const ACaption: string; AValue: Integer; AReadOnly: Boolean): TcxEditorRow;
+  const ACaption: string; AValue: Integer; AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
 var
   Props: TcxSpinEditProperties;
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxSpinEditProperties';
   Props := Result.Properties.EditProperties as TcxSpinEditProperties;
@@ -217,11 +254,13 @@ begin
 end;
 
 function TfrmNodeInspector.AddFloatRow(AParent: TcxCategoryRow;
-  const ACaption: string; AValue: Double; AReadOnly: Boolean): TcxEditorRow;
+  const ACaption: string; AValue: Double; AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
 var
   Props: TcxSpinEditProperties;
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxSpinEditProperties';
   Props := Result.Properties.EditProperties as TcxSpinEditProperties;
@@ -236,11 +275,13 @@ begin
 end;
 
 function TfrmNodeInspector.AddBoolRow(AParent: TcxCategoryRow;
-  const ACaption: string; AValue: Boolean; AReadOnly: Boolean): TcxEditorRow;
+  const ACaption: string; AValue: Boolean; AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
 var
   Props: TcxCheckBoxProperties;
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxCheckBoxProperties';
   Props := Result.Properties.EditProperties as TcxCheckBoxProperties;
@@ -253,11 +294,13 @@ begin
 end;
 
 function TfrmNodeInspector.AddDateRow(AParent: TcxCategoryRow;
-  const ACaption: string; AValue: TDateTime; AReadOnly: Boolean): TcxEditorRow;
+  const ACaption: string; AValue: TDateTime; AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
 var
   Props: TcxDateEditProperties;
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxDateEditProperties';
   Props := Result.Properties.EditProperties as TcxDateEditProperties;
@@ -273,12 +316,14 @@ end;
 
 function TfrmNodeInspector.AddComboRow(AParent: TcxCategoryRow;
   const ACaption, AValue: string; const AItems: array of string;
-  AReadOnly: Boolean): TcxEditorRow;
+  AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
 var
   Props: TcxComboBoxProperties;
   I: Integer;
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxComboBoxProperties';
   Props := Result.Properties.EditProperties as TcxComboBoxProperties;
@@ -292,9 +337,12 @@ begin
 end;
 
 function TfrmNodeInspector.AddColorRow(AParent: TcxCategoryRow;
-  const ACaption: string; AValue: TColor; AReadOnly: Boolean): TcxEditorRow;
+  const ACaption: string; AValue: TColor; AReadOnly: Boolean; AGrid: TcxVerticalGrid): TcxEditorRow;
+var
+  G: TcxVerticalGrid;
 begin
-  Result := vg.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
+  if AGrid <> nil then G := AGrid else G := vg;
+  Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxTextEditProperties';
   (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := True;
@@ -440,24 +488,186 @@ begin
     Result := VarToDateTime(ARow.Properties.Value);
 end;
 
-function TfrmNodeInspector.EstadoToStr(E: TEstadoOF): string;
+function TfrmNodeInspector.EstadoToStr(E: TNodoEstado): string;
 begin
   case E of
-    eoPendiente:   Result := 'Pendiente';
-    eoEnCurso:     Result := 'EnCurso';
-    eoFinalizado:  Result := 'Finalizado';
-    eoBloqueado:   Result := 'Bloqueado';
+    nePendiente:   Result := 'Pendiente';
+    neEnCurso:     Result := 'EnCurso';
+    neFinalizado:  Result := 'Finalizado';
+    neBloqueado:   Result := 'Bloqueado';
   else
     Result := 'Pendiente';
   end;
 end;
 
-function TfrmNodeInspector.StrToEstado(const S: string): TEstadoOF;
+function TfrmNodeInspector.StrToEstado(const S: string): TNodoEstado;
 begin
-  if SameText(S, 'EnCurso') then Result := eoEnCurso
-  else if SameText(S, 'Finalizado') then Result := eoFinalizado
-  else if SameText(S, 'Bloqueado') then Result := eoBloqueado
-  else Result := eoPendiente;
+  if SameText(S, 'EnCurso') then Result := neEnCurso
+  else if SameText(S, 'Finalizado') then Result := neFinalizado
+  else if SameText(S, 'Bloqueado') then Result := neBloqueado
+  else Result := nePendiente;
+end;
+
+{ --- Custom fields --- }
+
+procedure TfrmNodeInspector.BuildCustomRows;
+var
+  Defs: TArray<TCustomFieldDef>;
+  I: Integer;
+  D: TCustomFieldDef;
+  V: Variant;
+  Row: TcxEditorRow;
+  GrupoMap: TDictionary<string, TcxCategoryRow>;
+  ParentCat: TcxCategoryRow;
+  GrupoKey: string;
+begin
+  if FCustomFieldDefs = nil then Exit;
+
+  Defs := FCustomFieldDefs.GetVisibleDefs;
+  if Length(Defs) = 0 then Exit;
+
+  GrupoMap := TDictionary<string, TcxCategoryRow>.Create;
+  try
+  vgCustom.BeginUpdate;
+  try
+    vgCustom.ClearRows;
+
+    SetLength(FCustomRows, Length(Defs));
+
+    for I := 0 to High(Defs) do
+    begin
+      D := Defs[I];
+      V := GetCustomFieldValue(FNodeData.CustomFields, D.FieldName);
+      if VarIsNull(V) or VarIsEmpty(V) then
+        V := D.DefaultValue;
+
+      // Determinar categoria per grup
+      if D.Grupo <> '' then
+        GrupoKey := D.Grupo
+      else
+        GrupoKey := 'Campos Personalizados';
+
+      if not GrupoMap.TryGetValue(GrupoKey, ParentCat) then
+      begin
+        ParentCat := AddCategory(GrupoKey, vgCustom);
+        GrupoMap.Add(GrupoKey, ParentCat);
+      end;
+
+      case D.FieldType of
+        cftString:
+          Row := AddTextRow(ParentCat, D.Caption, VarToStr(V), D.ReadOnly, vgCustom);
+        cftInteger:
+        begin
+          if VarIsNull(V) or VarIsEmpty(V) then
+            Row := AddIntRow(ParentCat, D.Caption, 0, D.ReadOnly, vgCustom)
+          else
+            Row := AddIntRow(ParentCat, D.Caption, V, D.ReadOnly, vgCustom);
+        end;
+        cftFloat:
+        begin
+          if VarIsNull(V) or VarIsEmpty(V) then
+            Row := AddFloatRow(ParentCat, D.Caption, 0, D.ReadOnly, vgCustom)
+          else
+            Row := AddFloatRow(ParentCat, D.Caption, Double(V), D.ReadOnly, vgCustom);
+        end;
+        cftDate:
+        begin
+          if VarIsNull(V) or VarIsEmpty(V) then
+            Row := AddDateRow(ParentCat, D.Caption, 0, D.ReadOnly, vgCustom)
+          else
+            Row := AddDateRow(ParentCat, D.Caption, VarToDateTime(V), D.ReadOnly, vgCustom);
+        end;
+        cftBoolean:
+        begin
+          if VarIsNull(V) or VarIsEmpty(V) then
+            Row := AddBoolRow(ParentCat, D.Caption, False, D.ReadOnly, vgCustom)
+          else
+            Row := AddBoolRow(ParentCat, D.Caption, Boolean(V), D.ReadOnly, vgCustom);
+        end;
+        cftList:
+          Row := AddComboRow(ParentCat, D.Caption, VarToStr(V), D.ListValues, D.ReadOnly, vgCustom);
+      else
+        Row := AddTextRow(ParentCat, D.Caption, VarToStr(V), D.ReadOnly, vgCustom);
+      end;
+
+      // Aplicar MinValue/MaxValue para numèrics
+      if (D.FieldType in [cftInteger, cftFloat]) and
+         ((D.MinValue <> 0) or (D.MaxValue <> 0)) then
+      begin
+        if Row.Properties.EditProperties is TcxSpinEditProperties then
+        begin
+          (Row.Properties.EditProperties as TcxSpinEditProperties).MinValue := D.MinValue;
+          (Row.Properties.EditProperties as TcxSpinEditProperties).MaxValue := D.MaxValue;
+        end;
+      end;
+
+      // Aplicar Tooltip
+      if D.Tooltip <> '' then
+        Row.Properties.Hint := D.Tooltip;
+
+      // Estilo visual ReadOnly
+      if D.ReadOnly then
+        Row.Styles.Content := FStyleReadOnly;
+
+      // Estilo visual Required (negreta + color al header)
+      if D.Required then
+      begin
+        Row.Styles.Header := FStyleRequired;
+        Row.Properties.Caption := D.Caption + ' *';
+      end;
+
+      FCustomRows[I] := Row;
+    end;
+  finally
+    vgCustom.EndUpdate;
+  end;
+  finally
+    GrupoMap.Free;
+  end;
+end;
+
+procedure TfrmNodeInspector.ApplyCustomFields;
+var
+  Defs: TArray<TCustomFieldDef>;
+  I: Integer;
+  D: TCustomFieldDef;
+  Row: TcxEditorRow;
+begin
+  if FCustomFieldDefs = nil then Exit;
+
+  Defs := FCustomFieldDefs.GetVisibleDefs;
+  for I := 0 to High(Defs) do
+  begin
+    if I > High(FCustomRows) then Break;
+    D := Defs[I];
+    Row := FCustomRows[I];
+
+    case D.FieldType of
+      cftString, cftList:
+        SetCustomFieldValue(FNodeData.CustomFields, D.FieldName, GetRowText(Row));
+      cftInteger:
+        SetCustomFieldValue(FNodeData.CustomFields, D.FieldName, GetRowInt(Row));
+      cftFloat:
+        SetCustomFieldValue(FNodeData.CustomFields, D.FieldName, GetRowFloat(Row));
+      cftDate:
+        SetCustomFieldValue(FNodeData.CustomFields, D.FieldName, GetRowDate(Row));
+      cftBoolean:
+        SetCustomFieldValue(FNodeData.CustomFields, D.FieldName, GetRowBool(Row));
+    end;
+  end;
+end;
+
+{ --- Edit custom field definitions --- }
+
+procedure TfrmNodeInspector.btnEditFieldsClick(Sender: TObject);
+begin
+  if FCustomFieldDefs = nil then Exit;
+  if TfrmCustomFieldEditor.Execute(FCustomFieldDefs) then
+  begin
+    FCustomFieldDefs.SaveToFile;
+    BuildCustomRows;
+    tabCustomFields.TabVisible := FCustomFieldDefs.Count > 0;
+  end;
 end;
 
 { --- Apply changes back --- }
@@ -524,6 +734,7 @@ begin
   FNodeData.Estado              := StrToEstado(GetRowText(FRowEstado));
   FNodeData.Prioridad           := GetRowInt(FRowPrioridad);
   FNodeData.LibreMoviment       := GetRowBool(FRowLibreMoviment);
+  ApplyCustomFields;
 end;
 
 procedure TfrmNodeInspector.btnOKClick(Sender: TObject);

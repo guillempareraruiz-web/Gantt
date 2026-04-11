@@ -121,6 +121,54 @@
         <DCCReference Include="uNodeInspector.pas">
             <Form>frmNodeInspector</Form>
         </DCCReference>
+        <DCCReference Include="uOperariosTypes.pas"/>
+        <DCCReference Include="uOperariosRepo.pas"/>
+        <DCCReference Include="uAssignOperaris.pas">
+            <Form>frmAssignOperaris</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionOperaris.pas">
+            <Form>frmGestionOperaris</Form>
+        </DCCReference>
+        <DCCReference Include="uOperarioFilterPopup.pas"/>
+        <DCCReference Include="uLinkEditor.pas">
+            <Form>frmLinkEditor</Form>
+        </DCCReference>
+        <DCCReference Include="uHelpGuide.pas">
+            <Form>frmHelpGuide</Form>
+        </DCCReference>
+        <DCCReference Include="uCentreInspector.pas">
+            <Form>frmCentreInspector</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionCentres.pas">
+            <Form>frmGestionCentres</Form>
+        </DCCReference>
+        <DCCReference Include="uMarkerEditor.pas">
+            <Form>frmMarkerEditor</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionMarkers.pas">
+            <Form>frmGestionMarkers</Form>
+        </DCCReference>
+        <DCCReference Include="uMoldeTypes.pas"/>
+        <DCCReference Include="uMoldeRepo.pas"/>
+        <DCCReference Include="uGestionMoldes.pas">
+            <Form>frmGestionMoldes</Form>
+        </DCCReference>
+        <DCCReference Include="uSampleDataGenerator.pas"/>
+        <DCCReference Include="uGestionCalendarios.pas">
+            <Form>frmGestionCalendarios</Form>
+        </DCCReference>
+        <DCCReference Include="uKanbanBoard.pas"/>
+        <DCCReference Include="uDispatchList.pas">
+            <Form>frmDispatchList</Form>
+        </DCCReference>
+        <DCCReference Include="uFiniteCapacityPlanner.pas">
+            <Form>frmFiniteCapacityPlanner</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uPlanningRulesEditor.pas">
+            <Form>frmPlanningRulesEditor</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

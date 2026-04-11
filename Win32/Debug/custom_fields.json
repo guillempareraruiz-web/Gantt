@@ -1,0 +1,48 @@
+﻿[
+  {
+    "fieldName": "_ColorArticulo",
+    "caption": "Color Articulo",
+    "type": "integer",
+    "required": true,
+    "readOnly": false,
+    "order": 0,
+    "visible": true,
+    "default": 0
+  },
+  {
+    "fieldName": "_AlturaArticulo",
+    "caption": "Altura artículo",
+    "type": "integer",
+    "required": false,
+    "readOnly": false,
+    "order": 1,
+    "visible": true,
+    "grupo": "Propiedades físicas del artículo",
+    "default": 0
+  },
+  {
+    "fieldName": "_LongitudArticulo",
+    "caption": "Longitud artículo",
+    "type": "integer",
+    "required": false,
+    "readOnly": true,
+    "order": 3,
+    "visible": true,
+    "grupo": "Propiedades físicas del artículo",
+    "default": 0
+  },
+  {
+    "fieldName": "_CampoFloat",
+    "caption": "Campo Float (1-10)",
+    "type": "float",
+    "required": false,
+    "readOnly": false,
+    "order": 2,
+    "visible": true,
+    "grupo": "Floats",
+    "tooltip": "Campo con rango 1 a 10",
+    "minValue": 1,
+    "maxValue": 10,
+    "default": 1
+  }
+]

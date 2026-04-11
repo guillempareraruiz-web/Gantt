@@ -26,10 +26,13 @@ uses
   dxSkinXmas2008Blue, cxTextEdit, cxMaskEdit, cxSpinEdit, Vcl.ComCtrls, dxCore,
   cxDateUtils, cxDropDownEdit, cxCalendar, Vcl.Menus, Vcl.WinXCtrls, uNodeDataRepo,
   System.Generics.Collections, uErpTypes, uColorPalette64LayeredPopup,
-  System.Threading,  System.SyncObjs, System.Diagnostics, uNodeInspector,
+  System.Threading,  System.SyncObjs, System.Diagnostics, uNodeInspector, uMarkerEditor, uGestionMarkers,
   cxStyles, cxFilter, dxScrollbarAnnotations, cxInplaceContainer, cxVGrid,
   uOperariosTypes, uOperariosRepo, uAssignOperaris, uGestionOperaris,
-  cxCheckComboBox, cxCheckBox, uOperarioFilterPopup, uLinkEditor, uHelpGuide, uCentreInspector;
+  uMoldeTypes, uMoldeRepo, uGestionMoldes, uSampleDataGenerator, uGestionCalendarios,
+  cxCheckComboBox, cxCheckBox, uOperarioFilterPopup, uLinkEditor, uHelpGuide, uCentreInspector,
+  cxButtons, dxCoreGraphics, cxButtonEdit, cxScrollBox,
+  uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor;
 
 type
 
@@ -80,7 +83,6 @@ type
     pnlCentros: TPanel;
     pnlGanttContainer: TPanel;
     popCentros: TPopupMenu;
-    PopCentros1: TMenuItem;
     popGantt: TPopupMenu;
     MenuItem1: TMenuItem;
     popTimeline: TPopupMenu;
@@ -88,7 +90,6 @@ type
     popNode: TPopupMenu;
     MenuItem3: TMenuItem;
     Panel2: TPanel;
-    Move1h1: TMenuItem;
     SearchBox1: TSearchBox;
     Label5: TLabel;
     RadioButton1: TRadioButton;
@@ -109,8 +110,6 @@ type
     FranjalaborableSi1: TMenuItem;
     PeriodoNoLaborableInicio1: TMenuItem;
     PeriodoNoLaborableFin1: TMenuItem;
-    INFO2: TMenuItem;
-    aa1: TMenuItem;
     CentroAAA1: TMenuItem;
     INFO3: TMenuItem;
     Label7: TLabel;
@@ -195,12 +194,62 @@ type
     FchkSoloFiltrados: TcxCheckBox;
     FcxFilterOperarios: TcxCheckComboBox;
     Button24: TButton;
+    ResaltarOF1: TMenuItem;
+    btnResaltarOF: TcxButton;
+    btnResaltarOT: TcxButton;
+    Button25: TButton;
+    pnlBuscar: TPanel;
+    cxScrollBox1: TcxScrollBox;
+    cxButton1: TcxButton;
+    cxButtonEdit1: TcxButtonEdit;
+    cxButtonEdit2: TcxButtonEdit;
+    cxButtonEdit3: TcxButtonEdit;
+    cxButtonEdit4: TcxButtonEdit;
+    cxButtonEdit5: TcxButtonEdit;
+    cxButtonEdit6: TcxButtonEdit;
+    cxButtonEdit7: TcxButtonEdit;
+    Label20: TLabel;
+    Label21: TLabel;
+    Label22: TLabel;
+    Label23: TLabel;
+    cxButton2: TcxButton;
+    Label24: TLabel;
+    Label25: TLabel;
+    Label26: TLabel;
+    Label27: TLabel;
+    cxButtonEdit8: TcxButtonEdit;
+    cxButton3: TcxButton;
+    cxButton4: TcxButton;
+    cxButton5: TcxButton;
+    Aadirmarcador1: TMenuItem;
+    Gestionmarcadores1: TMenuItem;
+    Marcadoresautomaticos1: TMenuItem;
+    N2: TMenuItem;
+    MainMenu1: TMainMenu;
+    Archivo1: TMenuItem;
+    Salir1: TMenuItem;
+    N3: TMenuItem;
+    Entidades1: TMenuItem;
+    Operarios1: TMenuItem;
+    Centros1: TMenuItem;
+    Calendarios1: TMenuItem;
+    Moldes1: TMenuItem;
+    Utillajes1: TMenuItem;
+    Links1: TMenuItem;
+    N10: TMenuItem;
+    CamposPersonalizados1: TMenuItem;
+    ReglasPlanificacion1: TMenuItem;
+    Vistas1: TMenuItem;
+    Kanban1: TMenuItem;
+    DispatchList1: TMenuItem;
+    FiniteCapacity1: TMenuItem;
+    Ayuda1: TMenuItem;
+    Acercade1: TMenuItem;
+    N4: TMenuItem;
 
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
-    procedure PopCentros1Click(Sender: TObject);
-    procedure Move1h1Click(Sender: TObject);
     procedure SearchBox1InvokeSearch(Sender: TObject);
     procedure Button3Click(Sender: TObject);
     procedure Button5Click(Sender: TObject);
@@ -248,10 +297,27 @@ type
     procedure FcxFilterOperariosPropertiesChange(Sender: TObject);
     procedure Button20Click(Sender: TObject);
     procedure Button24Click(Sender: TObject);
+    procedure ResaltarOF1Click(Sender: TObject);
+    procedure btnResaltarOFClick(Sender: TObject);
+    procedure Button25Click(Sender: TObject);
+    procedure cxButton2Click(Sender: TObject);
+    procedure Aadirmarcador1Click(Sender: TObject);
+    procedure Gestionmarcadores1Click(Sender: TObject);
+    procedure Marcadoresautomaticos1Click(Sender: TObject);
+    procedure Moldes1Click(Sender: TObject);
+    procedure Calendarios1Click(Sender: TObject);
+    procedure Operarios1Click(Sender: TObject);
+    procedure Centros1Click(Sender: TObject);
+    procedure CamposPersonalizados1Click(Sender: TObject);
+    procedure ReglasPlanificacion1Click(Sender: TObject);
+    procedure Kanban1Click(Sender: TObject);
+    procedure DispatchList1Click(Sender: TObject);
+    procedure FiniteCapacity1Click(Sender: TObject);
   private
     { Private declarations }
 
-
+    FCustomFieldDefs: TCustomFieldDefs;
+    FPlanningRuleEngine: TPlanningRuleEngine;
     FUpdatingViewport: Boolean;
     FFilterPopup: TfrmOperarioFilterPopup;
     FBtnFilterOperarios: TButton;
@@ -302,8 +368,10 @@ type
 
     procedure TimelineViewportChanged(Sender: TObject; const StartTime: TDateTime;
       const PxPerMinute, ScrollX: Single);
+    procedure TimelineInteraction(Sender: TObject; const Interacting: Boolean);
 
     procedure GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
+    procedure GanttMarkerDblClick(Sender: TObject; const MarkerId: Integer);
     procedure GanttViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
 
@@ -317,6 +385,8 @@ type
     procedure ConfiguraCalendariCentre(const Gantt: TGanttControl; const CentreId: Integer);
     procedure GanttStatsChanged( Sender: TObject );
     procedure GanttLayoutChanged( Sender: TObject );
+    procedure GanttNodeSelected( Sender: TObject );
+    procedure GanttVoidClick( Sender: TObject );
 
     function BuildNodeKPIItemsFromGanttNodes: TArray<TNodeKPIItem>;
 
@@ -345,15 +415,17 @@ var
   FCentrosControl: TGanttCentresControl;
   FNodeRepo: TNodeDataRepo;
   FOperariosRepo: TOperariosRepo;
+  FMoldeRepo: TMoldeRepo;
   FCentresRows: TArray<TCentreTreball>;
   FRaw: TErpRaw;
-
+  FSampleData: TSampleData;
 
     Label19: TLabel;
 
 implementation
 
-uses uErpSampleBuilder, uGestionCentres;
+uses uErpSampleBuilder, uGestionCentres, uKanbanBoard, uDispatchList,
+  uFiniteCapacityPlanner;
 
 {$R *.dfm}
 
@@ -488,6 +560,11 @@ begin
   end;
 end;
 
+procedure TForm1.TimelineInteraction(Sender: TObject; const Interacting: Boolean);
+begin
+  if Assigned(FGantt) then
+    FGantt.TimelineInteraction(Sender, Interacting);
+end;
 
 procedure TForm1.tmr1SecTimer(Sender: TObject);
 begin
@@ -584,7 +661,7 @@ begin
   if not Assigned(FCentrosControl) then Exit;
 
   Centres := Copy(FCentresRows);
-  if TfrmGestionCentres.Execute(Centres) then
+  if TfrmGestionCentres.Execute(Centres, FSampleData.Calendarios, FSampleData.CalendarioCentro) then
   begin
     FCentresRows := Centres;
     // Aplicar canvis al Gantt
@@ -622,13 +699,37 @@ begin
 end;
 
 procedure TForm1.Button24Click(Sender: TObject);
-var ms: Int64; moved: Integer;
+var ms1, ms2: Int64; moved1, moved2: Integer;
 begin
   if not Assigned(FGantt) then
    Exit;
 
-  FGantt.ReplanAllFromDate(Now, 0, ms, moved);
-  ShowMessage(Format('Moguts: %d en %d ms', [moved, ms]));
+  Screen.Cursor := crHourGlass;
+
+  FGantt.ReplanAllFromDateV2(Now, 0, ms2, moved2);
+
+  Button24.Caption := Format('%d ms', [moved2, ms2]);
+
+  {
+  FGantt.ReplanAllFromDate(Now, 0, ms1, moved1);
+  Screen.Cursor := crHourGlass;
+
+  FGantt.ReplanAllFromDateV2(Now, 0, ms2, moved2);
+
+  Button24.Caption := Format('V1: %d mov %d ms | V2: %d mov %d ms',
+    [moved1, ms1, moved2, ms2]);
+    }
+end;
+
+procedure TForm1.Button25Click(Sender: TObject);
+var
+   bVisible: Boolean;
+begin
+   bVisible := pnlBuscar.Visible;
+   bVisible := not bVisible;
+
+   pnlBuscar.Top := Panel3.Top + 10;
+   pnlBuscar.Visible := bVisible;
 end;
 
 procedure TForm1.Button2Click(Sender: TObject);
@@ -731,13 +832,16 @@ begin
 
   // connexió robusta
   FTimeline.OnViewportChanged := TimelineViewportChanged;
-  //FTimeline.OnInteraction := TimelineInteraction;
+  FTimeline.OnInteraction := TimelineInteraction;
 
   FGantt.OnViewportChanged := GanttViewportChanged;
   FGantt.OnScrollYChanged := GanttScrollYChanged;
   FGantt.OnNodeDblClick := GanttNodeDblClick;
+  FGantt.OnMarkerDblClick := GanttMarkerDblClick;
   FGantt.OnStatsChanged := GanttStatsChanged;
   FGantt.OnLayoutChanged := GanttLayoutChanged;
+  FGantt.OnNodeSelected := GanttNodeSelected;
+  FGantt.OnVoid := GanttVoidClick;
 
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
 
@@ -759,9 +863,18 @@ begin
 
   FTimeline.SetTimeRange(T0, T1);
 
-  // Centres (exemple)
+  // Generar datos de ejemplo (centros, operarios, moldes, calendarios, etc.)
   iCentros := spCentros.EditValue;
-  SetLength(FCentresRows, iCentros);
+
+  // Limpiar repos para regenerar
+  FOperariosRepo.Free;
+  FMoldeRepo.Free;
+  FOperariosRepo := TOperariosRepo.Create;
+  FMoldeRepo := TMoldeRepo.Create;
+  GenerateSampleData(FOperariosRepo, FMoldeRepo, iCentros, FSampleData);
+
+  // Copiar centros generados
+  FCentresRows := Copy(FSampleData.Centros);
   SetLength(CTNames, iCentros);
 
   FCentrosControl.GetCentreName :=
@@ -775,60 +888,18 @@ begin
         Exit(FCentresRows[k].Titulo);
   end;
 
+  // Aplicar calendarios a cada centro
+  ApplyCalendariosToGantt(FSampleData,
+    function(const CentreId: Integer): TCentreCalendar
+    begin
+      Result := FGantt.GetCalendar(CentreId);
+    end);
 
-  // Nodes realistes
   SetLength(Nodes, 0);
   NextId := 1000;
 
   for i := 0 to iCentros-1 do
-  begin
-    FCentresRows[i].Id := i+1;
-    FCentresRows[i].CodiCentre := 'CENTRO-' + inttostr((i div 2) + 1); // agrupa de 2 en 2
-    FCentresRows[i].IsSequencial := ((Random(999) Mod  2)=0);
-    FCentresRows[i].Titulo := 'CENTRO-' + inttostr(i+1);
-    FCentresRows[i].Subtitulo := 'MAQUINA-' + inttostr(i+1);
-    FCentresRows[i].Order := i;       // o i+1
-    FCentresRows[i].Visible := True;
-    FCentresRows[i].Enabled := True;
-
-    // MaxLaneCount: limitar lanes als centres no-seqüencials per testejar col·lisions
-    if FCentresRows[i].IsSequencial then
-      FCentresRows[i].MaxLaneCount := 0
-    else
-      FCentresRows[i].MaxLaneCount := 3;
-
-    case i of
-    0: FCentresRows[i].BkColor := TColor($005252FF);
-    1: FCentresRows[i].BkColor := TColor($002828DC);
-    2: FCentresRows[i].BkColor := TColor($00FFE6CC);
-    else
-      FCentresRows[i].BkColor := TColor($003366CC);
-    end;
-
-    // Assignar area per defecte segons index
-    case (i mod 5) of
-      0: FCentresRows[i].Area := 'F'#225'brica';
-      1: FCentresRows[i].Area := 'Log'#237'stica';
-      2: FCentresRows[i].Area := 'Oficina T'#233'cnica';
-      3: FCentresRows[i].Area := 'F'#225'brica';
-      4: FCentresRows[i].Area := 'Calidad';
-    end;
-
-    if FCentresRows[i].IsSequencial then
-    begin
-      FCentresRows[i].BaseHeight := 28;
-    end
-    else
-    begin
-      FCentresRows[i].BaseHeight := 28 + Random(150);
-    end;
-
-    ConfiguraCalendariCentre(FGantt, i+1);
-    //FCentresRows[i].BaseHeight := 28 + Random(150);
-
     CTNames[i] := FCentresRows[i].Titulo;
-
-  end;
 
 
   FRaw := BuildRawSample(
@@ -1371,40 +1442,19 @@ begin
 end;
 
 
-procedure TForm1.Resetduracinoriginal1Click(Sender: TObject);
+procedure TForm1.ResaltarOF1Click(Sender: TObject);
 var
   idx: Integer;
   node: TNode;
-  cal: TCentreCalendar;
-  newStart, newEnd: Tdatetime;
-  D: TNodeData;
 begin
   idx := FGantt.SelectedNodeIndex;
   if idx < 0 then Exit;
-  node := FGantt.SelectedNode;
+  FGantt.HighlightOF(idx);
+end;
 
-  if (node.DataId = 0) or (not FNodeRepo.TryGetById(node.DataId, d)) then
-    Exit;
-
-  newStart := node.StartTime;
-
-  node.DurationMin := d.DurationMinOriginal;
-
-  cal := FGantt.GetCalendar(node.CentreId);
-  if cal <> nil then
-    newStart := cal.NextWorkingTime(newStart);
-
-  newEnd := FGantt.CalcEndTime(node.CentreId, newStart, node.DurationMin);
-
-  node.EndTime     := newEnd;
-
-  D.DurationMin := d.DurationMinOriginal;
-  FNodeRepo.AddOrUpdate(D);
-
-  FGantt.RebuildAfterModelChange(False);
-
-  FGantt.Invalidate;
-
+procedure TForm1.Resetduracinoriginal1Click(Sender: TObject);
+begin
+  FGantt.ResetNodeDuration(FGantt.SelectedNodeIndex);
 end;
 
 procedure TForm1.Calendario1Click(Sender: TObject);
@@ -1523,6 +1573,22 @@ begin
   FCentrosControl.Invalidate;
 end;
 
+procedure TForm1.GanttNodeSelected(Sender: TObject);
+begin
+  // Si el botón ResaltarOF está activo, resaltar toda la OF del nodo seleccionado
+  if btnResaltarOF.SpeedButtonOptions.Down then
+    FGantt.HighlightOF(FGantt.SelectedNodeIndex);
+
+  if btnResaltarOT.SpeedButtonOptions.Down then
+    FGantt.HighlightOT(FGantt.SelectedNodeIndex);
+end;
+
+procedure TForm1.GanttVoidClick(Sender: TObject);
+begin
+  // Al hacer clic en el fondo, limpiar el resaltado
+  FGantt.ClearSearch;
+end;
+
 
 procedure TForm1.UpdateKPIs;
 begin
@@ -1534,6 +1600,64 @@ begin
   lblOrange.Caption := IntToStr(FGantt.CNT_TotalNodes_StateOrange);
   lblRed.Caption := IntToStr(FGantt.CNT_TotalNodes_StateRed);
   lblGreen.Caption := IntToStr(FGantt.CNT_TotalNodes_StateGreen);
+end;
+
+procedure TForm1.Aadirmarcador1Click(Sender: TObject);
+var
+  dt: TDateTime;
+  M: TGanttMarker;
+begin
+  if not Assigned(FGantt) then
+    Exit;
+
+  dt := FGantt.GetDateTimeFromPoint(FGantt.FClickPoint.X, 0);
+
+  M := Default(TGanttMarker);
+  M.DateTime := dt;
+  M.Caption := FormatDateTime('dd/mm hh:nn', dt);
+  M.Color := clRed;
+  M.Style := msLine;
+  M.StrokeWidth := 1.5;
+  M.Moveable := True;
+  M.Visible := True;
+  M.Tag := 0;
+  M.FontName := 'Segoe UI';
+  M.FontSize := 8;
+  M.FontColor := clRed;
+  M.FontStyle := [];
+  M.TextOrientation := mtoHorizontal;
+  M.TextAlign := mtaTop;
+
+  FGantt.AddMarker(M);
+end;
+
+procedure TForm1.Gestionmarcadores1Click(Sender: TObject);
+var
+  markers: TArray<TGanttMarker>;
+begin
+  if not Assigned(FGantt) then Exit;
+
+  markers := FGantt.GetMarkers;
+  TfrmGestionMarkers.Execute(markers,
+    procedure(const ADate: TDateTime)
+    begin
+      GoToDate(ADate);
+    end,
+    nil
+  );
+
+  // Aplicar canvis: substituir tots els markers
+  FGantt.ClearMarkers;
+  var i: Integer;
+  for i := 0 to High(markers) do
+    FGantt.AddMarker(markers[i]);
+end;
+
+procedure TForm1.Marcadoresautomaticos1Click(Sender: TObject);
+begin
+  if not Assigned(FGantt) then Exit;
+  FGantt.AutoMarkersEnabled := Marcadoresautomaticos1.Checked;
+  FGantt.Invalidate;
 end;
 
 procedure TForm1.AfterLayoutRebuilt;
@@ -1550,6 +1674,147 @@ procedure TForm1.CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
 begin
   if Assigned(FGantt) then
    FGantt.ApplyScrollYFromCentres(ScrollY);
+end;
+
+procedure TForm1.Centros1Click(Sender: TObject);
+var
+  Centres: TArray<TCentreTreball>;
+  I: Integer;
+begin
+  if not Assigned(FCentrosControl) then Exit;
+
+  Centres := Copy(FCentresRows);
+  if TfrmGestionCentres.Execute(Centres, FSampleData.Calendarios, FSampleData.CalendarioCentro) then
+  begin
+    FCentresRows := Centres;
+    // Aplicar canvis al Gantt
+    for I := 0 to High(FCentresRows) do
+      FGantt.UpdateCentre(FCentresRows[I].Id, FCentresRows[I]);
+    // Actualitzar panel de centres amb les rows recalculades
+    FCentrosControl.SetCentres(FCentresRows);
+    FCentrosControl.SetRows(FGantt.GetRowsCopy);
+  end;
+
+end;
+
+procedure TForm1.Kanban1Click(Sender: TObject);
+var
+  Frm: TForm;
+  Kanban: TKanbanBoard;
+begin
+  Frm := TForm.Create(nil);
+  try
+    Frm.Caption := 'Vista Kanban';
+    Frm.Width := 1000;
+    Frm.Height := 700;
+    Frm.Position := poScreenCenter;
+    Frm.Color := $00F5F5F5;
+
+    Kanban := TKanbanBoard.Create(Frm);
+    Kanban.Parent := Frm;
+    Kanban.Align := alClient;
+    Kanban.SetNodeRepo(FNodeRepo);
+
+    // Callback para obtener tiempos teóricos del nodo Gantt
+    Kanban.SetGetNodeTimes(
+      function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
+      var
+        Nodes: TArray<TNode>;
+        J: Integer;
+      begin
+        Result := False;
+        AStart := 0;
+        AEnd := 0;
+        if not Assigned(FGantt) then Exit;
+        Nodes := FGantt.GetNodes;
+        for J := 0 to High(Nodes) do
+          if Nodes[J].DataId = DataId then
+          begin
+            AStart := Nodes[J].StartTime;
+            AEnd := Nodes[J].EndTime;
+            Exit(True);
+          end;
+      end
+    );
+
+    Frm.ShowModal;
+
+    // Tras cerrar el Kanban, refrescar Gantt por si hubo cambios de estado
+    if Assigned(FGantt) then
+      FGantt.Invalidate;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TForm1.DispatchList1Click(Sender: TObject);
+begin
+  TDispatchListForm.Execute(
+    FNodeRepo,
+    FCentresRows,
+    function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
+    var
+      Nodes: TArray<TNode>;
+      J: Integer;
+    begin
+      Result := False;
+      AStart := 0;
+      AEnd := 0;
+      if not Assigned(FGantt) then Exit;
+      Nodes := FGantt.GetNodes;
+      for J := 0 to High(Nodes) do
+        if Nodes[J].DataId = DataId then
+        begin
+          AStart := Nodes[J].StartTime;
+          AEnd := Nodes[J].EndTime;
+          Exit(True);
+        end;
+    end
+  );
+end;
+
+procedure TForm1.FiniteCapacity1Click(Sender: TObject);
+var
+  Assignments: TArray<TFCPAssignment>;
+begin
+  if TfrmFiniteCapacityPlanner.Execute(
+    FNodeRepo,
+    FOperariosRepo,
+    FCentresRows,
+    function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
+    var
+      Nodes: TArray<TNode>;
+      J: Integer;
+    begin
+      Result := False;
+      AStart := 0;
+      AEnd := 0;
+      if not Assigned(FGantt) then Exit;
+      Nodes := FGantt.GetNodes;
+      for J := 0 to High(Nodes) do
+        if Nodes[J].DataId = DataId then
+        begin
+          AStart := Nodes[J].StartTime;
+          AEnd := Nodes[J].EndTime;
+          Exit(True);
+        end;
+    end,
+    function(const CentreId: Integer): TCentreCalendar
+    begin
+      Result := FGantt.GetCalendar(CentreId);
+    end,
+    FGantt.GetLinks,
+    Assignments,
+    FPlanningRuleEngine,
+    FCustomFieldDefs
+  ) then
+  begin
+    // TODO: aplicar asignaciones al Gantt
+  end;
+
+  // Refrescar Gantt por si hubo cambios
+  if Assigned(FGantt) then
+    FGantt.Invalidate;
 end;
 
 procedure TForm1.chkShowKPIsClick(Sender: TObject);
@@ -1600,28 +1865,58 @@ begin
 
     UpdateViewportInfo;
 
+    if Assigned(FCentrosControl) and FCentrosControl.VerIndicadores then
+    begin
+      FKPIDebounceTimer.Enabled := False;
+      FKPIDebounceTimer.Enabled := True;
+    end;
 
   finally
     FUpdatingViewport := False;
   end;
-
-
-
 end;
 
 procedure TForm1.GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
 var
   node: TNode;
-  ANodeData: uNodeDataRepo.TNodeData;
+  ANodeData: TNodeData;
 begin
   if NodeIndex < 0 then Exit;
   node := FGantt.SelectedNode;
   if not FNodeRepo.TryGetById(node.DataId, ANodeData) then Exit;
 
-  if TfrmNodeInspector.Execute(ANodeData) then
+  if TfrmNodeInspector.Execute(ANodeData, False, FCustomFieldDefs) then
   begin
     FNodeRepo.AddOrUpdate(ANodeData);
     FGantt.Invalidate;
+  end;
+end;
+
+procedure TForm1.GanttMarkerDblClick(Sender: TObject; const MarkerId: Integer);
+var
+  markers: TArray<TGanttMarker>;
+  M: TGanttMarker;
+  i: Integer;
+  res: TMarkerEditorResult;
+begin
+  markers := FGantt.GetMarkers;
+  for i := 0 to High(markers) do
+  begin
+    if markers[i].Id = MarkerId then
+    begin
+      M := markers[i];
+      res := TfrmMarkerEditor.Execute(M);
+      case res of
+        merOK:
+        begin
+          FGantt.RemoveMarker(MarkerId);
+          FGantt.AddMarker(M);
+        end;
+        merDelete:
+          FGantt.RemoveMarker(MarkerId);
+      end;
+      Exit;
+    end;
   end;
 end;
 
@@ -1650,16 +1945,27 @@ var
   centreId: Integer;
   cIdx: Integer;
   c: TCentreTreball;
+  CalIdx: Integer;
+  PCal: PSampleCalendario;
 begin
   centreId := FCentrosControl.SelectedCentreId;
   if centreId < 0 then Exit;
   cIdx := FGantt.FindCentreIndexById(centreId);
   if cIdx < 0 then Exit;
 
-
   c := FGantt.GetCentreByIndex(cIdx);
 
-  if TfrmCentreInspector.Execute(c) then
+  // Buscar calendario asociado a este centro
+  PCal := nil;
+  if (cIdx >= 0) and (cIdx <= High(FSampleData.CalendarioCentro)) and
+     (Length(FSampleData.Calendarios) > 0) then
+  begin
+    CalIdx := FSampleData.CalendarioCentro[cIdx];
+    if (CalIdx >= 0) and (CalIdx <= High(FSampleData.Calendarios)) then
+      PCal := @FSampleData.Calendarios[CalIdx];
+  end;
+
+  if TfrmCentreInspector.Execute(c, False, PCal) then
   begin
     // Aplicar al Gantt (fa RebuildLayout si cal)
     FGantt.UpdateCentre(c.Id, c);
@@ -1713,21 +2019,45 @@ begin
 
 end;
 
-procedure TForm1.Move1h1Click(Sender: TObject);
+procedure TForm1.Moldes1Click(Sender: TObject);
 var
-  idx: Integer;
-  node: TNode;
+  Centros: TArray<string>;
+  I: Integer;
 begin
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
-  node := FGantt.SelectedNode;
-  node.StartTime := IncHour(node.StartTime, 1);
-  node.EndTime := IncHour(node.EndTime, 1);
-  FGantt.UpdateNode(idx, node);
+  // Centros desde FCentresRows (pueden haber cambiado en la sesion)
+  SetLength(Centros, Length(FCentresRows));
+  for I := 0 to High(FCentresRows) do
+    Centros[I] := FCentresRows[I].Titulo;
 
-  FGantt.RebuildLayout;
-  FGantt.Invalidate;
+  TfrmGestionMoldes.Execute(FMoldeRepo, Centros,
+    FSampleData.Operaciones, FSampleData.Articulos, FSampleData.Utillajes);
+end;
 
+procedure TForm1.CamposPersonalizados1Click(Sender: TObject);
+begin
+  if TfrmCustomFieldEditor.Execute(FCustomFieldDefs) then
+    FCustomFieldDefs.SaveToFile;
+end;
+
+procedure TForm1.ReglasPlanificacion1Click(Sender: TObject);
+begin
+  if TfrmPlanningRulesEditor.Execute(FPlanningRuleEngine) then
+    FPlanningRuleEngine.SaveToFile;
+end;
+
+procedure TForm1.Calendarios1Click(Sender: TObject);
+begin
+  if not Assigned(FGantt) then
+  begin
+    ShowMessage('Primero debe generar el Gantt para disponer de los calendarios.');
+    Exit;
+  end;
+  TfrmGestionCalendarios.Execute(FSampleData,
+    function(const CentreId: Integer): TCentreCalendar
+    begin
+      Result := FGantt.GetCalendar(CentreId);
+    end,
+    YearOf(dtFechaInicioGantt.Date));
 end;
 
 procedure TForm1.odalaOF1Click(Sender: TObject);
@@ -1744,6 +2074,11 @@ begin
 
   FGantt.CompactOFFromNode( idx, 0, (iAllOF=1) , (iPrioridad=1) );
 
+end;
+
+procedure TForm1.Operarios1Click(Sender: TObject);
+begin
+  TfrmGestionOperaris.Execute(FOperariosRepo, FSampleData.Operaciones, FSampleData.CalendariosOperario);
 end;
 
 procedure TForm1.otalaOT1Click(Sender: TObject);
@@ -1769,25 +2104,6 @@ begin
    LblTiempos.Caption := datetimetostr( FTimeline.StartTime) + ' - ' + datetimetostr(FTimeline.endTime) +
                         ' (' + datetimetostr( FTimeline.StartVisibleTime) + ' - ' + datetimetostr(  FTimeline.EndVisibleTime ) + ')';
  end;
-
-end;
-
-procedure TForm1.PopCentros1Click(Sender: TObject);
-var
-  centreId: Integer;
-  cIdx: Integer;
-  c: TCentreTreball;
-begin
-  centreId := FCentrosControl.SelectedCentreId;
-  if centreId < 0 then Exit;
-  cIdx := FGantt.FindCentreIndexById(centreId);
-  if cIdx < 0 then Exit;
-  c := FGantt.GetCentreByIndex(cIdx);
-  c.Enabled := not c.Enabled;
-  FGantt.UpdateCentre(centreId, c);
-  // refresca rows del centres panel si el layout canvia o vols repintar selecció
-  FCentrosControl.SetRows(FGantt.GetRowsCopy);
-  FCentrosControl.Invalidate;
 
 end;
 
@@ -1858,7 +2174,7 @@ begin
       node: TNode;
       d: TNodeData;
       iOT, iOF: Integer;
-      sOF: String;
+      sOF, sOT: String;
     begin
         for I := 0 to High(SelIndexes) do
         begin
@@ -1867,6 +2183,7 @@ begin
           if (node.DataId = 0) or (not FNodeRepo.TryGetById(node.DataId, d)) then
             Continue;
 
+          sOT := d.NumeroTrabajo;
           iOT := strtointdef(d.NumeroTrabajo,0);
           iOF := d.NumeroOrdenFabricacion;
           sOF := d.SerieFabricacion;
@@ -1876,10 +2193,10 @@ begin
                FGantt.ApplyOpColorsByNode(node.DataId, octOnlyNode, c, AdjustColorBrightness(c, -40));
              end;
           1: begin //...assignem color a node i OT
-               FGantt.ApplyOpColorsByNode(node.DataId, octByTrabajo, c, AdjustColorBrightness(c, -40));
+               FGantt.ApplyOpColorsByNode(node.DataId, octByTrabajo, c, AdjustColorBrightness(c, -40), sOT, sOF, iOF);
              end;
           2: begin //...assignem color a node i OF
-               FGantt.ApplyOpColorsByNode(node.DataId, octByFabricacionSerie, c, AdjustColorBrightness(c, -40), 0, sOF, iOF);
+               FGantt.ApplyOpColorsByNode(node.DataId, octByFabricacionSerie, c, AdjustColorBrightness(c, -40), '', sOF, iOF);
              end;
           end;
         end;
@@ -2028,6 +2345,30 @@ begin
 end;
 
 
+procedure TForm1.cxButton2Click(Sender: TObject);
+begin
+  pnlBuscar.Visible := False;
+end;
+
+procedure TForm1.btnResaltarOFClick(Sender: TObject);
+var
+   iTag: Integer;
+   bOF, bOT: Boolean;
+begin
+
+   iTag := TcxButton(Sender).Tag;
+
+   bOF  := btnResaltarOF.SpeedButtonOptions.Down;
+   bOT  := btnResaltarOT.SpeedButtonOptions.Down;
+
+   if bOF or bOT then
+    GanttNodeSelected( Self )
+   else
+    FGantt.ClearSearch;
+
+
+end;
+
 procedure TForm1.Desactivarfechabloqueo1Click(Sender: TObject);
 var
  dt: TDateTime;
@@ -2055,9 +2396,14 @@ begin
   dtFechaFinGantt.Date := Trunc( strtodatetime('31/12/2026') ); // IncDay(Now, 30);
 
   FNodeRepo := TNodeDataRepo.Create;
+  FCustomFieldDefs := TCustomFieldDefs.Create;
+  FCustomFieldDefs.LoadFromFile(ExtractFilePath(Application.ExeName) + 'custom_fields.json');
+
+  FPlanningRuleEngine := TPlanningRuleEngine.Create(FCustomFieldDefs);
+  FPlanningRuleEngine.LoadFromFile(ExtractFilePath(Application.ExeName) + 'planning_rules.json');
 
   FOperariosRepo := TOperariosRepo.Create;
-  FOperariosRepo.LoadSampleData;
+  FMoldeRepo := TMoldeRepo.Create;
 
   pnlCentros.Width := 220;
 
@@ -2120,13 +2466,13 @@ procedure TForm1.EditarLinksClick(Sender: TObject);
 var
   idx: Integer;
   node: TNode;
-  D: uNodeDataRepo.TNodeData;
+  D: TNodeData;
   AllLinks: TArray<TErpLink>;
   LinkIdxs: TArray<Integer>;
   Items: TArray<TLinkEditItem>;
   I, J: Integer;
   OtherNode: TNode;
-  OtherData: uNodeDataRepo.TNodeData;
+  OtherData: TNodeData;
   LResult: TLinkEditorResult;
   OtherIdx: Integer;
 begin
@@ -2265,9 +2611,10 @@ end;
 
 procedure TForm1.GestionOperarisClick(Sender: TObject);
 begin
-  TfrmGestionOperaris.Execute(FOperariosRepo);
+  TfrmGestionOperaris.Execute(FOperariosRepo, FSampleData.Operaciones, FSampleData.CalendariosOperario);
   RefreshOperarioFilterItems;
 end;
+
 
 procedure TForm1.RefreshOperarioFilterItems;
 var
@@ -2389,7 +2736,7 @@ var
   SelIndexes: TArray<Integer>;
   I: Integer;
   node: TNode;
-  D: uNodeDataRepo.TNodeData;
+  D: TNodeData;
   AssignCount: Integer;
   DataIds: TArray<Integer>;
   Operaciones: TArray<string>;
@@ -2457,7 +2804,10 @@ end;
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   FNodeRepo.Free;
+  FPlanningRuleEngine.Free;
+  FCustomFieldDefs.Free;
   FOperariosRepo.Free;
+  FMoldeRepo.Free;
 
   if Assigned(FCentreKPIs) then
    FreeAndNil(FCentreKPIs);

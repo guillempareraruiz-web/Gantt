@@ -26,7 +26,18 @@ uses
   uLinkEditor in 'uLinkEditor.pas' {frmLinkEditor},
   uHelpGuide in 'uHelpGuide.pas' {frmHelpGuide},
   uCentreInspector in 'uCentreInspector.pas' {frmCentreInspector},
-  uGestionCentres in 'uGestionCentres.pas' {frmGestionCentres};
+  uGestionCentres in 'uGestionCentres.pas' {frmGestionCentres},
+  uMarkerEditor in 'uMarkerEditor.pas' {frmMarkerEditor},
+  uGestionMarkers in 'uGestionMarkers.pas' {frmGestionMarkers},
+  uMoldeTypes in 'uMoldeTypes.pas',
+  uMoldeRepo in 'uMoldeRepo.pas',
+  uGestionMoldes in 'uGestionMoldes.pas' {frmGestionMoldes},
+  uSampleDataGenerator in 'uSampleDataGenerator.pas',
+  uGestionCalendarios in 'uGestionCalendarios.pas' {frmGestionCalendarios},
+  uKanbanBoard in 'uKanbanBoard.pas',
+  uDispatchList in 'uDispatchList.pas' {frmDispatchList},
+  uFiniteCapacityPlanner in 'uFiniteCapacityPlanner.pas' {frmFiniteCapacityPlanner},
+  uPlanningRulesEditor in 'uPlanningRulesEditor.pas' {frmPlanningRulesEditor};
 
 {$R *.res}
 
@@ -34,5 +45,6 @@ begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TForm1, Form1);
+  Application.CreateForm(TfrmPlanningRulesEditor, frmPlanningRulesEditor);
   Application.Run;
 end.

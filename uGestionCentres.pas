@@ -33,7 +33,7 @@ uses
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges,
   // Project
-  uGanttTypes, uCentreInspector;
+  uGanttTypes, uCentreInspector, uSampleDataGenerator;
 
 type
   TfrmGestionCentres = class(TForm)
@@ -102,6 +102,8 @@ type
     procedure CentroColumnChanged(Sender: TObject);
   private
     FCentres: TArray<TCentreTreball>;
+    FCalendarios: TArray<TSampleCalendario>;
+    FCalendarioCentro: TArray<Integer>;
     FAreas: TList<string>;
 
     // Refresh
@@ -133,7 +135,9 @@ type
     class function AreaRemove(const AAreaField, AArea: string): string;
     class function AreaSplit(const AAreaField: string): TArray<string>;
   public
-    class function Execute(var ACentres: TArray<TCentreTreball>): Boolean;
+    class function Execute(var ACentres: TArray<TCentreTreball>;
+      const ACalendarios: TArray<TSampleCalendario> = nil;
+      const ACalendarioCentro: TArray<Integer> = nil): Boolean;
   end;
 
 implementation
@@ -211,13 +215,17 @@ end;
 
 { ========== Execute ========== }
 
-class function TfrmGestionCentres.Execute(var ACentres: TArray<TCentreTreball>): Boolean;
+class function TfrmGestionCentres.Execute(var ACentres: TArray<TCentreTreball>;
+  const ACalendarios: TArray<TSampleCalendario>;
+  const ACalendarioCentro: TArray<Integer>): Boolean;
 var
   F: TfrmGestionCentres;
 begin
   F := TfrmGestionCentres.Create(Application);
   try
     F.FCentres := Copy(ACentres);
+    F.FCalendarios := ACalendarios;
+    F.FCalendarioCentro := ACalendarioCentro;
     F.FAreas := TList<string>.Create;
     try
       F.RebuildAreaList;
@@ -545,14 +553,25 @@ end;
 
 procedure TfrmGestionCentres.btnCentroEditClick(Sender: TObject);
 var
-  CIdx: Integer;
+  CIdx, CalIdx: Integer;
   C: TCentreTreball;
+  PCal: PSampleCalendario;
 begin
   CIdx := GetSelectedCentreIdx;
   if CIdx < 0 then Exit;
 
   C := FCentres[CIdx];
-  if TfrmCentreInspector.Execute(C) then
+
+  // Buscar calendario asociado a este centro
+  PCal := nil;
+  if (Length(FCalendarioCentro) > CIdx) and (Length(FCalendarios) > 0) then
+  begin
+    CalIdx := FCalendarioCentro[CIdx];
+    if (CalIdx >= 0) and (CalIdx <= High(FCalendarios)) then
+      PCal := @FCalendarios[CalIdx];
+  end;
+
+  if TfrmCentreInspector.Execute(C, False, PCal) then
   begin
     FCentres[CIdx] := C;
     RebuildAreaList;

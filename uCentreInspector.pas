@@ -29,7 +29,7 @@ uses
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
   dxSkinXmas2008Blue, cxFilter, dxScrollbarAnnotations, cxClasses,
   // Project
-  uGanttTypes;
+  uGanttTypes, uSampleDataGenerator;
 
 type
   TfrmCentreInspector = class(TForm)
@@ -49,8 +49,12 @@ type
   private
     FCentre: TCentreTreball;
     FReadOnly: Boolean;
+    FCalNombre: string;
+    FCalHorarioLV: string;
+    FCalFinSemana: string;
     // Categories
     FCatGeneral: TcxCategoryRow;
+    FCatCalendario: TcxCategoryRow;
     FCatLayout: TcxCategoryRow;
     FCatVisual: TcxCategoryRow;
     // Rows
@@ -66,6 +70,9 @@ type
     FRowVisible: TcxEditorRow;
     FRowEnabled: TcxEditorRow;
     FRowBkColor: TcxEditorRow;
+    FRowCalNombre: TcxEditorRow;
+    FRowCalHorarioLV: TcxEditorRow;
+    FRowCalFinSemana: TcxEditorRow;
     procedure BuildRows;
     procedure ApplyToCentre;
     function AddCategory(const ACaption: string): TcxCategoryRow;
@@ -84,7 +91,8 @@ type
     function GetRowFloat(ARow: TcxEditorRow): Double;
     function GetRowBool(ARow: TcxEditorRow): Boolean;
   public
-    class function Execute(var ACentre: TCentreTreball; AReadOnly: Boolean = False): Boolean;
+    class function Execute(var ACentre: TCentreTreball; AReadOnly: Boolean = False;
+      const ACalendario: PSampleCalendario = nil): Boolean;
   end;
 
 implementation
@@ -93,14 +101,51 @@ implementation
 
 { TfrmCentreInspector }
 
-class function TfrmCentreInspector.Execute(var ACentre: TCentreTreball; AReadOnly: Boolean): Boolean;
+class function TfrmCentreInspector.Execute(var ACentre: TCentreTreball;
+  AReadOnly: Boolean; const ACalendario: PSampleCalendario): Boolean;
 var
   F: TfrmCentreInspector;
+  I: Integer;
+  S: string;
 begin
   F := TfrmCentreInspector.Create(Application);
   try
     F.FCentre := ACentre;
     F.FReadOnly := AReadOnly;
+
+    // Preparar info del calendario
+    if ACalendario <> nil then
+    begin
+      F.FCalNombre := ACalendario^.Nombre;
+
+      // Construir texto de horario L-V
+      if Length(ACalendario^.PeriodosLV) = 0 then
+        F.FCalHorarioLV := '24h laborable'
+      else
+      begin
+        S := '';
+        for I := 0 to High(ACalendario^.PeriodosLV) do
+        begin
+          if I > 0 then S := S + ' | ';
+          S := S + Format('%02d:%02d-%02d:%02d', [
+            ACalendario^.PeriodosLV[I].StartH, ACalendario^.PeriodosLV[I].StartM,
+            ACalendario^.PeriodosLV[I].EndH, ACalendario^.PeriodosLV[I].EndM
+          ]);
+        end;
+        F.FCalHorarioLV := 'No laborable: ' + S;
+      end;
+
+      if ACalendario^.FinDeSemanaCompleto then
+        F.FCalFinSemana := 'Cerrado'
+      else
+        F.FCalFinSemana := 'Abierto';
+    end
+    else
+    begin
+      F.FCalNombre := '(sin calendario)';
+      F.FCalHorarioLV := '';
+      F.FCalFinSemana := '';
+    end;
 
     // Header
     F.lblTitle.Caption := ACentre.Titulo;
@@ -240,6 +285,12 @@ begin
     FRowTitulo      := AddTextRow(FCatGeneral, 'T'#237'tulo', C.Titulo);
     FRowSubtitulo   := AddTextRow(FCatGeneral, 'Subt'#237'tulo', C.Subtitulo);
     FRowArea        := AddTextRow(FCatGeneral, #193'rea', C.Area);
+
+    // ── Calendario ──
+    FCatCalendario := AddCategory('Calendario');
+    FRowCalNombre    := AddTextRow(FCatCalendario, 'Nombre', FCalNombre, True);
+    FRowCalHorarioLV := AddTextRow(FCatCalendario, 'Horario L-V', FCalHorarioLV, True);
+    FRowCalFinSemana := AddTextRow(FCatCalendario, 'Fin de Semana', FCalFinSemana, True);
 
     // ── Layout ──
     FCatLayout := AddCategory('Layout');

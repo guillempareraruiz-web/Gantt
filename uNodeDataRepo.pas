@@ -5,59 +5,9 @@ interface
 uses
   System.SysUtils,
   System.Generics.Collections,
-  uGAnttTypes, Vcl.Graphics;
+  uGAnttTypes;
 
 type
-
-  TNodeData = record
-    DataId: Integer;
-
-    Operacion: String;
-    NumeroPedido: Integer;
-    SeriePedido: string;
-
-    CentresTrabajo: TArray<string>;    // noms ERP dels centres permesos; buit = tots
-    CentresPermesos: TArray<Integer>;  // ids Gantt dels centres permesos; buit = tots
-
-    NumeroOrdenFabricacion: Integer;
-    SerieFabricacion: string;
-
-    NumeroTrabajo: string;
-
-    FechaEntrega: TDateTime;
-    FechaNecesaria: TDateTime;
-
-    CodigoCliente: String;
-
-    CodigoColor: String;
-    CodigoTalla: String;
-
-    Stock: Double;
-
-    CodigoArticulo: string;
-    DescripcionArticulo: string;
-
-    PorcentajeDependencia: Double;
-
-    UnidadesFabricadas: Double;
-    UnidadesAFabricar: Double;
-    TiempoUnidadFabSecs: Double; //...tiempo en segundos para fabricar una unidad
-    DurationMin: Double; //...minutos;
-    DurationMinOriginal: Double; //...minutos;
-    OperariosNecesarios: Integer;
-    OperariosAsignados: Integer;
-
-    Estado: TEstadoOF;
-    Prioridad: Integer;
-
-    bkColorOp: TColor;
-    borderColorOp: TColor;
-
-    Selected: Boolean;
-    Modified: Boolean;
-    LibreMoviment: Boolean;  // True = es pot moure a qualsevol centre; False = només CentresPermesos
-  end;
-
 
   TNodeDataRepo = class
   private
@@ -99,6 +49,9 @@ type
 
     function FindByTrabajo(
       const NumeroTrabajo: string): TArray<Integer>; // retorna DataIds
+
+    function GetAllData: TArray<TNodeData>;
+    function Count: Integer;
 
   end;
 
@@ -386,6 +339,18 @@ begin
   else
     SetLength(Result, 0);
 
+end;
+
+
+
+function TNodeDataRepo.GetAllData: TArray<TNodeData>;
+begin
+  Result := Copy(FData, 0, Length(FData));
+end;
+
+function TNodeDataRepo.Count: Integer;
+begin
+  Result := Length(FData);
 end;
 
 
