@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.DateUtils, System.UITypes,
   uGanttTypes, uOperariosTypes, uOperariosRepo, uMoldeTypes, uMoldeRepo,
-  uCentreCalendar, uErpTypes;
+  uCentreCalendar, uErpTypes, uGestionTurnos;
 
 type
   // Definicion de un periodo no laborable dentro de un dia
@@ -54,6 +54,9 @@ procedure ApplyCalendariosToGantt(
   const Data: TSampleData;
   const GetCalendar: TGetCalendarFunc
 );
+
+// Genera 3 turnos de ejemplo con franjas horarias coherentes
+procedure GenerateSampleTurnos(out ATurnos: TArray<TTurno>);
 
 implementation
 
@@ -426,6 +429,16 @@ begin
       Cal.SetDayNonWorkingPeriods(7, FullDay);
     end;
   end;
+end;
+
+{ ========================================================= }
+{                  GenerateSampleTurnos                     }
+{ ========================================================= }
+
+procedure GenerateSampleTurnos(out ATurnos: TArray<TTurno>);
+begin
+  Randomize;
+  ATurnos := ProfileToTurnos(Random(NUM_TURNO_PROFILES));
 end;
 
 end.

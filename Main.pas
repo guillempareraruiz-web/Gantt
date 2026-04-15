@@ -32,7 +32,7 @@ uses
   uMoldeTypes, uMoldeRepo, uGestionMoldes, uSampleDataGenerator, uGestionCalendarios,
   cxCheckComboBox, cxCheckBox, uOperarioFilterPopup, uLinkEditor, uHelpGuide, uCentreInspector,
   cxButtons, dxCoreGraphics, cxButtonEdit, cxScrollBox,
-  uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor;
+  uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor, uDashBoard, uVistaGantt;
 
 type
 
@@ -227,12 +227,16 @@ type
     N2: TMenuItem;
     MainMenu1: TMainMenu;
     Archivo1: TMenuItem;
+    Dashboard1: TMenuItem;
+    N4: TMenuItem;
+    Proyectos1: TMenuItem;
     Salir1: TMenuItem;
     N3: TMenuItem;
     Entidades1: TMenuItem;
     Operarios1: TMenuItem;
     Centros1: TMenuItem;
     Calendarios1: TMenuItem;
+    Turnos1: TMenuItem;
     Moldes1: TMenuItem;
     Utillajes1: TMenuItem;
     Links1: TMenuItem;
@@ -243,10 +247,30 @@ type
     Kanban1: TMenuItem;
     DispatchList1: TMenuItem;
     FiniteCapacity1: TMenuItem;
+    CuadroPlanificacionDia1: TMenuItem;
+    Configuracion1: TMenuItem;
+    Roles1: TMenuItem;
+    Usuarios1: TMenuItem;
+    NDemo1: TMenuItem;
+    InstalarDemos1: TMenuItem;
+    lblCurrentEmpresa: TLabel;
+    lblCurrentProyecto: TLabel;
     Ayuda1: TMenuItem;
     Acercade1: TMenuItem;
-    N4: TMenuItem;
 
+    Button26: TButton;
+    MnGantt: TMenuItem;
+
+    procedure Roles1Click(Sender: TObject);
+    procedure Usuarios1Click(Sender: TObject);
+    procedure InstalarDemos1Click(Sender: TObject);
+    procedure Proyectos1Click(Sender: TObject);
+    procedure Dashboard1Click(Sender: TObject);
+    procedure UpdateContextLabels;
+    procedure MostrarDashboard;
+    procedure OcultarDashboard;
+    procedure DashboardAbrirGantt(Sender: TObject);
+    procedure MostrarVistaGantt;
     procedure FormCreate(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
@@ -306,6 +330,7 @@ type
     procedure Marcadoresautomaticos1Click(Sender: TObject);
     procedure Moldes1Click(Sender: TObject);
     procedure Calendarios1Click(Sender: TObject);
+    procedure Turnos1Click(Sender: TObject);
     procedure Operarios1Click(Sender: TObject);
     procedure Centros1Click(Sender: TObject);
     procedure CamposPersonalizados1Click(Sender: TObject);
@@ -313,6 +338,10 @@ type
     procedure Kanban1Click(Sender: TObject);
     procedure DispatchList1Click(Sender: TObject);
     procedure FiniteCapacity1Click(Sender: TObject);
+    procedure CuadroPlanificacionDia1Click(Sender: TObject);
+    procedure Salir1Click(Sender: TObject);
+    procedure Button26Click(Sender: TObject);
+    procedure MnGanttClick(Sender: TObject);
   private
     { Private declarations }
 
@@ -323,6 +352,7 @@ type
     FBtnFilterOperarios: TButton;
 
     FKPIDebounceTimer : TTimer;
+    FTurnos: TArray<TTurno>;
 
 
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
@@ -419,13 +449,17 @@ var
   FCentresRows: TArray<TCentreTreball>;
   FRaw: TErpRaw;
   FSampleData: TSampleData;
+  FDashboard: TfrmDashboard;
+  FVistaGantt: TfrmVistaGantt;
 
     Label19: TLabel;
 
 implementation
 
 uses uErpSampleBuilder, uGestionCentres, uKanbanBoard, uDispatchList,
-  uFiniteCapacityPlanner;
+  uFiniteCapacityPlanner, uCuadroPlanificacionDelDia, uGestionTurnos,
+  uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
+  uGestionProyectos;
 
 {$R *.dfm}
 
@@ -732,6 +766,24 @@ begin
    pnlBuscar.Visible := bVisible;
 end;
 
+procedure TForm1.Button26Click(Sender: TObject);
+begin
+
+  DMPlanner.ADOConnection.Close;
+  try
+    DMPlanner.ADOConnection.Open();
+
+    // Carregar planning
+    //DMPlanner.Connector.LoadPlanning(1, Data);
+
+    // Guardar
+    //DMPlanner.Connector.SavePlanning(Data);
+  finally
+
+  end;
+
+end;
+
 procedure TForm1.Button2Click(Sender: TObject);
 var
   idx: Integer;
@@ -872,6 +924,9 @@ begin
   FOperariosRepo := TOperariosRepo.Create;
   FMoldeRepo := TMoldeRepo.Create;
   GenerateSampleData(FOperariosRepo, FMoldeRepo, iCentros, FSampleData);
+
+  // Generar turnos de ejemplo
+  GenerateSampleTurnos(FTurnos);
 
   // Copiar centros generados
   FCentresRows := Copy(FSampleData.Centros);
@@ -1817,6 +1872,36 @@ begin
     FGantt.Invalidate;
 end;
 
+procedure TForm1.CuadroPlanificacionDia1Click(Sender: TObject);
+begin
+  TfrmCuadroPlanificacionDelDia.Execute(
+    FNodeRepo,
+    FCentresRows,
+    function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
+    var
+      Nodes: TArray<TNode>;
+      J: Integer;
+    begin
+      Result := False;
+      AStart := 0;
+      AEnd := 0;
+      if not Assigned(FGantt) then Exit;
+      Nodes := FGantt.GetNodes;
+      for J := 0 to High(Nodes) do
+        if Nodes[J].DataId = DataId then
+        begin
+          AStart := Nodes[J].StartTime;
+          AEnd := Nodes[J].EndTime;
+          Exit(True);
+        end;
+    end,
+    function(const CentreId: Integer): TCentreCalendar
+    begin
+      Result := FGantt.GetCalendar(CentreId);
+    end,
+    FTurnos);
+end;
+
 procedure TForm1.chkShowKPIsClick(Sender: TObject);
 begin
   if not Assigned(FGantt) then
@@ -2019,6 +2104,12 @@ begin
 
 end;
 
+procedure TForm1.MnGanttClick(Sender: TObject);
+begin
+  OcultarDashboard;
+  MostrarVistaGantt;
+end;
+
 procedure TForm1.Moldes1Click(Sender: TObject);
 var
   Centros: TArray<string>;
@@ -2046,18 +2137,26 @@ begin
 end;
 
 procedure TForm1.Calendarios1Click(Sender: TObject);
+var
+  GetCal: TGetCalendarFunc;
 begin
-  if not Assigned(FGantt) then
-  begin
-    ShowMessage('Primero debe generar el Gantt para disponer de los calendarios.');
-    Exit;
-  end;
-  TfrmGestionCalendarios.Execute(FSampleData,
-    function(const CentreId: Integer): TCentreCalendar
-    begin
-      Result := FGantt.GetCalendar(CentreId);
-    end,
-    YearOf(dtFechaInicioGantt.Date));
+  if Assigned(FGantt) then
+    GetCal := function(const CentreId: Integer): TCentreCalendar
+      begin
+        Result := FGantt.GetCalendar(CentreId);
+      end
+  else
+    GetCal := function(const CentreId: Integer): TCentreCalendar
+      begin
+        Result := nil;
+      end;
+
+  TfrmGestionCalendarios.Execute(FSampleData, GetCal, YearOf(Now));
+end;
+
+procedure TForm1.Turnos1Click(Sender: TObject);
+begin
+  TfrmGestionTurnos.Execute(FTurnos);
 end;
 
 procedure TForm1.odalaOF1Click(Sender: TObject);
@@ -2081,6 +2180,94 @@ begin
   TfrmGestionOperaris.Execute(FOperariosRepo, FSampleData.Operaciones, FSampleData.CalendariosOperario);
 end;
 
+procedure TForm1.Roles1Click(Sender: TObject);
+var
+  Frm: TfrmGestionRoles;
+begin
+  if not HasPermission('ADMIN_ROLES') then
+  begin
+    ShowMessage('No tiene permisos para gestionar roles.');
+    Exit;
+  end;
+  Frm := TfrmGestionRoles.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TForm1.Usuarios1Click(Sender: TObject);
+var
+  Frm: TfrmGestionUsuarios;
+begin
+  if not HasPermission('ADMIN_USERS') then
+  begin
+    ShowMessage('No tiene permisos para gestionar usuarios.');
+    Exit;
+  end;
+  Frm := TfrmGestionUsuarios.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TForm1.UpdateContextLabels;
+var
+  EmpresaTxt, ProyectoTxt: string;
+begin
+  if DMPlanner.CurrentEmpresaNombre <> '' then
+    EmpresaTxt := 'Empresa: ' + DMPlanner.CurrentEmpresaNombre +
+      ' (' + IntToStr(DMPlanner.CodigoEmpresa) + ')'
+  else
+    EmpresaTxt := 'Empresa: --';
+
+  if DMPlanner.CurrentProjectId > 0 then
+  begin
+    ProyectoTxt := 'Proyecto: ' + DMPlanner.CurrentProjectName;
+    if DMPlanner.CurrentProjectIsMaster then
+      ProyectoTxt := ProyectoTxt + ' [MASTER]';
+  end
+  else
+    ProyectoTxt := 'Proyecto: --';
+
+  lblCurrentEmpresa.Caption := EmpresaTxt;
+  lblCurrentProyecto.Caption := ProyectoTxt;
+end;
+
+procedure TForm1.InstalarDemos1Click(Sender: TObject);
+var
+  Frm: TfrmGestionDemos;
+begin
+  Frm := TfrmGestionDemos.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TForm1.Proyectos1Click(Sender: TObject);
+var
+  Frm: TfrmGestionProyectos;
+begin
+  if not IsAdmin then
+  begin
+    ShowMessage('Solo el administrador puede gestionar proyectos.');
+    Exit;
+  end;
+  Frm := TfrmGestionProyectos.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+  // Refrescar etiquetas por si se cambió el proyecto activo
+  UpdateContextLabels;
+end;
+
 procedure TForm1.otalaOT1Click(Sender: TObject);
 var
   idx: Integer;
@@ -2095,6 +2282,12 @@ begin
 
   FGantt.CompactOTFromNode( idx, 0, (iAllOT=1) , (iPrioridad=1) );
 
+end;
+
+
+procedure TForm1.Salir1Click(Sender: TObject);
+begin
+ Close;
 end;
 
 procedure TForm1.pnlGanttContainerResize(Sender: TObject);
@@ -2387,6 +2580,8 @@ begin
   pnlGanttContainer.Caption := '';
   pnlGanttContainer.Align := alClient;
 
+  UpdateContextLabels;
+
   pnlCentros.Caption := '';
 
   cxDateEdit1.Date := Now;
@@ -2460,6 +2655,53 @@ begin
   FBtnFilterOperarios.Font.Style := [fsBold];
   FBtnFilterOperarios.OnClick := BtnFilterOperariosClick;
 
+  MostrarDashboard;
+end;
+
+procedure TForm1.MostrarDashboard;
+begin
+  if FDashboard = nil then
+  begin
+    FDashboard := TfrmDashboard.Create(Self);
+    FDashboard.OnAbrirGantt := DashboardAbrirGantt;
+    FDashboard.Parent := Self;
+    FDashboard.Align := alClient;
+  end;
+  FDashboard.Refrescar;
+  FDashboard.Visible := True;
+  FDashboard.BringToFront;
+end;
+
+procedure TForm1.OcultarDashboard;
+begin
+  if Assigned(FDashboard) then
+    FDashboard.Visible := False;
+end;
+
+procedure TForm1.DashboardAbrirGantt(Sender: TObject);
+begin
+  OcultarDashboard;
+  MostrarVistaGantt;
+end;
+
+procedure TForm1.MostrarVistaGantt;
+begin
+  if FVistaGantt = nil then
+  begin
+    FVistaGantt := TfrmVistaGantt.CreateVista(Self,
+      FNodeRepo, FOperariosRepo, FMoldeRepo,
+      FCustomFieldDefs, FPlanningRuleEngine);
+    FVistaGantt.Parent := Self;
+    FVistaGantt.Align := alClient;
+    FVistaGantt.Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
+  end;
+  FVistaGantt.Visible := True;
+  FVistaGantt.BringToFront;
+end;
+
+procedure TForm1.Dashboard1Click(Sender: TObject);
+begin
+  MostrarDashboard;
 end;
 
 procedure TForm1.EditarLinksClick(Sender: TObject);

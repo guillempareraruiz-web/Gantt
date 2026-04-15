@@ -21,77 +21,111 @@ object Form1: TForm1
     Left = 0
     Top = 0
     Width = 1092
-    Height = 108
+    Height = 134
     Align = alTop
     Color = 15395562
     ParentBackground = False
     TabOrder = 0
     DesignSize = (
       1092
-      108)
+      134)
+    object lblCurrentEmpresa: TLabel
+      Left = 786
+      Top = 4
+      Width = 295
+      Height = 15
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = 'Empresa: --'
+      EllipsisPosition = epEndEllipsis
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 3553567
+      Font.Height = -12
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
+      ParentFont = False
+      Layout = tlCenter
+    end
+    object lblCurrentProyecto: TLabel
+      Left = 787
+      Top = 18
+      Width = 294
+      Height = 15
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = 'Proyecto: --'
+      EllipsisPosition = epEndEllipsis
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clGray
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+      Layout = tlCenter
+    end
     object Label1: TLabel
-      Left = 283
-      Top = 7
+      Left = 285
+      Top = 39
       Width = 41
       Height = 15
       Caption = 'Centros'
     end
     object Label2: TLabel
-      Left = 346
-      Top = 7
+      Left = 348
+      Top = 39
       Width = 48
       Height = 15
       Caption = 'Total OFs'
     end
     object Label3: TLabel
-      Left = 18
-      Top = 7
+      Left = 20
+      Top = 39
       Width = 95
       Height = 15
       Caption = 'Fecha Inicio Gantt'
     end
     object Label4: TLabel
-      Left = 145
-      Top = 7
+      Left = 147
+      Top = 39
       Width = 80
       Height = 15
       Caption = 'Fecha fin Gantt'
     end
     object Label5: TLabel
-      Left = 772
-      Top = 6
+      Left = 774
+      Top = 38
       Width = 35
       Height = 15
       Anchors = [akTop, akRight]
       Caption = 'Buscar'
     end
     object Label6: TLabel
-      Left = 522
-      Top = 4
+      Left = 524
+      Top = 36
       Width = 48
       Height = 15
       Anchors = [akTop, akRight]
       Caption = 'Ir a fecha'
     end
     object Label7: TLabel
-      Left = 614
-      Top = 50
+      Left = 616
+      Top = 82
       Width = 78
       Height = 15
       Anchors = [akTop, akRight]
       Caption = 'Zoom timeline'
     end
     object Label8: TLabel
-      Left = 419
-      Top = 50
+      Left = 421
+      Top = 82
       Width = 30
       Height = 15
       Anchors = [akTop, akRight]
       Caption = 'Vistas'
     end
     object lblUndoCount: TLabel
-      Left = 18
-      Top = 76
+      Left = 20
+      Top = 108
       Width = 23
       Height = 15
       Alignment = taCenter
@@ -105,8 +139,8 @@ object Form1: TForm1
       ParentFont = False
     end
     object lblRedoCount: TLabel
-      Left = 40
-      Top = 76
+      Left = 42
+      Top = 108
       Width = 23
       Height = 15
       Alignment = taCenter
@@ -120,15 +154,15 @@ object Form1: TForm1
       ParentFont = False
     end
     object Label19: TLabel
-      Left = 150
-      Top = 62
+      Left = 152
+      Top = 94
       Width = 51
       Height = 15
       Caption = 'Operarios'
     end
     object btnRefresh: TButton
-      Left = 1004
-      Top = 22
+      Left = 1006
+      Top = 54
       Width = 75
       Height = 25
       Anchors = [akTop, akRight]
@@ -137,8 +171,8 @@ object Form1: TForm1
       OnClick = btnRefreshClick
     end
     object spCentros: TcxSpinEdit
-      Left = 283
-      Top = 23
+      Left = 285
+      Top = 55
       Properties.AssignedValues.MinValue = True
       Properties.ImmediatePost = True
       TabOrder = 1
@@ -146,8 +180,8 @@ object Form1: TForm1
       Width = 57
     end
     object cxSpinEdit2: TcxSpinEdit
-      Left = 346
-      Top = 23
+      Left = 348
+      Top = 55
       Properties.AssignedValues.MinValue = True
       Properties.ImmediatePost = True
       TabOrder = 2
@@ -155,22 +189,22 @@ object Form1: TForm1
       Width = 66
     end
     object dtFechaInicioGantt: TcxDateEdit
-      Left = 16
-      Top = 23
+      Left = 18
+      Top = 55
       Properties.ShowTime = False
       TabOrder = 3
       Width = 121
     end
     object dtFechaFinGantt: TcxDateEdit
-      Left = 143
-      Top = 23
+      Left = 145
+      Top = 55
       Properties.ShowTime = False
       TabOrder = 4
       Width = 121
     end
     object SearchBox1: TSearchBox
-      Left = 772
-      Top = 23
+      Left = 774
+      Top = 55
       Width = 145
       Height = 23
       Anchors = [akTop, akRight]
@@ -179,8 +213,8 @@ object Form1: TForm1
       OnInvokeSearch = SearchBox1InvokeSearch
     end
     object RadioButton1: TRadioButton
-      Left = 841
-      Top = 5
+      Left = 831
+      Top = 38
       Width = 40
       Height = 17
       Anchors = [akTop, akRight]
@@ -190,8 +224,8 @@ object Form1: TForm1
       TabStop = True
     end
     object RadioButton2: TRadioButton
-      Left = 885
-      Top = 5
+      Left = 877
+      Top = 38
       Width = 40
       Height = 17
       Anchors = [akTop, akRight]
@@ -199,8 +233,8 @@ object Form1: TForm1
       TabOrder = 7
     end
     object Button3: TButton
-      Left = 921
-      Top = 22
+      Left = 923
+      Top = 54
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -209,8 +243,8 @@ object Form1: TForm1
       OnClick = Button3Click
     end
     object Button4: TButton
-      Left = 945
-      Top = 22
+      Left = 947
+      Top = 54
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -219,8 +253,8 @@ object Form1: TForm1
       OnClick = Button4Click
     end
     object Button5: TButton
-      Left = 969
-      Top = 22
+      Left = 971
+      Top = 54
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -229,8 +263,8 @@ object Form1: TForm1
       OnClick = Button5Click
     end
     object Button6: TButton
-      Left = 418
-      Top = 21
+      Left = 420
+      Top = 53
       Width = 75
       Height = 25
       Caption = 'Recrear Raw'
@@ -238,16 +272,16 @@ object Form1: TForm1
       OnClick = Button6Click
     end
     object cxDateEdit1: TcxDateEdit
-      Left = 520
-      Top = 20
+      Left = 522
+      Top = 52
       Anchors = [akTop, akRight]
       Properties.ShowTime = False
       TabOrder = 12
       Width = 94
     end
     object Button7: TButton
-      Left = 614
-      Top = 19
+      Left = 616
+      Top = 51
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -263,8 +297,8 @@ object Form1: TForm1
     end
     object Button8: TButton
       Tag = 1
-      Left = 614
-      Top = 65
+      Left = 616
+      Top = 97
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -280,8 +314,8 @@ object Form1: TForm1
     end
     object Button9: TButton
       Tag = 2
-      Left = 638
-      Top = 65
+      Left = 640
+      Top = 97
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -297,8 +331,8 @@ object Form1: TForm1
     end
     object Button10: TButton
       Tag = 3
-      Left = 662
-      Top = 65
+      Left = 664
+      Top = 97
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -314,8 +348,8 @@ object Form1: TForm1
     end
     object Button11: TButton
       Tag = 4
-      Left = 686
-      Top = 65
+      Left = 688
+      Top = 97
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -330,8 +364,8 @@ object Form1: TForm1
       OnClick = Button8Click
     end
     object ComboBox1: TComboBox
-      Left = 826
-      Top = 66
+      Left = 828
+      Top = 98
       Width = 253
       Height = 23
       Style = csDropDownList
@@ -346,8 +380,8 @@ object Form1: TForm1
         'Nunca ver dependencias')
     end
     object Button1: TButton
-      Left = 638
-      Top = 19
+      Left = 640
+      Top = 51
       Width = 25
       Height = 25
       Anchors = [akTop, akRight]
@@ -362,8 +396,8 @@ object Form1: TForm1
       OnClick = Button1Click
     end
     object ComboBox2: TComboBox
-      Left = 418
-      Top = 66
+      Left = 420
+      Top = 98
       Width = 187
       Height = 23
       Style = csDropDownList
@@ -387,8 +421,8 @@ object Form1: TForm1
     end
     object btnUndo: TButton
       Tag = 1
-      Left = 16
-      Top = 52
+      Left = 18
+      Top = 84
       Width = 25
       Height = 25
       Caption = 'Undo'
@@ -403,8 +437,8 @@ object Form1: TForm1
     end
     object btnRedo: TButton
       Tag = 1
-      Left = 40
-      Top = 52
+      Left = 42
+      Top = 84
       Width = 25
       Height = 25
       Caption = 'Redo'
@@ -419,8 +453,8 @@ object Form1: TForm1
     end
     object Button12: TButton
       Tag = 1
-      Left = 66
-      Top = 52
+      Left = 68
+      Top = 84
       Width = 39
       Height = 25
       Caption = 'Check'
@@ -435,8 +469,8 @@ object Form1: TForm1
     end
     object Button13: TButton
       Tag = 1
-      Left = 717
-      Top = 65
+      Left = 719
+      Top = 97
       Width = 52
       Height = 25
       Anchors = [akTop, akRight]
@@ -451,8 +485,8 @@ object Form1: TForm1
       OnClick = Button13Click
     end
     object FcxFilterOperarios: TcxCheckComboBox
-      Left = 149
-      Top = 78
+      Left = 151
+      Top = 110
       Properties.DropDownRows = 30
       Properties.Items = <>
       Properties.OnChange = FcxFilterOperariosPropertiesChange
@@ -460,22 +494,38 @@ object Form1: TForm1
       Width = 185
     end
     object FchkSoloFiltrados: TcxCheckBox
-      Left = 224
-      Top = 59
+      Left = 226
+      Top = 91
       Caption = 'Ver solo filtrados'
       Properties.Alignment = taRightJustify
       Style.TransparentBorder = False
       TabOrder = 26
     end
     object Button25: TButton
-      Left = 717
-      Top = 21
+      Left = 719
+      Top = 53
       Width = 51
       Height = 25
       Anchors = [akTop, akRight]
       Caption = 'BUSCAR'
       TabOrder = 27
       OnClick = Button25Click
+    end
+    object Button26: TButton
+      Left = 1006
+      Top = 35
+      Width = 75
+      Height = 20
+      Anchors = [akTop, akRight]
+      Caption = 'bbdd Connect'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+      TabOrder = 28
+      OnClick = Button26Click
     end
   end
   object Panel1: TPanel
@@ -533,9 +583,9 @@ object Form1: TForm1
   end
   object pnlCentros: TPanel
     Left = 0
-    Top = 209
+    Top = 235
     Width = 226
-    Height = 503
+    Height = 477
     Align = alLeft
     BevelOuter = bvNone
     Caption = 'pnlCentros'
@@ -652,7 +702,7 @@ object Form1: TForm1
   end
   object Panel3: TPanel
     Left = 0
-    Top = 108
+    Top = 134
     Width = 1092
     Height = 50
     Align = alTop
@@ -1181,7 +1231,7 @@ object Form1: TForm1
   end
   object pnlBuscar: TPanel
     Left = 0
-    Top = 158
+    Top = 184
     Width = 1092
     Height = 51
     Align = alTop
@@ -1781,11 +1831,19 @@ object Form1: TForm1
     Top = 368
     object Archivo1: TMenuItem
       Caption = 'Archivo'
+      object N4: TMenuItem
+        Caption = '-'
+      end
+      object Proyectos1: TMenuItem
+        Caption = 'Proyectos...'
+        OnClick = Proyectos1Click
+      end
       object N3: TMenuItem
         Caption = '-'
       end
       object Salir1: TMenuItem
         Caption = 'Salir'
+        OnClick = Salir1Click
       end
     end
     object Entidades1: TMenuItem
@@ -1802,12 +1860,13 @@ object Form1: TForm1
         Caption = 'Calendarios'
         OnClick = Calendarios1Click
       end
+      object Turnos1: TMenuItem
+        Caption = 'Turnos'
+        OnClick = Turnos1Click
+      end
       object Moldes1: TMenuItem
         Caption = 'Moldes y utillajes'
         OnClick = Moldes1Click
-      end
-      object N4: TMenuItem
-        Caption = '-'
       end
       object Utillajes1: TMenuItem
         Caption = 'Marcadores'
@@ -1831,6 +1890,14 @@ object Form1: TForm1
     end
     object Vistas1: TMenuItem
       Caption = 'Vistas'
+      object Dashboard1: TMenuItem
+        Caption = 'Dashboard'
+        OnClick = Dashboard1Click
+      end
+      object MnGantt: TMenuItem
+        Caption = 'Gantt'
+        OnClick = MnGanttClick
+      end
       object Kanban1: TMenuItem
         Caption = 'Kanban'
         OnClick = Kanban1Click
@@ -1842,6 +1909,28 @@ object Form1: TForm1
       object FiniteCapacity1: TMenuItem
         Caption = 'Planificador Capacidad Finita'
         OnClick = FiniteCapacity1Click
+      end
+      object CuadroPlanificacionDia1: TMenuItem
+        Caption = 'Cuadro Planificaci'#243'n del D'#237'a'
+        OnClick = CuadroPlanificacionDia1Click
+      end
+    end
+    object Configuracion1: TMenuItem
+      Caption = 'Configuraci'#243'n'
+      object Roles1: TMenuItem
+        Caption = 'Roles y Permisos'
+        OnClick = Roles1Click
+      end
+      object Usuarios1: TMenuItem
+        Caption = 'Usuarios'
+        OnClick = Usuarios1Click
+      end
+      object NDemo1: TMenuItem
+        Caption = '-'
+      end
+      object InstalarDemos1: TMenuItem
+        Caption = 'Instalar datos de Demo...'
+        OnClick = InstalarDemos1Click
       end
     end
     object Ayuda1: TMenuItem

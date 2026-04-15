@@ -132,20 +132,55 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     end
     object lbCalendarios: TListBox
       Left = 0
-      Top = 0
+      Top = 24
       Width = 260
-      Height = 340
-      Align = alTop
-      Anchors = [akLeft, akTop, akRight, akBottom]
+      Height = 304
+      Align = alClient
       ItemHeight = 15
       TabOrder = 0
       OnClick = lbCalendariosClick
     end
+    object pnlCalToolbar: TPanel
+      Left = 0
+      Top = 328
+      Width = 260
+      Height = 36
+      Align = alBottom
+      BevelOuter = bvNone
+      TabOrder = 2
+      object btnCalAdd: TButton
+        Left = 4
+        Top = 4
+        Width = 75
+        Height = 28
+        Caption = 'A'#241'adir'
+        TabOrder = 0
+        OnClick = btnCalAddClick
+      end
+      object btnCalEdit: TButton
+        Left = 83
+        Top = 4
+        Width = 75
+        Height = 28
+        Caption = 'Editar'
+        TabOrder = 1
+        OnClick = btnCalEditClick
+      end
+      object btnCalDel: TButton
+        Left = 162
+        Top = 4
+        Width = 75
+        Height = 28
+        Caption = 'Eliminar'
+        TabOrder = 2
+        OnClick = btnCalDelClick
+      end
+    end
     object pnlDetalle: TPanel
       Left = 0
-      Top = 370
+      Top = 364
       Width = 260
-      Height = 230
+      Height = 236
       Align = alBottom
       BevelOuter = bvNone
       TabOrder = 1

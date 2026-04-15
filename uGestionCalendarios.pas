@@ -27,7 +27,8 @@ uses
   dxSkinVisualStudio2013Dark, dxSkinVisualStudio2013Light, dxSkinVS2010,
   dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue,
   // Project
-  uSampleDataGenerator, uCentreCalendar, uErpTypes, cxClasses;
+  uSampleDataGenerator, uCentreCalendar, uErpTypes, cxClasses,
+  Data.Win.ADODB, Data.DB;
 
 type
   // Tipo de dia para el calendario visual
@@ -50,6 +51,10 @@ type
     pnlLeft: TPanel;
     lblCalendarios: TLabel;
     lbCalendarios: TListBox;
+    pnlCalToolbar: TPanel;
+    btnCalAdd: TButton;
+    btnCalEdit: TButton;
+    btnCalDel: TButton;
     pnlDetalle: TPanel;
     lblDetalleTitulo: TLabel;
     memoDetalle: TMemo;
@@ -65,6 +70,9 @@ type
     procedure lbCalendariosClick(Sender: TObject);
     procedure pbCalendarPaint(Sender: TObject);
     procedure pbCalendarMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure btnCalAddClick(Sender: TObject);
+    procedure btnCalEditClick(Sender: TObject);
+    procedure btnCalDelClick(Sender: TObject);
   private
     FSampleData: TSampleData;
     FGetCalendar: TGetCalendarFunc;
@@ -78,10 +86,14 @@ type
     FDayTypes: array[1..12, 1..31] of TDayType;
     FWorkingMinutes: array[1..12, 1..31] of Integer;
 
+    FCalendarIds: TArray<Integer>;  // CalendarId per cada entrada al ListBox
+
     procedure LoadCalendarioList;
+    procedure LoadCalendarioListFromDB;
     procedure SelectCalendario(AIdx: Integer);
     procedure BuildDayCache;
     procedure BuildDetalleText;
+    procedure BuildDetalleTextFromDB;
     procedure PaintLeyenda;
 
     function GetDayType(const ACal: TCentreCalendar; const ADate: TDateTime): TDayType;
@@ -116,6 +128,9 @@ var
   frmGestionCalendarios: TfrmGestionCalendarios;
 
 implementation
+
+uses
+  uDMPlanner;
 
 {$R *.dfm}
 
@@ -180,27 +195,73 @@ end;
 { ========== Lista calendarios ========== }
 
 procedure TfrmGestionCalendarios.LoadCalendarioList;
-var
-  I: Integer;
-  S: string;
-  CentroCount: Integer;
-  J: Integer;
 begin
-  lbCalendarios.Items.Clear;
-  for I := 0 to High(FSampleData.Calendarios) do
+  if DMPlanner.IsConnected then
+    LoadCalendarioListFromDB
+  else
   begin
-    // Contar cuantos centros usan este calendario
-    CentroCount := 0;
-    for J := 0 to High(FSampleData.CalendarioCentro) do
-      if FSampleData.CalendarioCentro[J] = I then
-        Inc(CentroCount);
-    S := FSampleData.Calendarios[I].Nombre + '  (' + IntToStr(CentroCount) + ' centros)';
-    lbCalendarios.Items.Add(S);
+    // Fallback: cargar desde SampleData en memoria
+    var I, J, CentroCount: Integer;
+    var S: string;
+    lbCalendarios.Items.Clear;
+    SetLength(FCalendarIds, Length(FSampleData.Calendarios));
+    for I := 0 to High(FSampleData.Calendarios) do
+    begin
+      CentroCount := 0;
+      for J := 0 to High(FSampleData.CalendarioCentro) do
+        if FSampleData.CalendarioCentro[J] = I then
+          Inc(CentroCount);
+      S := FSampleData.Calendarios[I].Nombre + '  (' + IntToStr(CentroCount) + ' centros)';
+      lbCalendarios.Items.Add(S);
+      FCalendarIds[I] := I; // usamos índice como ID en modo memoria
+    end;
   end;
+
   if lbCalendarios.Items.Count > 0 then
   begin
     lbCalendarios.ItemIndex := 0;
     SelectCalendario(0);
+  end;
+end;
+
+procedure TfrmGestionCalendarios.LoadCalendarioListFromDB;
+var
+  Q: TADOQuery;
+  I: Integer;
+  S: string;
+  CentroCount: Integer;
+begin
+  lbCalendarios.Items.Clear;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT c.CalendarId, c.Nombre, ' +
+      '  (SELECT COUNT(*) FROM FS_PL_CenterCalendar cc ' +
+      '   WHERE cc.CodigoEmpresa = c.CodigoEmpresa AND cc.CalendarId = c.CalendarId) AS CentroCount ' +
+      'FROM FS_PL_Calendar c ' +
+      'WHERE c.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) + ' AND c.Activo = 1 ' +
+      'ORDER BY c.Nombre';
+    Q.Open;
+    SetLength(FCalendarIds, Q.RecordCount);
+    I := 0;
+    while not Q.Eof do
+    begin
+      CentroCount := Q.FieldByName('CentroCount').AsInteger;
+      S := Q.FieldByName('Nombre').AsString + '  (' + IntToStr(CentroCount) + ' centros)';
+      lbCalendarios.Items.Add(S);
+      FCalendarIds[I] := Q.FieldByName('CalendarId').AsInteger;
+
+      // Sincronizar también con FSampleData si hay espacio
+      if I <= High(FSampleData.Calendarios) then
+        FSampleData.Calendarios[I].Nombre := Q.FieldByName('Nombre').AsString;
+
+      Inc(I);
+      Q.Next;
+    end;
+    SetLength(FCalendarIds, I);
+  finally
+    Q.Free;
   end;
 end;
 
@@ -299,55 +360,171 @@ end;
 { ========== Detalle texto ========== }
 
 procedure TfrmGestionCalendarios.BuildDetalleText;
-var
-  Cal: TSampleCalendario;
-  I, J: Integer;
-  S: string;
-  TotalLab, TotalNoLab, TotalParcial: Integer;
-  Mo, D, DaysInMo: Integer;
 begin
-  memoDetalle.Lines.Clear;
-  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FSampleData.Calendarios)) then
-    Exit;
-
-  Cal := FSampleData.Calendarios[FSelectedCalIdx];
-
-  memoDetalle.Lines.Add('CALENDARIO: ' + Cal.Nombre);
-  memoDetalle.Lines.Add('');
-
-  // Horario L-V
-  if Length(Cal.PeriodosLV) = 0 then
-    memoDetalle.Lines.Add('L-V: 24h laborable')
+  if DMPlanner.IsConnected then
+    BuildDetalleTextFromDB
   else
   begin
-    memoDetalle.Lines.Add('L-V periodos NO laborables:');
-    for I := 0 to High(Cal.PeriodosLV) do
+    // Fallback: usar SampleData en memoria
+    var Cal: TSampleCalendario;
+    var I, J: Integer;
+    var S: string;
+    var TotalLab, TotalNoLab, TotalParcial: Integer;
+    var Mo, D, DaysInMo: Integer;
+
+    memoDetalle.Lines.Clear;
+    if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FSampleData.Calendarios)) then
+      Exit;
+
+    Cal := FSampleData.Calendarios[FSelectedCalIdx];
+    memoDetalle.Lines.Add('CALENDARIO: ' + Cal.Nombre);
+    memoDetalle.Lines.Add('');
+
+    if Length(Cal.PeriodosLV) = 0 then
+      memoDetalle.Lines.Add('L-V: 24h laborable')
+    else
     begin
-      S := Format('  %02d:%02d - %02d:%02d', [
-        Cal.PeriodosLV[I].StartH, Cal.PeriodosLV[I].StartM,
-        Cal.PeriodosLV[I].EndH, Cal.PeriodosLV[I].EndM
-      ]);
-      memoDetalle.Lines.Add(S);
+      memoDetalle.Lines.Add('L-V periodos NO laborables:');
+      for I := 0 to High(Cal.PeriodosLV) do
+      begin
+        S := Format('  %02d:%02d - %02d:%02d', [
+          Cal.PeriodosLV[I].StartH, Cal.PeriodosLV[I].StartM,
+          Cal.PeriodosLV[I].EndH, Cal.PeriodosLV[I].EndM]);
+        memoDetalle.Lines.Add(S);
+      end;
     end;
+
+    memoDetalle.Lines.Add('');
+    if Cal.FinDeSemanaCompleto then
+      memoDetalle.Lines.Add('Fin de semana: CERRADO')
+    else
+      memoDetalle.Lines.Add('Fin de semana: ABIERTO');
+
+    memoDetalle.Lines.Add('');
+    memoDetalle.Lines.Add('Centros asignados:');
+    for J := 0 to High(FSampleData.CalendarioCentro) do
+      if FSampleData.CalendarioCentro[J] = FSelectedCalIdx then
+        memoDetalle.Lines.Add('  ' + FSampleData.Centros[J].Titulo);
+
+    TotalLab := 0; TotalNoLab := 0; TotalParcial := 0;
+    for Mo := 1 to 12 do
+    begin
+      DaysInMo := DaysInMonth(EncodeDate(FYear, Mo, 1));
+      for D := 1 to DaysInMo do
+        case FDayTypes[Mo, D] of
+          dtLaborable: Inc(TotalLab);
+          dtNoLaborable: Inc(TotalNoLab);
+          dtParcial: Inc(TotalParcial);
+        end;
+    end;
+    memoDetalle.Lines.Add('');
+    memoDetalle.Lines.Add(Format('--- Resumen %d ---', [FYear]));
+    memoDetalle.Lines.Add(Format('Laborables 24h:  %d', [TotalLab]));
+    memoDetalle.Lines.Add(Format('Parciales:       %d', [TotalParcial]));
+    memoDetalle.Lines.Add(Format('No laborables:   %d', [TotalNoLab]));
+    memoDetalle.Lines.Add(Format('Total dias:      %d', [TotalLab + TotalParcial + TotalNoLab]));
+  end;
+end;
+
+procedure TfrmGestionCalendarios.BuildDetalleTextFromDB;
+var
+  Q: TADOQuery;
+  CalId: Integer;
+  CalNombre: string;
+  TotalLab, TotalNoLab, TotalParcial: Integer;
+  Mo, D, DaysInMo: Integer;
+  CE: string;
+begin
+  memoDetalle.Lines.Clear;
+  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then Exit;
+
+  CalId := FCalendarIds[FSelectedCalIdx];
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+  // Nombre del calendario
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text := 'SELECT Nombre, Descripcion FROM FS_PL_Calendar WHERE CodigoEmpresa = ' +
+      CE + ' AND CalendarId = ' + IntToStr(CalId);
+    Q.Open;
+    if Q.Eof then Exit;
+    CalNombre := Q.FieldByName('Nombre').AsString;
+    memoDetalle.Lines.Add('CALENDARIO: ' + CalNombre);
+    if Q.FieldByName('Descripcion').AsString <> '' then
+      memoDetalle.Lines.Add(Q.FieldByName('Descripcion').AsString);
+    memoDetalle.Lines.Add('');
+  finally
+    Q.Free;
   end;
 
-  memoDetalle.Lines.Add('');
-  if Cal.FinDeSemanaCompleto then
-    memoDetalle.Lines.Add('Fin de semana: CERRADO')
-  else
-    memoDetalle.Lines.Add('Fin de semana: ABIERTO');
+  // Períodos no laborables L-V (día 1 como ejemplo)
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text := 'SELECT DiaSemana, ' +
+      'CONVERT(VARCHAR(5), HoraInicioNoLab, 108) AS HoraInicio, ' +
+      'CONVERT(VARCHAR(5), HoraFinNoLab, 108) AS HoraFin ' +
+      'FROM FS_PL_CalendarDayRule ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId) +
+      ' AND DiaSemana = 1 ORDER BY HoraInicioNoLab';
+    Q.Open;
+    if Q.Eof then
+      memoDetalle.Lines.Add('L-V: 24h laborable')
+    else
+    begin
+      memoDetalle.Lines.Add('L-V periodos NO laborables:');
+      while not Q.Eof do
+      begin
+        memoDetalle.Lines.Add('  ' +
+          Q.FieldByName('HoraInicio').AsString + ' - ' +
+          Q.FieldByName('HoraFin').AsString);
+        Q.Next;
+      end;
+    end;
+  finally
+    Q.Free;
+  end;
 
-  // Centros que usan este calendario
+  // Fin de semana
+  memoDetalle.Lines.Add('');
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text := 'SELECT COUNT(*) AS Cnt FROM FS_PL_CalendarDayRule ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId) +
+      ' AND DiaSemana IN (6,7)';
+    Q.Open;
+    if Q.FieldByName('Cnt').AsInteger > 0 then
+      memoDetalle.Lines.Add('Fin de semana: CERRADO')
+    else
+      memoDetalle.Lines.Add('Fin de semana: ABIERTO');
+  finally
+    Q.Free;
+  end;
+
+  // Centros asignados
   memoDetalle.Lines.Add('');
   memoDetalle.Lines.Add('Centros asignados:');
-  for J := 0 to High(FSampleData.CalendarioCentro) do
-    if FSampleData.CalendarioCentro[J] = FSelectedCalIdx then
-      memoDetalle.Lines.Add('  ' + FSampleData.Centros[J].Titulo);
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text := 'SELECT c.Titulo FROM FS_PL_CenterCalendar cc ' +
+      'INNER JOIN FS_PL_Center c ON c.CodigoEmpresa = cc.CodigoEmpresa AND c.CenterId = cc.CenterId ' +
+      'WHERE cc.CodigoEmpresa = ' + CE + ' AND cc.CalendarId = ' + IntToStr(CalId) +
+      ' ORDER BY c.Titulo';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      memoDetalle.Lines.Add('  ' + Q.FieldByName('Titulo').AsString);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
 
-  // Estadisticas anuales
-  TotalLab := 0;
-  TotalNoLab := 0;
-  TotalParcial := 0;
+  // Estadísticas anuales
+  TotalLab := 0; TotalNoLab := 0; TotalParcial := 0;
   for Mo := 1 to 12 do
   begin
     DaysInMo := DaysInMonth(EncodeDate(FYear, Mo, 1));
@@ -666,6 +843,143 @@ begin
   ApplyDarkMode(FDark);
   PaintLeyenda;
   pbCalendar.Invalidate;
+end;
+
+{ ========== Calendarios CRUD (SQL) ========== }
+
+procedure TfrmGestionCalendarios.btnCalAddClick(Sender: TObject);
+var
+  Nom: string;
+  Cmd: TADOCommand;
+  CE: string;
+begin
+  Nom := InputBox('Nuevo Calendario', 'Nombre:', '');
+  if Nom = '' then Exit;
+
+  if DMPlanner.IsConnected then
+  begin
+    CE := IntToStr(DMPlanner.CodigoEmpresa);
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'INSERT INTO FS_PL_Calendar (CodigoEmpresa, Nombre, Descripcion) VALUES (' +
+        CE + ', N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', N'''')';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    // Crear reglas por defecto: fines de semana cerrados
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText :=
+        'DECLARE @CalId INT = (SELECT MAX(CalendarId) FROM FS_PL_Calendar WHERE CodigoEmpresa = ' + CE + '); ' +
+        'INSERT INTO FS_PL_CalendarDayRule (CodigoEmpresa, CalendarId, DiaSemana, HoraInicioNoLab, HoraFinNoLab) VALUES ' +
+        '(' + CE + ', @CalId, 6, ''00:00:00'', ''23:59:00''), ' +
+        '(' + CE + ', @CalId, 7, ''00:00:00'', ''23:59:00'')';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+  end;
+
+  LoadCalendarioList;
+end;
+
+procedure TfrmGestionCalendarios.btnCalEditClick(Sender: TObject);
+var
+  CalId: Integer;
+  Nom, Desc: string;
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  CE: string;
+begin
+  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then Exit;
+  if not DMPlanner.IsConnected then Exit;
+
+  CalId := FCalendarIds[FSelectedCalIdx];
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+  // Obtener datos actuales
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text := 'SELECT Nombre, Descripcion FROM FS_PL_Calendar WHERE CodigoEmpresa = ' +
+      CE + ' AND CalendarId = ' + IntToStr(CalId);
+    Q.Open;
+    if Q.Eof then Exit;
+    Nom := Q.FieldByName('Nombre').AsString;
+    Desc := Q.FieldByName('Descripcion').AsString;
+  finally
+    Q.Free;
+  end;
+
+  Nom := InputBox('Editar Calendario', 'Nombre:', Nom);
+  if Nom = '' then Exit;
+  Desc := InputBox('Editar Calendario', 'Descripción:', Desc);
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText := 'UPDATE FS_PL_Calendar SET ' +
+      'Nombre = N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
+      'Descripcion = N''' + StringReplace(Desc, '''', '''''', [rfReplaceAll]) + '''' +
+      ' WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  LoadCalendarioList;
+end;
+
+procedure TfrmGestionCalendarios.btnCalDelClick(Sender: TObject);
+var
+  CalId: Integer;
+  Cmd: TADOCommand;
+  CE: string;
+  CalNom: string;
+begin
+  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then Exit;
+  if not DMPlanner.IsConnected then Exit;
+
+  CalId := FCalendarIds[FSelectedCalIdx];
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+  // Obtener nombre para confirmación
+  CalNom := '';
+  if FSelectedCalIdx < lbCalendarios.Items.Count then
+    CalNom := lbCalendarios.Items[FSelectedCalIdx];
+
+  if MessageDlg('¿Eliminar calendario "' + CalNom + '"?' + sLineBreak +
+    'Se eliminarán también sus reglas y asignaciones a centros.',
+    mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  // Desasignar de centros
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText := 'DELETE FROM FS_PL_CenterCalendar WHERE CodigoEmpresa = ' +
+      CE + ' AND CalendarId = ' + IntToStr(CalId);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  // Eliminar calendario (CASCADE elimina DayRules y Exceptions)
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText := 'DELETE FROM FS_PL_Calendar WHERE CodigoEmpresa = ' +
+      CE + ' AND CalendarId = ' + IntToStr(CalId);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  FSelectedCalIdx := -1;
+  LoadCalendarioList;
 end;
 
 procedure TfrmGestionCalendarios.ApplyDarkMode(ADark: Boolean);

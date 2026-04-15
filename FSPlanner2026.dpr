@@ -37,13 +37,36 @@ uses
   uKanbanBoard in 'uKanbanBoard.pas',
   uDispatchList in 'uDispatchList.pas' {frmDispatchList},
   uFiniteCapacityPlanner in 'uFiniteCapacityPlanner.pas' {frmFiniteCapacityPlanner},
-  uPlanningRulesEditor in 'uPlanningRulesEditor.pas' {frmPlanningRulesEditor};
+  uPlanningRulesEditor in 'uPlanningRulesEditor.pas' {frmPlanningRulesEditor},
+  uCuadroPlanificacionDelDia in 'uCuadroPlanificacionDelDia.pas' {frmCuadroPlanificacionDelDia},
+  uGestionTurnos in 'uGestionTurnos.pas' {frmGestionTurnos},
+  uDataConnector in 'uDataConnector.pas',
+  uSQLServerConnector in 'uSQLServerConnector.pas',
+  uDMPlanner in 'uDMPlanner.pas' {DMPlanner: TDataModule},
+  uLogin in 'uLogin.pas' {frmLogin},
+  uGestionRoles in 'uGestionRoles.pas' {frmGestionRoles},
+  uGestionUsuarios in 'uGestionUsuarios.pas' {frmGestionUsuarios},
+  uDBMigrations in 'uDBMigrations.pas',
+  uDemoDataGenerator in 'uDemoDataGenerator.pas',
+  uGestionDemos in 'uGestionDemos.pas' {frmGestionDemos},
+  uGestionProyectos in 'uGestionProyectos.pas' {frmGestionProyectos},
+  uAsignarUsuariosProyecto in 'uAsignarUsuariosProyecto.pas' {frmAsignarUsuariosProyecto},
+  uDashboard in 'uDashboard.pas' {frmDashboard},
+  uVistaGantt in 'uVistaGantt.pas' {frmVistaGantt};
 
 {$R *.res}
 
 begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
+  Application.CreateForm(TDMPlanner, DMPlanner);
+
+  if not DoLogin then
+  begin
+    Application.Terminate;
+    Exit;
+  end;
+
   Application.CreateForm(TForm1, Form1);
   Application.CreateForm(TfrmPlanningRulesEditor, frmPlanningRulesEditor);
   Application.Run;

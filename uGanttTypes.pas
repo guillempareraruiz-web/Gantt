@@ -170,6 +170,15 @@ type
     Rect: TRectF;
   end;
 
+  TTurno = record
+    Id: Integer;
+    Nombre: string;
+    HoraInicio: TDateTime;  // solo parte hora (ej. EncodeTime(6,0,0,0))
+    HoraFin: TDateTime;     // solo parte hora; si < HoraInicio => cruza medianoche
+    Color: TColor;
+    Activo: Boolean;
+    Order: Integer;
+  end;
 
 function DayStart(const D: TDateTime): TDateTime;
 function DayEnd(const D: TDateTime): TDateTime;

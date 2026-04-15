@@ -32,7 +32,8 @@ uses
   dxScrollbarAnnotations,
   // Project
   uOperariosTypes, uOperariosRepo, dxBarBuiltInMenu, cxCustomData, cxData,
-  cxDataStorage, cxNavigator, dxDateRanges;
+  cxDataStorage, cxNavigator, dxDateRanges,
+  Data.Win.ADODB, Data.DB;
 
 type
   TfrmGestionOperaris = class(TForm)
@@ -143,6 +144,9 @@ var
 
 implementation
 
+uses
+  uDMPlanner;
+
 {$R *.dfm}
 
 { TfrmGestionOperaris }
@@ -151,16 +155,28 @@ class procedure TfrmGestionOperaris.Execute(ARepo: TOperariosRepo;
   const AOperaciones, ACalendarios: TArray<string>);
 var
   F: TfrmGestionOperaris;
+  TempRepo: TOperariosRepo;
+  OwnRepo: Boolean;
 begin
+  OwnRepo := False;
+  TempRepo := ARepo;
+  if TempRepo = nil then
+  begin
+    TempRepo := TOperariosRepo.Create;
+    OwnRepo := True;
+  end;
+
   F := TfrmGestionOperaris.Create(Application);
   try
-    F.FRepo := ARepo;
+    F.FRepo := TempRepo;
     F.FOperaciones := AOperaciones;
     F.FCalendarios := ACalendarios;
     F.RefreshAll;
     F.ShowModal;
   finally
     F.Free;
+    if OwnRepo then
+      TempRepo.Free;
   end;
 end;
 
@@ -193,20 +209,36 @@ end;
 
 procedure TfrmGestionOperaris.RefreshDepts;
 var
-  Depts: TArray<TDepartamento>;
+  Q: TADOQuery;
   I: Integer;
+  D: TDepartamento;
 begin
-  Depts := FRepo.GetDepartamentos;
   tvDepts.BeginUpdate;
   try
     tvDepts.DataController.RecordCount := 0;
-    tvDepts.DataController.RecordCount := Length(Depts);
-    for I := 0 to High(Depts) do
-    begin
-      tvDepts.DataController.Values[I, colDeptId.Index] := Depts[I].Id;
-      tvDepts.DataController.Values[I, colDeptNom.Index] := Depts[I].Nombre;
-      tvDepts.DataController.Values[I, colDeptDesc.Index] := Depts[I].Descripcion;
-      tvDepts.DataController.Values[I, colDeptOperaris.Index] := DeptOperarisStr(Depts[I].Id);
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT DepartmentId, Nombre, Descripcion FROM FS_PL_Department ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) + ' ORDER BY Nombre';
+      Q.Open;
+      I := 0;
+      while not Q.Eof do
+      begin
+        tvDepts.DataController.RecordCount := I + 1;
+        tvDepts.DataController.Values[I, colDeptId.Index] := Q.FieldByName('DepartmentId').AsInteger;
+        tvDepts.DataController.Values[I, colDeptNom.Index] := Q.FieldByName('Nombre').AsString;
+        tvDepts.DataController.Values[I, colDeptDesc.Index] := Q.FieldByName('Descripcion').AsString;
+        // Actualizar también el repo en memoria
+        D.Id := Q.FieldByName('DepartmentId').AsInteger;
+        D.Nombre := Q.FieldByName('Nombre').AsString;
+        D.Descripcion := Q.FieldByName('Descripcion').AsString;
+        tvDepts.DataController.Values[I, colDeptOperaris.Index] := DeptOperarisStr(D.Id);
+        Inc(I);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
     end;
   finally
     tvDepts.EndUpdate;
@@ -215,21 +247,40 @@ end;
 
 procedure TfrmGestionOperaris.RefreshOperaris;
 var
-  Ops: TArray<TOperario>;
-  I: Integer;
+  Q: TADOQuery;
+  I, OpId: Integer;
 begin
-  Ops := FRepo.GetOperarios;
   tvOperaris.BeginUpdate;
   try
     tvOperaris.DataController.RecordCount := 0;
-    tvOperaris.DataController.RecordCount := Length(Ops);
-    for I := 0 to High(Ops) do
-    begin
-      tvOperaris.DataController.Values[I, colOpId.Index] := Ops[I].Id;
-      tvOperaris.DataController.Values[I, colOpNom.Index] := Ops[I].Nombre;
-      tvOperaris.DataController.Values[I, colOpCalendari.Index] := Ops[I].Calendario;
-      tvOperaris.DataController.Values[I, colOpDepts.Index] := OpDeptsStr(Ops[I].Id);
-      tvOperaris.DataController.Values[I, colOpCaps.Index] := OpCapsStr(Ops[I].Id);
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT o.OperatorId, o.Nombre, ' +
+        '  ISNULL((SELECT STRING_AGG(d.Nombre, '', '') FROM FS_PL_OperatorDepartment od ' +
+        '    INNER JOIN FS_PL_Department d ON d.CodigoEmpresa = od.CodigoEmpresa AND d.DepartmentId = od.DepartmentId ' +
+        '    WHERE od.CodigoEmpresa = o.CodigoEmpresa AND od.OperatorId = o.OperatorId), '''') AS Depts, ' +
+        '  ISNULL((SELECT STRING_AGG(os.Operacion, '', '') FROM FS_PL_OperatorSkill os ' +
+        '    WHERE os.CodigoEmpresa = o.CodigoEmpresa AND os.OperatorId = o.OperatorId), '''') AS Caps ' +
+        'FROM FS_PL_Operator o ' +
+        'WHERE o.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) + ' AND o.Activo = 1 ' +
+        'ORDER BY o.Nombre';
+      Q.Open;
+      I := 0;
+      while not Q.Eof do
+      begin
+        tvOperaris.DataController.RecordCount := I + 1;
+        tvOperaris.DataController.Values[I, colOpId.Index] := Q.FieldByName('OperatorId').AsInteger;
+        tvOperaris.DataController.Values[I, colOpNom.Index] := Q.FieldByName('Nombre').AsString;
+        tvOperaris.DataController.Values[I, colOpCalendari.Index] := '';
+        tvOperaris.DataController.Values[I, colOpDepts.Index] := Q.FieldByName('Depts').AsString;
+        tvOperaris.DataController.Values[I, colOpCaps.Index] := Q.FieldByName('Caps').AsString;
+        Inc(I);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
     end;
   finally
     tvOperaris.EndUpdate;
@@ -238,18 +289,29 @@ end;
 
 procedure TfrmGestionOperaris.RefreshCapOperaris;
 var
-  Ops: TArray<TOperario>;
+  Q: TADOQuery;
   I: Integer;
 begin
-  Ops := FRepo.GetOperarios;
   tvCapOperaris.BeginUpdate;
   try
     tvCapOperaris.DataController.RecordCount := 0;
-    tvCapOperaris.DataController.RecordCount := Length(Ops);
-    for I := 0 to High(Ops) do
-    begin
-      tvCapOperaris.DataController.Values[I, colCapOpId.Index] := Ops[I].Id;
-      tvCapOperaris.DataController.Values[I, colCapOpNom.Index] := Ops[I].Nombre;
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT OperatorId, Nombre FROM FS_PL_Operator ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) + ' AND Activo = 1 ORDER BY Nombre';
+      Q.Open;
+      I := 0;
+      while not Q.Eof do
+      begin
+        tvCapOperaris.DataController.RecordCount := I + 1;
+        tvCapOperaris.DataController.Values[I, colCapOpId.Index] := Q.FieldByName('OperatorId').AsInteger;
+        tvCapOperaris.DataController.Values[I, colCapOpNom.Index] := Q.FieldByName('Nombre').AsString;
+        Inc(I);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
     end;
   finally
     tvCapOperaris.EndUpdate;
@@ -260,21 +322,77 @@ procedure TfrmGestionOperaris.RefreshCapOps;
 var
   OpId, I: Integer;
   HasCap: Boolean;
+  Q: TADOQuery;
+  Skills: TStringList;
+  Ops: TArray<string>;
+  OpsList: TStringList;
 begin
   OpId := GetSelectedCapOperarioId;
   tvCapOps.BeginUpdate;
+  Skills := TStringList.Create;
   try
+    // Si FOperaciones está vacío, cargarlas desde SQL (operaciones distintas en FS_PL_OperatorSkill)
+    if (Length(FOperaciones) = 0) and DMPlanner.IsConnected then
+    begin
+      OpsList := TStringList.Create;
+      try
+        OpsList.Duplicates := dupIgnore;
+        OpsList.Sorted := True;
+        Q := TADOQuery.Create(nil);
+        try
+          Q.Connection := DMPlanner.ADOConnection;
+          Q.SQL.Text := 'SELECT DISTINCT Operacion FROM FS_PL_OperatorSkill ' +
+            'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+            ' ORDER BY Operacion';
+          Q.Open;
+          while not Q.Eof do
+          begin
+            OpsList.Add(Q.FieldByName('Operacion').AsString);
+            Q.Next;
+          end;
+        finally
+          Q.Free;
+        end;
+        SetLength(Ops, OpsList.Count);
+        for I := 0 to OpsList.Count - 1 do
+          Ops[I] := OpsList[I];
+        FOperaciones := Ops;
+      finally
+        OpsList.Free;
+      end;
+    end;
+
+    // Cargar skills del operario desde SQL
+    if (OpId > 0) and DMPlanner.IsConnected then
+    begin
+      Q := TADOQuery.Create(nil);
+      try
+        Q.Connection := DMPlanner.ADOConnection;
+        Q.SQL.Text := 'SELECT Operacion FROM FS_PL_OperatorSkill ' +
+          'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+          ' AND OperatorId = ' + IntToStr(OpId);
+        Q.Open;
+        while not Q.Eof do
+        begin
+          Skills.Add(Q.FieldByName('Operacion').AsString);
+          Q.Next;
+        end;
+      finally
+        Q.Free;
+      end;
+    end;
+
     tvCapOps.DataController.RecordCount := 0;
     tvCapOps.DataController.RecordCount := Length(FOperaciones);
     for I := 0 to High(FOperaciones) do
     begin
-      HasCap := (OpId > 0) and FRepo.OperarioPotFerOperacio(OpId, FOperaciones[I]);
+      HasCap := (OpId > 0) and (Skills.IndexOf(FOperaciones[I]) >= 0);
       tvCapOps.DataController.Values[I, colCapOpsNom.Index] := FOperaciones[I];
       tvCapOps.DataController.Values[I, colCapOpsCheck.Index] := HasCap;
     end;
-    // Deshabilitar edici'on si no hay operario seleccionado
     colCapOpsCheck.Options.Editing := (OpId > 0);
   finally
+    Skills.Free;
     tvCapOps.EndUpdate;
   end;
 end;
@@ -295,6 +413,8 @@ var
   Checked: Boolean;
   V: Variant;
   Cap: TCapacitacion;
+  Cmd: TADOCommand;
+  CE: string;
 begin
   OpId := GetSelectedCapOperarioId;
   if OpId <= 0 then Exit;
@@ -309,16 +429,33 @@ begin
   else
     Checked := V;
 
-  if Checked then
-  begin
-    Cap.OperarioId := OpId;
-    Cap.Operacion := Operacio;
-    FRepo.AddCapacitacion(Cap);
-  end
-  else
-    FRepo.RemoveCapacitacion(OpId, Operacio);
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    if Checked then
+    begin
+      Cmd.CommandText := 'IF NOT EXISTS (SELECT 1 FROM FS_PL_OperatorSkill WHERE CodigoEmpresa = ' + CE +
+        ' AND OperatorId = ' + IntToStr(OpId) +
+        ' AND Operacion = N''' + StringReplace(Operacio, '''', '''''', [rfReplaceAll]) + ''') ' +
+        'INSERT INTO FS_PL_OperatorSkill (CodigoEmpresa, OperatorId, Operacion) VALUES (' +
+        CE + ', ' + IntToStr(OpId) + ', N''' + StringReplace(Operacio, '''', '''''', [rfReplaceAll]) + ''')';
+      Cap.OperarioId := OpId;
+      Cap.Operacion := Operacio;
+      FRepo.AddCapacitacion(Cap);
+    end
+    else
+    begin
+      Cmd.CommandText := 'DELETE FROM FS_PL_OperatorSkill WHERE CodigoEmpresa = ' + CE +
+        ' AND OperatorId = ' + IntToStr(OpId) +
+        ' AND Operacion = N''' + StringReplace(Operacio, '''', '''''', [rfReplaceAll]) + '''';
+      FRepo.RemoveCapacitacion(OpId, Operacio);
+    end;
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
 
-  // Actualizar tambien el grid de operarios si visible
   RefreshOperaris;
 end;
 
@@ -328,11 +465,25 @@ procedure TfrmGestionOperaris.btnDeptAddClick(Sender: TObject);
 var
   Nom, Desc: string;
   D: TDepartamento;
+  Cmd: TADOCommand;
 begin
   Nom := '';
   Desc := '';
   if InputDept(Nom, Desc, 'Nuevo Departamento') then
   begin
+    // Guardar en SQL
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'INSERT INTO FS_PL_Department (CodigoEmpresa, Nombre, Descripcion) VALUES (' +
+        IntToStr(DMPlanner.CodigoEmpresa) + ', ' +
+        'N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
+        'N''' + StringReplace(Desc, '''', '''''', [rfReplaceAll]) + ''')';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+    // Actualizar también el repo en memoria
     D.Id := 0;
     D.Nombre := Nom;
     D.Descripcion := Desc;
@@ -346,6 +497,7 @@ var
   DId: Integer;
   D: TDepartamento;
   Nom, Desc: string;
+  Cmd: TADOCommand;
 begin
   DId := GetSelectedDeptId;
   if DId <= 0 then Exit;
@@ -355,6 +507,19 @@ begin
   Desc := D.Descripcion;
   if InputDept(Nom, Desc, 'Editar Departamento') then
   begin
+    // Guardar en SQL
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'UPDATE FS_PL_Department SET ' +
+        'Nombre = N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
+        'Descripcion = N''' + StringReplace(Desc, '''', '''''', [rfReplaceAll]) + '''' +
+        ' WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+        ' AND DepartmentId = ' + IntToStr(DId);
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
     D.Nombre := Nom;
     D.Descripcion := Desc;
     FRepo.UpdateDepartamento(D);
@@ -366,6 +531,7 @@ procedure TfrmGestionOperaris.btnDeptDelClick(Sender: TObject);
 var
   DId: Integer;
   D: TDepartamento;
+  Cmd: TADOCommand;
 begin
   DId := GetSelectedDeptId;
   if DId <= 0 then Exit;
@@ -374,6 +540,16 @@ begin
   if MessageDlg('#191Eliminar departamento "' + D.Nombre + '"?',
     mtConfirmation, [mbYes, mbNo], 0) = mrYes then
   begin
+    // Eliminar en SQL
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'DELETE FROM FS_PL_Department WHERE CodigoEmpresa = ' +
+        IntToStr(DMPlanner.CodigoEmpresa) + ' AND DepartmentId = ' + IntToStr(DId);
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
     FRepo.RemoveDepartamento(DId);
     RefreshDepts;
     RefreshOperaris;
@@ -388,18 +564,62 @@ var
   DIds: TArray<Integer>;
   Op: TOperario;
   I: Integer;
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  CE: string;
+  NewId: Integer;
 begin
   Nom := '';
   Cal := 'STD';
   SetLength(DIds, 0);
   if InputOperari(Nom, Cal, DIds, 'Nuevo Operario') then
   begin
-    Op.Id := FRepo.NextOperarioId;
+    CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+    // Insertar en SQL
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'INSERT INTO FS_PL_Operator (CodigoEmpresa, Nombre, Activo) VALUES (' +
+        CE + ', N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', 1)';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    // Obtener el ID generado
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT MAX(OperatorId) AS NewId FROM FS_PL_Operator WHERE CodigoEmpresa = ' + CE;
+      Q.Open;
+      NewId := Q.FieldByName('NewId').AsInteger;
+    finally
+      Q.Free;
+    end;
+
+    // Asignar departamentos en SQL
+    for I := 0 to High(DIds) do
+    begin
+      Cmd := TADOCommand.Create(nil);
+      try
+        Cmd.Connection := DMPlanner.ADOConnection;
+        Cmd.CommandText := 'INSERT INTO FS_PL_OperatorDepartment (CodigoEmpresa, OperatorId, DepartmentId) VALUES (' +
+          CE + ', ' + IntToStr(NewId) + ', ' + IntToStr(DIds[I]) + ')';
+        Cmd.Execute;
+      finally
+        Cmd.Free;
+      end;
+    end;
+
+    // Actualizar repo en memoria
+    Op.Id := NewId;
     Op.Nombre := Nom;
     Op.Calendario := Cal;
     FRepo.AddOperario(Op);
     for I := 0 to High(DIds) do
       FRepo.AssignOperariToDept(Op.Id, DIds[I]);
+
     RefreshAll;
   end;
 end;
@@ -411,11 +631,14 @@ var
   Nom, Cal: string;
   DIds, OldDIds: TArray<Integer>;
   Depts: TArray<TDepartamento>;
+  Cmd: TADOCommand;
+  CE: string;
 begin
   OpId := GetSelectedOpId;
   if OpId <= 0 then Exit;
   if not FRepo.GetOperarioById(OpId, Op) then Exit;
 
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
   Nom := Op.Nombre;
   Cal := Op.Calendario;
 
@@ -428,14 +651,47 @@ begin
 
   if InputOperari(Nom, Cal, DIds, 'Editar Operario') then
   begin
+    // Actualizar en SQL
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'UPDATE FS_PL_Operator SET Nombre = N''' +
+        StringReplace(Nom, '''', '''''', [rfReplaceAll]) + '''' +
+        ' WHERE CodigoEmpresa = ' + CE + ' AND OperatorId = ' + IntToStr(OpId);
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    // Rehacer departamentos en SQL
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'DELETE FROM FS_PL_OperatorDepartment WHERE CodigoEmpresa = ' +
+        CE + ' AND OperatorId = ' + IntToStr(OpId);
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+    for I := 0 to High(DIds) do
+    begin
+      Cmd := TADOCommand.Create(nil);
+      try
+        Cmd.Connection := DMPlanner.ADOConnection;
+        Cmd.CommandText := 'INSERT INTO FS_PL_OperatorDepartment (CodigoEmpresa, OperatorId, DepartmentId) VALUES (' +
+          CE + ', ' + IntToStr(OpId) + ', ' + IntToStr(DIds[I]) + ')';
+        Cmd.Execute;
+      finally
+        Cmd.Free;
+      end;
+    end;
+
+    // Actualizar repo en memoria
     Op.Nombre := Nom;
     Op.Calendario := Cal;
     FRepo.UpdateOperario(Op);
-
-    // Quitar departamentos antiguos
     for I := 0 to High(OldDIds) do
       FRepo.UnassignOperariFromDept(OpId, OldDIds[I]);
-    // A'nadir nuevos
     for I := 0 to High(DIds) do
       FRepo.AssignOperariToDept(OpId, DIds[I]);
 
@@ -447,6 +703,8 @@ procedure TfrmGestionOperaris.btnOpDelClick(Sender: TObject);
 var
   OpId: Integer;
   Op: TOperario;
+  Cmd: TADOCommand;
+  CE: string;
 begin
   OpId := GetSelectedOpId;
   if OpId <= 0 then Exit;
@@ -456,6 +714,18 @@ begin
     'Se perder'#225'n todas las asignaciones y capacitaciones.',
     mtConfirmation, [mbYes, mbNo], 0) = mrYes then
   begin
+    CE := IntToStr(DMPlanner.CodigoEmpresa);
+    // Eliminar en SQL (CASCADE eliminará skills y departments)
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText := 'DELETE FROM FS_PL_Operator WHERE CodigoEmpresa = ' +
+        CE + ' AND OperatorId = ' + IntToStr(OpId);
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
     FRepo.RemoveOperario(OpId);
     RefreshAll;
   end;

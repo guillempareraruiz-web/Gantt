@@ -52,7 +52,7 @@
       "description": "",
       "sortRules": [
         {
-          "field": "Prioridad",
+          "field": "CodigoArticulo",
           "direction": "asc",
           "weight": 5,
           "enabled": true

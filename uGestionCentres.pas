@@ -142,6 +142,9 @@ type
 
 implementation
 
+uses
+  uDMPlanner, Data.Win.ADODB, Data.DB;
+
 {$R *.dfm}
 
 { ========== Area CSV helpers ========== }
@@ -281,15 +284,39 @@ var
   I: Integer;
   Arr: TArray<string>;
   S: string;
+  Q: TADOQuery;
 begin
   FAreas.Clear;
 
-  // Areas por defecto siempre presentes
-  for I := 0 to High(DEFAULT_AREAS) do
-    if not FAreas.Contains(DEFAULT_AREAS[I]) then
-      FAreas.Add(DEFAULT_AREAS[I]);
+  // Cargar áreas desde SQL
+  if DMPlanner.IsConnected then
+  begin
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT Nombre FROM FS_PL_Area WHERE CodigoEmpresa = ' +
+        IntToStr(DMPlanner.CodigoEmpresa) + ' AND Activo = 1 ORDER BY Orden, Nombre';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        S := Q.FieldByName('Nombre').AsString;
+        if not FAreas.Contains(S) then
+          FAreas.Add(S);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+  end
+  else
+  begin
+    // Fallback: áreas por defecto si no hay conexión
+    for I := 0 to High(DEFAULT_AREAS) do
+      if not FAreas.Contains(DEFAULT_AREAS[I]) then
+        FAreas.Add(DEFAULT_AREAS[I]);
+  end;
 
-  // Areas extra que vengan de los centros
+  // Areas extra que vengan de los centros (por si hay alguna no registrada en SQL)
   for I := 0 to High(FCentres) do
   begin
     Arr := AreaSplit(FCentres[I].Area);
@@ -452,12 +479,31 @@ end;
 procedure TfrmGestionCentres.btnAreaAddClick(Sender: TObject);
 var
   Nom: string;
+  Cmd: TADOCommand;
 begin
   Nom := '';
   if InputArea(Nom, 'Nueva '#193'rea') then
   begin
     if not FAreas.Contains(Nom) then
+    begin
+      // Guardar en SQL
+      if DMPlanner.IsConnected then
+      begin
+        Cmd := TADOCommand.Create(nil);
+        try
+          Cmd.Connection := DMPlanner.ADOConnection;
+          Cmd.CommandText := 'INSERT INTO FS_PL_Area (CodigoEmpresa, Codigo, Nombre, Orden) VALUES (' +
+            IntToStr(DMPlanner.CodigoEmpresa) + ', ' +
+            'N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
+            'N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
+            IntToStr(FAreas.Count) + ')';
+          Cmd.Execute;
+        finally
+          Cmd.Free;
+        end;
+      end;
       FAreas.Add(Nom);
+    end;
     FAreas.Sort;
     RefreshAreas;
     RefreshAsigAreas;
@@ -468,6 +514,7 @@ procedure TfrmGestionCentres.btnAreaEditClick(Sender: TObject);
 var
   OldNom, NewNom: string;
   I: Integer;
+  Cmd: TADOCommand;
 begin
   OldNom := GetSelectedAreaName;
   if OldNom = '' then Exit;
@@ -475,6 +522,23 @@ begin
   NewNom := OldNom;
   if InputArea(NewNom, 'Editar '#193'rea') and (NewNom <> OldNom) then
   begin
+    // Actualizar en SQL
+    if DMPlanner.IsConnected then
+    begin
+      Cmd := TADOCommand.Create(nil);
+      try
+        Cmd.Connection := DMPlanner.ADOConnection;
+        Cmd.CommandText := 'UPDATE FS_PL_Area SET ' +
+          'Nombre = N''' + StringReplace(NewNom, '''', '''''', [rfReplaceAll]) + ''', ' +
+          'Codigo = N''' + StringReplace(NewNom, '''', '''''', [rfReplaceAll]) + '''' +
+          ' WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+          ' AND Nombre = N''' + StringReplace(OldNom, '''', '''''', [rfReplaceAll]) + '''';
+        Cmd.Execute;
+      finally
+        Cmd.Free;
+      end;
+    end;
+
     // Renombrar en todos los centros
     for I := 0 to High(FCentres) do
       if AreaContains(FCentres[I].Area, OldNom) then
@@ -497,6 +561,7 @@ procedure TfrmGestionCentres.btnAreaDelClick(Sender: TObject);
 var
   Nom: string;
   I: Integer;
+  Cmd: TADOCommand;
 begin
   Nom := GetSelectedAreaName;
   if Nom = '' then Exit;
@@ -505,6 +570,21 @@ begin
     'Se desasignar'#225' de todos los centros.',
     mtConfirmation, [mbYes, mbNo], 0) = mrYes then
   begin
+    // Eliminar en SQL
+    if DMPlanner.IsConnected then
+    begin
+      Cmd := TADOCommand.Create(nil);
+      try
+        Cmd.Connection := DMPlanner.ADOConnection;
+        Cmd.CommandText := 'DELETE FROM FS_PL_Area WHERE CodigoEmpresa = ' +
+          IntToStr(DMPlanner.CodigoEmpresa) +
+          ' AND Nombre = N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + '''';
+        Cmd.Execute;
+      finally
+        Cmd.Free;
+      end;
+    end;
+
     // Quitar de todos los centros
     for I := 0 to High(FCentres) do
       if AreaContains(FCentres[I].Area, Nom) then
