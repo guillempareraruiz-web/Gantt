@@ -230,12 +230,17 @@ type
     Dashboard1: TMenuItem;
     N4: TMenuItem;
     Proyectos1: TMenuItem;
+    ConfigEmpresa1: TMenuItem;
+    GenerarNodosDemo1: TMenuItem;
     Salir1: TMenuItem;
     N3: TMenuItem;
     Entidades1: TMenuItem;
     Operarios1: TMenuItem;
     Centros1: TMenuItem;
     Calendarios1: TMenuItem;
+    Areas1: TMenuItem;
+    Departamentos1: TMenuItem;
+    Capacitaciones1: TMenuItem;
     Turnos1: TMenuItem;
     Moldes1: TMenuItem;
     Utillajes1: TMenuItem;
@@ -265,7 +270,12 @@ type
     procedure Usuarios1Click(Sender: TObject);
     procedure InstalarDemos1Click(Sender: TObject);
     procedure Proyectos1Click(Sender: TObject);
+    procedure ConfigEmpresa1Click(Sender: TObject);
+    procedure GenerarNodosDemo1Click(Sender: TObject);
     procedure Dashboard1Click(Sender: TObject);
+    procedure Areas1Click(Sender: TObject);
+    procedure Departamentos1Click(Sender: TObject);
+    procedure Capacitaciones1Click(Sender: TObject);
     procedure UpdateContextLabels;
     procedure MostrarDashboard;
     procedure OcultarDashboard;
@@ -459,7 +469,8 @@ implementation
 uses uErpSampleBuilder, uGestionCentres, uKanbanBoard, uDispatchList,
   uFiniteCapacityPlanner, uCuadroPlanificacionDelDia, uGestionTurnos,
   uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
-  uGestionProyectos;
+  uGestionProyectos, uGestionAreas, uGestionDepartamentos, uGestionCapacitaciones,
+  uConfigEmpresa, uGenerarNodosDemo;
 
 {$R *.dfm}
 
@@ -689,22 +700,15 @@ end;
 
 procedure TForm1.Button20Click(Sender: TObject);
 var
-  Centres: TArray<TCentreTreball>;
-  I: Integer;
+  Frm: TfrmGestionCentres;
 begin
-  if not Assigned(FCentrosControl) then Exit;
-
-  Centres := Copy(FCentresRows);
-  if TfrmGestionCentres.Execute(Centres, FSampleData.Calendarios, FSampleData.CalendarioCentro) then
-  begin
-    FCentresRows := Centres;
-    // Aplicar canvis al Gantt
-    for I := 0 to High(FCentresRows) do
-      FGantt.UpdateCentre(FCentresRows[I].Id, FCentresRows[I]);
-    // Actualitzar panel de centres amb les rows recalculades
-    FCentrosControl.SetCentres(FCentresRows);
-    FCentrosControl.SetRows(FGantt.GetRowsCopy);
+  Frm := TfrmGestionCentres.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
   end;
+  DMPlanner.LoadCentres;
 end;
 
 procedure TForm1.Button21Click(Sender: TObject);
@@ -1688,24 +1692,14 @@ end;
 
 procedure TForm1.Gestionmarcadores1Click(Sender: TObject);
 var
-  markers: TArray<TGanttMarker>;
+  Frm: TfrmGestionMarkers;
 begin
-  if not Assigned(FGantt) then Exit;
-
-  markers := FGantt.GetMarkers;
-  TfrmGestionMarkers.Execute(markers,
-    procedure(const ADate: TDateTime)
-    begin
-      GoToDate(ADate);
-    end,
-    nil
-  );
-
-  // Aplicar canvis: substituir tots els markers
-  FGantt.ClearMarkers;
-  var i: Integer;
-  for i := 0 to High(markers) do
-    FGantt.AddMarker(markers[i]);
+  Frm := TfrmGestionMarkers.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
 end;
 
 procedure TForm1.Marcadoresautomaticos1Click(Sender: TObject);
@@ -1733,23 +1727,15 @@ end;
 
 procedure TForm1.Centros1Click(Sender: TObject);
 var
-  Centres: TArray<TCentreTreball>;
-  I: Integer;
+  Frm: TfrmGestionCentres;
 begin
-  if not Assigned(FCentrosControl) then Exit;
-
-  Centres := Copy(FCentresRows);
-  if TfrmGestionCentres.Execute(Centres, FSampleData.Calendarios, FSampleData.CalendarioCentro) then
-  begin
-    FCentresRows := Centres;
-    // Aplicar canvis al Gantt
-    for I := 0 to High(FCentresRows) do
-      FGantt.UpdateCentre(FCentresRows[I].Id, FCentresRows[I]);
-    // Actualitzar panel de centres amb les rows recalculades
-    FCentrosControl.SetCentres(FCentresRows);
-    FCentrosControl.SetRows(FGantt.GetRowsCopy);
+  Frm := TfrmGestionCentres.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
   end;
-
+  DMPlanner.LoadCentres;
 end;
 
 procedure TForm1.Kanban1Click(Sender: TObject);
@@ -2112,16 +2098,14 @@ end;
 
 procedure TForm1.Moldes1Click(Sender: TObject);
 var
-  Centros: TArray<string>;
-  I: Integer;
+  Frm: TfrmGestionMoldes;
 begin
-  // Centros desde FCentresRows (pueden haber cambiado en la sesion)
-  SetLength(Centros, Length(FCentresRows));
-  for I := 0 to High(FCentresRows) do
-    Centros[I] := FCentresRows[I].Titulo;
-
-  TfrmGestionMoldes.Execute(FMoldeRepo, Centros,
-    FSampleData.Operaciones, FSampleData.Articulos, FSampleData.Utillajes);
+  Frm := TfrmGestionMoldes.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
 end;
 
 procedure TForm1.CamposPersonalizados1Click(Sender: TObject);
@@ -2137,26 +2121,14 @@ begin
 end;
 
 procedure TForm1.Calendarios1Click(Sender: TObject);
-var
-  GetCal: TGetCalendarFunc;
 begin
-  if Assigned(FGantt) then
-    GetCal := function(const CentreId: Integer): TCentreCalendar
-      begin
-        Result := FGantt.GetCalendar(CentreId);
-      end
-  else
-    GetCal := function(const CentreId: Integer): TCentreCalendar
-      begin
-        Result := nil;
-      end;
-
-  TfrmGestionCalendarios.Execute(FSampleData, GetCal, YearOf(Now));
+  TfrmGestionCalendarios.Execute(YearOf(Now));
+  DMPlanner.LoadCalendars;
 end;
 
 procedure TForm1.Turnos1Click(Sender: TObject);
 begin
-  TfrmGestionTurnos.Execute(FTurnos);
+  TfrmGestionTurnos.Execute;
 end;
 
 procedure TForm1.odalaOF1Click(Sender: TObject);
@@ -2176,8 +2148,15 @@ begin
 end;
 
 procedure TForm1.Operarios1Click(Sender: TObject);
+var
+  Frm: TfrmGestionOperaris;
 begin
-  TfrmGestionOperaris.Execute(FOperariosRepo, FSampleData.Operaciones, FSampleData.CalendariosOperario);
+  Frm := TfrmGestionOperaris.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
 end;
 
 procedure TForm1.Roles1Click(Sender: TObject);
@@ -2693,15 +2672,84 @@ begin
       FCustomFieldDefs, FPlanningRuleEngine);
     FVistaGantt.Parent := Self;
     FVistaGantt.Align := alClient;
-    FVistaGantt.Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
   end;
+  FVistaGantt.Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
   FVistaGantt.Visible := True;
   FVistaGantt.BringToFront;
 end;
 
+procedure TForm1.ConfigEmpresa1Click(Sender: TObject);
+begin
+  if not IsAdmin then
+  begin
+    ShowMessage('Solo el administrador puede editar la configuración de empresa.');
+    Exit;
+  end;
+  TfrmConfigEmpresa.Execute;
+end;
+
+procedure TForm1.GenerarNodosDemo1Click(Sender: TObject);
+begin
+  if not IsAdmin then
+  begin
+    ShowMessage('Solo el administrador puede generar nodos demo.');
+    Exit;
+  end;
+  if DMPlanner.CurrentProjectId <= 0 then
+  begin
+    ShowMessage('Primero active un proyecto.');
+    Exit;
+  end;
+  TfrmGenerarNodosDemo.Execute;
+end;
+
 procedure TForm1.Dashboard1Click(Sender: TObject);
 begin
+  if FDashboard <> nil then
+   if FDashboard.Visible then
+   begin
+    FDashboard.Visible := False;
+    Exit;
+   end;
+
+
   MostrarDashboard;
+end;
+
+procedure TForm1.Areas1Click(Sender: TObject);
+var
+  Frm: TfrmGestionAreas;
+begin
+  Frm := TfrmGestionAreas.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TForm1.Departamentos1Click(Sender: TObject);
+var
+  Frm: TfrmGestionDepartamentos;
+begin
+  Frm := TfrmGestionDepartamentos.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TForm1.Capacitaciones1Click(Sender: TObject);
+var
+  Frm: TfrmGestionCapacitaciones;
+begin
+  Frm := TfrmGestionCapacitaciones.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
 end;
 
 procedure TForm1.EditarLinksClick(Sender: TObject);
@@ -2852,8 +2900,15 @@ begin
 end;
 
 procedure TForm1.GestionOperarisClick(Sender: TObject);
+var
+  Frm: TfrmGestionOperaris;
 begin
-  TfrmGestionOperaris.Execute(FOperariosRepo, FSampleData.Operaciones, FSampleData.CalendariosOperario);
+  Frm := TfrmGestionOperaris.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
   RefreshOperarioFilterItems;
 end;
 

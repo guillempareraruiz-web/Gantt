@@ -38,6 +38,7 @@ type
     colProjBasado: TcxGridColumn;
     colProjFecha: TcxGridColumn;
     colProjActivo: TcxGridColumn;
+    colProjFechaBloqueo: TcxGridColumn;
     lvProyectos: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
@@ -120,7 +121,7 @@ begin
     tvProyectos.DataController.RecordCount := 0;
     Q := OpenQuery(
       'SELECT p.ProjectId, p.Codigo, p.Nombre, p.Descripcion, p.EsMaster, p.EsEscenario, ' +
-      '  p.BasedOnProjectId, p.FechaCreacion, p.Activo, ' +
+      '  p.BasedOnProjectId, p.FechaCreacion, p.FechaBloqueo, p.Activo, ' +
       '  (SELECT p2.Codigo FROM FS_PL_Project p2 WHERE p2.CodigoEmpresa = p.CodigoEmpresa ' +
       '   AND p2.ProjectId = p.BasedOnProjectId) AS BasadoEn ' +
       'FROM FS_PL_Project p ' +
@@ -156,6 +157,11 @@ begin
         tvProyectos.DataController.Values[I, colProjFecha.Index] :=
           FormatDateTime('dd/mm/yyyy hh:nn', Q.FieldByName('FechaCreacion').AsDateTime);
         tvProyectos.DataController.Values[I, colProjActivo.Index] := Activo;
+        if Q.FieldByName('FechaBloqueo').IsNull then
+          tvProyectos.DataController.Values[I, colProjFechaBloqueo.Index] := Null
+        else
+          tvProyectos.DataController.Values[I, colProjFechaBloqueo.Index] :=
+            Q.FieldByName('FechaBloqueo').AsDateTime;
 
         FProjectIds[I] := Q.FieldByName('ProjectId').AsInteger;
         FIsMaster[I] := IsMaster;
@@ -439,8 +445,9 @@ end;
 procedure TfrmGestionProyectos.btnGuardarClick(Sender: TObject);
 var
   I, ProjId: Integer;
-  Codigo, Nombre, Descripcion: string;
+  Codigo, Nombre, Descripcion, BloqueoSQL: string;
   CE: string;
+  V: Variant;
 begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvProyectos.DataController.RecordCount - 1 do
@@ -450,6 +457,11 @@ begin
     Codigo := VarToStr(tvProyectos.DataController.Values[I, colProjCodigo.Index]);
     Nombre := VarToStr(tvProyectos.DataController.Values[I, colProjNombre.Index]);
     Descripcion := VarToStr(tvProyectos.DataController.Values[I, colProjDescripcion.Index]);
+    V := tvProyectos.DataController.Values[I, colProjFechaBloqueo.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then
+      BloqueoSQL := 'NULL'
+    else
+      BloqueoSQL := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', TDateTime(V)) + '''';
 
     if (Codigo = '') or (Nombre = '') then Continue;
 
@@ -457,6 +469,7 @@ begin
       'Codigo = ' + QStr(Codigo) + ', ' +
       'Nombre = ' + QStr(Nombre) + ', ' +
       'Descripcion = ' + QStr(Descripcion) + ', ' +
+      'FechaBloqueo = ' + BloqueoSQL + ', ' +
       'FechaModificacion = GETDATE() ' +
       'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + IntToStr(ProjId));
   end;

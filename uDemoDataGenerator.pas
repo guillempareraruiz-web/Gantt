@@ -45,6 +45,7 @@ type
     procedure CrearRolesYPermisos(ACodigoEmpresa: SmallInt);
     procedure CrearUsuariosDefecto(ACodigoEmpresa: SmallInt);
     procedure CrearCalendariosDefecto(ACodigoEmpresa: SmallInt);
+    procedure CrearTurnosDefecto(ACodigoEmpresa: SmallInt);
     procedure AsignarCalendariosACentros(ACodigoEmpresa: SmallInt);
 
     // Específico por sector
@@ -267,6 +268,7 @@ begin
       CrearEmpresa(Info);
       CrearRolesYPermisos(Info.Codigo);
       CrearCalendariosDefecto(Info.Codigo);
+      CrearTurnosDefecto(Info.Codigo);
 
       case ASector of
         sdMetalurgico:       PoblarSectorMetalurgico(Info.Codigo);
@@ -374,6 +376,18 @@ begin
     'SELECT c.CodigoEmpresa, c.CalendarId, d.DiaSemana, ''00:00:00'', ''23:59:00'' ' +
     'FROM FS_PL_Calendar c CROSS APPLY (VALUES (6),(7)) AS d(DiaSemana) ' +
     'WHERE c.CodigoEmpresa = ' + CE);
+end;
+
+procedure TDemoDataGenerator.CrearTurnosDefecto(ACodigoEmpresa: SmallInt);
+var
+  CE: string;
+begin
+  CE := IntToStr(ACodigoEmpresa);
+  // Perfil clásico: Mañana 06-14, Tarde 14-22, Noche 22-06
+  Exec('INSERT INTO FS_PL_Shift (CodigoEmpresa, Nombre, HoraInicio, HoraFin, Color, Activo, Orden) VALUES ' +
+    '(' + CE + ', ''Ma'#241'ana'', ''06:00:00'', ''14:00:00'', 16756824, 1, 0), ' +
+    '(' + CE + ', ''Tarde'',    ''14:00:00'', ''22:00:00'', 5810687,  1, 1), ' +
+    '(' + CE + ', ''Noche'',    ''22:00:00'', ''06:00:00'', 4482180,  1, 2)');
 end;
 
 procedure TDemoDataGenerator.AsignarCalendariosACentros(ACodigoEmpresa: SmallInt);

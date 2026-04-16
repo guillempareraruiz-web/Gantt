@@ -12,6 +12,7 @@ object Form1: TForm1
   Font.Style = []
   KeyPreview = True
   Menu = MainMenu1
+  WindowState = wsMaximized
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnKeyDown = FormKeyDown
@@ -572,13 +573,12 @@ object Form1: TForm1
       Left = 11
       Top = 4
       Width = 80
-      Height = 20
+      Height = 15
       Margins.Left = 10
       Margins.Right = 10
       Align = alLeft
       Caption = 'Tiempos Gantt:'
       Layout = tlCenter
-      ExplicitHeight = 15
     end
   end
   object pnlCentros: TPanel
@@ -1838,6 +1838,14 @@ object Form1: TForm1
         Caption = 'Proyectos...'
         OnClick = Proyectos1Click
       end
+      object ConfigEmpresa1: TMenuItem
+        Caption = 'Configuraci'#243'n de Empresa...'
+        OnClick = ConfigEmpresa1Click
+      end
+      object GenerarNodosDemo1: TMenuItem
+        Caption = 'Generar nodos demo...'
+        OnClick = GenerarNodosDemo1Click
+      end
       object N3: TMenuItem
         Caption = '-'
       end
@@ -1859,6 +1867,18 @@ object Form1: TForm1
       object Calendarios1: TMenuItem
         Caption = 'Calendarios'
         OnClick = Calendarios1Click
+      end
+      object Areas1: TMenuItem
+        Caption = #193'reas'
+        OnClick = Areas1Click
+      end
+      object Departamentos1: TMenuItem
+        Caption = 'Departamentos'
+        OnClick = Departamentos1Click
+      end
+      object Capacitaciones1: TMenuItem
+        Caption = 'Capacitaciones'
+        OnClick = Capacitaciones1Click
       end
       object Turnos1: TMenuItem
         Caption = 'Turnos'

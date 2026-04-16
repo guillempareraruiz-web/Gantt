@@ -4,11 +4,16 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, Data.DB, Data.Win.ADODB,
-  uDataConnector, uSQLServerConnector, uDBMigrations;
+  uDataConnector, uSQLServerConnector, uDBMigrations,
+  uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo;
 
 function UserCanAccessProject(AUserId, AProjectId: Integer): Boolean;
 
 type
+  TEstructuraNodos = (enSimple, enCompleja);
+    // enSimple   : 1 OF = 1 OT = 1 OP
+    // enCompleja : 1 OF = N OT = N OP
+
   TDMPlanner = class(TDataModule)
     ADOConnection: TADOConnection;
   private
@@ -21,11 +26,20 @@ type
     FCurrentProjectId: Integer;
     FCurrentProjectName: string;
     FCurrentProjectIsMaster: Boolean;
+    FCurrentProjectFechaBloqueo: TDateTime;
+    FCurrentProjectTieneBloqueo: Boolean;
     FCodigoEmpresa: SmallInt;
     FCurrentEmpresaNombre: string;
+    FPlanificaOperarios: Boolean;
+    FPlanificaMoldes: Boolean;
+    FEstructuraNodos: TEstructuraNodos;
+    FCalendarsRepo: TCalendarsRepo;
+    FCentresRepo: TCentresRepo;
+    FNodesRepo: TNodesRepo;
     procedure BuildConnectionString;
   public
     procedure AfterConstruction; override;
+    destructor Destroy; override;
 
     // Conexión
     function Connect: TConnectorResult;
@@ -39,14 +53,29 @@ type
     procedure LoadUserActiveProject(AUserId: Integer);
     procedure SetCurrentProject(AProjectId: Integer);
     procedure LoadEmpresaInfo;
+    procedure LoadCalendars;
+    procedure LoadCentres;
+    procedure LoadNodes(ANodeDataRepo: TNodeDataRepo = nil);
+    function CountTable(const ATableName: string): Integer;
+
+    property CalendarsRepo: TCalendarsRepo read FCalendarsRepo;
+    property CentresRepo: TCentresRepo read FCentresRepo;
+    property NodesRepo: TNodesRepo read FNodesRepo;
 
     // Acceso al conector
     property Connector: IGanttDataConnector read FConnector;
     property CurrentProjectId: Integer read FCurrentProjectId write FCurrentProjectId;
     property CurrentProjectName: string read FCurrentProjectName;
     property CurrentProjectIsMaster: Boolean read FCurrentProjectIsMaster;
+    property CurrentProjectFechaBloqueo: TDateTime read FCurrentProjectFechaBloqueo;
+    property CurrentProjectTieneBloqueo: Boolean read FCurrentProjectTieneBloqueo;
     property CurrentEmpresaNombre: string read FCurrentEmpresaNombre;
     property CodigoEmpresa: SmallInt read FCodigoEmpresa write FCodigoEmpresa;
+    property PlanificaOperarios: Boolean read FPlanificaOperarios;
+    property PlanificaMoldes: Boolean read FPlanificaMoldes;
+    property EstructuraNodos: TEstructuraNodos read FEstructuraNodos;
+    procedure SaveEmpresaPreferencias(APlanificaOperarios, APlanificaMoldes: Boolean;
+      AEstructuraNodos: TEstructuraNodos);
 
     // Configuración
     property Server: string read FServer write FServer;
@@ -93,6 +122,55 @@ begin
   FCurrentProjectId := -1;
   FCodigoEmpresa := 9999;
   FUseWindowsAuth := True;
+  FCalendarsRepo := TCalendarsRepo.Create(ADOConnection);
+  FCentresRepo := TCentresRepo.Create(ADOConnection, FCalendarsRepo);
+  FNodesRepo := TNodesRepo.Create(ADOConnection);
+end;
+
+destructor TDMPlanner.Destroy;
+begin
+  FNodesRepo.Free;
+  FCentresRepo.Free;
+  FCalendarsRepo.Free;
+  inherited;
+end;
+
+procedure TDMPlanner.LoadCalendars;
+begin
+  if (FCalendarsRepo <> nil) and IsConnected then
+    FCalendarsRepo.LoadFromDB(FCodigoEmpresa);
+end;
+
+procedure TDMPlanner.LoadCentres;
+begin
+  if (FCentresRepo <> nil) and IsConnected then
+    FCentresRepo.LoadFromDB(FCodigoEmpresa);
+end;
+
+procedure TDMPlanner.LoadNodes(ANodeDataRepo: TNodeDataRepo);
+begin
+  if (FNodesRepo <> nil) and IsConnected and (FCurrentProjectId > 0) then
+    FNodesRepo.LoadFromDB(FCodigoEmpresa, FCurrentProjectId, ANodeDataRepo);
+end;
+
+function TDMPlanner.CountTable(const ATableName: string): Integer;
+var
+  Q: TADOQuery;
+begin
+  Result := 0;
+  if not IsConnected then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text := 'SELECT COUNT(*) AS N FROM ' + ATableName +
+      ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa);
+    Q.Open;
+    if not Q.Eof then
+      Result := Q.FieldByName('N').AsInteger;
+  finally
+    Q.Free;
+  end;
 end;
 
 procedure TDMPlanner.BuildConnectionString;
@@ -171,8 +249,13 @@ var
   Q: TADOQuery;
 begin
   FCurrentEmpresaNombre := '';
+  FPlanificaOperarios := True;
+  FPlanificaMoldes := False;
+  FEstructuraNodos := enCompleja;
+
   if not IsConnected then Exit;
 
+  // Primera consulta: solo Nombre (funciona aunque V008 no se haya aplicado).
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := ADOConnection;
@@ -184,6 +267,60 @@ begin
   finally
     Q.Free;
   end;
+
+  // Segunda consulta: columnas de V008. Si no existen, quedarán los defaults.
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text :=
+      'SELECT PlanificaOperarios, PlanificaMoldes, EstructuraNodos ' +
+      'FROM FS_PL_Empresa WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa);
+    try
+      Q.Open;
+      if not Q.Eof then
+      begin
+        FPlanificaOperarios := Q.FieldByName('PlanificaOperarios').AsBoolean;
+        FPlanificaMoldes := Q.FieldByName('PlanificaMoldes').AsBoolean;
+        if Q.FieldByName('EstructuraNodos').AsInteger = 0 then
+          FEstructuraNodos := enSimple
+        else
+          FEstructuraNodos := enCompleja;
+      end;
+    except
+      // Columnas V008 aún no creadas: seguimos con los defaults en memoria.
+    end;
+  finally
+    Q.Free;
+  end;
+
+  LoadCalendars;
+  LoadCentres;
+end;
+
+procedure TDMPlanner.SaveEmpresaPreferencias(APlanificaOperarios,
+  APlanificaMoldes: Boolean; AEstructuraNodos: TEstructuraNodos);
+var
+  Cmd: TADOCommand;
+begin
+  if not IsConnected then Exit;
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := ADOConnection;
+    Cmd.CommandText :=
+      'UPDATE FS_PL_Empresa SET ' +
+      '  PlanificaOperarios = ' + IntToStr(Ord(APlanificaOperarios)) + ', ' +
+      '  PlanificaMoldes    = ' + IntToStr(Ord(APlanificaMoldes)) + ', ' +
+      '  EstructuraNodos    = ' + IntToStr(Ord(AEstructuraNodos)) + ' ' +
+      'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  FPlanificaOperarios := APlanificaOperarios;
+  FPlanificaMoldes := APlanificaMoldes;
+  FEstructuraNodos := AEstructuraNodos;
 end;
 
 procedure TDMPlanner.LoadMasterProject;
@@ -193,13 +330,15 @@ begin
   FCurrentProjectId := -1;
   FCurrentProjectName := '';
   FCurrentProjectIsMaster := False;
+  FCurrentProjectFechaBloqueo := 0;
+  FCurrentProjectTieneBloqueo := False;
 
   if not IsConnected then Exit;
 
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := ADOConnection;
-    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster FROM FS_PL_Project ' +
+    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster, FechaBloqueo FROM FS_PL_Project ' +
       'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
       ' AND EsMaster = 1 AND Activo = 1';
     Q.Open;
@@ -208,6 +347,9 @@ begin
       FCurrentProjectId := Q.FieldByName('ProjectId').AsInteger;
       FCurrentProjectName := Q.FieldByName('Nombre').AsString;
       FCurrentProjectIsMaster := True;
+      FCurrentProjectTieneBloqueo := not Q.FieldByName('FechaBloqueo').IsNull;
+      if FCurrentProjectTieneBloqueo then
+        FCurrentProjectFechaBloqueo := Q.FieldByName('FechaBloqueo').AsDateTime;
     end;
   finally
     Q.Free;
@@ -279,7 +421,7 @@ begin
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := ADOConnection;
-    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster FROM FS_PL_Project ' +
+    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster, FechaBloqueo FROM FS_PL_Project ' +
       'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
       ' AND ProjectId = ' + IntToStr(AProjectId);
     Q.Open;
@@ -288,6 +430,11 @@ begin
       FCurrentProjectId := Q.FieldByName('ProjectId').AsInteger;
       FCurrentProjectName := Q.FieldByName('Nombre').AsString;
       FCurrentProjectIsMaster := Q.FieldByName('EsMaster').AsBoolean;
+      FCurrentProjectTieneBloqueo := not Q.FieldByName('FechaBloqueo').IsNull;
+      if FCurrentProjectTieneBloqueo then
+        FCurrentProjectFechaBloqueo := Q.FieldByName('FechaBloqueo').AsDateTime
+      else
+        FCurrentProjectFechaBloqueo := 0;
     end;
   finally
     Q.Free;

@@ -88,9 +88,9 @@ object frmLogin: TfrmLogin
     end
     object lblError: TLabel
       Left = 50
-      Top = 210
+      Top = 184
       Width = 300
-      Height = 30
+      Height = 56
       AutoSize = False
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clRed

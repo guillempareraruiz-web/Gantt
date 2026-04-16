@@ -52,7 +52,18 @@ uses
   uGestionProyectos in 'uGestionProyectos.pas' {frmGestionProyectos},
   uAsignarUsuariosProyecto in 'uAsignarUsuariosProyecto.pas' {frmAsignarUsuariosProyecto},
   uDashboard in 'uDashboard.pas' {frmDashboard},
-  uVistaGantt in 'uVistaGantt.pas' {frmVistaGantt};
+  uVistaGantt in 'uVistaGantt.pas' {frmVistaGantt},
+  uCalendarsRepo in 'uCalendarsRepo.pas',
+  uCentresRepo in 'uCentresRepo.pas',
+  uNodesRepo in 'uNodesRepo.pas',
+  uGestionAreas in 'uGestionAreas.pas' {frmGestionAreas},
+  uGestionDepartamentos in 'uGestionDepartamentos.pas' {frmGestionDepartamentos},
+  uGestionCapacitaciones in 'uGestionCapacitaciones.pas' {frmGestionCapacitaciones},
+  uAsignarDepartamentos in 'uAsignarDepartamentos.pas' {frmAsignarDepartamentos},
+  uAsignarCentrosMolde in 'uAsignarCentrosMolde.pas' {frmAsignarCentrosMolde},
+  uEditarListaMolde in 'uEditarListaMolde.pas' {frmEditarListaMolde},
+  uConfigEmpresa in 'uConfigEmpresa.pas' {frmConfigEmpresa},
+  uGenerarNodosDemo in 'uGenerarNodosDemo.pas' {frmGenerarNodosDemo};
 
 {$R *.res}
 

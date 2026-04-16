@@ -11,13 +11,14 @@ object frmVistaGantt: TfrmVistaGantt
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
+  OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 15
   object pnlRoot: TPanel
     Left = 0
-    Top = 265
+    Top = 393
     Width = 1130
-    Height = 335
+    Height = 207
     Align = alClient
     BevelOuter = bvNone
     Color = clWhite
@@ -27,17 +28,110 @@ object frmVistaGantt: TfrmVistaGantt
       Left = 0
       Top = 0
       Width = 226
-      Height = 335
+      Height = 207
       Align = alLeft
       BevelOuter = bvNone
       Caption = 'pnlCentros'
       TabOrder = 0
+      object Panel2: TPanel
+        Left = 0
+        Top = 0
+        Width = 226
+        Height = 48
+        Align = alTop
+        BevelOuter = bvNone
+        Color = 15395562
+        ParentBackground = False
+        TabOrder = 0
+        DesignSize = (
+          226
+          48)
+        object Shape1: TShape
+          Left = 0
+          Top = 47
+          Width = 226
+          Height = 1
+          Align = alBottom
+          Brush.Color = clSilver
+          Pen.Color = clSilver
+          ExplicitTop = 41
+        end
+        object Shape2: TShape
+          Left = 225
+          Top = 0
+          Width = 1
+          Height = 47
+          Align = alRight
+          Brush.Color = clSilver
+          Pen.Color = clSilver
+          ExplicitLeft = 0
+          ExplicitTop = 46
+          ExplicitHeight = 226
+        end
+        object Button14: TButton
+          Left = 10
+          Top = 24
+          Width = 39
+          Height = 21
+          Caption = 'KPIs'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          TabOrder = 0
+        end
+        object Button15: TButton
+          Left = 51
+          Top = 24
+          Width = 39
+          Height = 21
+          Caption = 'KPI all'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          TabOrder = 1
+        end
+        object chkShowKPIs: TCheckBox
+          Left = 11
+          Top = 6
+          Width = 54
+          Height = 17
+          Caption = ' Show KPI'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          TabOrder = 2
+        end
+        object Button20: TButton
+          Left = 178
+          Top = 24
+          Width = 39
+          Height = 21
+          Anchors = [akTop, akRight]
+          Caption = 'Config'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          TabOrder = 3
+        end
+      end
     end
     object pnlGanttContainer: TPanel
       Left = 226
       Top = 0
       Width = 904
-      Height = 335
+      Height = 207
       Align = alClient
       BevelOuter = bvNone
       Caption = 'pnlGanttContainer'
@@ -49,7 +143,7 @@ object frmVistaGantt: TfrmVistaGantt
     Left = 0
     Top = 0
     Width = 1130
-    Height = 265
+    Height = 393
     Align = alTop
     BevelOuter = bvNone
     Color = 15395562
@@ -57,13 +151,14 @@ object frmVistaGantt: TfrmVistaGantt
     TabOrder = 1
     object pnlToolbar: TPanel
       Left = 0
-      Top = 0
+      Top = 124
       Width = 1130
       Height = 134
       Align = alTop
       Color = 15395562
       ParentBackground = False
       TabOrder = 0
+      Visible = False
       DesignSize = (
         1130
         134)
@@ -547,13 +642,14 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object Panel3: TPanel
       Left = 0
-      Top = 134
+      Top = 258
       Width = 1130
       Height = 50
       Align = alTop
       Color = 15395562
       ParentBackground = False
       TabOrder = 1
+      Visible = False
       DesignSize = (
         1130
         50)
@@ -1064,7 +1160,7 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object pnlBuscar: TPanel
       Left = 0
-      Top = 184
+      Top = 308
       Width = 1130
       Height = 51
       Align = alTop
@@ -1472,6 +1568,248 @@ object frmVistaGantt: TfrmVistaGantt
         PaintStyle = bpsGlyph
         TabOrder = 5
       end
+    end
+    object pnlTitulo: TPanel
+      Left = 0
+      Top = 0
+      Width = 1130
+      Height = 80
+      Align = alTop
+      BevelOuter = bvNone
+      Color = 3553567
+      ParentBackground = False
+      TabOrder = 3
+      DesignSize = (
+        1130
+        80)
+      object lblTitulo: TLabel
+        Left = 24
+        Top = 16
+        Width = 122
+        Height = 32
+        Caption = 'Vista Gantt'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -24
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = []
+        ParentFont = False
+      end
+      object lblSubtitulo: TLabel
+        Left = 24
+        Top = 52
+        Width = 148
+        Height = 15
+        Caption = 'Resumen de la sesi'#243'n actual'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+      object lblFechaHora: TLabel
+        Left = 640
+        Top = 28
+        Width = 240
+        Height = 28
+        Alignment = taRightJustify
+        Anchors = [akTop, akRight]
+        AutoSize = False
+        Caption = '--/--/---- --:--'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -19
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
+    object pnlSubTitulo: TPanel
+      Left = 0
+      Top = 80
+      Width = 1130
+      Height = 44
+      Align = alTop
+      BevelOuter = bvNone
+      Color = 7699523
+      ParentBackground = False
+      TabOrder = 4
+      DesignSize = (
+        1130
+        44)
+      object Button27: TButton
+        Tag = 1
+        Left = 640
+        Top = 6
+        Width = 25
+        Height = 25
+        Anchors = [akTop, akRight]
+        Caption = 'Debug'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        TabOrder = 0
+        OnClick = Button27Click
+      end
+    end
+  end
+  object popCentros: TPopupMenu
+    Left = 744
+    Top = 428
+    object INFO3: TMenuItem
+      Caption = 'Propiedades...'
+    end
+  end
+  object popGantt: TPopupMenu
+    Left = 832
+    Top = 428
+    object MenuItem1: TMenuItem
+      Caption = 'Asignar fecha bloqueo'
+    end
+    object Desactivarfechabloqueo1: TMenuItem
+      Caption = 'Desactivar fecha bloqueo'
+    end
+    object Calendario1: TMenuItem
+      Caption = 'Calendario'
+      object Fechayhora1: TMenuItem
+        Caption = 'Fecha y hora:'
+      end
+      object CentroAAA1: TMenuItem
+        Caption = 'Centro:'
+      end
+      object NombreAAA1: TMenuItem
+        Caption = 'Nombre Calendario: AAA'
+      end
+      object FranjalaborableSi1: TMenuItem
+        Caption = 'Franja laborable: Si'
+      end
+      object PeriodoNoLaborableInicio1: TMenuItem
+        Caption = 'Periodo NoLaborable Inicio:'
+      end
+      object PeriodoNoLaborableFin1: TMenuItem
+        Caption = 'Periodo NoLaborable Fin:'
+      end
+    end
+    object ShiftRow1: TMenuItem
+      Caption = 'Shift all Rows'
+    end
+    object ShiftRowallimpact1: TMenuItem
+      Caption = 'Shift Row all impact'
+    end
+    object N2: TMenuItem
+      Caption = '-'
+    end
+    object Aadirmarcador1: TMenuItem
+      Caption = 'A'#241'adir marcador...'
+    end
+    object Gestionmarcadores1: TMenuItem
+      Caption = 'Gesti'#243'n de marcadores...'
+    end
+    object Marcadoresautomaticos1: TMenuItem
+      AutoCheck = True
+      Caption = 'Marcadores autom'#225'ticos (Entrega/Necesaria)'
+    end
+  end
+  object popTimeline: TPopupMenu
+    Left = 744
+    Top = 492
+    object MenuItem2: TMenuItem
+      Caption = 'PopTimeline'
+    end
+  end
+  object popNode: TPopupMenu
+    Left = 832
+    Top = 492
+    object MenuItem3: TMenuItem
+      AutoCheck = True
+      Caption = 'Activar / bloquear'
+      Checked = True
+    end
+    object LibreMovimiento1: TMenuItem
+      AutoCheck = True
+      Caption = 'Libre Movimiento'
+    end
+    object Resetduracinoriginal1: TMenuItem
+      Caption = 'Restablecer duraci'#243'n original'
+    end
+    object CompactarOF1: TMenuItem
+      Caption = 'Compactar OF'
+      object odalaOF1: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OF'
+      end
+      object odalaOF2: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OF con prioridad'
+        HelpContext = 1
+      end
+      object CompactarOFapartirdelNodo1: TMenuItem
+        Caption = 'A partir del Nodo'
+      end
+      object ApartirdelNodoconprioridad1: TMenuItem
+        Caption = 'A partir del Nodo con prioridad'
+        HelpContext = 1
+      end
+    end
+    object CompactarOT1: TMenuItem
+      Caption = 'Compactar OT'
+      object otalaOT1: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OT'
+      end
+      object odalaOTconprioridad1: TMenuItem
+        Tag = 1
+        Caption = 'Toda la OT con prioridad'
+        HelpContext = 1
+      end
+      object ApartirdelNodo1: TMenuItem
+        Caption = 'A partir del Nodo'
+      end
+      object ApartirdelNodoconprioridad2: TMenuItem
+        Caption = 'A partir del Nodo con prioridad'
+        HelpContext = 1
+      end
+    end
+    object ShiftRow2: TMenuItem
+      Caption = 'ShiftRow'
+    end
+    object N1: TMenuItem
+      Caption = '-'
+    end
+    object Color1: TMenuItem
+      Caption = 'Color'
+      object Colordelnode1: TMenuItem
+        Caption = 'Color del node...'
+      end
+      object ColordelaOrdendetrabajo1: TMenuItem
+        Tag = 1
+        Caption = 'Color de la Orden de trabajo...'
+      end
+      object ColordelaOrdendeFabricacin1: TMenuItem
+        Tag = 2
+        Caption = 'Color de la Orden de Fabricaci'#243'n'
+      end
+      object ColordelPedido1: TMenuItem
+        Tag = -1
+        Caption = 'Color del Pedido...'
+        Enabled = False
+      end
+      object ColordelProyecto1: TMenuItem
+        Tag = -1
+        Caption = 'Color del Proyecto...'
+        Enabled = False
+      end
+    end
+    object ResaltarOF1: TMenuItem
+      Caption = 'Resaltar OF'
+    end
+    object Info1: TMenuItem
+      Caption = 'Info'
     end
   end
 end

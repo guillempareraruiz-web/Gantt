@@ -16,6 +16,7 @@ uses
   System.Math, System.DateUtils, System.Generics.Collections,
   Vcl.Controls, Vcl.Graphics, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls, Vcl.ComCtrls,
+  Data.Win.ADODB, Data.DB,
   uGanttTypes;
 
 const
@@ -141,6 +142,8 @@ type
     FCmbProfile: TComboBox;
 
     procedure LoadInitialTurnos;
+    procedure LoadFromDB;
+    procedure SaveToDB(const ATurnos: TArray<TTurno>);
     procedure LoadProfile(const AProfileIdx: Integer);
     procedure OnProfileChange(Sender: TObject);
     procedure RebuildRowFromTurno(const ATurno: TTurno);
@@ -152,10 +155,13 @@ type
     procedure OnRowChanged(Sender: TObject);
     procedure OnRowDelete(Sender: TObject);
   public
-    class function Execute(var ATurnos: TArray<TTurno>): Boolean;
+    class procedure Execute;
   end;
 
 implementation
+
+uses
+  uDMPlanner;
 
 {$R *.dfm}
 
@@ -533,6 +539,8 @@ begin
   if FLoaded then Exit;
   FLoaded := True;
 
+  LoadFromDB;
+
   for I := 0 to High(FInitialTurnos) do
   begin
     if FInitialTurnos[I].Id >= FNextId then
@@ -541,6 +549,101 @@ begin
   end;
   UpdateTimeline;
   UpdateAddButton;
+end;
+
+procedure TfrmGestionTurnos.LoadFromDB;
+var
+  Q: TADOQuery;
+  I: Integer;
+  T: TTurno;
+begin
+  SetLength(FInitialTurnos, 0);
+  if not uDMPlanner.DMPlanner.IsConnected then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := uDMPlanner.DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT ShiftId, Nombre, ' +
+      '  CAST(HoraInicio AS DATETIME) AS HoraIni, ' +
+      '  CAST(HoraFin AS DATETIME) AS HoraFin, ' +
+      '  ISNULL(Color, 0) AS Color, Activo, Orden ' +
+      'FROM FS_PL_Shift ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa ' +
+      'ORDER BY Orden, ShiftId';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := uDMPlanner.DMPlanner.CodigoEmpresa;
+    Q.Open;
+    SetLength(FInitialTurnos, Q.RecordCount);
+    I := 0;
+    while not Q.Eof do
+    begin
+      T.Id := Q.FieldByName('ShiftId').AsInteger;
+      T.Nombre := Q.FieldByName('Nombre').AsString;
+      T.HoraInicio := Frac(Q.FieldByName('HoraIni').AsDateTime);
+      T.HoraFin := Frac(Q.FieldByName('HoraFin').AsDateTime);
+      T.Color := TColor(Q.FieldByName('Color').AsInteger);
+      T.Activo := Q.FieldByName('Activo').AsBoolean;
+      T.Order := Q.FieldByName('Orden').AsInteger;
+      FInitialTurnos[I] := T;
+      Inc(I);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TfrmGestionTurnos.SaveToDB(const ATurnos: TArray<TTurno>);
+var
+  Cmd: TADOCommand;
+  I: Integer;
+  CE: string;
+
+  procedure Exec(const ASQL: string);
+  begin
+    Cmd.CommandText := ASQL;
+    Cmd.Execute;
+  end;
+
+  function QStr(const S: string): string;
+  begin
+    Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
+  end;
+
+  function TimeStr(const T: TDateTime): string;
+  begin
+    Result := '''' + FormatDateTime('hh:nn:ss', T) + '''';
+  end;
+
+begin
+  if not uDMPlanner.DMPlanner.IsConnected then Exit;
+
+  CE := IntToStr(uDMPlanner.DMPlanner.CodigoEmpresa);
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := uDMPlanner.DMPlanner.ADOConnection;
+    uDMPlanner.DMPlanner.ADOConnection.BeginTrans;
+    try
+      Exec('DELETE FROM FS_PL_Shift WHERE CodigoEmpresa = ' + CE);
+      for I := 0 to High(ATurnos) do
+      begin
+        Exec('INSERT INTO FS_PL_Shift (CodigoEmpresa, Nombre, HoraInicio, HoraFin, Color, Activo, Orden) VALUES (' +
+          CE + ', ' +
+          QStr(ATurnos[I].Nombre) + ', ' +
+          TimeStr(ATurnos[I].HoraInicio) + ', ' +
+          TimeStr(ATurnos[I].HoraFin) + ', ' +
+          IntToStr(Integer(ATurnos[I].Color)) + ', ' +
+          IntToStr(Ord(ATurnos[I].Activo)) + ', ' +
+          IntToStr(ATurnos[I].Order) + ')');
+      end;
+      uDMPlanner.DMPlanner.ADOConnection.CommitTrans;
+    except
+      uDMPlanner.DMPlanner.ADOConnection.RollbackTrans;
+      raise;
+    end;
+  finally
+    Cmd.Free;
+  end;
 end;
 
 procedure TfrmGestionTurnos.FormKeyDown(Sender: TObject; var Key: Word;
@@ -584,11 +687,22 @@ end;
 procedure TfrmGestionTurnos.btnAceptarClick(Sender: TObject);
 var
   Msg: string;
+  Turnos: TArray<TTurno>;
 begin
   if not ValidateTurnos(Msg) then
   begin
     MessageDlg(Msg, mtWarning, [mbOK], 0);
     Exit;
+  end;
+  Turnos := CollectTurnos;
+  try
+    SaveToDB(Turnos);
+  except
+    on E: Exception do
+    begin
+      MessageDlg('Error guardando turnos: ' + E.Message, mtError, [mbOK], 0);
+      Exit;
+    end;
   end;
   ModalResult := mrOk;
 end;
@@ -779,18 +893,13 @@ end;
 
 { --- Punto de entrada --- }
 
-class function TfrmGestionTurnos.Execute(var ATurnos: TArray<TTurno>): Boolean;
+class procedure TfrmGestionTurnos.Execute;
 var
   F: TfrmGestionTurnos;
 begin
   F := TfrmGestionTurnos.Create(nil);
   try
-    // Guardar turnos para cargar en OnShow (cuando el handle ya existe)
-    F.FInitialTurnos := Copy(ATurnos);
-
-    Result := F.ShowModal = mrOk;
-    if Result then
-      ATurnos := F.CollectTurnos;
+    F.ShowModal;
   finally
     F.Free;
   end;

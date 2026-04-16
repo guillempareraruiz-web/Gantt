@@ -14,7 +14,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.ExtCtrls, DateUtils,
-  uGanttHelpers,
+  uGanttHelpers, uCentreCalendar,
   uNodeDataRepo, uOperariosRepo, uMoldeRepo,
   uCustomFieldDefs, uPlanningRules, cxGraphics, cxControls, cxLookAndFeels,
   cxLookAndFeelPainters, cxContainer, cxEdit, dxSkinsCore, dxSkinBasic,
@@ -37,7 +37,7 @@ uses
   cxDateUtils, cxCheckBox, Vcl.Menus, dxCoreGraphics, cxButtonEdit, cxScrollBox,
   cxButtons, cxDropDownEdit, cxCheckComboBox, Vcl.StdCtrls, Vcl.WinXCtrls,
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
-  uGanttControl, uGanttTimeline, uGanttCentres, uGanttTypes;
+  uGanttControl, uGanttTimeline, uGanttCentres, uGanttTypes, uErpTypes;
 
 type
   TfrmVistaGantt = class(TForm)
@@ -149,6 +149,63 @@ type
     cxButton5: TcxButton;
     pnlCentros: TPanel;
     pnlGanttContainer: TPanel;
+    Panel2: TPanel;
+    Shape1: TShape;
+    Shape2: TShape;
+    Button14: TButton;
+    Button15: TButton;
+    chkShowKPIs: TCheckBox;
+    Button20: TButton;
+    pnlTitulo: TPanel;
+    lblTitulo: TLabel;
+    lblSubtitulo: TLabel;
+    lblFechaHora: TLabel;
+    pnlSubTitulo: TPanel;
+    Button27: TButton;
+    popCentros: TPopupMenu;
+    INFO3: TMenuItem;
+    popGantt: TPopupMenu;
+    MenuItem1: TMenuItem;
+    Desactivarfechabloqueo1: TMenuItem;
+    Calendario1: TMenuItem;
+    Fechayhora1: TMenuItem;
+    CentroAAA1: TMenuItem;
+    NombreAAA1: TMenuItem;
+    FranjalaborableSi1: TMenuItem;
+    PeriodoNoLaborableInicio1: TMenuItem;
+    PeriodoNoLaborableFin1: TMenuItem;
+    ShiftRow1: TMenuItem;
+    ShiftRowallimpact1: TMenuItem;
+    N2: TMenuItem;
+    Aadirmarcador1: TMenuItem;
+    Gestionmarcadores1: TMenuItem;
+    Marcadoresautomaticos1: TMenuItem;
+    popTimeline: TPopupMenu;
+    MenuItem2: TMenuItem;
+    popNode: TPopupMenu;
+    MenuItem3: TMenuItem;
+    LibreMovimiento1: TMenuItem;
+    Resetduracinoriginal1: TMenuItem;
+    CompactarOF1: TMenuItem;
+    odalaOF1: TMenuItem;
+    odalaOF2: TMenuItem;
+    CompactarOFapartirdelNodo1: TMenuItem;
+    ApartirdelNodoconprioridad1: TMenuItem;
+    CompactarOT1: TMenuItem;
+    otalaOT1: TMenuItem;
+    odalaOTconprioridad1: TMenuItem;
+    ApartirdelNodo1: TMenuItem;
+    ApartirdelNodoconprioridad2: TMenuItem;
+    ShiftRow2: TMenuItem;
+    N1: TMenuItem;
+    Color1: TMenuItem;
+    Colordelnode1: TMenuItem;
+    ColordelaOrdendetrabajo1: TMenuItem;
+    ColordelaOrdendeFabricacin1: TMenuItem;
+    ColordelPedido1: TMenuItem;
+    ColordelProyecto1: TMenuItem;
+    ResaltarOF1: TMenuItem;
+    Info1: TMenuItem;
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
@@ -163,6 +220,8 @@ type
     procedure GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
     procedure GanttMarkerDblClick(Sender: TObject; const MarkerId: Integer);
     procedure CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
+    procedure Button27Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
   private
     FNodeRepo: TNodeDataRepo;
     FOperariosRepo: TOperariosRepo;
@@ -172,6 +231,7 @@ type
     FGanttControl: TGanttControl;
     FTimelineControl: TGanttTimelineControl;
     FCentrosControl: TGanttCentresControl;
+    FUpdatingViewport: Boolean;
   public
     constructor CreateVista(AOwner: TComponent;
       ANodeRepo: TNodeDataRepo;
@@ -183,11 +243,19 @@ type
     property TimelineControl: TGanttTimelineControl read FTimelineControl;
     property CentrosControl: TGanttCentresControl read FCentrosControl;
     procedure Inicializar(const AFechaInicio, AFechaFin: TDateTime);
+    procedure CargarCentros;
+    procedure CargarDependencias;
+    procedure CargarMarcadores;
+    procedure AplicarCalendariosAGantt;
+    procedure IrAFecha(const ADate: TDateTime);
   end;
 
 implementation
 
 {$R *.dfm}
+
+uses
+  uDMPlanner, Vcl.Dialogs, Data.Win.ADODB, Data.DB;
 
 constructor TfrmVistaGantt.CreateVista(AOwner: TComponent;
   ANodeRepo: TNodeDataRepo;
@@ -208,15 +276,22 @@ begin
   FTimelineControl.Parent := pnlGanttContainer;
   FTimelineControl.Align := alTop;
   FTimelineControl.LeftWidth := 0;
+  FTimelineControl.PopupMenu := popTimeline;
 
   FGanttControl := TGanttControl.Create(Self);
   FGanttControl.Parent := pnlGanttContainer;
   FGanttControl.Align := alClient;
   FGanttControl.ShowHint := True;
+  FGanttControl.NodePopupMenu := popNode;
+  FGanttControl.PopupMenu := popGantt;
+  // Importante: el Gantt necesita el repo para resolver NodeData al pintar.
+  // Sin esto, BuildDataIdIndex/RebuildLayout acceden a puntero nil.
+  FGanttControl.SetNodeRepo(FNodeRepo);
 
   FCentrosControl := TGanttCentresControl.Create(Self);
   FCentrosControl.Parent := pnlCentros;
   FCentrosControl.Align := alLeft;
+  FCentrosControl.PopupMenu := popCentros;
 
   pnlCentros.Width := FCentrosControl.BaseWidth;
   FCentrosControl.VerIndicadores := False;
@@ -237,6 +312,11 @@ begin
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
 end;
 
+procedure TfrmVistaGantt.FormCreate(Sender: TObject);
+begin
+  Panel1.Height := pnlTitulo.Height + pnlSubTitulo.Height;
+end;
+
 procedure TfrmVistaGantt.Inicializar(const AFechaInicio, AFechaFin: TDateTime);
 var
   T0, T1: TDateTime;
@@ -247,6 +327,238 @@ begin
     T1 := DayEnd(T0);
 
   FTimelineControl.SetTimeRange(T0, T1);
+  // También el Gantt: sin esto, FContentWidth queda limitado a ClientWidth
+  // y el panning del timeline no puede desplazar el Gantt (MaxScrollX = 0).
+  FGanttControl.SetTimeRange(T0, T1);
+
+  CargarCentros;
+
+  // Centrar la vista en la fecha actual al abrir.
+  IrAFecha(Now);
+end;
+
+procedure TfrmVistaGantt.Button27Click(Sender: TObject);
+begin
+  pnlToolbar.Visible := not pnlToolbar.Visible;
+  Panel3.Visible := not Panel3.Visible;
+
+  if pnlToolbar.Visible then
+   Panel1.Height := pnlToolbar.Height + Panel3.Height
+  else
+   Panel1.Height := pnlTitulo.Height + pnlSubTitulo.Height;
+
+end;
+
+procedure TfrmVistaGantt.CargarCentros;
+var
+  Centres: TArray<TCentreTreball>;
+  CentresLocal: TArray<TCentreTreball>;
+  Rows: TArray<TRowLayout>;
+  Nodes: TArray<TNode>;
+  I: Integer;
+  Y: Single;
+begin
+  if DMPlanner.CentresRepo = nil then Exit;
+
+  Centres := DMPlanner.CentresRepo.GetAll;
+  CentresLocal := Centres;
+
+  FCentrosControl.GetCentreName :=
+    function(const CentreId: Integer): string
+    var
+      J: Integer;
+    begin
+      Result := '';
+      for J := 0 to High(CentresLocal) do
+        if CentresLocal[J].Id = CentreId then
+          Exit(CentresLocal[J].Titulo);
+    end;
+
+  FCentrosControl.SetCentres(Centres);
+
+  // Cargar nodos reales del proyecto activo desde BD.
+  // LoadNodes limpia y rellena el FNodeRepo con los NodeData correspondientes.
+  DMPlanner.LoadNodes(FNodeRepo);
+  if DMPlanner.NodesRepo <> nil then
+    Nodes := DMPlanner.NodesRepo.GetAll
+  else
+    SetLength(Nodes, 0);
+
+  FGanttControl.SetData(Centres, Nodes, FTimelineControl.StartTime);
+  FGanttControl.RebuildOpIdIndex;
+  FGanttControl.RebuildNodeLayoutIndex;
+
+  // Copiar reglas de cada calendario al calendario interno del Gantt por centro.
+  AplicarCalendariosAGantt;
+
+  // Dependencias entre nodos (flechas)
+  CargarDependencias;
+
+  // Marcadores verticales del proyecto
+  CargarMarcadores;
+
+  // Fecha de bloqueo del proyecto (si el proyecto la tiene configurada)
+  if DMPlanner.CurrentProjectTieneBloqueo then
+    FGanttControl.FechaBloqueo := DMPlanner.CurrentProjectFechaBloqueo
+  else
+    FGanttControl.FechaBloqueo := 0;
+
+  // Usar el layout calculado por el Gantt y publicarlo a la columna de centros.
+  // Así ambos controles comparten las mismas filas y el scroll/zoom las mantiene.
+  FCentrosControl.SetRows(FGanttControl.GetRowsCopy);
+  FCentrosControl.Invalidate;
+end;
+
+procedure TfrmVistaGantt.CargarDependencias;
+var
+  Q: TADOQuery;
+  Links: TArray<TErpLink>;
+  I: Integer;
+begin
+  if (FGanttControl = nil) or (not DMPlanner.IsConnected) or
+     (DMPlanner.CurrentProjectId <= 0) then
+  begin
+    if FGanttControl <> nil then
+      FGanttControl.SetLinks(nil);
+    Exit;
+  end;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT FromNodeId, ToNodeId, TipoLink, PorcentajeDependencia ' +
+      'FROM FS_PL_Dependency ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa AND ProjectId = :ProjectId';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('ProjectId').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    SetLength(Links, Q.RecordCount);
+    I := 0;
+    while not Q.Eof do
+    begin
+      Links[I].FromNodeId := Q.FieldByName('FromNodeId').AsInteger;
+      Links[I].ToNodeId := Q.FieldByName('ToNodeId').AsInteger;
+      Links[I].LinkType := TLinkType(Q.FieldByName('TipoLink').AsInteger);
+      Links[I].PorcentajeDependencia := Q.FieldByName('PorcentajeDependencia').AsFloat;
+      Inc(I);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  FGanttControl.SetLinks(Links);
+end;
+
+procedure TfrmVistaGantt.CargarMarcadores;
+var
+  Q: TADOQuery;
+  M: TGanttMarker;
+begin
+  if (FGanttControl = nil) or (not DMPlanner.IsConnected) or
+     (DMPlanner.CurrentProjectId <= 0) then
+  begin
+    if FGanttControl <> nil then
+      FGanttControl.ClearMarkers;
+    Exit;
+  end;
+
+  FGanttControl.ClearMarkers;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT MarkerId, FechaHora, ISNULL(Caption, '''') AS Caption, ' +
+      '  ISNULL(Color, 0) AS Color, Estilo, GrosorLinea, ' +
+      '  Movible, Visible, Tag, ' +
+      '  ISNULL(FontName, '''') AS FontName, ISNULL(FontSize, 0) AS FontSize, ' +
+      '  ISNULL(FontColor, 0) AS FontColor, FontStyle, ' +
+      '  OrientacionTexto, AlineacionTexto ' +
+      'FROM FS_PL_Marker ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa AND ProjectId = :ProjectId ' +
+      '  AND Visible = 1 ' +
+      'ORDER BY FechaHora';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('ProjectId').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FillChar(M, SizeOf(M), 0);
+      M.Id := Q.FieldByName('MarkerId').AsInteger;
+      M.DateTime := Q.FieldByName('FechaHora').AsDateTime;
+      M.Caption := Q.FieldByName('Caption').AsString;
+      M.Color := TColor(Q.FieldByName('Color').AsInteger);
+      M.Style := TMarkerStyle(Q.FieldByName('Estilo').AsInteger);
+      M.StrokeWidth := Q.FieldByName('GrosorLinea').AsFloat;
+      if M.StrokeWidth <= 0 then M.StrokeWidth := 1;
+      M.Moveable := Q.FieldByName('Movible').AsBoolean;
+      M.Visible := Q.FieldByName('Visible').AsBoolean;
+      M.Tag := Q.FieldByName('Tag').AsInteger;
+      M.FontName := Q.FieldByName('FontName').AsString;
+      M.FontSize := Q.FieldByName('FontSize').AsInteger;
+      M.FontColor := TColor(Q.FieldByName('FontColor').AsInteger);
+      M.TextOrientation := TMarkerTextOrientation(Q.FieldByName('OrientacionTexto').AsInteger);
+      M.TextAlign := TMarkerTextAlign(Q.FieldByName('AlineacionTexto').AsInteger);
+      FGanttControl.AddMarker(M);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TfrmVistaGantt.IrAFecha(const ADate: TDateTime);
+var
+  SX: Single;
+begin
+  if (FTimelineControl = nil) or (FGanttControl = nil) then Exit;
+  SX := FTimelineControl.CalcScrollXToCenterDate(ADate);
+  FTimelineControl.ScrollX := SX;
+  FGanttControl.ScrollX := SX;
+end;
+
+procedure TfrmVistaGantt.AplicarCalendariosAGantt;
+var
+  Centres: TArray<TCentreTreball>;
+  I, Dia: Integer;
+  SrcCal, DstCal: TCentreCalendar;
+  RefDate: TDateTime;
+  Periods: TArray<TNonWorkingPeriod>;
+begin
+  if (DMPlanner.CentresRepo = nil) or (FGanttControl = nil) then Exit;
+
+  Centres := DMPlanner.CentresRepo.GetAll;
+
+  // Tomamos una semana de referencia (lunes=1..domingo=7) y pedimos al
+  // calendario de cada centro las franjas de cada día. Esas franjas se copian
+  // al calendario interno del Gantt para ese centro.
+  // Usamos DayOfTheWeek (Delphi: 1=Dom..7=Sáb) — aquí iteramos valores brutos 1..7
+  // tal como los expone uCentreCalendar, que usa DayOfTheWeek internamente.
+  for I := 0 to High(Centres) do
+  begin
+    SrcCal := DMPlanner.CentresRepo.GetCalendarFor(Centres[I].Id);
+    if SrcCal = nil then Continue;
+
+    DstCal := FGanttControl.GetCalendar(Centres[I].Id);
+    if DstCal = nil then Continue;
+
+    DstCal.Name := SrcCal.Name;
+
+    // Recorremos 7 días consecutivos a partir de un lunes conocido
+    // (01/01/2024 fue lunes). Así cubrimos los 7 posibles valores del día.
+    RefDate := EncodeDate(2024, 1, 1);
+    for Dia := 0 to 6 do
+    begin
+      Periods := SrcCal.NonWorkingPeriodsForDate(RefDate + Dia);
+      // SetDayNonWorkingPeriods espera el mismo índice que DayOfTheWeek
+      DstCal.SetDayNonWorkingPeriods(
+        DayOfTheWeek(RefDate + Dia), Periods);
+    end;
+  end;
+
+  FGanttControl.Invalidate;
 end;
 
 procedure TfrmVistaGantt.pnlGanttContainerResize(Sender: TObject);
@@ -257,35 +569,55 @@ end;
 procedure TfrmVistaGantt.TimelineViewportChanged(Sender: TObject;
   const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
 begin
-  // TODO (paso siguiente)
+  if FUpdatingViewport then Exit;
+  FUpdatingViewport := True;
+  try
+    if Assigned(FGanttControl) then
+      FGanttControl.SetViewport(StartTime, PxPerMinute, ScrollX);
+  finally
+    FUpdatingViewport := False;
+  end;
 end;
 
 procedure TfrmVistaGantt.TimelineInteraction(Sender: TObject;
   const Interacting: Boolean);
 begin
-  // TODO (paso siguiente)
+  if Assigned(FGanttControl) then
+    FGanttControl.TimelineInteraction(Sender, Interacting);
 end;
 
 procedure TfrmVistaGantt.GanttViewportChanged(Sender: TObject;
   const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
 begin
-  // TODO (paso siguiente)
+  if FUpdatingViewport then Exit;
+  if not Assigned(FTimelineControl) then Exit;
+  FUpdatingViewport := True;
+  try
+    FTimelineControl.SetViewport(StartTime, PxPerMinute, ScrollX);
+  finally
+    FUpdatingViewport := False;
+  end;
 end;
 
 procedure TfrmVistaGantt.GanttScrollYChanged(Sender: TObject;
   const ScrollY: Single);
 begin
-  // TODO (paso siguiente)
+  if Assigned(FCentrosControl) then
+    FCentrosControl.ScrollY := ScrollY;
 end;
 
 procedure TfrmVistaGantt.GanttStatsChanged(Sender: TObject);
 begin
-  // TODO (paso siguiente)
+  // KPIs: pendiente cuando migremos el cálculo
 end;
 
 procedure TfrmVistaGantt.GanttLayoutChanged(Sender: TObject);
 begin
-  // TODO (paso siguiente)
+  if Assigned(FCentrosControl) and Assigned(FGanttControl) then
+  begin
+    FCentrosControl.SetRows(FGanttControl.GetRowsCopy);
+    FCentrosControl.Invalidate;
+  end;
 end;
 
 procedure TfrmVistaGantt.GanttNodeSelected(Sender: TObject);
@@ -313,7 +645,8 @@ end;
 procedure TfrmVistaGantt.CentresScrollYChanged(Sender: TObject;
   const ScrollY: Single);
 begin
-  // TODO (paso siguiente)
+  if Assigned(FGanttControl) then
+    FGanttControl.ApplyScrollYFromCentres(ScrollY);
 end;
 
 end.

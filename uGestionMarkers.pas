@@ -1,19 +1,20 @@
-unit uGestionMarkers;
+﻿unit uGestionMarkers;
 
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  System.Variants,
+  Winapi.Windows, System.SysUtils, System.Classes, System.Variants,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls,
-  // DevExpress
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
   cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
-  cxGridCustomTableView, cxGridTableView, cxTextEdit, cxSpinEdit,
-  cxCheckBox, cxContainer, cxClasses, cxFilter,
+  cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
+  cxCalendar, cxButtonEdit,
+  cxContainer, cxClasses, cxFilter,
   dxSkinsCore, dxSkinOffice2019Colorful,
-  dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
+  dxDateRanges, dxScrollbarAnnotations,
+  Data.Win.ADODB, Data.DB, dxSkinBasic, dxSkinBlack, dxSkinBlue,
   dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
@@ -29,306 +30,314 @@ uses
   dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, dxScrollbarAnnotations,
-  dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
-  dxDateRanges,
-  // Project
-  uGanttTypes, uMarkerEditor;
+  dxSkinXmas2008Blue;
 
 type
-  TGoToDateProc = reference to procedure(const ADate: TDateTime);
-  TMarkerChangedProc = reference to procedure;
-
   TfrmGestionMarkers = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    shpHeaderLine: TShape;
     pnlBottom: TPanel;
     btnClose: TButton;
-    lblCount: TLabel;
     pnlToolbar: TPanel;
-    btnEdit: TButton;
-    btnDelete: TButton;
-    btnGoTo: TButton;
-    grid: TcxGrid;
-    tv: TcxGridTableView;
+    btnAdd: TButton;
+    btnDel: TButton;
+    btnSave: TButton;
+    gridMarkers: TcxGrid;
+    tvMarkers: TcxGridTableView;
     colId: TcxGridColumn;
     colCaption: TcxGridColumn;
-    colDateTime: TcxGridColumn;
-    colStyle: TcxGridColumn;
+    colFechaHora: TcxGridColumn;
     colColor: TcxGridColumn;
-    colMoveable: TcxGridColumn;
     colVisible: TcxGridColumn;
-    lv: TcxGridLevel;
+    colMovible: TcxGridColumn;
+    lvMarkers: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
+    ColorDialog: TColorDialog;
     procedure FormCreate(Sender: TObject);
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnCloseClick(Sender: TObject);
-    procedure btnEditClick(Sender: TObject);
-    procedure btnDeleteClick(Sender: TObject);
-    procedure btnGoToClick(Sender: TObject);
+    procedure btnAddClick(Sender: TObject);
+    procedure btnDelClick(Sender: TObject);
+    procedure btnSaveClick(Sender: TObject);
+    procedure colColorCustomDrawCell(Sender: TcxCustomGridTableView;
+      ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
+      var ADone: Boolean);
+    procedure colColorButtonClick(Sender: TObject; AButtonIndex: Integer);
   private
-    FMarkers: TArray<TGanttMarker>;
-    FGoToDate: TGoToDateProc;
-    FOnMarkerChanged: TMarkerChangedProc;
-    FChanged: Boolean;
-
-    procedure GridDblClick(Sender: TObject);
-    procedure RefreshGrid;
-    procedure UpdateCount;
-    function GetFocusedMarkerId: Integer;
-    function GetSelectedMarkerIds: TArray<Integer>;
-    function StyleToStr(S: TMarkerStyle): string;
-    function FindMarkerIndex(AId: Integer): Integer;
-    procedure DoGoToFocused;
-  public
-    class procedure Execute(
-      var AMarkers: TArray<TGanttMarker>;
-      const AGoToDate: TGoToDateProc;
-      const AOnChanged: TMarkerChangedProc);
+    FIds: TArray<Integer>;
+    FColors: TArray<Integer>;
+    procedure LoadMarkers;
+    function GetSelectedIdx: Integer;
+    function Exec(const ASQL: string): Integer;
+    function OpenQuery(const ASQL: string): TADOQuery;
+    function QStr(const S: string): string;
   end;
-
-var
-  frmGestionMarkers: TfrmGestionMarkers;
 
 implementation
 
 {$R *.dfm}
 
-{ ============================================= }
-{             Execute                           }
-{ ============================================= }
+uses
+  uDMPlanner;
 
-class procedure TfrmGestionMarkers.Execute(
-  var AMarkers: TArray<TGanttMarker>;
-  const AGoToDate: TGoToDateProc;
-  const AOnChanged: TMarkerChangedProc);
-var
-  F: TfrmGestionMarkers;
+function TfrmGestionMarkers.QStr(const S: string): string;
 begin
-  F := TfrmGestionMarkers.Create(Application);
+  Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
+end;
+
+function TfrmGestionMarkers.Exec(const ASQL: string): Integer;
+var
+  Cmd: TADOCommand;
+begin
+  Cmd := TADOCommand.Create(nil);
   try
-    F.FMarkers := Copy(AMarkers);
-    F.FGoToDate := AGoToDate;
-    F.FOnMarkerChanged := AOnChanged;
-    F.FChanged := False;
-    F.RefreshGrid;
-    F.ShowModal;
-    if F.FChanged then
-      AMarkers := Copy(F.FMarkers);
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText := ASQL;
+    Cmd.Execute(Result, EmptyParam);
   finally
-    F.Free;
+    Cmd.Free;
   end;
 end;
 
-{ ============================================= }
-{             Form events                       }
-{ ============================================= }
+function TfrmGestionMarkers.OpenQuery(const ASQL: string): TADOQuery;
+begin
+  Result := TADOQuery.Create(nil);
+  Result.Connection := DMPlanner.ADOConnection;
+  Result.SQL.Text := ASQL;
+  Result.Open;
+end;
 
 procedure TfrmGestionMarkers.FormCreate(Sender: TObject);
 begin
-  tv.OnDblClick := GridDblClick;
-end;
-
-procedure TfrmGestionMarkers.FormKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
-begin
-  if Key = VK_ESCAPE then
-    ModalResult := mrCancel;
+  if DMPlanner.CurrentProjectName <> '' then
+    lblSubtitle.Caption := 'Proyecto: ' + DMPlanner.CurrentProjectName;
+  LoadMarkers;
 end;
 
 procedure TfrmGestionMarkers.btnCloseClick(Sender: TObject);
 begin
-  ModalResult := mrOk;
+  Close;
 end;
 
-{ ============================================= }
-{             Refresh                           }
-{ ============================================= }
-
-procedure TfrmGestionMarkers.GridDblClick(Sender: TObject);
-begin
-  DoGoToFocused;
-end;
-
-procedure TfrmGestionMarkers.RefreshGrid;
+procedure TfrmGestionMarkers.LoadMarkers;
 var
-  i: Integer;
-  rec: Integer;
+  Q: TADOQuery;
+  I: Integer;
 begin
-  tv.BeginUpdate;
+  tvMarkers.BeginUpdate;
   try
-    tv.DataController.RecordCount := Length(FMarkers);
-    for i := 0 to High(FMarkers) do
-    begin
-      rec := i;
-      tv.DataController.Values[rec, colId.Index] := FMarkers[i].Id;
-      tv.DataController.Values[rec, colCaption.Index] := FMarkers[i].Caption;
-      tv.DataController.Values[rec, colDateTime.Index] :=
-        FormatDateTime('dd/mm/yyyy hh:nn', FMarkers[i].DateTime);
-      tv.DataController.Values[rec, colStyle.Index] := StyleToStr(FMarkers[i].Style);
-      tv.DataController.Values[rec, colColor.Index] :=
-        '$' + IntToHex(FMarkers[i].Color, 6);
-      tv.DataController.Values[rec, colMoveable.Index] := FMarkers[i].Moveable;
-      tv.DataController.Values[rec, colVisible.Index] := FMarkers[i].Visible;
+    tvMarkers.DataController.RecordCount := 0;
+    SetLength(FIds, 0);
+    SetLength(FColors, 0);
+
+    if DMPlanner.CurrentProjectId <= 0 then Exit;
+
+    Q := OpenQuery(
+      'SELECT MarkerId, ISNULL(Caption, '''') AS Caption, FechaHora, ' +
+      '  ISNULL(Color, 0) AS Color, Visible, Movible ' +
+      'FROM FS_PL_Marker ' +
+      'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+      '  AND ProjectId = ' + IntToStr(DMPlanner.CurrentProjectId) +
+      ' ORDER BY FechaHora');
+    try
+      SetLength(FIds, Q.RecordCount);
+      SetLength(FColors, Q.RecordCount);
+      I := 0;
+      while not Q.Eof do
+      begin
+        tvMarkers.DataController.RecordCount := I + 1;
+        tvMarkers.DataController.Values[I, colId.Index] := Q.FieldByName('MarkerId').AsInteger;
+        tvMarkers.DataController.Values[I, colCaption.Index] := Q.FieldByName('Caption').AsString;
+        tvMarkers.DataController.Values[I, colFechaHora.Index] := Q.FieldByName('FechaHora').AsDateTime;
+        tvMarkers.DataController.Values[I, colColor.Index] := '';
+        tvMarkers.DataController.Values[I, colVisible.Index] := Q.FieldByName('Visible').AsBoolean;
+        tvMarkers.DataController.Values[I, colMovible.Index] := Q.FieldByName('Movible').AsBoolean;
+        FIds[I] := Q.FieldByName('MarkerId').AsInteger;
+        FColors[I] := Q.FieldByName('Color').AsInteger;
+        Inc(I);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
     end;
   finally
-    tv.EndUpdate;
+    tvMarkers.EndUpdate;
   end;
-  UpdateCount;
 end;
 
-procedure TfrmGestionMarkers.UpdateCount;
+procedure TfrmGestionMarkers.colColorCustomDrawCell(
+  Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
+  AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
+var
+  RecIdx: Integer;
+  R: TRect;
 begin
-  lblCount.Caption := IntToStr(Length(FMarkers)) + ' marcadores';
+  ADone := False;
+  if AViewInfo.GridRecord = nil then Exit;
+  RecIdx := AViewInfo.GridRecord.RecordIndex;
+  if (RecIdx < 0) or (RecIdx > High(FColors)) then Exit;
+  if FColors[RecIdx] = 0 then Exit;
+  R := AViewInfo.ContentBounds;
+  InflateRect(R, -2, -2);
+  Dec(R.Right, 22);
+  ACanvas.Brush.Color := TColor(FColors[RecIdx]);
+  ACanvas.FillRect(R);
+  ADone := True;
 end;
 
-{ ============================================= }
-{             Helpers                           }
-{ ============================================= }
-
-function TfrmGestionMarkers.StyleToStr(S: TMarkerStyle): string;
+procedure TfrmGestionMarkers.colColorButtonClick(Sender: TObject;
+  AButtonIndex: Integer);
+var
+  Idx: Integer;
 begin
-  case S of
-    msLine:   Result := 'L'#237'nea';
-    msDashed: Result := 'Discontinua';
-    msDotted: Result := 'Punteada';
+  Idx := GetSelectedIdx;
+  if (Idx < 0) or (Idx > High(FColors)) then Exit;
+  if FColors[Idx] <> 0 then
+    ColorDialog.Color := TColor(FColors[Idx])
   else
-    Result := 'L'#237'nea';
-  end;
-end;
-
-function TfrmGestionMarkers.GetFocusedMarkerId: Integer;
-var
-  rec: Integer;
-begin
-  Result := -1;
-  if tv.Controller.FocusedRecord = nil then Exit;
-  rec := tv.Controller.FocusedRecord.RecordIndex;
-  if (rec >= 0) and (rec <= High(FMarkers)) then
-    Result := FMarkers[rec].Id;
-end;
-
-function TfrmGestionMarkers.GetSelectedMarkerIds: TArray<Integer>;
-var
-  i, rec: Integer;
-begin
-  SetLength(Result, 0);
-  for i := 0 to tv.Controller.SelectedRecordCount - 1 do
+    ColorDialog.Color := clWhite;
+  if ColorDialog.Execute then
   begin
-    rec := tv.Controller.SelectedRecords[i].RecordIndex;
-    if (rec >= 0) and (rec <= High(FMarkers)) then
-    begin
-      SetLength(Result, Length(Result) + 1);
-      Result[High(Result)] := FMarkers[rec].Id;
-    end;
+    FColors[Idx] := Integer(ColorDialog.Color);
+    gridMarkers.Invalidate;
   end;
 end;
 
-function TfrmGestionMarkers.FindMarkerIndex(AId: Integer): Integer;
-var
-  i: Integer;
+function TfrmGestionMarkers.GetSelectedIdx: Integer;
 begin
-  Result := -1;
-  for i := 0 to High(FMarkers) do
-    if FMarkers[i].Id = AId then
-      Exit(i);
+  Result := tvMarkers.Controller.FocusedRecordIndex;
 end;
 
-{ ============================================= }
-{             Actions                           }
-{ ============================================= }
-
-procedure TfrmGestionMarkers.btnEditClick(Sender: TObject);
+procedure TfrmGestionMarkers.btnAddClick(Sender: TObject);
 var
-  mId, idx: Integer;
-  M: TGanttMarker;
-  res: TMarkerEditorResult;
+  Caption: string;
+  Q: TADOQuery;
+  NewId, Cnt: Integer;
+  CE, PID: string;
 begin
-  mId := GetFocusedMarkerId;
-  if mId < 0 then Exit;
-  idx := FindMarkerIndex(mId);
-  if idx < 0 then Exit;
-
-  M := FMarkers[idx];
-  res := TfrmMarkerEditor.Execute(M);
-
-  case res of
-    merOK:
-    begin
-      FMarkers[idx] := M;
-      FChanged := True;
-      RefreshGrid;
-    end;
-    merDelete:
-    begin
-      // Eliminar
-      if idx < High(FMarkers) then
-        FMarkers[idx] := FMarkers[High(FMarkers)];
-      SetLength(FMarkers, Length(FMarkers) - 1);
-      FChanged := True;
-      RefreshGrid;
-    end;
-  end;
-end;
-
-procedure TfrmGestionMarkers.btnDeleteClick(Sender: TObject);
-var
-  ids: TArray<Integer>;
-  i, j, last: Integer;
-  found: Boolean;
-begin
-  ids := GetSelectedMarkerIds;
-  if Length(ids) = 0 then
+  if DMPlanner.CurrentProjectId <= 0 then
   begin
-    // Si no hi ha selecció múltiple, agafar el focused
-    var focId: Integer := GetFocusedMarkerId;
-    if focId < 0 then Exit;
-    SetLength(ids, 1);
-    ids[0] := focId;
-  end;
-
-  if MessageDlg('Eliminar ' + IntToStr(Length(ids)) + ' marcador(es)?',
-    mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    ShowMessage('No hay proyecto activo.');
     Exit;
+  end;
 
-  // Eliminar de darrere cap endavant
-  for i := 0 to High(ids) do
+  Caption := InputBox('Nuevo Marcador', 'Texto:', '');
+  if Caption = '' then Exit;
+
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  PID := IntToStr(DMPlanner.CurrentProjectId);
+
+  Exec('INSERT INTO FS_PL_Marker (CodigoEmpresa, ProjectId, FechaHora, Caption) VALUES (' +
+    CE + ', ' + PID + ', GETDATE(), ' + QStr(Caption) + ')');
+
+  Q := OpenQuery('SELECT MAX(MarkerId) AS NewId FROM FS_PL_Marker WHERE CodigoEmpresa = ' +
+    CE + ' AND ProjectId = ' + PID);
+  try
+    NewId := Q.FieldByName('NewId').AsInteger;
+  finally
+    Q.Free;
+  end;
+
+  Cnt := tvMarkers.DataController.RecordCount;
+  tvMarkers.DataController.RecordCount := Cnt + 1;
+  tvMarkers.DataController.Values[Cnt, colId.Index] := NewId;
+  tvMarkers.DataController.Values[Cnt, colCaption.Index] := Caption;
+  tvMarkers.DataController.Values[Cnt, colFechaHora.Index] := Now;
+  tvMarkers.DataController.Values[Cnt, colColor.Index] := '';
+  tvMarkers.DataController.Values[Cnt, colVisible.Index] := True;
+  tvMarkers.DataController.Values[Cnt, colMovible.Index] := False;
+
+  SetLength(FIds, Cnt + 1);
+  SetLength(FColors, Cnt + 1);
+  FIds[Cnt] := NewId;
+  FColors[Cnt] := 0;
+  tvMarkers.Controller.FocusedRecordIndex := Cnt;
+end;
+
+procedure TfrmGestionMarkers.btnDelClick(Sender: TObject);
+var
+  Idx, MarkerId: Integer;
+begin
+  Idx := GetSelectedIdx;
+  if (Idx < 0) or (Idx > High(FIds)) then Exit;
+  if MessageDlg('¿Eliminar este marcador?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  MarkerId := FIds[Idx];
+  Exec('DELETE FROM FS_PL_Marker WHERE CodigoEmpresa = ' +
+    IntToStr(DMPlanner.CodigoEmpresa) + ' AND MarkerId = ' + IntToStr(MarkerId));
+  LoadMarkers;
+end;
+
+procedure TfrmGestionMarkers.btnSaveClick(Sender: TObject);
+var
+  I, MarkerId: Integer;
+  Caption: string;
+  FechaHora: TDateTime;
+  Visible, Movible: Boolean;
+  V: Variant;
+  CE: string;
+  Paso: string;
+
+  function AsBool(AV: Variant): Boolean;
   begin
-    for j := 0 to High(FMarkers) do
-    begin
-      if FMarkers[j].Id = ids[i] then
-      begin
-        last := High(FMarkers);
-        if j <> last then
-          FMarkers[j] := FMarkers[last];
-        SetLength(FMarkers, last);
-        Break;
+    Result := False;
+    if VarIsNull(AV) or VarIsEmpty(AV) then Exit;
+    try
+      Result := Boolean(AV);
+    except
+      try
+        Result := StrToBoolDef(VarToStr(AV), False);
+      except
+        Result := False;
       end;
     end;
   end;
 
-  FChanged := True;
-  RefreshGrid;
-end;
-
-procedure TfrmGestionMarkers.btnGoToClick(Sender: TObject);
 begin
-  DoGoToFocused;
-end;
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  Paso := '';
+  try
+    for I := 0 to tvMarkers.DataController.RecordCount - 1 do
+    begin
+      if I > High(FIds) then Continue;
+      MarkerId := FIds[I];
 
-procedure TfrmGestionMarkers.DoGoToFocused;
-var
-  mId, idx: Integer;
-begin
-  mId := GetFocusedMarkerId;
-  if mId < 0 then Exit;
-  idx := FindMarkerIndex(mId);
-  if idx < 0 then Exit;
+      Paso := Format('fila %d - Caption', [I]);
+      Caption := VarToStr(tvMarkers.DataController.Values[I, colCaption.Index]);
 
-  if Assigned(FGoToDate) then
-    FGoToDate(FMarkers[idx].DateTime);
+      Paso := Format('fila %d - FechaHora (variant)', [I]);
+      V := tvMarkers.DataController.Values[I, colFechaHora.Index];
+      if VarIsNull(V) or VarIsEmpty(V) then Continue;
+
+      Paso := Format('fila %d - FechaHora VarToDateTime (tipo=%d, valor="%s")',
+        [I, VarType(V), VarToStr(V)]);
+      try
+        FechaHora := VarToDateTime(V);
+      except
+        Continue;
+      end;
+
+      Paso := Format('fila %d - Visible', [I]);
+      Visible := AsBool(tvMarkers.DataController.Values[I, colVisible.Index]);
+
+      Paso := Format('fila %d - Movible', [I]);
+      Movible := AsBool(tvMarkers.DataController.Values[I, colMovible.Index]);
+
+      Paso := Format('fila %d - UPDATE SQL', [I]);
+      Exec('UPDATE FS_PL_Marker SET ' +
+        'Caption = ' + QStr(Caption) + ', ' +
+        'FechaHora = ''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FechaHora) + ''', ' +
+        'Color = ' + IntToStr(FColors[I]) + ', ' +
+        'Visible = ' + IntToStr(Ord(Visible)) + ', ' +
+        'Movible = ' + IntToStr(Ord(Movible)) +
+        ' WHERE CodigoEmpresa = ' + CE + ' AND MarkerId = ' + IntToStr(MarkerId));
+    end;
+    ShowMessage('Marcadores guardados correctamente.');
+    LoadMarkers;
+  except
+    on E: Exception do
+      raise Exception.Create('Error en ' + Paso + ': ' + E.Message);
+  end;
 end;
 
 end.

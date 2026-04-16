@@ -1,9 +1,9 @@
-object frmGestionMarkers: TfrmGestionMarkers
+object frmGestionDepartamentos: TfrmGestionDepartamentos
   Left = 0
   Top = 0
-  Caption = 'Gesti'#243'n de Marcadores'
-  ClientHeight = 500
-  ClientWidth = 900
+  Caption = 'Gesti'#243'n de Departamentos'
+  ClientHeight = 480
+  ClientWidth = 700
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -17,7 +17,7 @@ object frmGestionMarkers: TfrmGestionMarkers
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 900
+    Width = 700
     Height = 60
     Align = alTop
     BevelOuter = bvNone
@@ -27,9 +27,9 @@ object frmGestionMarkers: TfrmGestionMarkers
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 101
+      Width = 200
       Height = 25
-      Caption = 'Marcadores'
+      Caption = 'Departamentos'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWhite
       Font.Height = -19
@@ -40,9 +40,9 @@ object frmGestionMarkers: TfrmGestionMarkers
     object lblSubtitle: TLabel
       Left = 16
       Top = 36
-      Width = 228
+      Width = 300
       Height = 15
-      Caption = 'Marcadores temporales del proyecto activo'
+      Caption = 'Agrupaci'#243'n organizativa de operarios'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -53,19 +53,19 @@ object frmGestionMarkers: TfrmGestionMarkers
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 460
-    Width = 900
+    Top = 440
+    Width = 700
     Height = 40
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
     object btnClose: TButton
-      Left = 792
+      Left = 592
       Top = 6
       Width = 100
       Height = 28
-      Cancel = True
       Caption = 'Cerrar'
+      Cancel = True
       TabOrder = 0
       OnClick = btnCloseClick
     end
@@ -73,7 +73,7 @@ object frmGestionMarkers: TfrmGestionMarkers
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
-    Width = 900
+    Width = 700
     Height = 40
     Align = alTop
     BevelOuter = bvNone
@@ -97,7 +97,7 @@ object frmGestionMarkers: TfrmGestionMarkers
       OnClick = btnDelClick
     end
     object btnSave: TButton
-      Left = 174
+      Left = 172
       Top = 6
       Width = 120
       Height = 28
@@ -106,16 +106,15 @@ object frmGestionMarkers: TfrmGestionMarkers
       OnClick = btnSaveClick
     end
   end
-  object gridMarkers: TcxGrid
+  object gridDepts: TcxGrid
     Left = 0
     Top = 100
-    Width = 900
-    Height = 360
+    Width = 700
+    Height = 340
     Align = alClient
     TabOrder = 3
-    object tvMarkers: TcxGridTableView
+    object tvDepts: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
-      ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
       DataController.Summary.SummaryGroups = <>
@@ -123,56 +122,27 @@ object frmGestionMarkers: TfrmGestionMarkers
       OptionsData.Inserting = False
       OptionsView.GroupByBox = False
       OptionsView.Indicator = True
-      object colId: TcxGridColumn
+      object colDeptId: TcxGridColumn
         Caption = 'ID'
-        Options.Editing = False
         Width = 50
+        Options.Editing = False
       end
-      object colCaption: TcxGridColumn
-        Caption = 'Texto'
-        Width = 300
+      object colDeptNombre: TcxGridColumn
+        Caption = 'Nombre'
+        Width = 250
       end
-      object colFechaHora: TcxGridColumn
-        Caption = 'Fecha / hora'
-        PropertiesClassName = 'TcxDateEditProperties'
-        Width = 140
-      end
-      object colColor: TcxGridColumn
-        Caption = 'Color'
-        PropertiesClassName = 'TcxButtonEditProperties'
-        Properties.Buttons = <
-          item
-            Default = True
-            Kind = bkEllipsis
-          end>
-        Properties.ReadOnly = True
-        Properties.OnButtonClick = colColorButtonClick
-        OnCustomDrawCell = colColorCustomDrawCell
-        Width = 110
-      end
-      object colVisible: TcxGridColumn
-        Caption = 'Visible'
-        PropertiesClassName = 'TcxCheckBoxProperties'
-        Width = 60
-      end
-      object colMovible: TcxGridColumn
-        Caption = 'Movible'
-        PropertiesClassName = 'TcxCheckBoxProperties'
-        Width = 70
+      object colDeptDescripcion: TcxGridColumn
+        Caption = 'Descripci'#243'n'
+        Width = 350
       end
     end
-    object lvMarkers: TcxGridLevel
-      GridView = tvMarkers
+    object lvDepts: TcxGridLevel
+      GridView = tvDepts
     end
   end
   object LookAndFeel: TcxLookAndFeelController
-    NativeStyle = False
     SkinName = 'Office2019Colorful'
-    Left = 840
+    Left = 640
     Top = 12
-  end
-  object ColorDialog: TColorDialog
-    Left = 840
-    Top = 68
   end
 end

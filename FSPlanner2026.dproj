@@ -169,6 +169,45 @@
             <Form>frmPlanningRulesEditor</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uCuadroPlanificacionDelDia.pas">
+            <Form>frmCuadroPlanificacionDelDia</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionTurnos.pas">
+            <Form>frmGestionTurnos</Form>
+        </DCCReference>
+        <DCCReference Include="uDataConnector.pas"/>
+        <DCCReference Include="uSQLServerConnector.pas"/>
+        <DCCReference Include="uDMPlanner.pas">
+            <Form>DMPlanner</Form>
+            <DesignClass>TDataModule</DesignClass>
+        </DCCReference>
+        <DCCReference Include="uLogin.pas">
+            <Form>frmLogin</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionRoles.pas">
+            <Form>frmGestionRoles</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionUsuarios.pas">
+            <Form>frmGestionUsuarios</Form>
+        </DCCReference>
+        <DCCReference Include="uDBMigrations.pas"/>
+        <DCCReference Include="uDemoDataGenerator.pas"/>
+        <DCCReference Include="uGestionDemos.pas">
+            <Form>frmGestionDemos</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionProyectos.pas">
+            <Form>frmGestionProyectos</Form>
+        </DCCReference>
+        <DCCReference Include="uAsignarUsuariosProyecto.pas">
+            <Form>frmAsignarUsuariosProyecto</Form>
+        </DCCReference>
+        <DCCReference Include="uDashboard.pas">
+            <Form>frmDashboard</Form>
+        </DCCReference>
+        <DCCReference Include="uVistaGantt.pas">
+            <Form>frmVistaGantt</Form>
+        </DCCReference>
+        <DCCReference Include="uCalendarsRepo.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -1022,6 +1061,7 @@
                 <Platform value="Win32">True</Platform>
                 <Platform value="Win64">False</Platform>
             </Platforms>
+            <ModelSupport>False</ModelSupport>
         </BorlandProject>
         <ProjectFileVersion>12</ProjectFileVersion>
     </ProjectExtensions>

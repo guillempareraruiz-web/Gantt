@@ -186,6 +186,11 @@ object frmGestionProyectos: TfrmGestionProyectos
         Width = 80
         Options.Editing = False
       end
+      object colProjFechaBloqueo: TcxGridColumn
+        Caption = 'Fecha bloqueo'
+        PropertiesClassName = 'TcxDateEditProperties'
+        Width = 120
+      end
     end
     object lvProyectos: TcxGridLevel
       GridView = tvProyectos

@@ -1,19 +1,18 @@
 ﻿unit uGestionCentres;
-
 interface
-
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  System.Variants, System.Generics.Collections,
+  Winapi.Windows, System.SysUtils, System.Classes, System.Variants,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls,
-  // DevExpress
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
   cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
-  cxGridCustomTableView, cxGridTableView, cxTextEdit, cxSpinEdit,
-  cxCheckBox, cxContainer, cxClasses, cxFilter, cxPC,
+  cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
+  cxDropDownEdit, cxSpinEdit, cxButtonEdit,
+  cxContainer, cxClasses, cxFilter,
   dxSkinsCore, dxSkinOffice2019Colorful,
-  dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
+  dxDateRanges, dxScrollbarAnnotations,
+  Data.Win.ADODB, Data.DB, dxSkinBasic, dxSkinBlack, dxSkinBlue,
   dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
@@ -29,758 +28,429 @@ uses
   dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, dxScrollbarAnnotations,
-  dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
-  dxDateRanges,
-  // Project
-  uGanttTypes, uCentreInspector, uSampleDataGenerator;
-
+  dxSkinXmas2008Blue;
 type
   TfrmGestionCentres = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    shpHeaderLine: TShape;
     pnlBottom: TPanel;
     btnClose: TButton;
-    pc: TcxPageControl;
-    LookAndFeel: TcxLookAndFeelController;
-    // Tab Areas
-    tabAreas: TcxTabSheet;
-    pnlAreaToolbar: TPanel;
-    btnAreaAdd: TButton;
-    btnAreaEdit: TButton;
-    btnAreaDel: TButton;
-    gridAreas: TcxGrid;
-    tvAreas: TcxGridTableView;
-    colAreaNom: TcxGridColumn;
-    colAreaCentros: TcxGridColumn;
-    lvAreas: TcxGridLevel;
-    // Tab Centros
-    tabCentros: TcxTabSheet;
-    pnlCentroToolbar: TPanel;
-    btnCentroEdit: TButton;
+    pnlToolbar: TPanel;
+    btnAdd: TButton;
+    btnDel: TButton;
+    btnSave: TButton;
     gridCentros: TcxGrid;
     tvCentros: TcxGridTableView;
     colCentroId: TcxGridColumn;
-    colCentroCodi: TcxGridColumn;
+    colCentroCodigo: TcxGridColumn;
     colCentroTitulo: TcxGridColumn;
     colCentroSubtitulo: TcxGridColumn;
     colCentroArea: TcxGridColumn;
-    colCentroSeq: TcxGridColumn;
+    colCentroCalendario: TcxGridColumn;
+    colCentroSecuencial: TcxGridColumn;
     colCentroMaxLanes: TcxGridColumn;
-    colCentroOrder: TcxGridColumn;
+    colCentroOrden: TcxGridColumn;
     colCentroVisible: TcxGridColumn;
-    colCentroEnabled: TcxGridColumn;
+    colCentroHabilitado: TcxGridColumn;
+    colCentroColor: TcxGridColumn;
     lvCentros: TcxGridLevel;
-    // Tab Asignacion
-    tabAsignacion: TcxTabSheet;
-    splAsig: TSplitter;
-    pnlAsigLeft: TPanel;
-    lblAsigCentro: TLabel;
-    gridAsigCentros: TcxGrid;
-    tvAsigCentros: TcxGridTableView;
-    colAsigCentroId: TcxGridColumn;
-    colAsigCentroTitulo: TcxGridColumn;
-    lvAsigCentros: TcxGridLevel;
-    pnlAsigRight: TPanel;
-    lblAsigAreas: TLabel;
-    gridAsigAreas: TcxGrid;
-    tvAsigAreas: TcxGridTableView;
-    colAsigAreaNom: TcxGridColumn;
-    colAsigAreaCheck: TcxGridColumn;
-    lvAsigAreas: TcxGridLevel;
+    LookAndFeel: TcxLookAndFeelController;
+    ColorDialog: TColorDialog;
     procedure FormCreate(Sender: TObject);
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnCloseClick(Sender: TObject);
-    // Areas
-    procedure btnAreaAddClick(Sender: TObject);
-    procedure btnAreaEditClick(Sender: TObject);
-    procedure btnAreaDelClick(Sender: TObject);
-    // Centros
-    procedure btnCentroEditClick(Sender: TObject);
-    procedure CentroColumnChanged(Sender: TObject);
+    procedure btnAddClick(Sender: TObject);
+    procedure btnDelClick(Sender: TObject);
+    procedure btnSaveClick(Sender: TObject);
+    procedure colCentroColorButtonClick(Sender: TObject; AButtonIndex: Integer);
+    procedure colCentroColorCustomDrawCell(Sender: TcxCustomGridTableView;
+      ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
+      var ADone: Boolean);
   private
-    FCentres: TArray<TCentreTreball>;
-    FCalendarios: TArray<TSampleCalendario>;
-    FCalendarioCentro: TArray<Integer>;
-    FAreas: TList<string>;
-
-    // Refresh
-    procedure RefreshAreas;
-    procedure RefreshCentros;
-    procedure RefreshAsigCentros;
-    procedure RefreshAsigAreas;
-    procedure RefreshAll;
-
-    // Asignacion events
-    procedure AsigCentroFocusChanged(Sender: TcxCustomGridTableView;
-      APrevFocusedRecord, AFocusedRecord: TcxCustomGridRecord;
-      ANewItemRecordFocusingChanged: Boolean);
-    procedure AsigAreaCheckChanged(Sender: TObject);
-    procedure WMRefreshAfterCheck(var Msg: TMessage); message WM_USER + 100;
-
-    // Helpers
-    function GetSelectedAreaName: string;
-    function GetSelectedCentreIdx: Integer;
-    function GetSelectedAsigCentreIdx: Integer;
-    function CentreAreasStr(const ACentre: TCentreTreball): string;
-    function AreaCentrosStr(const AArea: string): string;
-    procedure RebuildAreaList;
-    function InputArea(var ANombre: string; const ATitle: string): Boolean;
-
-    // Area helpers en el camp Area del centre (CSV)
-    class function AreaContains(const AAreaField, AArea: string): Boolean;
-    class function AreaAdd(const AAreaField, AArea: string): string;
-    class function AreaRemove(const AAreaField, AArea: string): string;
-    class function AreaSplit(const AAreaField: string): TArray<string>;
-  public
-    class function Execute(var ACentres: TArray<TCentreTreball>;
-      const ACalendarios: TArray<TSampleCalendario> = nil;
-      const ACalendarioCentro: TArray<Integer> = nil): Boolean;
+    FCenterIds: TArray<Integer>;
+    FColors: TArray<Integer>;
+    FAreaIds: TArray<Integer>;
+    FAreaNames: TArray<string>;
+    FCalendarIds: TArray<Integer>;
+    FCalendarNames: TArray<string>;
+    procedure LoadAreas;
+    procedure LoadCalendars;
+    procedure LoadCentros;
+    procedure SetupCombos;
+    function GetSelectedIdx: Integer;
+    function AreaIdFromName(const AName: string): Integer;
+    function AreaNameFromId(AAreaId: Integer): string;
+    function CalendarIdFromName(const AName: string): Integer;
+    function CalendarNameFromId(ACalendarId: Integer): string;
+    function Exec(const ASQL: string): Integer;
+    function OpenQuery(const ASQL: string): TADOQuery;
+    function QStr(const S: string): string;
+    function QStrNullable(AId: Integer): string;
+    procedure RefreshColorCell(ARecIdx: Integer);
   end;
-
 implementation
-
-uses
-  uDMPlanner, Data.Win.ADODB, Data.DB;
-
 {$R *.dfm}
-
-{ ========== Area CSV helpers ========== }
-
-class function TfrmGestionCentres.AreaSplit(const AAreaField: string): TArray<string>;
-var
-  Parts: TArray<string>;
-  I, N: Integer;
-  S: string;
+uses
+  uDMPlanner;
+function TfrmGestionCentres.QStr(const S: string): string;
 begin
-  if Trim(AAreaField) = '' then
-  begin
-    SetLength(Result, 0);
-    Exit;
-  end;
-  Parts := AAreaField.Split([',']);
-  N := 0;
-  SetLength(Result, Length(Parts));
-  for I := 0 to High(Parts) do
-  begin
-    S := Trim(Parts[I]);
-    if S <> '' then
-    begin
-      Result[N] := S;
-      Inc(N);
-    end;
-  end;
-  SetLength(Result, N);
+  Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
 end;
-
-class function TfrmGestionCentres.AreaContains(const AAreaField, AArea: string): Boolean;
-var
-  Arr: TArray<string>;
-  S: string;
+function TfrmGestionCentres.QStrNullable(AId: Integer): string;
 begin
-  Result := False;
-  Arr := AreaSplit(AAreaField);
-  for S in Arr do
-    if SameText(S, AArea) then
-      Exit(True);
-end;
-
-class function TfrmGestionCentres.AreaAdd(const AAreaField, AArea: string): string;
-begin
-  if AreaContains(AAreaField, AArea) then
-    Exit(AAreaField);
-  if Trim(AAreaField) = '' then
-    Result := AArea
+  if AId <= 0 then
+    Result := 'NULL'
   else
-    Result := AAreaField + ', ' + AArea;
+    Result := IntToStr(AId);
 end;
-
-class function TfrmGestionCentres.AreaRemove(const AAreaField, AArea: string): string;
+function TfrmGestionCentres.Exec(const ASQL: string): Integer;
 var
-  Arr: TArray<string>;
-  S: string;
-  First: Boolean;
+  Cmd: TADOCommand;
 begin
-  Result := '';
-  First := True;
-  Arr := AreaSplit(AAreaField);
-  for S in Arr do
-    if not SameText(S, AArea) then
-    begin
-      if not First then
-        Result := Result + ', ';
-      Result := Result + S;
-      First := False;
-    end;
-end;
-
-{ ========== Execute ========== }
-
-class function TfrmGestionCentres.Execute(var ACentres: TArray<TCentreTreball>;
-  const ACalendarios: TArray<TSampleCalendario>;
-  const ACalendarioCentro: TArray<Integer>): Boolean;
-var
-  F: TfrmGestionCentres;
-begin
-  F := TfrmGestionCentres.Create(Application);
+  Cmd := TADOCommand.Create(nil);
   try
-    F.FCentres := Copy(ACentres);
-    F.FCalendarios := ACalendarios;
-    F.FCalendarioCentro := ACalendarioCentro;
-    F.FAreas := TList<string>.Create;
-    try
-      F.RebuildAreaList;
-      F.RefreshAll;
-      Result := F.ShowModal = mrOk;
-      if Result then
-        ACentres := Copy(F.FCentres);
-    finally
-      F.FAreas.Free;
-    end;
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText := ASQL;
+    Cmd.Execute(Result, EmptyParam);
   finally
-    F.Free;
+    Cmd.Free;
   end;
 end;
-
+function TfrmGestionCentres.OpenQuery(const ASQL: string): TADOQuery;
+begin
+  Result := TADOQuery.Create(nil);
+  Result.Connection := DMPlanner.ADOConnection;
+  Result.SQL.Text := ASQL;
+  Result.Open;
+end;
 procedure TfrmGestionCentres.FormCreate(Sender: TObject);
 begin
-  (colCentroVisible.Properties as TcxCheckBoxProperties).OnEditValueChanged := CentroColumnChanged;
-  (colCentroEnabled.Properties as TcxCheckBoxProperties).OnEditValueChanged := CentroColumnChanged;
-  (colCentroOrder.Properties as TcxSpinEditProperties).OnEditValueChanged := CentroColumnChanged;
-  tvAsigCentros.OnFocusedRecordChanged := AsigCentroFocusChanged;
-  (colAsigAreaCheck.Properties as TcxCheckBoxProperties).OnEditValueChanged := AsigAreaCheckChanged;
+  LoadAreas;
+  LoadCalendars;
+  SetupCombos;
+  LoadCentros;
 end;
-
-procedure TfrmGestionCentres.FormKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
-begin
-  if Key = VK_ESCAPE then
-    ModalResult := mrOk;
-end;
-
 procedure TfrmGestionCentres.btnCloseClick(Sender: TObject);
 begin
-  ModalResult := mrOk;
+  Close;
 end;
-
-{ ========== Rebuild Area List ========== }
-
-const
-  DEFAULT_AREAS: array[0..7] of string = (
-    'F'#225'brica',
-    'Log'#237'stica',
-    'Oficina T'#233'cnica',
-    'Calidad',
-    'Mantenimiento',
-    'Almac'#233'n',
-    'Expediciones',
-    'Subcontrataci'#243'n'
-  );
-
-procedure TfrmGestionCentres.RebuildAreaList;
+procedure TfrmGestionCentres.LoadAreas;
+var
+  Q: TADOQuery;
+  I: Integer;
+begin
+  SetLength(FAreaIds, 1);
+  SetLength(FAreaNames, 1);
+  FAreaIds[0] := 0;
+  FAreaNames[0] := '(sin área)';
+  Q := OpenQuery('SELECT AreaId, Nombre FROM FS_PL_Area WHERE CodigoEmpresa = ' +
+    IntToStr(DMPlanner.CodigoEmpresa) + ' AND Activo = 1 ORDER BY Nombre');
+  try
+    I := 1;
+    while not Q.Eof do
+    begin
+      SetLength(FAreaIds, I + 1);
+      SetLength(FAreaNames, I + 1);
+      FAreaIds[I] := Q.FieldByName('AreaId').AsInteger;
+      FAreaNames[I] := Q.FieldByName('Nombre').AsString;
+      Inc(I);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+procedure TfrmGestionCentres.LoadCalendars;
+var
+  Q: TADOQuery;
+  I: Integer;
+begin
+  SetLength(FCalendarIds, 1);
+  SetLength(FCalendarNames, 1);
+  FCalendarIds[0] := 0;
+  FCalendarNames[0] := '(sin calendario)';
+  Q := OpenQuery('SELECT CalendarId, Nombre FROM FS_PL_Calendar WHERE CodigoEmpresa = ' +
+    IntToStr(DMPlanner.CodigoEmpresa) + ' AND Activo = 1 ORDER BY Nombre');
+  try
+    I := 1;
+    while not Q.Eof do
+    begin
+      SetLength(FCalendarIds, I + 1);
+      SetLength(FCalendarNames, I + 1);
+      FCalendarIds[I] := Q.FieldByName('CalendarId').AsInteger;
+      FCalendarNames[I] := Q.FieldByName('Nombre').AsString;
+      Inc(I);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+procedure TfrmGestionCentres.SetupCombos;
+var
+  Props: TcxComboBoxProperties;
+  I: Integer;
+begin
+  Props := colCentroArea.Properties as TcxComboBoxProperties;
+  Props.Items.Clear;
+  Props.DropDownListStyle := lsFixedList;
+  for I := 0 to High(FAreaNames) do
+    Props.Items.Add(FAreaNames[I]);
+  Props := colCentroCalendario.Properties as TcxComboBoxProperties;
+  Props.Items.Clear;
+  Props.DropDownListStyle := lsFixedList;
+  for I := 0 to High(FCalendarNames) do
+    Props.Items.Add(FCalendarNames[I]);
+end;
+function TfrmGestionCentres.AreaIdFromName(const AName: string): Integer;
 var
   I: Integer;
-  Arr: TArray<string>;
-  S: string;
-  Q: TADOQuery;
 begin
-  FAreas.Clear;
-
-  // Cargar áreas desde SQL
-  if DMPlanner.IsConnected then
-  begin
-    Q := TADOQuery.Create(nil);
+  for I := 0 to High(FAreaNames) do
+    if SameText(FAreaNames[I], AName) then
+      Exit(FAreaIds[I]);
+  Result := 0;
+end;
+function TfrmGestionCentres.AreaNameFromId(AAreaId: Integer): string;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FAreaIds) do
+    if FAreaIds[I] = AAreaId then
+      Exit(FAreaNames[I]);
+  Result := FAreaNames[0];
+end;
+function TfrmGestionCentres.CalendarIdFromName(const AName: string): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FCalendarNames) do
+    if SameText(FCalendarNames[I], AName) then
+      Exit(FCalendarIds[I]);
+  Result := 0;
+end;
+function TfrmGestionCentres.CalendarNameFromId(ACalendarId: Integer): string;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FCalendarIds) do
+    if FCalendarIds[I] = ACalendarId then
+      Exit(FCalendarNames[I]);
+  Result := FCalendarNames[0];
+end;
+procedure TfrmGestionCentres.LoadCentros;
+var
+  Q: TADOQuery;
+  I, AreaId, CalId: Integer;
+begin
+  tvCentros.BeginUpdate;
+  try
+    tvCentros.DataController.RecordCount := 0;
+    Q := OpenQuery(
+      'SELECT c.CenterId, c.CodigoCentro, c.Titulo, c.Subtitulo, ' +
+      '  ISNULL(c.AreaId, 0) AS AreaId, ' +
+      '  c.EsSecuencial, c.MaxLanes, c.Orden, c.Visible, c.Habilitado, ' +
+      '  ISNULL(c.ColorFondo, 0) AS ColorFondo, ' +
+      '  ISNULL((SELECT MIN(cc.CalendarId) FROM FS_PL_CenterCalendar cc ' +
+      '    WHERE cc.CodigoEmpresa = c.CodigoEmpresa AND cc.CenterId = c.CenterId), 0) AS CalendarId ' +
+      'FROM FS_PL_Center c ' +
+      'WHERE c.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+      ' ORDER BY c.Orden, c.CenterId');
     try
-      Q.Connection := DMPlanner.ADOConnection;
-      Q.SQL.Text := 'SELECT Nombre FROM FS_PL_Area WHERE CodigoEmpresa = ' +
-        IntToStr(DMPlanner.CodigoEmpresa) + ' AND Activo = 1 ORDER BY Orden, Nombre';
-      Q.Open;
+      SetLength(FCenterIds, Q.RecordCount);
+      SetLength(FColors, Q.RecordCount);
+      I := 0;
       while not Q.Eof do
       begin
-        S := Q.FieldByName('Nombre').AsString;
-        if not FAreas.Contains(S) then
-          FAreas.Add(S);
+        AreaId := Q.FieldByName('AreaId').AsInteger;
+        CalId := Q.FieldByName('CalendarId').AsInteger;
+        tvCentros.DataController.RecordCount := I + 1;
+        tvCentros.DataController.Values[I, colCentroId.Index] := Q.FieldByName('CenterId').AsInteger;
+        tvCentros.DataController.Values[I, colCentroCodigo.Index] := Q.FieldByName('CodigoCentro').AsString;
+        tvCentros.DataController.Values[I, colCentroTitulo.Index] := Q.FieldByName('Titulo').AsString;
+        tvCentros.DataController.Values[I, colCentroSubtitulo.Index] := Q.FieldByName('Subtitulo').AsString;
+        tvCentros.DataController.Values[I, colCentroArea.Index] := AreaNameFromId(AreaId);
+        tvCentros.DataController.Values[I, colCentroCalendario.Index] := CalendarNameFromId(CalId);
+        tvCentros.DataController.Values[I, colCentroSecuencial.Index] := Q.FieldByName('EsSecuencial').AsBoolean;
+        tvCentros.DataController.Values[I, colCentroMaxLanes.Index] := Q.FieldByName('MaxLanes').AsInteger;
+        tvCentros.DataController.Values[I, colCentroOrden.Index] := Q.FieldByName('Orden').AsInteger;
+        tvCentros.DataController.Values[I, colCentroVisible.Index] := Q.FieldByName('Visible').AsBoolean;
+        tvCentros.DataController.Values[I, colCentroHabilitado.Index] := Q.FieldByName('Habilitado').AsBoolean;
+        FCenterIds[I] := Q.FieldByName('CenterId').AsInteger;
+        FColors[I] := Q.FieldByName('ColorFondo').AsInteger;
+        RefreshColorCell(I);
+        Inc(I);
         Q.Next;
       end;
     finally
       Q.Free;
     end;
-  end
-  else
-  begin
-    // Fallback: áreas por defecto si no hay conexión
-    for I := 0 to High(DEFAULT_AREAS) do
-      if not FAreas.Contains(DEFAULT_AREAS[I]) then
-        FAreas.Add(DEFAULT_AREAS[I]);
-  end;
-
-  // Areas extra que vengan de los centros (por si hay alguna no registrada en SQL)
-  for I := 0 to High(FCentres) do
-  begin
-    Arr := AreaSplit(FCentres[I].Area);
-    for S in Arr do
-      if not FAreas.Contains(S) then
-        FAreas.Add(S);
-  end;
-  FAreas.Sort;
-end;
-
-{ ========== Refresh ========== }
-
-procedure TfrmGestionCentres.RefreshAll;
-begin
-  RefreshAreas;
-  RefreshCentros;
-  RefreshAsigCentros;
-  RefreshAsigAreas;
-end;
-
-procedure TfrmGestionCentres.RefreshAreas;
-var
-  I: Integer;
-begin
-  tvAreas.BeginUpdate;
-  try
-    tvAreas.DataController.RecordCount := 0;
-    tvAreas.DataController.RecordCount := FAreas.Count;
-    for I := 0 to FAreas.Count - 1 do
-    begin
-      tvAreas.DataController.Values[I, colAreaNom.Index] := FAreas[I];
-      tvAreas.DataController.Values[I, colAreaCentros.Index] := AreaCentrosStr(FAreas[I]);
-    end;
-  finally
-    tvAreas.EndUpdate;
-  end;
-end;
-
-procedure TfrmGestionCentres.RefreshCentros;
-var
-  I: Integer;
-  C: TCentreTreball;
-begin
-  tvCentros.BeginUpdate;
-  try
-    tvCentros.DataController.RecordCount := 0;
-    tvCentros.DataController.RecordCount := Length(FCentres);
-    for I := 0 to High(FCentres) do
-    begin
-      C := FCentres[I];
-      tvCentros.DataController.Values[I, colCentroId.Index] := C.Id;
-      tvCentros.DataController.Values[I, colCentroCodi.Index] := C.CodiCentre;
-      tvCentros.DataController.Values[I, colCentroTitulo.Index] := C.Titulo;
-      tvCentros.DataController.Values[I, colCentroSubtitulo.Index] := C.Subtitulo;
-      tvCentros.DataController.Values[I, colCentroArea.Index] := C.Area;
-      if C.IsSequencial then
-        tvCentros.DataController.Values[I, colCentroSeq.Index] := 'S'#237
-      else
-        tvCentros.DataController.Values[I, colCentroSeq.Index] := 'No';
-      tvCentros.DataController.Values[I, colCentroMaxLanes.Index] := C.MaxLaneCount;
-      tvCentros.DataController.Values[I, colCentroOrder.Index] := C.Order;
-      tvCentros.DataController.Values[I, colCentroVisible.Index] := C.Visible;
-      tvCentros.DataController.Values[I, colCentroEnabled.Index] := C.Enabled;
-    end;
   finally
     tvCentros.EndUpdate;
   end;
 end;
-
-procedure TfrmGestionCentres.RefreshAsigCentros;
-var
-  I: Integer;
+procedure TfrmGestionCentres.RefreshColorCell(ARecIdx: Integer);
 begin
-  tvAsigCentros.BeginUpdate;
+  if (ARecIdx < 0) or (ARecIdx > High(FColors)) then Exit;
+  // La celda se pinta con OnCustomDrawCell; el valor de texto queda vacío.
+  tvCentros.DataController.Values[ARecIdx, colCentroColor.Index] := '';
+end;
+function TfrmGestionCentres.GetSelectedIdx: Integer;
+begin
+  Result := tvCentros.Controller.FocusedRecordIndex;
+end;
+procedure TfrmGestionCentres.btnAddClick(Sender: TObject);
+var
+  Codigo, Titulo: string;
+  Q: TADOQuery;
+  NewId, Cnt: Integer;
+begin
+  Codigo := InputBox('Nuevo Centro', 'Código:', '');
+  if Codigo = '' then Exit;
+  Titulo := InputBox('Nuevo Centro', 'Título:', Codigo);
+  if Titulo = '' then Exit;
+  Exec('INSERT INTO FS_PL_Center (CodigoEmpresa, CodigoCentro, Titulo) VALUES (' +
+    IntToStr(DMPlanner.CodigoEmpresa) + ', ' + QStr(Codigo) + ', ' + QStr(Titulo) + ')');
+  Q := OpenQuery('SELECT MAX(CenterId) AS NewId FROM FS_PL_Center WHERE CodigoEmpresa = ' +
+    IntToStr(DMPlanner.CodigoEmpresa));
   try
-    tvAsigCentros.DataController.RecordCount := 0;
-    tvAsigCentros.DataController.RecordCount := Length(FCentres);
-    for I := 0 to High(FCentres) do
-    begin
-      tvAsigCentros.DataController.Values[I, colAsigCentroId.Index] := FCentres[I].Id;
-      tvAsigCentros.DataController.Values[I, colAsigCentroTitulo.Index] := FCentres[I].Titulo;
-    end;
+    NewId := Q.FieldByName('NewId').AsInteger;
   finally
-    tvAsigCentros.EndUpdate;
+    Q.Free;
   end;
+  Cnt := tvCentros.DataController.RecordCount;
+  tvCentros.DataController.RecordCount := Cnt + 1;
+  tvCentros.DataController.Values[Cnt, colCentroId.Index] := NewId;
+  tvCentros.DataController.Values[Cnt, colCentroCodigo.Index] := Codigo;
+  tvCentros.DataController.Values[Cnt, colCentroTitulo.Index] := Titulo;
+  tvCentros.DataController.Values[Cnt, colCentroSubtitulo.Index] := '';
+  tvCentros.DataController.Values[Cnt, colCentroArea.Index] := FAreaNames[0];
+  tvCentros.DataController.Values[Cnt, colCentroCalendario.Index] := FCalendarNames[0];
+  tvCentros.DataController.Values[Cnt, colCentroSecuencial.Index] := False;
+  tvCentros.DataController.Values[Cnt, colCentroMaxLanes.Index] := 0;
+  tvCentros.DataController.Values[Cnt, colCentroOrden.Index] := 0;
+  tvCentros.DataController.Values[Cnt, colCentroVisible.Index] := True;
+  tvCentros.DataController.Values[Cnt, colCentroHabilitado.Index] := True;
+  SetLength(FCenterIds, Cnt + 1);
+  SetLength(FColors, Cnt + 1);
+  FCenterIds[Cnt] := NewId;
+  FColors[Cnt] := 0;
+  RefreshColorCell(Cnt);
 end;
-
-procedure TfrmGestionCentres.RefreshAsigAreas;
+procedure TfrmGestionCentres.btnDelClick(Sender: TObject);
 var
-  CIdx, I: Integer;
-  HasArea: Boolean;
+  Idx, CenterId: Integer;
+  CE: string;
 begin
-  CIdx := GetSelectedAsigCentreIdx;
-  tvAsigAreas.BeginUpdate;
-  try
-    tvAsigAreas.DataController.RecordCount := 0;
-    tvAsigAreas.DataController.RecordCount := FAreas.Count;
-    for I := 0 to FAreas.Count - 1 do
-    begin
-      HasArea := (CIdx >= 0) and AreaContains(FCentres[CIdx].Area, FAreas[I]);
-      tvAsigAreas.DataController.Values[I, colAsigAreaNom.Index] := FAreas[I];
-      tvAsigAreas.DataController.Values[I, colAsigAreaCheck.Index] := HasArea;
-    end;
-    colAsigAreaCheck.Options.Editing := (CIdx >= 0);
-  finally
-    tvAsigAreas.EndUpdate;
-  end;
+  Idx := GetSelectedIdx;
+  if (Idx < 0) or (Idx > High(FCenterIds)) then Exit;
+  if MessageDlg('¿Eliminar este centro?' + sLineBreak +
+    'Se eliminará también su asignación de calendario.',
+    mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+  CenterId := FCenterIds[Idx];
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  Exec('DELETE FROM FS_PL_CenterCalendar WHERE CodigoEmpresa = ' + CE +
+    ' AND CenterId = ' + IntToStr(CenterId));
+  Exec('DELETE FROM FS_PL_Center WHERE CodigoEmpresa = ' + CE +
+    ' AND CenterId = ' + IntToStr(CenterId));
+  LoadCentros;
 end;
-
-{ ========== Asignacion events ========== }
-
-procedure TfrmGestionCentres.AsigCentroFocusChanged(Sender: TcxCustomGridTableView;
-  APrevFocusedRecord, AFocusedRecord: TcxCustomGridRecord;
-  ANewItemRecordFocusingChanged: Boolean);
-begin
-  RefreshAsigAreas;
-end;
-
-procedure TfrmGestionCentres.AsigAreaCheckChanged(Sender: TObject);
+procedure TfrmGestionCentres.btnSaveClick(Sender: TObject);
 var
-  CIdx, RecIdx: Integer;
-  AreaName: string;
-  Checked: Boolean;
+  I, CenterId, AreaId, CalId, MaxLanes, Orden: Integer;
+  Codigo, Titulo, Subtitulo, AreaName, CalName: string;
+  EsSeq, Visible, Habilitado: Boolean;
+  CE: string;
   V: Variant;
+  function AsBool(AV: Variant): Boolean;
+  begin
+    Result := (not VarIsNull(AV)) and (not VarIsEmpty(AV)) and Boolean(AV);
+  end;
+  function AsInt(AV: Variant): Integer;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := 0 else Result := Integer(AV);
+  end;
 begin
-  if not Assigned(FAreas) then Exit;
-
-  CIdx := GetSelectedAsigCentreIdx;
-  if CIdx < 0 then Exit;
-
-  RecIdx := tvAsigAreas.DataController.FocusedRecordIndex;
-  if RecIdx < 0 then Exit;
-
-  AreaName := VarToStr(tvAsigAreas.DataController.Values[RecIdx, colAsigAreaNom.Index]);
-
-  // El valor al DataController encara és l'antic; invertim-lo
-  V := tvAsigAreas.DataController.Values[RecIdx, colAsigAreaCheck.Index];
-  if VarIsNull(V) then
-    Checked := True   // si era null (no marcat), ara serà marcat
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  for I := 0 to tvCentros.DataController.RecordCount - 1 do
+  begin
+    if I > High(FCenterIds) then Continue;
+    CenterId := FCenterIds[I];
+    Codigo := VarToStr(tvCentros.DataController.Values[I, colCentroCodigo.Index]);
+    Titulo := VarToStr(tvCentros.DataController.Values[I, colCentroTitulo.Index]);
+    Subtitulo := VarToStr(tvCentros.DataController.Values[I, colCentroSubtitulo.Index]);
+    AreaName := VarToStr(tvCentros.DataController.Values[I, colCentroArea.Index]);
+    CalName := VarToStr(tvCentros.DataController.Values[I, colCentroCalendario.Index]);
+    V := tvCentros.DataController.Values[I, colCentroSecuencial.Index];
+    EsSeq := AsBool(V);
+    MaxLanes := AsInt(tvCentros.DataController.Values[I, colCentroMaxLanes.Index]);
+    Orden := AsInt(tvCentros.DataController.Values[I, colCentroOrden.Index]);
+    Visible := AsBool(tvCentros.DataController.Values[I, colCentroVisible.Index]);
+    Habilitado := AsBool(tvCentros.DataController.Values[I, colCentroHabilitado.Index]);
+    AreaId := AreaIdFromName(AreaName);
+    CalId := CalendarIdFromName(CalName);
+    if (Codigo = '') or (Titulo = '') then Continue;
+    Exec('UPDATE FS_PL_Center SET ' +
+      'CodigoCentro = ' + QStr(Codigo) + ', ' +
+      'Titulo = ' + QStr(Titulo) + ', ' +
+      'Subtitulo = ' + QStr(Subtitulo) + ', ' +
+      'AreaId = ' + QStrNullable(AreaId) + ', ' +
+      'EsSecuencial = ' + IntToStr(Ord(EsSeq)) + ', ' +
+      'MaxLanes = ' + IntToStr(MaxLanes) + ', ' +
+      'Orden = ' + IntToStr(Orden) + ', ' +
+      'Visible = ' + IntToStr(Ord(Visible)) + ', ' +
+      'Habilitado = ' + IntToStr(Ord(Habilitado)) + ', ' +
+      'ColorFondo = ' + IntToStr(FColors[I]) +
+      ' WHERE CodigoEmpresa = ' + CE + ' AND CenterId = ' + IntToStr(CenterId));
+    // Calendario: DELETE + INSERT (modelo 1:1 efectivo)
+    Exec('DELETE FROM FS_PL_CenterCalendar WHERE CodigoEmpresa = ' + CE +
+      ' AND CenterId = ' + IntToStr(CenterId));
+    if CalId > 0 then
+      Exec('INSERT INTO FS_PL_CenterCalendar (CodigoEmpresa, CenterId, CalendarId) VALUES (' +
+        CE + ', ' + IntToStr(CenterId) + ', ' + IntToStr(CalId) + ')');
+  end;
+  ShowMessage('Centros guardados correctamente.');
+  LoadCentros;
+end;
+procedure TfrmGestionCentres.colCentroColorButtonClick(Sender: TObject;
+  AButtonIndex: Integer);
+var
+  Idx: Integer;
+begin
+  Idx := GetSelectedIdx;
+  if (Idx < 0) or (Idx > High(FColors)) then Exit;
+  if FColors[Idx] <> 0 then
+    ColorDialog.Color := TColor(FColors[Idx])
   else
-    Checked := not Boolean(V);
-
-  if Checked then
-    FCentres[CIdx].Area := AreaAdd(FCentres[CIdx].Area, AreaName)
-  else
-    FCentres[CIdx].Area := AreaRemove(FCentres[CIdx].Area, AreaName);
-
-  // Actualizar grids dependientes (posposar per evitar conflicte amb l'edicio en curs)
-  PostMessage(Handle, WM_USER + 100, 0, 0);
-end;
-
-procedure TfrmGestionCentres.WMRefreshAfterCheck(var Msg: TMessage);
-begin
-  RefreshCentros;
-  RefreshAreas;
-end;
-
-{ ========== Areas CRUD ========== }
-
-procedure TfrmGestionCentres.btnAreaAddClick(Sender: TObject);
-var
-  Nom: string;
-  Cmd: TADOCommand;
-begin
-  Nom := '';
-  if InputArea(Nom, 'Nueva '#193'rea') then
+    ColorDialog.Color := clWhite;
+  if ColorDialog.Execute then
   begin
-    if not FAreas.Contains(Nom) then
-    begin
-      // Guardar en SQL
-      if DMPlanner.IsConnected then
-      begin
-        Cmd := TADOCommand.Create(nil);
-        try
-          Cmd.Connection := DMPlanner.ADOConnection;
-          Cmd.CommandText := 'INSERT INTO FS_PL_Area (CodigoEmpresa, Codigo, Nombre, Orden) VALUES (' +
-            IntToStr(DMPlanner.CodigoEmpresa) + ', ' +
-            'N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
-            'N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + ''', ' +
-            IntToStr(FAreas.Count) + ')';
-          Cmd.Execute;
-        finally
-          Cmd.Free;
-        end;
-      end;
-      FAreas.Add(Nom);
-    end;
-    FAreas.Sort;
-    RefreshAreas;
-    RefreshAsigAreas;
+    FColors[Idx] := Integer(ColorDialog.Color);
+    RefreshColorCell(Idx);
+    tvCentros.DataController.Post(False);
+    gridCentros.Invalidate;
   end;
 end;
-
-procedure TfrmGestionCentres.btnAreaEditClick(Sender: TObject);
+procedure TfrmGestionCentres.colCentroColorCustomDrawCell(
+  Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
+  AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
 var
-  OldNom, NewNom: string;
-  I: Integer;
-  Cmd: TADOCommand;
+  RecIdx: Integer;
+  C: TColor;
+  R: TRect;
 begin
-  OldNom := GetSelectedAreaName;
-  if OldNom = '' then Exit;
-
-  NewNom := OldNom;
-  if InputArea(NewNom, 'Editar '#193'rea') and (NewNom <> OldNom) then
-  begin
-    // Actualizar en SQL
-    if DMPlanner.IsConnected then
-    begin
-      Cmd := TADOCommand.Create(nil);
-      try
-        Cmd.Connection := DMPlanner.ADOConnection;
-        Cmd.CommandText := 'UPDATE FS_PL_Area SET ' +
-          'Nombre = N''' + StringReplace(NewNom, '''', '''''', [rfReplaceAll]) + ''', ' +
-          'Codigo = N''' + StringReplace(NewNom, '''', '''''', [rfReplaceAll]) + '''' +
-          ' WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
-          ' AND Nombre = N''' + StringReplace(OldNom, '''', '''''', [rfReplaceAll]) + '''';
-        Cmd.Execute;
-      finally
-        Cmd.Free;
-      end;
-    end;
-
-    // Renombrar en todos los centros
-    for I := 0 to High(FCentres) do
-      if AreaContains(FCentres[I].Area, OldNom) then
-      begin
-        FCentres[I].Area := AreaRemove(FCentres[I].Area, OldNom);
-        FCentres[I].Area := AreaAdd(FCentres[I].Area, NewNom);
-      end;
-
-    // Renombrar en la lista
-    I := FAreas.IndexOf(OldNom);
-    if I >= 0 then
-      FAreas[I] := NewNom;
-    FAreas.Sort;
-
-    RefreshAll;
-  end;
+  ADone := False;
+  if AViewInfo.GridRecord = nil then Exit;
+  RecIdx := AViewInfo.GridRecord.RecordIndex;
+  if (RecIdx < 0) or (RecIdx > High(FColors)) then Exit;
+  if FColors[RecIdx] = 0 then Exit;
+  C := TColor(FColors[RecIdx]);
+  R := AViewInfo.ContentBounds;
+  // Dejar espacio para el botón ellipsis a la derecha (~20px)
+  InflateRect(R, -2, -2);
+  Dec(R.Right, 22);
+  ACanvas.Brush.Color := C;
+  ACanvas.FillRect(R);
+  ADone := True;
 end;
-
-procedure TfrmGestionCentres.btnAreaDelClick(Sender: TObject);
-var
-  Nom: string;
-  I: Integer;
-  Cmd: TADOCommand;
-begin
-  Nom := GetSelectedAreaName;
-  if Nom = '' then Exit;
-
-  if MessageDlg(#191'Eliminar '#225'rea "' + Nom + '"?' + sLineBreak +
-    'Se desasignar'#225' de todos los centros.',
-    mtConfirmation, [mbYes, mbNo], 0) = mrYes then
-  begin
-    // Eliminar en SQL
-    if DMPlanner.IsConnected then
-    begin
-      Cmd := TADOCommand.Create(nil);
-      try
-        Cmd.Connection := DMPlanner.ADOConnection;
-        Cmd.CommandText := 'DELETE FROM FS_PL_Area WHERE CodigoEmpresa = ' +
-          IntToStr(DMPlanner.CodigoEmpresa) +
-          ' AND Nombre = N''' + StringReplace(Nom, '''', '''''', [rfReplaceAll]) + '''';
-        Cmd.Execute;
-      finally
-        Cmd.Free;
-      end;
-    end;
-
-    // Quitar de todos los centros
-    for I := 0 to High(FCentres) do
-      if AreaContains(FCentres[I].Area, Nom) then
-        FCentres[I].Area := AreaRemove(FCentres[I].Area, Nom);
-
-    FAreas.Remove(Nom);
-    RefreshAll;
-  end;
-end;
-
-{ ========== Centros ========== }
-
-procedure TfrmGestionCentres.CentroColumnChanged(Sender: TObject);
-var
-  RecIdx, I: Integer;
-  V: Variant;
-  CId: Integer;
-begin
-  RecIdx := tvCentros.DataController.FocusedRecordIndex;
-  if RecIdx < 0 then Exit;
-
-  V := tvCentros.DataController.Values[RecIdx, colCentroId.Index];
-  if VarIsNull(V) then Exit;
-  CId := V;
-
-  // Trobar index a FCentres
-  for I := 0 to High(FCentres) do
-    if FCentres[I].Id = CId then
-    begin
-      // Llegir tots els camps editables
-      V := tvCentros.DataController.Values[RecIdx, colCentroVisible.Index];
-      if not VarIsNull(V) then
-        FCentres[I].Visible := Boolean(V);
-
-      V := tvCentros.DataController.Values[RecIdx, colCentroEnabled.Index];
-      if not VarIsNull(V) then
-        FCentres[I].Enabled := Boolean(V);
-
-      V := tvCentros.DataController.Values[RecIdx, colCentroOrder.Index];
-      if not VarIsNull(V) then
-        FCentres[I].Order := Integer(V);
-
-      Break;
-    end;
-end;
-
-procedure TfrmGestionCentres.btnCentroEditClick(Sender: TObject);
-var
-  CIdx, CalIdx: Integer;
-  C: TCentreTreball;
-  PCal: PSampleCalendario;
-begin
-  CIdx := GetSelectedCentreIdx;
-  if CIdx < 0 then Exit;
-
-  C := FCentres[CIdx];
-
-  // Buscar calendario asociado a este centro
-  PCal := nil;
-  if (Length(FCalendarioCentro) > CIdx) and (Length(FCalendarios) > 0) then
-  begin
-    CalIdx := FCalendarioCentro[CIdx];
-    if (CalIdx >= 0) and (CalIdx <= High(FCalendarios)) then
-      PCal := @FCalendarios[CalIdx];
-  end;
-
-  if TfrmCentreInspector.Execute(C, False, PCal) then
-  begin
-    FCentres[CIdx] := C;
-    RebuildAreaList;
-    RefreshAll;
-  end;
-end;
-
-{ ========== Helpers ========== }
-
-function TfrmGestionCentres.GetSelectedAreaName: string;
-var
-  Idx: Integer;
-  V: Variant;
-begin
-  Result := '';
-  Idx := tvAreas.DataController.FocusedRecordIndex;
-  if Idx < 0 then Exit;
-  V := tvAreas.DataController.Values[Idx, colAreaNom.Index];
-  if not VarIsNull(V) then
-    Result := VarToStr(V);
-end;
-
-function TfrmGestionCentres.GetSelectedCentreIdx: Integer;
-var
-  Idx: Integer;
-  V: Variant;
-  CId, I: Integer;
-begin
-  Result := -1;
-  Idx := tvCentros.DataController.FocusedRecordIndex;
-  if Idx < 0 then Exit;
-  V := tvCentros.DataController.Values[Idx, colCentroId.Index];
-  if VarIsNull(V) then Exit;
-  CId := V;
-  for I := 0 to High(FCentres) do
-    if FCentres[I].Id = CId then
-      Exit(I);
-end;
-
-function TfrmGestionCentres.GetSelectedAsigCentreIdx: Integer;
-var
-  Idx: Integer;
-  V: Variant;
-  CId, I: Integer;
-begin
-  Result := -1;
-  Idx := tvAsigCentros.DataController.FocusedRecordIndex;
-  if Idx < 0 then Exit;
-  V := tvAsigCentros.DataController.Values[Idx, colAsigCentroId.Index];
-  if VarIsNull(V) then Exit;
-  CId := V;
-  for I := 0 to High(FCentres) do
-    if FCentres[I].Id = CId then
-      Exit(I);
-end;
-
-function TfrmGestionCentres.CentreAreasStr(const ACentre: TCentreTreball): string;
-begin
-  Result := ACentre.Area;
-end;
-
-function TfrmGestionCentres.AreaCentrosStr(const AArea: string): string;
-var
-  I: Integer;
-  First: Boolean;
-begin
-  Result := '';
-  First := True;
-  for I := 0 to High(FCentres) do
-    if AreaContains(FCentres[I].Area, AArea) then
-    begin
-      if not First then
-        Result := Result + ', ';
-      Result := Result + FCentres[I].Titulo;
-      First := False;
-    end;
-end;
-
-function TfrmGestionCentres.InputArea(var ANombre: string; const ATitle: string): Boolean;
-var
-  Dlg: TForm;
-  edNom: TEdit;
-  lblN: TLabel;
-  btnOk, btnCa: TButton;
-begin
-  Dlg := TForm.CreateNew(Self);
-  try
-    Dlg.Caption := ATitle;
-    Dlg.Width := 400;
-    Dlg.Height := 130;
-    Dlg.Position := poScreenCenter;
-    Dlg.BorderStyle := bsDialog;
-    Dlg.Font.Name := 'Segoe UI';
-    Dlg.Font.Size := 9;
-
-    lblN := TLabel.Create(Dlg);
-    lblN.Parent := Dlg;
-    lblN.SetBounds(16, 16, 60, 20);
-    lblN.Caption := 'Nombre:';
-
-    edNom := TEdit.Create(Dlg);
-    edNom.Parent := Dlg;
-    edNom.SetBounds(100, 14, 270, 24);
-    edNom.Text := ANombre;
-
-    btnOk := TButton.Create(Dlg);
-    btnOk.Parent := Dlg;
-    btnOk.SetBounds(200, 56, 80, 28);
-    btnOk.Caption := 'OK';
-    btnOk.Default := True;
-    btnOk.ModalResult := mrOk;
-
-    btnCa := TButton.Create(Dlg);
-    btnCa.Parent := Dlg;
-    btnCa.SetBounds(290, 56, 80, 28);
-    btnCa.Caption := 'Cancelar';
-    btnCa.Cancel := True;
-    btnCa.ModalResult := mrCancel;
-
-    Result := Dlg.ShowModal = mrOk;
-    if Result then
-    begin
-      ANombre := Trim(edNom.Text);
-      if ANombre = '' then
-        Result := False;
-    end;
-  finally
-    Dlg.Free;
-  end;
-end;
-
 end.

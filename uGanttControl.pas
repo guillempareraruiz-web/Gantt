@@ -9236,8 +9236,9 @@ begin
 
   RebuildLayout;
 
-  if Assigned(FTimeline) and (FTimeline.HideWeekends <> Value) then
-    FTimeline.HideWeekends := Value;
+  // Nota: la sincronización HideWeekends con el timeline asociado
+  // la gestiona ahora la vista (uVistaGantt / Main). El control Gantt
+  // no debe conocer al timeline directamente.
 
   UpdateScrollBars;
 
