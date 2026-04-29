@@ -4,7 +4,7 @@
         <ProjectVersion>19.3</ProjectVersion>
         <FrameworkType>VCL</FrameworkType>
         <Base>True</Base>
-        <Config Condition="'$(Config)'==''">Debug</Config>
+        <Config Condition="'$(Config)'==''">Release</Config>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
         <TargetedPlatforms>1</TargetedPlatforms>
         <AppType>Application</AppType>
@@ -106,6 +106,7 @@
         </DCCReference>
         <DCCReference Include="uGanttTypes.pas"/>
         <DCCReference Include="uGanttControl.pas"/>
+        <DCCReference Include="uGanttControlGrupo.pas"/>
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>
@@ -161,6 +162,25 @@
         <DCCReference Include="uDispatchList.pas">
             <Form>frmDispatchList</Form>
         </DCCReference>
+        <DCCReference Include="uBacklog.pas">
+            <Form>frmBacklog</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uDemoBacklog.pas"/>
+        <DCCReference Include="uBacklogRegenParams.pas">
+            <Form>frmBacklogRegenParams</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uUserPrefs.pas"/>
+        <DCCReference Include="uBacklogScheduler.pas"/>
+        <DCCReference Include="uBacklogSchedParams.pas">
+            <Form>frmBacklogSchedParams</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uBacklogSchedPreview.pas">
+            <Form>frmBacklogSchedPreview</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uFiniteCapacityPlanner.pas">
             <Form>frmFiniteCapacityPlanner</Form>
             <FormType>dfm</FormType>
@@ -208,6 +228,52 @@
             <Form>frmVistaGantt</Form>
         </DCCReference>
         <DCCReference Include="uCalendarsRepo.pas"/>
+        <DCCReference Include="uCentresRepo.pas"/>
+        <DCCReference Include="uNodesRepo.pas"/>
+        <DCCReference Include="uGestionAreas.pas">
+            <Form>frmGestionAreas</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionDepartamentos.pas">
+            <Form>frmGestionDepartamentos</Form>
+        </DCCReference>
+        <DCCReference Include="uGestionCapacitaciones.pas">
+            <Form>frmGestionCapacitaciones</Form>
+        </DCCReference>
+        <DCCReference Include="uAsignarDepartamentos.pas">
+            <Form>frmAsignarDepartamentos</Form>
+        </DCCReference>
+        <DCCReference Include="uAsignarCentrosMolde.pas">
+            <Form>frmAsignarCentrosMolde</Form>
+        </DCCReference>
+        <DCCReference Include="uEditarListaMolde.pas">
+            <Form>frmEditarListaMolde</Form>
+        </DCCReference>
+        <DCCReference Include="uConfigEmpresa.pas">
+            <Form>frmConfigEmpresa</Form>
+        </DCCReference>
+        <DCCReference Include="uErpSelector.pas">
+            <Form>frmErpSelector</Form>
+        </DCCReference>
+        <DCCReference Include="uErpPrefsSage200.pas">
+            <Form>frmErpPrefsSage200</Form>
+        </DCCReference>
+        <DCCReference Include="uInstallWizard.pas">
+            <Form>frmInstallWizard</Form>
+        </DCCReference>
+        <DCCReference Include="uGenerarNodosDemo.pas">
+            <Form>frmGenerarNodosDemo</Form>
+        </DCCReference>
+        <DCCReference Include="uCentresKPI.pas">
+            <Form>frmCentresKPI</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uGanttDatesDialog.pas">
+            <Form>frmGanttDatesDialog</Form>
+        </DCCReference>
+        <DCCReference Include="uAppConfig.pas"/>
+        <DCCReference Include="uDBConfig.pas">
+            <Form>frmDBConfig</Form>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

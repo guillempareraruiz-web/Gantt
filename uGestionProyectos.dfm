@@ -191,6 +191,27 @@ object frmGestionProyectos: TfrmGestionProyectos
         PropertiesClassName = 'TcxDateEditProperties'
         Width = 120
       end
+      object colProjRowMode: TcxGridColumn
+        Caption = 'Modo vista'
+        PropertiesClassName = 'TcxComboBoxProperties'
+        Properties.DropDownListStyle = lsFixedList
+        Properties.Items.Strings = (
+          'CENTROS'
+          'GRUPO'
+          'TREE')
+        Options.Editing = True
+        Width = 95
+      end
+      object colProjNivelAgrupacion: TcxGridColumn
+        Caption = 'Nivel agrup.'
+        PropertiesClassName = 'TcxComboBoxProperties'
+        Properties.DropDownListStyle = lsFixedList
+        Properties.Items.Strings = (
+          '1'
+          '2')
+        Options.Editing = True
+        Width = 80
+      end
     end
     object lvProyectos: TcxGridLevel
       GridView = tvProyectos

@@ -1,10 +1,11 @@
-program FSPlanner2026;
+﻿program FSPlanner2026;
 
 uses
   Vcl.Forms,
   Main in 'Main.pas' {Form1},
   uGanttTypes in 'uGanttTypes.pas',
   uGanttControl in 'uGanttControl.pas',
+  uGanttControlGrupo in 'uGanttControlGrupo.pas',
   uCentreCalendar in 'uCentreCalendar.pas',
   uGanttHelpers in 'uGanttHelpers.pas',
   uGanttTimeline in 'uGanttTimeline.pas',
@@ -36,6 +37,13 @@ uses
   uGestionCalendarios in 'uGestionCalendarios.pas' {frmGestionCalendarios},
   uKanbanBoard in 'uKanbanBoard.pas',
   uDispatchList in 'uDispatchList.pas' {frmDispatchList},
+  uBacklog in 'uBacklog.pas' {frmBacklog},
+  uDemoBacklog in 'uDemoBacklog.pas',
+  uBacklogRegenParams in 'uBacklogRegenParams.pas' {frmBacklogRegenParams},
+  uUserPrefs in 'uUserPrefs.pas',
+  uBacklogScheduler in 'uBacklogScheduler.pas',
+  uBacklogSchedParams in 'uBacklogSchedParams.pas' {frmBacklogSchedParams},
+  uBacklogSchedPreview in 'uBacklogSchedPreview.pas' {frmBacklogSchedPreview},
   uFiniteCapacityPlanner in 'uFiniteCapacityPlanner.pas' {frmFiniteCapacityPlanner},
   uPlanningRulesEditor in 'uPlanningRulesEditor.pas' {frmPlanningRulesEditor},
   uCuadroPlanificacionDelDia in 'uCuadroPlanificacionDelDia.pas' {frmCuadroPlanificacionDelDia},
@@ -63,14 +71,42 @@ uses
   uAsignarCentrosMolde in 'uAsignarCentrosMolde.pas' {frmAsignarCentrosMolde},
   uEditarListaMolde in 'uEditarListaMolde.pas' {frmEditarListaMolde},
   uConfigEmpresa in 'uConfigEmpresa.pas' {frmConfigEmpresa},
-  uGenerarNodosDemo in 'uGenerarNodosDemo.pas' {frmGenerarNodosDemo};
+  uErpSelector in 'uErpSelector.pas' {frmErpSelector},
+  uErpPrefsSage200 in 'uErpPrefsSage200.pas' {frmErpPrefsSage200},
+  uInstallWizard in 'uInstallWizard.pas' {frmInstallWizard},
+  uGenerarNodosDemo in 'uGenerarNodosDemo.pas' {frmGenerarNodosDemo},
+  uCentresKPI in 'uCentresKPI.pas' {frmCentresKPI},
+  uGanttDatesDialog in 'uGanttDatesDialog.pas' {frmGanttDatesDialog},
+  uAppConfig in 'uAppConfig.pas',
+  uDBConfig in 'uDBConfig.pas' {frmDBConfig};
 
 {$R *.res}
 
+var
+  Cfg: TDBConfig;
 begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TDMPlanner, DMPlanner);
+
+  // Primera instalación: si no hay configuración de BBDD válida, lanzar el wizard.
+  if NeedsInstallWizard then
+  begin
+    if not TfrmInstallWizard.Execute then
+    begin
+      Application.Terminate;
+      Exit;
+    end;
+  end;
+
+  // Cargar configuración de BD desde INI (si existe). El login mostrará error
+  // y permitirá abrir el diálogo de configuración si falla la conexión.
+  Cfg := LoadDBConfig;
+  DMPlanner.Server         := Cfg.Server;
+  DMPlanner.Database       := Cfg.Database;
+  DMPlanner.UseWindowsAuth := Cfg.WindowsAuth;
+  DMPlanner.UserName       := Cfg.UserName;
+  DMPlanner.Password       := Cfg.Password;
 
   if not DoLogin then
   begin

@@ -12,6 +12,7 @@ uses
   cxFilter, dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
+  cxTextEdit, cxMaskEdit, cxCalendar, cxDropDownEdit,
   Data.Win.ADODB, Data.DB;
 
 type
@@ -39,6 +40,8 @@ type
     colProjFecha: TcxGridColumn;
     colProjActivo: TcxGridColumn;
     colProjFechaBloqueo: TcxGridColumn;
+    colProjRowMode: TcxGridColumn;
+    colProjNivelAgrupacion: TcxGridColumn;
     lvProyectos: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
@@ -122,6 +125,7 @@ begin
     Q := OpenQuery(
       'SELECT p.ProjectId, p.Codigo, p.Nombre, p.Descripcion, p.EsMaster, p.EsEscenario, ' +
       '  p.BasedOnProjectId, p.FechaCreacion, p.FechaBloqueo, p.Activo, ' +
+      '  p.RowMode, p.NivelAgrupacion, ' +
       '  (SELECT p2.Codigo FROM FS_PL_Project p2 WHERE p2.CodigoEmpresa = p.CodigoEmpresa ' +
       '   AND p2.ProjectId = p.BasedOnProjectId) AS BasadoEn ' +
       'FROM FS_PL_Project p ' +
@@ -162,6 +166,16 @@ begin
         else
           tvProyectos.DataController.Values[I, colProjFechaBloqueo.Index] :=
             Q.FieldByName('FechaBloqueo').AsDateTime;
+        if Q.FindField('RowMode') <> nil then
+          tvProyectos.DataController.Values[I, colProjRowMode.Index] :=
+            Q.FieldByName('RowMode').AsString
+        else
+          tvProyectos.DataController.Values[I, colProjRowMode.Index] := 'CENTROS';
+        if Q.FindField('NivelAgrupacion') <> nil then
+          tvProyectos.DataController.Values[I, colProjNivelAgrupacion.Index] :=
+            IntToStr(Q.FieldByName('NivelAgrupacion').AsInteger)
+        else
+          tvProyectos.DataController.Values[I, colProjNivelAgrupacion.Index] := '1';
 
         FProjectIds[I] := Q.FieldByName('ProjectId').AsInteger;
         FIsMaster[I] := IsMaster;
@@ -443,25 +457,53 @@ begin
 end;
 
 procedure TfrmGestionProyectos.btnGuardarClick(Sender: TObject);
+
+  function SafeStr(const V: Variant): string;
+  begin
+    if VarIsNull(V) or VarIsEmpty(V) or (VarType(V) = varError) then
+      Result := ''
+    else
+      try Result := VarToStr(V); except Result := ''; end;
+  end;
+
 var
-  I, ProjId: Integer;
-  Codigo, Nombre, Descripcion, BloqueoSQL: string;
+  I, ProjId, NivelAgrup: Integer;
+  Codigo, Nombre, Descripcion, BloqueoSQL, RowMode, S: string;
   CE: string;
   V: Variant;
+  DT: TDateTime;
 begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvProyectos.DataController.RecordCount - 1 do
   begin
     if I > High(FProjectIds) then Continue;
     ProjId := FProjectIds[I];
-    Codigo := VarToStr(tvProyectos.DataController.Values[I, colProjCodigo.Index]);
-    Nombre := VarToStr(tvProyectos.DataController.Values[I, colProjNombre.Index]);
-    Descripcion := VarToStr(tvProyectos.DataController.Values[I, colProjDescripcion.Index]);
+    Codigo := SafeStr(tvProyectos.DataController.Values[I, colProjCodigo.Index]);
+    Nombre := SafeStr(tvProyectos.DataController.Values[I, colProjNombre.Index]);
+    Descripcion := SafeStr(tvProyectos.DataController.Values[I, colProjDescripcion.Index]);
+
     V := tvProyectos.DataController.Values[I, colProjFechaBloqueo.Index];
-    if VarIsNull(V) or VarIsEmpty(V) then
+    if VarIsNull(V) or VarIsEmpty(V) or (VarType(V) = varError) then
       BloqueoSQL := 'NULL'
     else
-      BloqueoSQL := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', TDateTime(V)) + '''';
+    try
+      DT := VarToDateTime(V);
+      if DT = 0 then
+        BloqueoSQL := 'NULL'
+      else
+        BloqueoSQL := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', DT) + '''';
+    except
+      BloqueoSQL := 'NULL';
+    end;
+
+    RowMode := SafeStr(tvProyectos.DataController.Values[I, colProjRowMode.Index]);
+    if (RowMode <> 'CENTROS') and (RowMode <> 'GRUPO') and (RowMode <> 'TREE') then
+      RowMode := 'CENTROS';
+
+    S := SafeStr(tvProyectos.DataController.Values[I, colProjNivelAgrupacion.Index]);
+    if not TryStrToInt(S, NivelAgrup) then
+      NivelAgrup := 1;
+    if (NivelAgrup <> 1) and (NivelAgrup <> 2) then NivelAgrup := 1;
 
     if (Codigo = '') or (Nombre = '') then Continue;
 
@@ -470,6 +512,8 @@ begin
       'Nombre = ' + QStr(Nombre) + ', ' +
       'Descripcion = ' + QStr(Descripcion) + ', ' +
       'FechaBloqueo = ' + BloqueoSQL + ', ' +
+      'RowMode = ' + QStr(RowMode) + ', ' +
+      'NivelAgrupacion = ' + IntToStr(NivelAgrup) + ', ' +
       'FechaModificacion = GETDATE() ' +
       'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + IntToStr(ProjId));
   end;

@@ -562,8 +562,13 @@ var
   D: TNodeData;
 begin
   Q := OpenQuery(
-    'SELECT nd.* FROM FS_PL_NodeData nd ' +
+    'SELECT nd.*, ' +
+    '  gp.Nivel1ClaveERP, gp.Nivel1Caption, ' +
+    '  gp.Nivel2ClaveERP, gp.Nivel2Caption ' +
+    'FROM FS_PL_NodeData nd ' +
     'INNER JOIN FS_PL_Node n ON n.NodeId = nd.NodeId ' +
+    'LEFT JOIN FS_PL_vw_NodeGroupParent gp ' +
+    '  ON gp.CodigoEmpresa = nd.CodigoEmpresa AND gp.NodeId = nd.NodeId ' +
     'WHERE n.ProjectId = ' + IntToStr(AProjectId));
   try
     SetLength(Result, Q.RecordCount);
@@ -600,6 +605,20 @@ begin
       D.bkColorOp := SQLToColor(Q.FieldByName('ColorFondoOp').Value);
       D.borderColorOp := SQLToColor(Q.FieldByName('ColorBordeOp').Value);
       D.LibreMoviment := SQLToBool(Q.FieldByName('LibreMovimiento').Value);
+      // Campos para modos GRUPO/TREE (V016+ / V018+). Defensivos por si algun
+      // DB no tiene aun la vista FS_PL_vw_NodeGroupParent aplicada.
+      if Q.FindField('RawItemClaveERP') <> nil then
+        D.RawItemClaveERP := SQLToStr(Q.FieldByName('RawItemClaveERP').Value);
+      if Q.FindField('RawItemTipoOrigen') <> nil then
+        D.RawItemTipoOrigen := SQLToStr(Q.FieldByName('RawItemTipoOrigen').Value);
+      if Q.FindField('Nivel1ClaveERP') <> nil then
+        D.Nivel1ClaveERP := SQLToStr(Q.FieldByName('Nivel1ClaveERP').Value);
+      if Q.FindField('Nivel1Caption') <> nil then
+        D.Nivel1Caption := SQLToStr(Q.FieldByName('Nivel1Caption').Value);
+      if Q.FindField('Nivel2ClaveERP') <> nil then
+        D.Nivel2ClaveERP := SQLToStr(Q.FieldByName('Nivel2ClaveERP').Value);
+      if Q.FindField('Nivel2Caption') <> nil then
+        D.Nivel2Caption := SQLToStr(Q.FieldByName('Nivel2Caption').Value);
       Result[I] := D;
       Inc(I);
       Q.Next;

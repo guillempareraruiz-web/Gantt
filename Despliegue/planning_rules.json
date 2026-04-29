@@ -1,0 +1,73 @@
+﻿{
+  "activeIndex": 2,
+  "profiles": [
+    {
+      "name": "Regla1",
+      "description": "",
+      "sortRules": [
+        {
+          "field": "Prioridad",
+          "direction": "asc",
+          "weight": 5,
+          "enabled": true
+        },
+        {
+          "field": "_AlturaArticulo",
+          "direction": "desc",
+          "weight": 5,
+          "enabled": true
+        }
+      ],
+      "filterRules": [
+      ],
+      "groupRules": [
+      ]
+    },
+    {
+      "name": "Articulo",
+      "description": "",
+      "sortRules": [
+        {
+          "field": "CodigoArticulo",
+          "direction": "asc",
+          "weight": 5,
+          "enabled": true
+        }
+      ],
+      "filterRules": [
+        {
+          "field": "DurationMin",
+          "operator": "lt",
+          "value": "16",
+          "action": "exclude",
+          "targetCentreId": -1,
+          "enabled": true
+        }
+      ],
+      "groupRules": [
+      ]
+    },
+    {
+      "name": "Agrupar por articulo",
+      "description": "",
+      "sortRules": [
+        {
+          "field": "CodigoArticulo",
+          "direction": "asc",
+          "weight": 5,
+          "enabled": true
+        }
+      ],
+      "filterRules": [
+      ],
+      "groupRules": [
+        {
+          "field": "CodigoArticulo",
+          "mode": "sameCenter",
+          "weight": 5,
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

@@ -67,7 +67,10 @@ type
   end;
 
   TGanttControl = class(Vcl.Controls.TCustomControl)
-  private
+  protected
+    // Exposamos a descendientes (p.ej. TGanttControlGrupo) los campos y metodos
+    // que el RebuildLayout override necesita. Mantener `protected` simplifica
+    // la herencia en fase 6.2.
     FHistory: TGanttHistoryManager;
 
     FScrollX, FScrollY: Single;
@@ -106,6 +109,7 @@ type
     FOnViewportChanged: TGanttViewportChangedEvent;
     FOnScrollYChanged: TGanttScrollYChangedEvent;
     FOnNodeDblClick: TNodeDblClickEvent;
+    FOnFechaBloqueoChanged: TNotifyEvent;
 
     FCentreNodeIdx: TDictionary<Integer, TArray<Integer>>;
 
@@ -456,6 +460,7 @@ type
     procedure CommitMove;
 
     function IsCentreVisible(const ACentreId: Integer): Boolean;
+    function IsRowVisible(const ARowIndex: Integer): Boolean; virtual;
 
     procedure OpFilterTimerTick(Sender: TObject);
     function HitTestLink(const X, Y: Single; const Tolerance: Single = 6.0): Integer;
@@ -656,7 +661,7 @@ type
 
     procedure ApplyScrollYFromCentres(const AScrollY: Single);
 
-    procedure RebuildLayout; // sync, MVP
+    procedure RebuildLayout; virtual; // sync, MVP
 
     function GetCalendar(const CentreId: Integer): TCentreCalendar;
 
@@ -671,6 +676,7 @@ type
     function GetNodeAt(const Index: Integer): TNode;
 
     property OnScrollYChanged: TGanttScrollYChangedEvent read FOnScrollYChanged write FOnScrollYChanged;
+    property OnFechaBloqueoChanged: TNotifyEvent read FOnFechaBloqueoChanged write FOnFechaBloqueoChanged;
     property NodePopupMenu: TPopupMenu read FNodePopupMenu write FNodePopupMenu;
     property GanttPopupMenu: TPopupMenu read FGanttPopupMenu write FGanttPopupMenu;
     property ScrollX: Single read FScrollX write SetScrollX;
@@ -6571,6 +6577,16 @@ begin
   Result := (cIdx >= 0) and FCentres[cIdx].Visible; // o Enabled/Collapsed, el que facis servir
 end;
 
+function TGanttControl.IsRowVisible(const ARowIndex: Integer): Boolean;
+begin
+  // Hook para descendientes que usen TRowLayout.CentreId como indice de grupo
+  // (p.ej. TGanttControlGrupo). Por defecto delega en IsCentreVisible.
+  if (ARowIndex >= 0) and (ARowIndex <= High(FRows)) then
+    Result := IsCentreVisible(FRows[ARowIndex].CentreId)
+  else
+    Result := False;
+end;
+
 ///*****************************************************************************
 procedure TGanttControl.PaintD2D;
 const
@@ -6833,7 +6849,7 @@ begin
       begin
         Row := FRows[i];
 
-        if not IsCentreVisible(Row.CentreId) then
+        if not IsRowVisible(i) then
           Continue;
 
         // culling vertical WORLD
@@ -7277,7 +7293,7 @@ begin
       begin
         row := FRows[i];
 
-        if not IsCentreVisible(row.CentreId) then Continue;
+        if not IsRowVisible(i) then Continue;
 
         // culling vertical en WORLD
         if (row.TopY + row.Height) < VisibleYTop then
@@ -11735,6 +11751,8 @@ begin
       FDraggingBloqueo := False;
       MouseCapture := False;
       Invalidate;
+      if Assigned(FOnFechaBloqueoChanged) then
+        FOnFechaBloqueoChanged(Self);
       Exit;
   end;
 

@@ -4,7 +4,7 @@ object frmLogin: TfrmLogin
   BorderIcons = [biSystemMenu]
   BorderStyle = bsSingle
   Caption = 'FSPlanner 2026 - Iniciar Sesi'#243'n'
-  ClientHeight = 400
+  ClientHeight = 490
   ClientWidth = 400
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
@@ -54,12 +54,27 @@ object frmLogin: TfrmLogin
       Font.Style = []
       ParentFont = False
     end
+    object lblConfigBD: TLabel
+      Left = 250
+      Top = 48
+      Width = 132
+      Height = 15
+      Cursor = crHandPoint
+      Caption = 'Configurar Base de datos'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWhite
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsUnderline]
+      ParentFont = False
+      OnClick = lblConfigBDClick
+    end
   end
   object pnlBody: TPanel
     Left = 0
     Top = 80
     Width = 400
-    Height = 320
+    Height = 410
     Align = alClient
     BevelOuter = bvNone
     Color = clWhite
@@ -86,21 +101,6 @@ object frmLogin: TfrmLogin
       Height = 15
       Caption = 'Contrase'#241'a:'
     end
-    object lblError: TLabel
-      Left = 50
-      Top = 184
-      Width = 300
-      Height = 56
-      AutoSize = False
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clRed
-      Font.Height = -12
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-      Visible = False
-      WordWrap = True
-    end
     object cmbEmpresa: TComboBox
       Left = 50
       Top = 38
@@ -126,7 +126,7 @@ object frmLogin: TfrmLogin
     end
     object btnLogin: TButton
       Left = 200
-      Top = 249
+      Top = 337
       Width = 150
       Height = 32
       Caption = 'Iniciar Sesi'#243'n'
@@ -136,7 +136,7 @@ object frmLogin: TfrmLogin
     end
     object btnCancelar: TButton
       Left = 50
-      Top = 249
+      Top = 337
       Width = 120
       Height = 32
       Cancel = True
@@ -145,9 +145,9 @@ object frmLogin: TfrmLogin
       OnClick = btnCancelarClick
     end
     object btnDevAdmin: TButton
-      Left = 50
-      Top = 287
-      Width = 300
+      Left = 200
+      Top = 375
+      Width = 150
       Height = 22
       Caption = '[DEV] Entrar como Admin'
       Font.Charset = DEFAULT_CHARSET
@@ -158,6 +158,21 @@ object frmLogin: TfrmLogin
       ParentFont = False
       TabOrder = 5
       OnClick = btnDevAdminClick
+    end
+    object Memo1: TMemo
+      Left = 50
+      Top = 187
+      Width = 300
+      Height = 115
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -11
+      Font.Name = 'Consolas'
+      Font.Style = []
+      ParentFont = False
+      ReadOnly = True
+      ScrollBars = ssVertical
+      TabOrder = 6
     end
   end
 end

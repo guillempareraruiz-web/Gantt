@@ -443,10 +443,6 @@ type
     class function Execute(
       ANodeRepo: TNodeDataRepo;
       AOperariosRepo: TOperariosRepo;
-      const ACentres: TArray<TCentreTreball>;
-      AGetNodeTimes: TGetNodeTimesFunc;
-      AGetCalendar: TGetCalendarFunc;
-      const ALinks: TArray<TErpLink>;
       out AAssignments: TArray<TFCPAssignment>;
       ARuleEngine: TPlanningRuleEngine = nil;
       ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
@@ -455,6 +451,8 @@ type
 implementation
 
 uses
+  Data.Win.ADODB,
+  uDMPlanner, uCentresRepo,
   uCardLayoutEditor;
 
 {$R *.dfm}
@@ -2357,24 +2355,121 @@ end;
 class function TfrmFiniteCapacityPlanner.Execute(
   ANodeRepo: TNodeDataRepo;
   AOperariosRepo: TOperariosRepo;
-  const ACentres: TArray<TCentreTreball>;
-  AGetNodeTimes: TGetNodeTimesFunc;
-  AGetCalendar: TGetCalendarFunc;
-  const ALinks: TArray<TErpLink>;
   out AAssignments: TArray<TFCPAssignment>;
   ARuleEngine: TPlanningRuleEngine;
   ACustomFieldDefs: TCustomFieldDefs): Boolean;
 var
   Frm: TfrmFiniteCapacityPlanner;
+  NodeTimes: TDictionary<Integer, TAbsInterval>;
+  Links: TArray<TErpLink>;
+  Centres: TArray<TCentreTreball>;
+  Q: TADOQuery;
+  L: TErpLink;
+  LI: Integer;
+  Iv: TAbsInterval;
 begin
+  // Omplir el repo de NodeData amb el projecte actiu
+  if (ANodeRepo <> nil) and (DMPlanner <> nil) then
+    DMPlanner.LoadNodes(ANodeRepo);
+
+  // Obtenir centres del repo central
+  if (DMPlanner <> nil) and (DMPlanner.CentresRepo <> nil) then
+    Centres := DMPlanner.CentresRepo.GetAll
+  else
+    Centres := nil;
+
+  // Carregar Start/End dels nodes des de BD per al projecte actiu
+  NodeTimes := TDictionary<Integer, TAbsInterval>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT NodeId, FechaInicio, FechaFin FROM FS_PL_Node ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa AND ProjectId = :ProjectId';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('ProjectId').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if Q.FieldByName('FechaInicio').IsNull then
+        Iv.S := 0
+      else
+        Iv.S := Q.FieldByName('FechaInicio').AsDateTime;
+      if Q.FieldByName('FechaFin').IsNull then
+        Iv.E := 0
+      else
+        Iv.E := Q.FieldByName('FechaFin').AsDateTime;
+      NodeTimes.AddOrSetValue(Q.FieldByName('NodeId').AsInteger, Iv);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // Carregar Links del projecte des de BD
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT FromNodeId, ToNodeId, TipoLink, ' +
+      '  ISNULL(PorcentajeDependencia, 100) AS PorcentajeDependencia ' +
+      'FROM FS_PL_Dependency ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa AND ProjectId = :ProjectId';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('ProjectId').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    SetLength(Links, Q.RecordCount);
+    LI := 0;
+    while not Q.Eof do
+    begin
+      L.FromNodeId := Q.FieldByName('FromNodeId').AsInteger;
+      L.ToNodeId := Q.FieldByName('ToNodeId').AsInteger;
+      if Q.FieldByName('TipoLink').IsNull then
+        L.LinkType := TLinkType(0)
+      else
+        L.LinkType := TLinkType(Q.FieldByName('TipoLink').AsInteger);
+      L.PorcentajeDependencia := Q.FieldByName('PorcentajeDependencia').AsFloat;
+      Links[LI] := L;
+      Inc(LI);
+      Q.Next;
+    end;
+    SetLength(Links, LI);
+  finally
+    Q.Free;
+  end;
+
   Frm := TfrmFiniteCapacityPlanner.Create(nil);
   try
     Frm.FNodeRepo := ANodeRepo;
     Frm.FOperariosRepo := AOperariosRepo;
-    Frm.FCentres := ACentres;
-    Frm.FLinks := ALinks;
-    Frm.FGetNodeTimes := AGetNodeTimes;
-    Frm.FGetCalendar := AGetCalendar;
+    Frm.FCentres := Centres;
+    Frm.FLinks := Links;
+    Frm.FGetNodeTimes :=
+      function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
+      var
+        It: TAbsInterval;
+      begin
+        if NodeTimes.TryGetValue(DataId, It) then
+        begin
+          AStart := It.S;
+          AEnd := It.E;
+          Result := True;
+        end
+        else
+        begin
+          AStart := 0;
+          AEnd := 0;
+          Result := False;
+        end;
+      end;
+    Frm.FGetCalendar :=
+      function(const CentreId: Integer): TCentreCalendar
+      begin
+        if (DMPlanner <> nil) and (DMPlanner.CentresRepo <> nil) then
+          Result := DMPlanner.CentresRepo.GetCalendarFor(CentreId)
+        else
+          Result := nil;
+      end;
     Frm.FRuleEngine := ARuleEngine;
     Frm.FCustomFieldDefs := ACustomFieldDefs;
 
@@ -2526,9 +2621,9 @@ begin
     Frm.lblFilterArrow.OnClick := Frm.OnFilterBtnClick;
 
     // Inicializar todos los centros como visibles
-    for var CI := 0 to High(ACentres) do
-      if ACentres[CI].Visible and (ACentres[CI].Id >= 0) then
-        Frm.FVisibleCentreIds.Add(ACentres[CI].Id);
+    for var CI := 0 to High(Centres) do
+      if Centres[CI].Visible and (Centres[CI].Id >= 0) then
+        Frm.FVisibleCentreIds.Add(Centres[CI].Id);
     Frm.UpdateFilterText;
 
     // Pending list
@@ -2536,7 +2631,7 @@ begin
     Frm.FPendingList.Parent := Frm.pnlPending;
     Frm.FPendingList.Align := alClient;
     Frm.FPendingList.OnBeginDrag := Frm.OnPendingBeginDrag;
-    Frm.FPendingList.FLinks := ALinks;
+    Frm.FPendingList.FLinks := Links;
     // FGetNodeTimes s'assigna més avall via wrapper
     Frm.FPendingList.FOperariosRepo := AOperariosRepo;
     Frm.FPendingList.FCustomFieldDefs := ACustomFieldDefs;
@@ -2545,11 +2640,11 @@ begin
     Frm.FCentreColumns := TCentreColumnControl.Create(Frm);
     Frm.FCentreColumns.Parent := Frm.pnlCentres;
     Frm.FCentreColumns.Align := alClient;
-    Frm.FCentreColumns.SetData(ANodeRepo, ACentres);
+    Frm.FCentreColumns.SetData(ANodeRepo, Centres);
     Frm.FCentreColumns.OnBeginDrag := Frm.OnCentreBeginDrag;
-    Frm.FCentreColumns.FLinks := ALinks;
+    Frm.FCentreColumns.FLinks := Links;
     // FGetNodeTimes s'assigna més avall via wrapper
-    Frm.FCentreColumns.FGetCalendar := AGetCalendar;
+    Frm.FCentreColumns.FGetCalendar := Frm.FGetCalendar;
     Frm.FCentreColumns.FOperariosRepo := AOperariosRepo;
     Frm.FCentreColumns.FCustomFieldDefs := ACustomFieldDefs;
     Frm.FCentreColumns.PopupMenu := Frm.FCentrePopup;
@@ -2597,6 +2692,7 @@ begin
       AAssignments := nil;
   finally
     Frm.Free;
+    NodeTimes.Free;
   end;
 end;
 

@@ -180,7 +180,7 @@ procedure TDBMigrator.ExecuteSQLBatch(const ASQL: string);
 var
   Batches: TArray<string>;
   I: Integer;
-  Cmd: TADOCommand;
+  Q: TADOQuery;
   Batch: string;
 begin
   // Dividir por GO (batch separator de SQL Server)
@@ -192,13 +192,17 @@ begin
     Batch := Trim(Batches[I]);
     if Batch = '' then Continue;
 
-    Cmd := TADOCommand.Create(nil);
+    // Se usa TADOQuery con ParamCheck=False para que ADO no intente parsear
+    // ':' ni '?' como parametros dentro del SQL (comentarios, literales TIME
+    // '08:00', etc.). ExecSQL no devuelve recordset, ideal para DDL y DML.
+    Q := TADOQuery.Create(nil);
     try
-      Cmd.Connection := FConnection;
-      Cmd.CommandText := Batch;
-      Cmd.Execute;
+      Q.Connection := FConnection;
+      Q.ParamCheck := False;
+      Q.SQL.Text := Batch;
+      Q.ExecSQL;
     finally
-      Cmd.Free;
+      Q.Free;
     end;
   end;
 end;

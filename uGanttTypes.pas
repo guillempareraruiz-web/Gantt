@@ -121,6 +121,15 @@ type
     Modified: Boolean;
     LibreMoviment: Boolean;  // True = es pot moure a qualsevol centre; False = només CentresPermesos
 
+    // Link al modelo unificado Raw_Item (V016+). Poblado via FS_PL_vw_NodeGroupParent.
+    // Usado por los modos GRUPO/TREE del Gantt para agrupar nodos por padre ERP.
+    RawItemClaveERP: string;        // ClaveERP del item de Nivel 3 planificado
+    RawItemTipoOrigen: string;      // 'OF ','PED','PRJ'
+    Nivel1ClaveERP: string;         // padre Nivel 1 (OF / PEDIDO / PROYECTO)
+    Nivel1Caption: string;          // etiqueta para UI
+    Nivel2ClaveERP: string;         // padre Nivel 2 (OT / LINEA / TAREA)
+    Nivel2Caption: string;          // etiqueta para UI
+
     CustomFields: TArray<TCustomFieldValue>;
   end;
 

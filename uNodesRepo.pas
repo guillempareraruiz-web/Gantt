@@ -24,6 +24,13 @@ type
 
 implementation
 
+const
+  // Colores por defecto de los nodos (azul cal).
+  // Fill   = BGR $00E8B880 (RGB 128,184,232)
+  // Border = BGR $00AA6428 (RGB  40,100,170)
+  DEFAULT_NODE_FILL_COLOR   : TColor = TColor($00E8B880);
+  DEFAULT_NODE_BORDER_COLOR : TColor = TColor($00AA6428);
+
 constructor TNodesRepo.Create(AConnection: TADOConnection);
 begin
   inherited Create;
@@ -92,10 +99,19 @@ begin
       '  ISNULL(nd.ColorBordeOp, 0) AS ColorBordeOp, ' +
       '  ISNULL(nd.LibreMovimiento, 0) AS LibreMovimiento, ' +
       '  ISNULL(nd.Stock, 0) AS Stock, ' +
-      '  ISNULL(nd.PorcentajeDependencia, 0) AS PorcentajeDependencia ' +
+      '  ISNULL(nd.PorcentajeDependencia, 0) AS PorcentajeDependencia, ' +
+      // Campos del modelo unificado (V016) y cadena de padres (V018)
+      '  ISNULL(nd.RawItemClaveERP, '''') AS RawItemClaveERP, ' +
+      '  ISNULL(nd.RawItemTipoOrigen, '''') AS RawItemTipoOrigen, ' +
+      '  ISNULL(gp.Nivel1ClaveERP, '''') AS Nivel1ClaveERP, ' +
+      '  ISNULL(gp.Nivel1Caption, '''') AS Nivel1Caption, ' +
+      '  ISNULL(gp.Nivel2ClaveERP, '''') AS Nivel2ClaveERP, ' +
+      '  ISNULL(gp.Nivel2Caption, '''') AS Nivel2Caption ' +
       'FROM FS_PL_Node n ' +
       'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
       '  AND nd.NodeId = n.NodeId ' +
+      'LEFT JOIN FS_PL_vw_NodeGroupParent gp ON gp.CodigoEmpresa = n.CodigoEmpresa ' +
+      '  AND gp.NodeId = n.NodeId ' +
       'WHERE n.CodigoEmpresa = :CodigoEmpresa AND n.ProjectId = :ProjectId ' +
       'ORDER BY n.NodeId';
     Q.Parameters.ParamByName('CodigoEmpresa').Value := ACodigoEmpresa;
@@ -131,7 +147,11 @@ begin
         N.Caption := Q.FieldByName('Operacion').AsString;
 
       N.FillColor := TColor(Q.FieldByName('ColorFondo').AsInteger);
+      if N.FillColor = clBlack then
+        N.FillColor := DEFAULT_NODE_FILL_COLOR;
       N.BorderColor := TColor(Q.FieldByName('ColorBorde').AsInteger);
+      if N.BorderColor = clBlack then
+        N.BorderColor := DEFAULT_NODE_BORDER_COLOR;
       N.HoverColor := N.FillColor;
       N.Visible := Q.FieldByName('Visible').AsBoolean;
       N.Enabled := Q.FieldByName('Habilitado').AsBoolean;
@@ -163,10 +183,27 @@ begin
         D.Tipo := TNodoTipo(Q.FieldByName('Tipo').AsInteger);
         D.Prioridad := Q.FieldByName('Prioridad').AsInteger;
         D.bkColorOp := TColor(Q.FieldByName('ColorFondoOp').AsInteger);
+        if D.bkColorOp = clBlack then
+          D.bkColorOp := DEFAULT_NODE_FILL_COLOR;
         D.borderColorOp := TColor(Q.FieldByName('ColorBordeOp').AsInteger);
+        if D.borderColorOp = clBlack then
+          D.borderColorOp := DEFAULT_NODE_BORDER_COLOR;
         D.LibreMoviment := Q.FieldByName('LibreMovimiento').AsBoolean;
         D.Stock := Q.FieldByName('Stock').AsFloat;
         D.PorcentajeDependencia := Q.FieldByName('PorcentajeDependencia').AsFloat;
+        // Link modelo unificado Raw_Item (V016+) + cadena de padres (V018+)
+        if Q.FindField('RawItemClaveERP') <> nil then
+          D.RawItemClaveERP := Q.FieldByName('RawItemClaveERP').AsString;
+        if Q.FindField('RawItemTipoOrigen') <> nil then
+          D.RawItemTipoOrigen := Q.FieldByName('RawItemTipoOrigen').AsString;
+        if Q.FindField('Nivel1ClaveERP') <> nil then
+          D.Nivel1ClaveERP := Q.FieldByName('Nivel1ClaveERP').AsString;
+        if Q.FindField('Nivel1Caption') <> nil then
+          D.Nivel1Caption := Q.FieldByName('Nivel1Caption').AsString;
+        if Q.FindField('Nivel2ClaveERP') <> nil then
+          D.Nivel2ClaveERP := Q.FieldByName('Nivel2ClaveERP').AsString;
+        if Q.FindField('Nivel2Caption') <> nil then
+          D.Nivel2Caption := Q.FieldByName('Nivel2Caption').AsString;
         AFillNodeDataRepo.AddOrUpdate(D);
       end;
 

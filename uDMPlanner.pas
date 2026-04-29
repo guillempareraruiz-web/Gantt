@@ -28,6 +28,8 @@ type
     FCurrentProjectIsMaster: Boolean;
     FCurrentProjectFechaBloqueo: TDateTime;
     FCurrentProjectTieneBloqueo: Boolean;
+    FCurrentProjectRowMode: string;
+    FCurrentProjectNivelAgrupacion: Integer;
     FCodigoEmpresa: SmallInt;
     FCurrentEmpresaNombre: string;
     FPlanificaOperarios: Boolean;
@@ -69,6 +71,8 @@ type
     property CurrentProjectIsMaster: Boolean read FCurrentProjectIsMaster;
     property CurrentProjectFechaBloqueo: TDateTime read FCurrentProjectFechaBloqueo;
     property CurrentProjectTieneBloqueo: Boolean read FCurrentProjectTieneBloqueo;
+    property CurrentProjectRowMode: string read FCurrentProjectRowMode;
+    property CurrentProjectNivelAgrupacion: Integer read FCurrentProjectNivelAgrupacion;
     property CurrentEmpresaNombre: string read FCurrentEmpresaNombre;
     property CodigoEmpresa: SmallInt read FCodigoEmpresa write FCodigoEmpresa;
     property PlanificaOperarios: Boolean read FPlanificaOperarios;
@@ -193,7 +197,8 @@ var
   MigrationsPath: string;
 begin
   try
-    //BuildConnectionString;
+    if FServer <> '' then
+      BuildConnectionString;
     ADOConnection.Connected := True;
     FConnector := TSQLServerConnector.Create(ADOConnection);
 
@@ -332,13 +337,16 @@ begin
   FCurrentProjectIsMaster := False;
   FCurrentProjectFechaBloqueo := 0;
   FCurrentProjectTieneBloqueo := False;
+  FCurrentProjectRowMode := 'CENTROS';
+  FCurrentProjectNivelAgrupacion := 1;
 
   if not IsConnected then Exit;
 
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := ADOConnection;
-    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster, FechaBloqueo FROM FS_PL_Project ' +
+    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster, FechaBloqueo, RowMode, NivelAgrupacion ' +
+      'FROM FS_PL_Project ' +
       'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
       ' AND EsMaster = 1 AND Activo = 1';
     Q.Open;
@@ -350,6 +358,10 @@ begin
       FCurrentProjectTieneBloqueo := not Q.FieldByName('FechaBloqueo').IsNull;
       if FCurrentProjectTieneBloqueo then
         FCurrentProjectFechaBloqueo := Q.FieldByName('FechaBloqueo').AsDateTime;
+      if Q.FindField('RowMode') <> nil then
+        FCurrentProjectRowMode := Q.FieldByName('RowMode').AsString;
+      if Q.FindField('NivelAgrupacion') <> nil then
+        FCurrentProjectNivelAgrupacion := Q.FieldByName('NivelAgrupacion').AsInteger;
     end;
   finally
     Q.Free;
@@ -421,7 +433,8 @@ begin
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := ADOConnection;
-    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster, FechaBloqueo FROM FS_PL_Project ' +
+    Q.SQL.Text := 'SELECT ProjectId, Nombre, EsMaster, FechaBloqueo, RowMode, NivelAgrupacion ' +
+      'FROM FS_PL_Project ' +
       'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
       ' AND ProjectId = ' + IntToStr(AProjectId);
     Q.Open;
@@ -435,6 +448,14 @@ begin
         FCurrentProjectFechaBloqueo := Q.FieldByName('FechaBloqueo').AsDateTime
       else
         FCurrentProjectFechaBloqueo := 0;
+      if Q.FindField('RowMode') <> nil then
+        FCurrentProjectRowMode := Q.FieldByName('RowMode').AsString
+      else
+        FCurrentProjectRowMode := 'CENTROS';
+      if Q.FindField('NivelAgrupacion') <> nil then
+        FCurrentProjectNivelAgrupacion := Q.FieldByName('NivelAgrupacion').AsInteger
+      else
+        FCurrentProjectNivelAgrupacion := 1;
     end;
   finally
     Q.Free;

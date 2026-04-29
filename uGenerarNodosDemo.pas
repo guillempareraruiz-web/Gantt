@@ -297,11 +297,11 @@ begin
     Cmd.Connection := AConn;
     Cmd.CommandText :=
       'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, ' +
-      '  FechaInicio, FechaFin, DuracionMin, Caption) VALUES (' +
+      '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde) VALUES (' +
       ACE + ', ' + APID + ', ' + CenterSQL + ', ' +
       FechaIniSQL + ', ' + FechaFinSQL + ', ' +
       FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
-      QStr(AOperacion) + ')';
+      QStr(AOperacion) + ', 15251072, 11166760)';
     Cmd.Execute;
   finally
     Cmd.Free;
@@ -326,13 +326,13 @@ begin
     Cmd.CommandText :=
       'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
       '  NumeroOF, NumeroPedido, NumeroTrabajo, DuracionMin, DuracionMinOriginal, ' +
-      '  UnidadesAFabricar, OperariosNecesarios) VALUES (' +
+      '  UnidadesAFabricar, OperariosNecesarios, ColorFondoOp, ColorBordeOp) VALUES (' +
       ACE + ', ' + IntToStr(NodeId) + ', ' + QStr(AOperacion) + ', ' +
       IntToStr(ANumOF) + ', ' + IntToStr(ANumPedido) + ', ' +
       QStr(IntToStr(ANumTrabajo)) + ', ' +
       FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
       FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
-      IntToStr(100 + Random(900)) + ', 1)';
+      IntToStr(100 + Random(900)) + ', 1, 15251072, 11166760)';
     Cmd.Execute;
   finally
     Cmd.Free;

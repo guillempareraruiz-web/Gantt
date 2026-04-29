@@ -28,6 +28,9 @@ type
     function GetAll: TArray<TCentreTreball>;
     function GetCalendarIdFor(ACenterId: Integer): Integer;
     function GetCalendarFor(ACenterId: Integer): TCentreCalendar;
+
+    // Persistir cambios de un centro a BD y actualizar la copia en memoria.
+    procedure Update(ACodigoEmpresa: SmallInt; const ACentre: TCentreTreball);
   end;
 
 implementation
@@ -78,6 +81,45 @@ begin
   CalId := GetCalendarIdFor(ACenterId);
   if (CalId > 0) and (FCalendarsRepo <> nil) then
     Result := FCalendarsRepo.GetById(CalId);
+end;
+
+procedure TCentresRepo.Update(ACodigoEmpresa: SmallInt;
+  const ACentre: TCentreTreball);
+var
+  Cmd: TADOCommand;
+  I: Integer;
+begin
+  if FConnection = nil then Exit;
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := FConnection;
+    Cmd.ParamCheck := False;
+    Cmd.CommandText :=
+      'UPDATE FS_PL_Center SET ' +
+      '  CodigoCentro = ''' + StringReplace(ACentre.CodiCentre, '''', '''''', [rfReplaceAll]) + ''', ' +
+      '  Titulo = ''' + StringReplace(ACentre.Titulo, '''', '''''', [rfReplaceAll]) + ''', ' +
+      '  Subtitulo = ''' + StringReplace(ACentre.Subtitulo, '''', '''''', [rfReplaceAll]) + ''', ' +
+      '  EsSecuencial = ' + IntToStr(Ord(ACentre.IsSequencial)) + ', ' +
+      '  MaxLanes = ' + IntToStr(ACentre.MaxLaneCount) + ', ' +
+      '  AlturaBase = ' + FloatToStr(ACentre.BaseHeight).Replace(',', '.') + ', ' +
+      '  Orden = ' + IntToStr(ACentre.Order) + ', ' +
+      '  Visible = ' + IntToStr(Ord(ACentre.Visible)) + ', ' +
+      '  Habilitado = ' + IntToStr(Ord(ACentre.Enabled)) + ', ' +
+      '  ColorFondo = ' + IntToStr(Integer(ACentre.BkColor)) +
+      ' WHERE CodigoEmpresa = ' + IntToStr(ACodigoEmpresa) +
+      '   AND CenterId = ' + IntToStr(ACentre.Id);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  for I := 0 to High(FCentres) do
+    if FCentres[I].Id = ACentre.Id then
+    begin
+      FCentres[I] := ACentre;
+      Break;
+    end;
 end;
 
 procedure TCentresRepo.LoadFromDB(ACodigoEmpresa: SmallInt);

@@ -3,7 +3,7 @@
 interface
 
 uses
-  Winapi.Windows, System.SysUtils, System.Classes, System.Hash,
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes, System.Hash,
   Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Graphics,
   Vcl.Dialogs,
   Data.Win.ADODB, Data.DB;
@@ -29,16 +29,18 @@ type
     lblEmpresa: TLabel;
     lblUsuario: TLabel;
     lblPassword: TLabel;
-    lblError: TLabel;
     cmbEmpresa: TComboBox;
     edtUsuario: TEdit;
     edtPassword: TEdit;
     btnLogin: TButton;
     btnCancelar: TButton;
     btnDevAdmin: TButton;
+    Memo1: TMemo;
+    lblConfigBD: TLabel;
     procedure btnLoginClick(Sender: TObject);
     procedure btnCancelarClick(Sender: TObject);
     procedure btnDevAdminClick(Sender: TObject);
+    procedure lblConfigBDClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormKeyPress(Sender: TObject; var Key: Char);
   private
@@ -54,6 +56,7 @@ type
     procedure LoadPermissions;
     procedure LogAccess(const ALogin, AResultado: string; AUserId: Integer);
     procedure ShowError(const AMsg: string);
+    procedure LogStep(const AMsg: string);
   public
     property Session: TUserSession read FSession;
     property LoginOK: Boolean read FLoginOK;
@@ -69,7 +72,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uDMPlanner;
+  uDMPlanner, uAppConfig, uDBConfig;
 
 var
   GSession: TUserSession;
@@ -121,17 +124,36 @@ end;
 
 procedure TfrmLogin.FormCreate(Sender: TObject);
 begin
-  // Conectar y cargar empresas
+  Memo1.Lines.Clear;
+  Memo1.Visible := True;
+
+  LogStep('Lanzando aplicación FSPlanner 2026...');
+  LogStep('Configuración leída desde: ' + ExtractFilePath(ParamStr(0)) + 'FSPlanner2026.ini');
+
   if not DMPlanner.IsConnected then
   begin
+    if DMPlanner.Server <> '' then
+      LogStep('Conectando a base de datos: ' + DMPlanner.Server + ' / ' + DMPlanner.Database + '...')
+    else
+      LogStep('Conectando a base de datos (configuración por defecto)...');
+
     var R := DMPlanner.Connect;
     if not R.Success then
     begin
       ShowError('No se puede conectar: ' + R.ErrorMessage);
+      LogStep('Pulse "Configurar Base de datos" para revisar la conexión.');
       Exit;
     end;
-  end;
+    LogStep('Conexión establecida correctamente.');
+    LogStep('Migraciones aplicadas (si las había pendientes).');
+  end
+  else
+    LogStep('Conexión a base de datos ya activa.');
+
+  LogStep('Cargando lista de empresas...');
   LoadEmpresas;
+  LogStep('Empresas cargadas: ' + IntToStr(cmbEmpresa.Items.Count) + '.');
+  LogStep('Listo. Introduzca usuario y contraseña.');
 end;
 
 procedure TfrmLogin.LoadEmpresas;
@@ -173,8 +195,20 @@ end;
 
 procedure TfrmLogin.ShowError(const AMsg: string);
 begin
-  lblError.Caption := AMsg;
-  lblError.Visible := True;
+  Memo1.Font.Color := clRed;
+  Memo1.Lines.Add('[' + FormatDateTime('hh:nn:ss', Now) + '] ERROR: ' + AMsg);
+  Memo1.Visible := True;
+  Application.ProcessMessages;
+end;
+
+procedure TfrmLogin.LogStep(const AMsg: string);
+begin
+  Memo1.Font.Color := clBlack;
+  Memo1.Lines.Add('[' + FormatDateTime('hh:nn:ss', Now) + '] ' + AMsg);
+  Memo1.Visible := True;
+  // Forzar refresco visual durante el arranque
+  SendMessage(Memo1.Handle, EM_LINESCROLL, 0, Memo1.Lines.Count);
+  Application.ProcessMessages;
 end;
 
 procedure TfrmLogin.btnLoginClick(Sender: TObject);
@@ -182,7 +216,7 @@ var
   UserLogin, PwdHash: string;
   bValidated: Boolean;
 begin
-  lblError.Visible := False;
+  Memo1.Visible := False;
   FLoginOK := False;
   bValidated := False;
 
@@ -455,7 +489,7 @@ end;
 
 procedure TfrmLogin.btnDevAdminClick(Sender: TObject);
 begin
-  lblError.Visible := False;
+  Memo1.Visible := False;
 
   if cmbEmpresa.ItemIndex < 0 then
   begin
@@ -497,6 +531,38 @@ procedure TfrmLogin.btnCancelarClick(Sender: TObject);
 begin
   FLoginOK := False;
   Close;
+end;
+
+procedure TfrmLogin.lblConfigBDClick(Sender: TObject);
+var
+  Cfg: TDBConfig;
+begin
+  if not ShowDBConfigDialog then Exit;
+
+  LogStep('Nueva configuración guardada. Reconectando...');
+
+  if DMPlanner.IsConnected then
+    DMPlanner.Disconnect;
+
+  Cfg := LoadDBConfig;
+  DMPlanner.Server         := Cfg.Server;
+  DMPlanner.Database       := Cfg.Database;
+  DMPlanner.UseWindowsAuth := Cfg.WindowsAuth;
+  DMPlanner.UserName       := Cfg.UserName;
+  DMPlanner.Password       := Cfg.Password;
+
+  LogStep('Conectando a base de datos: ' + DMPlanner.Server + ' / ' + DMPlanner.Database + '...');
+  var R := DMPlanner.Connect;
+  if not R.Success then
+  begin
+    ShowError('No se puede conectar: ' + R.ErrorMessage);
+    Exit;
+  end;
+  LogStep('Conexión establecida correctamente.');
+
+  LogStep('Cargando lista de empresas...');
+  LoadEmpresas;
+  LogStep('Empresas cargadas: ' + IntToStr(cmbEmpresa.Items.Count) + '.');
 end;
 
 procedure TfrmLogin.FormKeyPress(Sender: TObject; var Key: Char);

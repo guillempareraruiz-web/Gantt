@@ -16,9 +16,9 @@ object frmVistaGantt: TfrmVistaGantt
   TextHeight = 15
   object pnlRoot: TPanel
     Left = 0
-    Top = 393
+    Top = 361
     Width = 1130
-    Height = 207
+    Height = 239
     Align = alClient
     BevelOuter = bvNone
     Color = clWhite
@@ -28,7 +28,7 @@ object frmVistaGantt: TfrmVistaGantt
       Left = 0
       Top = 0
       Width = 226
-      Height = 207
+      Height = 239
       Align = alLeft
       BevelOuter = bvNone
       Caption = 'pnlCentros'
@@ -81,6 +81,7 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = []
           ParentFont = False
           TabOrder = 0
+          OnClick = Button14Click
         end
         object Button15: TButton
           Left = 51
@@ -95,6 +96,7 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = []
           ParentFont = False
           TabOrder = 1
+          OnClick = Button15Click
         end
         object chkShowKPIs: TCheckBox
           Left = 11
@@ -109,6 +111,7 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = []
           ParentFont = False
           TabOrder = 2
+          OnClick = chkShowKPIsClick
         end
         object Button20: TButton
           Left = 178
@@ -124,6 +127,7 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = []
           ParentFont = False
           TabOrder = 3
+          OnClick = Button20Click
         end
       end
     end
@@ -131,7 +135,7 @@ object frmVistaGantt: TfrmVistaGantt
       Left = 226
       Top = 0
       Width = 904
-      Height = 207
+      Height = 239
       Align = alClient
       BevelOuter = bvNone
       Caption = 'pnlGanttContainer'
@@ -143,7 +147,7 @@ object frmVistaGantt: TfrmVistaGantt
     Left = 0
     Top = 0
     Width = 1130
-    Height = 393
+    Height = 361
     Align = alTop
     BevelOuter = bvNone
     Color = 15395562
@@ -153,112 +157,70 @@ object frmVistaGantt: TfrmVistaGantt
       Left = 0
       Top = 124
       Width = 1130
-      Height = 134
+      Height = 109
       Align = alTop
-      Color = 15395562
+      Color = clSilver
       ParentBackground = False
       TabOrder = 0
       Visible = False
       DesignSize = (
         1130
-        134)
-      object lblCurrentEmpresa: TLabel
-        Left = 786
-        Top = 4
-        Width = 295
-        Height = 15
-        Anchors = [akTop, akRight]
-        AutoSize = False
-        Caption = 'Empresa: --'
-        EllipsisPosition = epEndEllipsis
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = 3553567
-        Font.Height = -12
-        Font.Name = 'Segoe UI Semibold'
-        Font.Style = []
-        ParentFont = False
-        Layout = tlCenter
-      end
-      object lblCurrentProyecto: TLabel
-        Left = 787
-        Top = 18
-        Width = 294
-        Height = 15
-        Anchors = [akTop, akRight]
-        AutoSize = False
-        Caption = 'Proyecto: --'
-        EllipsisPosition = epEndEllipsis
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clGray
-        Font.Height = -11
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        Layout = tlCenter
-      end
+        109)
       object Label1: TLabel
-        Left = 285
-        Top = 39
+        Left = 276
+        Top = 7
         Width = 41
         Height = 15
         Caption = 'Centros'
       end
       object Label2: TLabel
-        Left = 348
-        Top = 39
+        Left = 339
+        Top = 7
         Width = 48
         Height = 15
         Caption = 'Total OFs'
       end
       object Label3: TLabel
-        Left = 20
-        Top = 39
+        Left = 11
+        Top = 7
         Width = 95
         Height = 15
         Caption = 'Fecha Inicio Gantt'
       end
       object Label4: TLabel
-        Left = 147
-        Top = 39
+        Left = 138
+        Top = 7
         Width = 80
         Height = 15
         Caption = 'Fecha fin Gantt'
       end
       object Label5: TLabel
-        Left = 774
-        Top = 38
+        Left = 765
+        Top = 6
         Width = 35
         Height = 15
         Anchors = [akTop, akRight]
         Caption = 'Buscar'
       end
       object Label6: TLabel
-        Left = 524
-        Top = 36
+        Left = 515
+        Top = 4
         Width = 48
         Height = 15
         Anchors = [akTop, akRight]
         Caption = 'Ir a fecha'
       end
       object Label7: TLabel
-        Left = 616
-        Top = 82
+        Left = 607
+        Top = 50
         Width = 78
         Height = 15
         Anchors = [akTop, akRight]
         Caption = 'Zoom timeline'
       end
-      object Label8: TLabel
-        Left = 421
-        Top = 82
-        Width = 30
-        Height = 15
-        Anchors = [akTop, akRight]
-        Caption = 'Vistas'
-      end
       object lblUndoCount: TLabel
-        Left = 20
-        Top = 108
+        Left = 11
+        Top = 76
         Width = 23
         Height = 15
         Alignment = taCenter
@@ -272,8 +234,8 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
       end
       object lblRedoCount: TLabel
-        Left = 42
-        Top = 108
+        Left = 33
+        Top = 76
         Width = 23
         Height = 15
         Alignment = taCenter
@@ -287,15 +249,15 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
       end
       object Label19: TLabel
-        Left = 152
-        Top = 94
+        Left = 143
+        Top = 62
         Width = 51
         Height = 15
         Caption = 'Operarios'
       end
       object btnRefresh: TButton
-        Left = 1006
-        Top = 54
+        Left = 997
+        Top = 22
         Width = 75
         Height = 25
         Anchors = [akTop, akRight]
@@ -303,8 +265,8 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 0
       end
       object spCentros: TcxSpinEdit
-        Left = 285
-        Top = 55
+        Left = 276
+        Top = 23
         Properties.AssignedValues.MinValue = True
         Properties.ImmediatePost = True
         TabOrder = 1
@@ -312,8 +274,8 @@ object frmVistaGantt: TfrmVistaGantt
         Width = 57
       end
       object cxSpinEdit2: TcxSpinEdit
-        Left = 348
-        Top = 55
+        Left = 339
+        Top = 23
         Properties.AssignedValues.MinValue = True
         Properties.ImmediatePost = True
         TabOrder = 2
@@ -321,22 +283,22 @@ object frmVistaGantt: TfrmVistaGantt
         Width = 66
       end
       object dtFechaInicioGantt: TcxDateEdit
-        Left = 18
-        Top = 55
+        Left = 9
+        Top = 23
         Properties.ShowTime = False
         TabOrder = 3
         Width = 121
       end
       object dtFechaFinGantt: TcxDateEdit
-        Left = 145
-        Top = 55
+        Left = 136
+        Top = 23
         Properties.ShowTime = False
         TabOrder = 4
         Width = 121
       end
       object SearchBox1: TSearchBox
-        Left = 774
-        Top = 55
+        Left = 765
+        Top = 23
         Width = 145
         Height = 23
         Anchors = [akTop, akRight]
@@ -344,8 +306,8 @@ object frmVistaGantt: TfrmVistaGantt
         Text = 'SearchBox1'
       end
       object RadioButton1: TRadioButton
-        Left = 831
-        Top = 38
+        Left = 822
+        Top = 6
         Width = 40
         Height = 17
         Anchors = [akTop, akRight]
@@ -355,8 +317,8 @@ object frmVistaGantt: TfrmVistaGantt
         TabStop = True
       end
       object RadioButton2: TRadioButton
-        Left = 877
-        Top = 38
+        Left = 868
+        Top = 6
         Width = 40
         Height = 17
         Anchors = [akTop, akRight]
@@ -364,8 +326,8 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 7
       end
       object Button3: TButton
-        Left = 923
-        Top = 54
+        Left = 914
+        Top = 22
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -373,8 +335,8 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 8
       end
       object Button4: TButton
-        Left = 947
-        Top = 54
+        Left = 938
+        Top = 22
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -382,8 +344,8 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 9
       end
       object Button5: TButton
-        Left = 971
-        Top = 54
+        Left = 962
+        Top = 22
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -391,24 +353,24 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 10
       end
       object Button6: TButton
-        Left = 420
-        Top = 53
+        Left = 411
+        Top = 21
         Width = 75
         Height = 25
         Caption = 'Recrear Raw'
         TabOrder = 11
       end
       object cxDateEdit1: TcxDateEdit
-        Left = 522
-        Top = 52
+        Left = 513
+        Top = 20
         Anchors = [akTop, akRight]
         Properties.ShowTime = False
         TabOrder = 12
         Width = 94
       end
       object Button7: TButton
-        Left = 616
-        Top = 51
+        Left = 607
+        Top = 19
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -423,8 +385,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button8: TButton
         Tag = 1
-        Left = 616
-        Top = 97
+        Left = 607
+        Top = 65
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -439,8 +401,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button9: TButton
         Tag = 2
-        Left = 640
-        Top = 97
+        Left = 631
+        Top = 65
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -455,8 +417,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button10: TButton
         Tag = 3
-        Left = 664
-        Top = 97
+        Left = 655
+        Top = 65
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -471,8 +433,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button11: TButton
         Tag = 4
-        Left = 688
-        Top = 97
+        Left = 679
+        Top = 65
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -486,8 +448,8 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 17
       end
       object ComboBox1: TComboBox
-        Left = 828
-        Top = 98
+        Left = 819
+        Top = 66
         Width = 253
         Height = 23
         Style = csDropDownList
@@ -501,8 +463,8 @@ object frmVistaGantt: TfrmVistaGantt
           'Nunca ver dependencias')
       end
       object Button1: TButton
-        Left = 640
-        Top = 51
+        Left = 631
+        Top = 19
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -515,33 +477,10 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         TabOrder = 19
       end
-      object ComboBox2: TComboBox
-        Left = 420
-        Top = 98
-        Width = 187
-        Height = 23
-        Style = csDropDownList
-        Anchors = [akTop, akRight]
-        DropDownCount = 12
-        TabOrder = 20
-        Items.Strings = (
-          'gvmNormal'
-          'gvmOptimitzacio'
-          'gvmFabricacio'
-          'gvmFechaEntrega'
-          'gvmStock'
-          'gvmOperarios   '
-          'gvmCarga'
-          'gvmEstado'
-          'gvmPrioridad'
-          'gvmRendimiento'
-          'gvmColores'
-          'gvmModificaciones')
-      end
       object btnUndo: TButton
         Tag = 1
-        Left = 18
-        Top = 84
+        Left = 9
+        Top = 52
         Width = 25
         Height = 25
         Caption = 'Undo'
@@ -551,12 +490,12 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 21
+        TabOrder = 20
       end
       object btnRedo: TButton
         Tag = 1
-        Left = 42
-        Top = 84
+        Left = 33
+        Top = 52
         Width = 25
         Height = 25
         Caption = 'Redo'
@@ -566,12 +505,12 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 22
+        TabOrder = 21
       end
       object Button12: TButton
         Tag = 1
-        Left = 68
-        Top = 84
+        Left = 59
+        Top = 52
         Width = 39
         Height = 25
         Caption = 'Check'
@@ -581,12 +520,12 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 23
+        TabOrder = 22
       end
       object Button13: TButton
         Tag = 1
-        Left = 719
-        Top = 97
+        Left = 710
+        Top = 65
         Width = 52
         Height = 25
         Anchors = [akTop, akRight]
@@ -597,36 +536,36 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 24
+        TabOrder = 23
       end
       object FcxFilterOperarios: TcxCheckComboBox
-        Left = 151
-        Top = 110
+        Left = 142
+        Top = 78
         Properties.DropDownRows = 30
         Properties.Items = <>
-        TabOrder = 25
+        TabOrder = 24
         Width = 185
       end
       object FchkSoloFiltrados: TcxCheckBox
-        Left = 226
-        Top = 91
+        Left = 217
+        Top = 59
         Caption = 'Ver solo filtrados'
         Properties.Alignment = taRightJustify
         Style.TransparentBorder = False
-        TabOrder = 26
+        TabOrder = 25
       end
       object Button25: TButton
-        Left = 719
-        Top = 53
+        Left = 710
+        Top = 21
         Width = 51
         Height = 25
         Anchors = [akTop, akRight]
         Caption = 'BUSCAR'
-        TabOrder = 27
+        TabOrder = 26
       end
       object Button26: TButton
-        Left = 1006
-        Top = 35
+        Left = 997
+        Top = 3
         Width = 75
         Height = 20
         Anchors = [akTop, akRight]
@@ -637,12 +576,12 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 28
+        TabOrder = 27
       end
     end
     object Panel3: TPanel
       Left = 0
-      Top = 258
+      Top = 233
       Width = 1130
       Height = 50
       Align = alTop
@@ -792,6 +731,7 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
+          OnClick = lblModifiedClick
         end
       end
       object Panel7: TPanel
@@ -1017,6 +957,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 8
+        OnClick = Button16Click
       end
       object Button17: TButton
         Left = 30
@@ -1031,6 +972,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 9
+        OnClick = Button17Click
       end
       object Button19: TButton
         Left = 50
@@ -1045,6 +987,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 10
+        OnClick = Button19Click
       end
       object Button18: TButton
         Left = 70
@@ -1059,6 +1002,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 11
+        OnClick = Button18Click
       end
       object Button21: TButton
         Left = 110
@@ -1073,6 +1017,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 12
+        OnClick = Button21Click
       end
       object Button22: TButton
         Left = 130
@@ -1087,6 +1032,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 13
+        OnClick = Button22Click
       end
       object Button2: TButton
         Left = 418
@@ -1096,6 +1042,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         Caption = 'OF inversa'
         TabOrder = 14
+        OnClick = Button2Click
       end
       object Button23: TButton
         Left = 418
@@ -1105,6 +1052,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         Caption = 'OT inversa'
         TabOrder = 15
+        OnClick = Button23Click
       end
       object Button24: TButton
         Left = 157
@@ -1137,6 +1085,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = [fsBold]
         ParentFont = False
+        OnClick = btnResaltarOFClick
       end
       object btnResaltarOT: TcxButton
         Tag = 1
@@ -1156,11 +1105,12 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = [fsBold]
         ParentFont = False
+        OnClick = btnResaltarOFClick
       end
     end
     object pnlBuscar: TPanel
       Left = 0
-      Top = 308
+      Top = 283
       Width = 1130
       Height = 51
       Align = alTop
@@ -1609,21 +1559,174 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
       end
       object lblFechaHora: TLabel
-        Left = 640
-        Top = 28
+        Left = 859
+        Top = 47
         Width = 240
-        Height = 28
+        Height = 29
         Alignment = taRightJustify
         Anchors = [akTop, akRight]
         AutoSize = False
-        Caption = '--/--/---- --:--'
+        Caption = '01.01.2026  -  31.12.2026'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -19
+        Font.Name = 'Segoe UI Semilight'
+        Font.Style = []
+        ParentFont = False
+        Layout = tlCenter
+      end
+      object Label28: TLabel
+        Left = 859
+        Top = 6
+        Width = 240
+        Height = 19
+        Alignment = taRightJustify
+        Anchors = [akTop, akRight]
+        AutoSize = False
+        Caption = 'PROJECT NAME'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -16
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
         Layout = tlCenter
+      end
+      object Label29: TLabel
+        Left = 1003
+        Top = 21
+        Width = 96
+        Height = 19
+        Alignment = taRightJustify
+        Anchors = [akTop, akRight]
+        AutoSize = False
+        Caption = 'MASTER'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 12903279
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+      object Label38: TLabel
+        Left = 1003
+        Top = 32
+        Width = 96
+        Height = 19
+        Alignment = taRightJustify
+        Anchors = [akTop, akRight]
+        AutoSize = False
+        Caption = 'Modo Edici'#243'n'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 7136979
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        Layout = tlCenter
+      end
+      object btnFocus: TButton
+        Left = 288
+        Top = 19
+        Width = 75
+        Height = 25
+        Caption = 'btnFocus'
+        TabOrder = 0
+      end
+      object btnGanttDates: TcxButton
+        Left = 1104
+        Top = 54
+        Width = 18
+        Height = 18
+        Cursor = crHandPoint
+        Anchors = [akTop, akRight]
+        LookAndFeel.NativeStyle = False
+        OptionsImage.Glyph.SourceDPI = 96
+        OptionsImage.Glyph.SourceHeight = 16
+        OptionsImage.Glyph.SourceWidth = 16
+        OptionsImage.Glyph.Data = {
+          3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+          462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+          617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+          2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+          77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+          22307078222076696577426F783D2230203020333220333222207374796C653D
+          22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+          3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+          303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+          63653D227072657365727665223E2E59656C6C6F777B66696C6C3A2346464231
+          31353B7D262331333B262331303B2623393B2E5265647B66696C6C3A23443131
+          4331433B7D262331333B262331303B2623393B2E426C75657B66696C6C3A2331
+          31373744373B7D262331333B262331303B2623393B2E477265656E7B66696C6C
+          3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
+          696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
+          657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
+          74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
+          74317B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B2E
+          7374327B646973706C61793A696E6C696E653B66696C6C3A233033394332333B
+          7D262331333B262331303B2623393B2E7374337B646973706C61793A696E6C69
+          6E653B66696C6C3A234431314331433B7D262331333B262331303B2623393B2E
+          7374347B646973706C61793A696E6C696E653B66696C6C3A233732373237323B
+          7D3C2F7374796C653E0D0A3C672069643D22416C69676E4A757374696679223E
+          0D0A09093C7061746820636C6173733D22426C61636B2220643D224D32382C38
+          4834563668323456387A204D32382C3130483476326832345631307A204D3238
+          2C3134483476326832345631347A204D32382C3232483476326832345632327A
+          204D32382C3138483476326832345631387A222F3E0D0A093C2F673E0D0A3C2F
+          7376673E0D0A}
+        PaintStyle = bpsGlyph
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.Flat = True
+        SpeedButtonOptions.Transparent = True
+        TabOrder = 1
+        OnClick = btnGanttDatesClick
+      end
+      object cxButton9: TcxButton
+        Left = 1104
+        Top = 8
+        Width = 18
+        Height = 18
+        Cursor = crHandPoint
+        Anchors = [akTop, akRight]
+        LookAndFeel.NativeStyle = False
+        OptionsImage.Glyph.SourceDPI = 96
+        OptionsImage.Glyph.SourceHeight = 16
+        OptionsImage.Glyph.SourceWidth = 16
+        OptionsImage.Glyph.Data = {
+          3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+          462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+          617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+          2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+          77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+          22307078222076696577426F783D2230203020333220333222207374796C653D
+          22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+          3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+          303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+          63653D227072657365727665223E2E59656C6C6F777B66696C6C3A2346464231
+          31353B7D262331333B262331303B2623393B2E5265647B66696C6C3A23443131
+          4331433B7D262331333B262331303B2623393B2E426C75657B66696C6C3A2331
+          31373744373B7D262331333B262331303B2623393B2E477265656E7B66696C6C
+          3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
+          696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
+          657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
+          74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
+          74317B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B2E
+          7374327B646973706C61793A696E6C696E653B66696C6C3A233033394332333B
+          7D262331333B262331303B2623393B2E7374337B646973706C61793A696E6C69
+          6E653B66696C6C3A234431314331433B7D262331333B262331303B2623393B2E
+          7374347B646973706C61793A696E6C696E653B66696C6C3A233732373237323B
+          7D3C2F7374796C653E0D0A3C672069643D22416C69676E4A757374696679223E
+          0D0A09093C7061746820636C6173733D22426C61636B2220643D224D32382C38
+          4834563668323456387A204D32382C3130483476326832345631307A204D3238
+          2C3134483476326832345631347A204D32382C3232483476326832345632327A
+          204D32382C3138483476326832345631387A222F3E0D0A093C2F673E0D0A3C2F
+          7376673E0D0A}
+        PaintStyle = bpsGlyph
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.Flat = True
+        SpeedButtonOptions.Transparent = True
+        TabOrder = 2
+        OnClick = cxButton9Click
       end
     end
     object pnlSubTitulo: TPanel
@@ -1639,6 +1742,19 @@ object frmVistaGantt: TfrmVistaGantt
       DesignSize = (
         1130
         44)
+      object Label8: TLabel
+        Left = 25
+        Top = 3
+        Width = 30
+        Height = 13
+        Caption = 'Vistas'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clBlack
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
       object Button27: TButton
         Tag = 1
         Left = 640
@@ -1656,6 +1772,291 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 0
         OnClick = Button27Click
       end
+      object Panel12: TPanel
+        AlignWithMargins = True
+        Left = 1054
+        Top = 3
+        Width = 73
+        Height = 38
+        Margins.Left = 1
+        Align = alRight
+        BevelOuter = bvNone
+        Color = 7041597
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 7041597
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentBackground = False
+        ParentFont = False
+        ShowCaption = False
+        TabOrder = 1
+        object Label30: TLabel
+          Left = 0
+          Top = 0
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'Total Nodos'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          Layout = tlBottom
+          WordWrap = True
+          ExplicitLeft = 1
+          ExplicitTop = 1
+          ExplicitWidth = 71
+        end
+        object Label31: TLabel
+          Left = 0
+          Top = 16
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = '0'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -13
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 1
+          ExplicitTop = 25
+          ExplicitWidth = 71
+        end
+      end
+      object Panel13: TPanel
+        AlignWithMargins = True
+        Left = 829
+        Top = 3
+        Width = 73
+        Height = 38
+        Margins.Left = 1
+        Margins.Right = 1
+        Align = alRight
+        BevelOuter = bvNone
+        Color = 7041597
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 7041597
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentBackground = False
+        ParentFont = False
+        ShowCaption = False
+        TabOrder = 2
+        object Label32: TLabel
+          Left = 0
+          Top = 0
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'Total Nodos'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          Layout = tlBottom
+          WordWrap = True
+          ExplicitLeft = 1
+          ExplicitTop = 1
+          ExplicitWidth = 71
+        end
+        object Label33: TLabel
+          Left = 0
+          Top = 16
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = '0'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -13
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 1
+          ExplicitTop = 25
+          ExplicitWidth = 71
+        end
+      end
+      object Panel14: TPanel
+        AlignWithMargins = True
+        Left = 904
+        Top = 3
+        Width = 73
+        Height = 38
+        Margins.Left = 1
+        Margins.Right = 1
+        Align = alRight
+        BevelOuter = bvNone
+        Color = 7041597
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 7041597
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentBackground = False
+        ParentFont = False
+        ShowCaption = False
+        TabOrder = 3
+        object Label34: TLabel
+          Left = 0
+          Top = 0
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'Total Nodos'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          Layout = tlBottom
+          WordWrap = True
+          ExplicitLeft = 1
+          ExplicitTop = 1
+          ExplicitWidth = 71
+        end
+        object Label35: TLabel
+          Left = 0
+          Top = 16
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = '0'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -13
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 1
+          ExplicitTop = 25
+          ExplicitWidth = 71
+        end
+      end
+      object Panel15: TPanel
+        AlignWithMargins = True
+        Left = 979
+        Top = 3
+        Width = 73
+        Height = 38
+        Margins.Left = 1
+        Margins.Right = 1
+        Align = alRight
+        BevelOuter = bvNone
+        Color = 7041597
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 7041597
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentBackground = False
+        ParentFont = False
+        ShowCaption = False
+        TabOrder = 4
+        object Label36: TLabel
+          Left = 0
+          Top = 0
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'Total Nodos'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          Layout = tlBottom
+          WordWrap = True
+          ExplicitLeft = 1
+          ExplicitTop = 1
+          ExplicitWidth = 71
+        end
+        object Label37: TLabel
+          Left = 0
+          Top = 16
+          Width = 73
+          Height = 16
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = '0'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -13
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 1
+          ExplicitTop = 25
+          ExplicitWidth = 71
+        end
+      end
+      object cbVistas: TcxComboBox
+        Left = 24
+        Top = 17
+        ParentFont = False
+        Properties.DropDownListStyle = lsFixedList
+        Properties.DropDownRows = 20
+        Properties.Items.Strings = (
+          'gvmNormal'
+          'gvmOptimitzacio'
+          'gvmFabricacio'
+          'gvmFechaEntrega'
+          'gvmStock'
+          'gvmOperarios   '
+          'gvmCarga'
+          'gvmEstado'
+          'gvmPrioridad'
+          'gvmRendimiento'
+          'gvmColores'
+          'gvmModificaciones')
+        Properties.OnChange = cbVistasPropertiesChange
+        Style.BorderColor = 3553567
+        Style.BorderStyle = ebsSingle
+        Style.Color = 7041597
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = []
+        Style.HotTrack = False
+        Style.LookAndFeel.NativeStyle = False
+        Style.TextColor = clWhite
+        Style.ButtonStyle = btsSimple
+        Style.ButtonTransparency = ebtAlways
+        Style.IsFontAssigned = True
+        StyleDisabled.LookAndFeel.NativeStyle = False
+        StyleFocused.LookAndFeel.NativeStyle = False
+        StyleHot.LookAndFeel.NativeStyle = False
+        StyleReadOnly.LookAndFeel.NativeStyle = False
+        TabOrder = 5
+        Text = 'gvmNormal'
+        Width = 147
+      end
     end
   end
   object popCentros: TPopupMenu
@@ -1663,6 +2064,11 @@ object frmVistaGantt: TfrmVistaGantt
     Top = 428
     object INFO3: TMenuItem
       Caption = 'Propiedades...'
+      OnClick = INFO3Click
+    end
+    object Indicadores1: TMenuItem
+      Caption = 'Indicadores...'
+      OnClick = Indicadores1Click
     end
   end
   object popGantt: TPopupMenu
@@ -1670,49 +2076,42 @@ object frmVistaGantt: TfrmVistaGantt
     Top = 428
     object MenuItem1: TMenuItem
       Caption = 'Asignar fecha bloqueo'
+      OnClick = MenuItem1Click
     end
     object Desactivarfechabloqueo1: TMenuItem
       Caption = 'Desactivar fecha bloqueo'
+      OnClick = Desactivarfechabloqueo1Click
     end
     object Calendario1: TMenuItem
-      Caption = 'Calendario'
-      object Fechayhora1: TMenuItem
-        Caption = 'Fecha y hora:'
-      end
-      object CentroAAA1: TMenuItem
-        Caption = 'Centro:'
-      end
-      object NombreAAA1: TMenuItem
-        Caption = 'Nombre Calendario: AAA'
-      end
-      object FranjalaborableSi1: TMenuItem
-        Caption = 'Franja laborable: Si'
-      end
-      object PeriodoNoLaborableInicio1: TMenuItem
-        Caption = 'Periodo NoLaborable Inicio:'
-      end
-      object PeriodoNoLaborableFin1: TMenuItem
-        Caption = 'Periodo NoLaborable Fin:'
-      end
+      Caption = 'Calendario info...'
+      OnClick = Calendario1Click
+    end
+    object N3: TMenuItem
+      Caption = '-'
     end
     object ShiftRow1: TMenuItem
       Caption = 'Shift all Rows'
+      OnClick = ShiftRow1Click
     end
     object ShiftRowallimpact1: TMenuItem
       Caption = 'Shift Row all impact'
+      OnClick = ShiftRowallimpact1Click
     end
     object N2: TMenuItem
       Caption = '-'
     end
     object Aadirmarcador1: TMenuItem
       Caption = 'A'#241'adir marcador...'
+      OnClick = Aadirmarcador1Click
     end
     object Gestionmarcadores1: TMenuItem
       Caption = 'Gesti'#243'n de marcadores...'
+      OnClick = Gestionmarcadores1Click
     end
     object Marcadoresautomaticos1: TMenuItem
       AutoCheck = True
       Caption = 'Marcadores autom'#225'ticos (Entrega/Necesaria)'
+      OnClick = Marcadoresautomaticos1Click
     end
   end
   object popTimeline: TPopupMenu

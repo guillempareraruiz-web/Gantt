@@ -3,7 +3,7 @@ object frmMarkerEditor: TfrmMarkerEditor
   Top = 0
   BorderStyle = bsSizeToolWin
   Caption = 'Marker Editor'
-  ClientHeight = 420
+  ClientHeight = 601
   ClientWidth = 460
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -76,12 +76,13 @@ object frmMarkerEditor: TfrmMarkerEditor
       Anchors = [akTop, akRight]
       Caption = 'Oscuro'
       TabOrder = 0
+      Visible = False
       OnClick = chkDarkModeClick
     end
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 380
+    Top = 561
     Width = 460
     Height = 40
     Align = alBottom
@@ -126,7 +127,7 @@ object frmMarkerEditor: TfrmMarkerEditor
     Left = 0
     Top = 60
     Width = 460
-    Height = 320
+    Height = 501
     Align = alClient
     OptionsView.RowHeaderWidth = 160
     OptionsView.ValueWidth = 260
