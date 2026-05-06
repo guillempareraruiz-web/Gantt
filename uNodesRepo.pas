@@ -3,7 +3,7 @@ unit uNodesRepo;
 interface
 
 uses
-  System.SysUtils, System.Classes,
+  System.SysUtils, System.Classes, System.Generics.Collections,
   Vcl.Graphics,
   Data.Win.ADODB, Data.DB,
   uGanttTypes, uNodeDataRepo;
@@ -20,6 +20,8 @@ type
       AFillNodeDataRepo: TNodeDataRepo);
     function GetAll: TArray<TNode>;
     function Count: Integer;
+    function GetByDataIds(const ADataIds: TArray<Integer>): TArray<TNode>;
+    procedure UpsertNodes(const ANodes: TArray<TNode>);
   end;
 
 implementation
@@ -212,6 +214,52 @@ begin
     end;
   finally
     Q.Free;
+  end;
+end;
+
+function TNodesRepo.GetByDataIds(const ADataIds: TArray<Integer>): TArray<TNode>;
+var
+  I, K: Integer;
+  IdSet: TDictionary<Integer, Boolean>;
+begin
+  SetLength(Result, Length(FNodes));
+  K := 0;
+  IdSet := TDictionary<Integer, Boolean>.Create;
+  try
+    for I := 0 to High(ADataIds) do
+      IdSet.AddOrSetValue(ADataIds[I], True);
+    for I := 0 to High(FNodes) do
+      if IdSet.ContainsKey(FNodes[I].DataId) then
+      begin
+        Result[K] := FNodes[I];
+        Inc(K);
+      end;
+  finally
+    IdSet.Free;
+  end;
+  SetLength(Result, K);
+end;
+
+procedure TNodesRepo.UpsertNodes(const ANodes: TArray<TNode>);
+var
+  I, J: Integer;
+  IdxMap: TDictionary<Integer, Integer>;
+begin
+  // Actualiza nodos existentes (por NodeId) o los a~nade al final.
+  IdxMap := TDictionary<Integer, Integer>.Create;
+  try
+    for I := 0 to High(FNodes) do
+      IdxMap.AddOrSetValue(FNodes[I].Id, I);
+    for I := 0 to High(ANodes) do
+      if IdxMap.TryGetValue(ANodes[I].Id, J) then
+        FNodes[J] := ANodes[I]
+      else
+      begin
+        SetLength(FNodes, Length(FNodes) + 1);
+        FNodes[High(FNodes)] := ANodes[I];
+      end;
+  finally
+    IdxMap.Free;
   end;
 end;
 

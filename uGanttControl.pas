@@ -20,6 +20,8 @@ type
   TMarkerMovedEvent = procedure(Sender: TObject; const MarkerId: Integer; const NewDateTime: TDateTime) of object;
 
   TGanttStatsChanged = procedure(Sender: TObject) of object;
+  TGanttPlanModifiedEvent = procedure(Sender: TObject;
+    const ADataIds: TArray<Integer>) of object;
 
   TGanttRenderMode = (grmNormalVCL, grmAdvancedD2D);
 
@@ -154,6 +156,7 @@ type
     FOnLayoutChanged: TNotifyEvent;
     FOnNodeSelected: TNotifyEvent;
     FOnVoid: TNotifyEvent;
+    FOnPlanModified: TGanttPlanModifiedEvent;
 
     FMouseDownPos: TPoint;
     FMouseDownNodeIndex: Integer;
@@ -745,6 +748,8 @@ type
     property OnLayoutChanged: TNotifyEvent read FOnLayoutChanged write FOnLayoutChanged;
     property OnNodeSelected: TNotifyEvent read FOnNodeSelected write FOnNodeSelected;
     property OnVoid: TNotifyEvent read FOnVoid write FOnVoid;
+    property OnPlanModified: TGanttPlanModifiedEvent
+      read FOnPlanModified write FOnPlanModified;
   end;
 
 
@@ -8933,6 +8938,10 @@ var
   BeforeSnaps, AfterSnaps: TArray<TNodePlanSnapshot>;
   Changes: TArray<TNodeHistoryChange>;
   Entry: TGanttHistoryEntry;
+  AffectedDataIds: TArray<Integer>;
+  IdSet: TDictionary<Integer, Boolean>;
+  D: TNodeData;
+  I, NIdx, DataId: Integer;
 begin
   if (NodeIdx < 0) or (NodeIdx > High(FNodes)) then Exit;
   // 1) estat abans
@@ -8964,8 +8973,43 @@ begin
 
   RecalcCounters;
   Invalidate;
-  //if Assigned(FOnNodesChanged) then
-  //  FOnNodesChanged(Self);
+
+  // 7) Marcar dirty + recolectar DataIds afectados (nodo principal + cascada)
+  IdSet := TDictionary<Integer, Boolean>.Create;
+  try
+    // Nodo principal
+    if (NodeIdx >= 0) and (NodeIdx <= High(FNodes)) then
+      IdSet.AddOrSetValue(FNodes[NodeIdx].DataId, True);
+
+    // Nodos desplazados por cascada (vienen en Changes)
+    for I := 0 to High(Changes) do
+    begin
+      NIdx := Changes[I].AfterValue.NodeIndex;
+      if (NIdx >= 0) and (NIdx <= High(FNodes)) then
+        IdSet.AddOrSetValue(FNodes[NIdx].DataId, True);
+    end;
+
+    SetLength(AffectedDataIds, IdSet.Count);
+    I := 0;
+    for DataId in IdSet.Keys do
+    begin
+      AffectedDataIds[I] := DataId;
+      Inc(I);
+
+      // Marcar D.Modified=True para que el AutoSaver lo recoja
+      if Assigned(FNodeRepo) and FNodeRepo.TryGetById(DataId, D) then
+      begin
+        D.Modified := True;
+        FNodeRepo.AddOrUpdate(D);
+      end;
+    end;
+  finally
+    IdSet.Free;
+  end;
+
+  // 8) Notificar al exterior (Main -> AutoSaver + sync NodesRepo)
+  if (Length(AffectedDataIds) > 0) and Assigned(FOnPlanModified) then
+    FOnPlanModified(Self, AffectedDataIds);
 end;
 
 

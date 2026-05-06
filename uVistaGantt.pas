@@ -35,7 +35,8 @@ uses
   cxButtons, cxDropDownEdit, cxCheckComboBox, Vcl.StdCtrls, Vcl.WinXCtrls,
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
   uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttCentres, uGanttTypes, uErpTypes,
-  System.Generics.Collections, System.Threading, System.Math;
+  System.Generics.Collections, System.Threading, System.Math, uHelpGuide,
+  uOperariosTypes, System.Variants;
 type
   // Items agregados de nodos usados para calculo de KPIs por centro.
   TNodeKPIItem = record
@@ -213,6 +214,11 @@ type
     ColordelProyecto1: TMenuItem;
     ResaltarOF1: TMenuItem;
     Info1: TMenuItem;
+    SepOperarios1: TMenuItem;
+    miAsignarOperarios: TMenuItem;
+    miGestionOperarios: TMenuItem;
+    SepOperarios2: TMenuItem;
+    miEditarLinks: TMenuItem;
     N3: TMenuItem;
     Indicadores1: TMenuItem;
     Label28: TLabel;
@@ -250,6 +256,9 @@ type
     procedure GuardarFechaBloqueo(const ADate: TDateTime);
     procedure GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
     procedure GanttMarkerDblClick(Sender: TObject; const MarkerId: Integer);
+    procedure miAsignarOperariosClick(Sender: TObject);
+    procedure miGestionOperariosClick(Sender: TObject);
+    procedure miEditarLinksClick(Sender: TObject);
     procedure CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
     procedure Button27Click(Sender: TObject);
 
@@ -281,6 +290,24 @@ type
     procedure cbVistasPropertiesChange(Sender: TObject);
     procedure cxButton9Click(Sender: TObject);
     procedure btnGanttDatesClick(Sender: TObject);
+    procedure btnUndoClick(Sender: TObject);
+    procedure btnRedoClick(Sender: TObject);
+    procedure Button12Click(Sender: TObject);
+    procedure Button13Click(Sender: TObject);
+    procedure Button8Click(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure Button24Click(Sender: TObject);
+    procedure Button7Click(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
+    procedure ComboBox1Change(Sender: TObject);
+    procedure SearchBox1InvokeSearch(Sender: TObject);
+    procedure Button3Click(Sender: TObject);
+    procedure btnRefreshClick(Sender: TObject);
+    procedure Button4Click(Sender: TObject);
+    procedure Button5Click(Sender: TObject);
+    procedure LibreMovimiento1Click(Sender: TObject);
+    procedure MenuItem3Click(Sender: TObject);
+    procedure Resetduracinoriginal1Click(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -289,6 +316,8 @@ type
     FUpdatingViewport: Boolean;
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
+
+    procedure UpdateHistoryButtons;
 
     procedure UpdateKPIs;
 
@@ -307,6 +336,8 @@ type
     FOperariosRepo: TOperariosRepo;
     FMoldeRepo: TMoldeRepo;
 
+    procedure GoToDate(const ADate: TDateTime);
+
     constructor CreateVista(AOwner: TComponent;
       ANodeRepo: TNodeDataRepo;
       AOperariosRepo: TOperariosRepo;
@@ -318,7 +349,9 @@ type
     property GanttControl: TGanttControl read FGanttControl;
     property TimelineControl: TGanttTimelineControl read FTimelineControl;
     property CentrosControl: TGanttCentresControl read FCentrosControl;
-    procedure Inicializar(const AFechaInicio, AFechaFin: TDateTime);
+    procedure Inicializar(const AFechaInicio, AFechaFin: TDateTime); overload;
+    procedure Inicializar; overload;
+    procedure SaveViewportPrefs;
     procedure CargarCentros;
     procedure CargarDependencias;
     procedure CargarMarcadores;
@@ -331,9 +364,19 @@ uses
   uDMPlanner, Vcl.Dialogs, Data.Win.ADODB, Data.DB,
   uGestionMarkers, uCentreInspector, uSampleDataGenerator,
   uCentresKPI, uGestionCentres, uNodeInspector, uMarkerEditor,
-  uGanttDatesDialog, Main;
+  uGanttDatesDialog, uUserPrefs,
+  uAssignOperaris, uGestionOperaris, uLinkEditor,  Main;
 
 
+
+procedure TfrmVistaGantt.ComboBox1Change(Sender: TObject);
+begin
+    case ComboBox1.itemindex of
+    0:  FGanttControl.LinksVisible := lvAlways;
+    1:  FGanttControl.LinksVisible := lvSelected;
+    2:  FGanttControl.LinksVisible := lvNever;
+    end;
+end;
 
 constructor TfrmVistaGantt.CreateVista(AOwner: TComponent;
   ANodeRepo: TNodeDataRepo;
@@ -394,12 +437,24 @@ begin
   FGanttControl.OnVoid := GanttVoidClick;
   FGanttControl.OnFechaBloqueoChanged := GanttFechaBloqueoChanged;
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
+
 end;
 
 
 procedure TfrmVistaGantt.cxButton9Click(Sender: TObject);
 begin
   Form1.Proyectos1Click(Self);
+end;
+
+
+
+procedure TfrmVistaGantt.GoToDate(const ADate: TDateTime);
+var
+  sx: Single;
+begin
+  sx := FTimelineControl.CalcScrollXToCenterDate(ADate);
+  FTimelineControl.ScrollX := sx; // via setter (recomanat)
+  FGanttControl.ScrollX := sx;    // via setter (recomanat)
 end;
 
 procedure TfrmVistaGantt.btnGanttDatesClick(Sender: TObject);
@@ -448,6 +503,8 @@ var
 begin
   btnFocus.Left := -300;
 
+  cxDateEdit1.Date := now;
+
   Panel1.Height := pnlTitulo.Height + pnlSubTitulo.Height;
 
   cbVistas.properties.onchange := nil;
@@ -468,6 +525,29 @@ begin
       'este operativa.');
 end;
 
+
+procedure TfrmVistaGantt.FormKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+
+  if Key = VK_F1 then
+  begin
+    TfrmHelpGuide.Execute;
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('Z')) then
+  begin
+    FGanttControl.UndoLastAction;
+    UpdateHistoryButtons;
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('Y')) then
+  begin
+    FGanttControl.RedoLastAction;
+    UpdateHistoryButtons;
+    Key := 0;
+  end;
+end;
 
 procedure TfrmVistaGantt.Indicadores1Click(Sender: TObject);
 begin
@@ -551,6 +631,16 @@ begin
   end;
 end;
 
+procedure TfrmVistaGantt.Button12Click(Sender: TObject);
+begin
+  UpdateHistoryButtons;
+end;
+
+procedure TfrmVistaGantt.Button13Click(Sender: TObject);
+begin
+   FGanttControl.HideWeekends := not FGanttControl.HideWeekends;
+end;
+
 procedure TfrmVistaGantt.Button14Click(Sender: TObject);
 begin
   if FCentrosControl.VerIndicadores then
@@ -582,6 +672,11 @@ end;
 procedure TfrmVistaGantt.Button19Click(Sender: TObject);
 begin
     FGanttControl.GoToNextNode;
+end;
+
+procedure TfrmVistaGantt.Button1Click(Sender: TObject);
+begin
+ GoToDate( Now );
 end;
 
 procedure TfrmVistaGantt.Inicializar(const AFechaInicio, AFechaFin: TDateTime);
@@ -645,6 +740,66 @@ begin
   // Centrar la vista en la fecha actual al abrir.
   IrAFecha(Now);
 end;
+
+procedure TfrmVistaGantt.Inicializar;
+const
+  PREF_MODULE = 'VistaGantt';
+  KEY_VIEWPORT_START = 'ViewportStart';
+  KEY_VIEWPORT_END = 'ViewportEnd';
+var
+  StartStr, EndStr: string;
+  StartDate, EndDate: TDateTime;
+begin
+  // Resolver viewport: UserPrefs si existe, sino Now +- 4 d'ias.
+  StartStr := uUserPrefs.GetPref(PREF_MODULE, KEY_VIEWPORT_START, '');
+  EndStr := uUserPrefs.GetPref(PREF_MODULE, KEY_VIEWPORT_END, '');
+  if (StartStr <> '') and (EndStr <> '') and
+     TryStrToDateTime(StartStr, StartDate) and
+     TryStrToDateTime(EndStr, EndDate) and
+     (EndDate > StartDate) then
+  begin
+    Inicializar(StartDate, EndDate);
+  end
+  else
+    Inicializar(Now - 4, Now + 4);
+end;
+
+procedure TfrmVistaGantt.SaveViewportPrefs;
+const
+  PREF_MODULE = 'VistaGantt';
+  KEY_VIEWPORT_START = 'ViewportStart';
+  KEY_VIEWPORT_END = 'ViewportEnd';
+begin
+  if FGanttControl = nil then Exit;
+  if (FGanttControl.StartTime = 0) or (FGanttControl.EndTime = 0) then Exit;
+  uUserPrefs.SetPref(PREF_MODULE, KEY_VIEWPORT_START, DateTimeToStr(FGanttControl.StartTime));
+  uUserPrefs.SetPref(PREF_MODULE, KEY_VIEWPORT_END, DateTimeToStr(FGanttControl.EndTime));
+end;
+
+procedure TfrmVistaGantt.SearchBox1InvokeSearch(Sender: TObject);
+var
+  nodes: TArray<Integer>;
+  iVal: Integer;
+begin
+
+  iVal := 20000 + strtointdef( SearchBox1.Text, 0);
+
+  if radiobutton1.checked then
+   nodes := FGanttControl.FindNodesByOF( iVal, 'A')
+  else
+   nodes := FGanttControl.FindNodesByTrabajo('TR-001');
+
+
+  if Length(nodes) = 0 then
+  begin
+    FGanttControl.ClearSearch;
+    Exit;
+  end;
+
+  FGantt.SetSearchResults(nodes, True);
+  FGantt.SelectNodeByIndex(nodes[0], True);
+end;
+
 procedure TfrmVistaGantt.Button20Click(Sender: TObject);
 var
   Frm: TfrmGestionCentres;
@@ -682,6 +837,17 @@ begin
 
 end;
 
+procedure TfrmVistaGantt.Button24Click(Sender: TObject);
+var ms1, ms2: Int64; moved1, moved2: Integer;
+begin
+
+  Screen.Cursor := crHourGlass;
+
+  FGanttControl.ReplanAllFromDateV2(Now, 0, ms2, moved2);
+
+  Button24.Caption := Format('%d ms', [moved2, ms2]);
+end;
+
 procedure TfrmVistaGantt.Button27Click(Sender: TObject);
 begin
   pnlToolbar.Visible := not pnlToolbar.Visible;
@@ -702,6 +868,42 @@ begin
 
   FGanttControl.BackwardScheduleOF( idx, cxDateEdit1.Date, 0, TRUE  );
 
+end;
+
+procedure TfrmVistaGantt.Button3Click(Sender: TObject);
+begin
+   FGanttControl.ClearSearch;
+end;
+
+procedure TfrmVistaGantt.Button4Click(Sender: TObject);
+begin
+  FGanttControl.SearchPrev(True);
+end;
+
+procedure TfrmVistaGantt.Button5Click(Sender: TObject);
+begin
+  FGanttControl.SearchNext(True);
+end;
+
+procedure TfrmVistaGantt.Button7Click(Sender: TObject);
+begin
+  if not varisnull(cxDateEdit1.EditValue) then
+   GoToDate( cxDateEdit1.Date );
+end;
+
+procedure TfrmVistaGantt.Button8Click(Sender: TObject);
+var
+ iTag: Integer;
+begin
+
+
+   iTag := TButton(Sender).Tag;
+   case iTag of
+   1: FTimelineControl.SetView(tvHours, 3); // 3 hores visibles
+   2: FTimelineControl.SetView(tvDay);
+   3: FTimelineControl.SetView(tvWeek);
+   4: FTimelineControl.SetView(tvMonth);
+   end;
 end;
 
 procedure TfrmVistaGantt.Calendario1Click(Sender: TObject);
@@ -959,6 +1161,24 @@ begin
     FGanttControl.Invalidate;
 end;
 
+procedure TfrmVistaGantt.LibreMovimiento1Click(Sender: TObject);
+var
+  idx: Integer;
+  n: TNode;
+  d: TNodeData;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  n := FGanttControl.SelectedNode;
+
+  if FNodeRepo.TryGetById(n.DataId, D) then
+  begin
+    D.LibreMoviment := LibreMovimiento1.Checked;
+    FNodeRepo.AddOrUpdate(D);
+  end;
+end;
+
 procedure TfrmVistaGantt.Marcadoresautomaticos1Click(Sender: TObject);
 begin
   FGanttControl.AutoMarkersEnabled := Marcadoresautomaticos1.Checked;
@@ -972,6 +1192,18 @@ begin
   dt := FGanttControl.GetDateTimeFromPoint( FGanttControl.FClickPoint.X, 0);
   FGanttControl.FechaBloqueo := dt;
   GuardarFechaBloqueo(dt);
+end;
+
+procedure TfrmVistaGantt.MenuItem3Click(Sender: TObject);
+var
+  idx: Integer;
+  node: TNode;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+  node := FGanttControl.SelectedNode;
+  node.Enabled := not node.Enabled;
+  FGanttControl.UpdateNode(idx, node);
 end;
 
 procedure TfrmVistaGantt.GanttFechaBloqueoChanged(Sender: TObject);
@@ -1074,6 +1306,18 @@ begin
   end;
   FGanttControl.Invalidate;
 end;
+procedure TfrmVistaGantt.btnRedoClick(Sender: TObject);
+begin
+  FGanttControl.RedoLastAction;
+  UpdateHistoryButtons;
+end;
+
+procedure TfrmVistaGantt.btnRefreshClick(Sender: TObject);
+begin
+   FGanttControl.RebuildLayout;
+   FGanttControl.Invalidate;
+end;
+
 procedure TfrmVistaGantt.btnResaltarOFClick(Sender: TObject);
 var
    iTag: Integer;
@@ -1092,6 +1336,12 @@ begin
 
 end;
 
+procedure TfrmVistaGantt.btnUndoClick(Sender: TObject);
+begin
+  FGanttControl.UndoLastAction;
+  UpdateHistoryButtons;
+end;
+
 procedure TfrmVistaGantt.pnlGanttContainerResize(Sender: TObject);
 begin
   // TODO (paso siguiente): copiar lógica de Main.pnlGanttContainerResize
@@ -1105,6 +1355,15 @@ procedure TfrmVistaGantt.ShiftRowallimpact1Click(Sender: TObject);
 begin
   FGanttControl.ShiftLeftAllImpactedSequentialFromDate( FGanttControl.FClickDatetime, 0);
 end;
+
+procedure TfrmVistaGantt.UpdateHistoryButtons;
+begin
+  btnUndo.Enabled := FGantt.CanUndo;
+  btnRedo.Enabled := FGantt.CanRedo;
+  lblUndoCount.Caption := IntToStr(FGantt.UndoCount);
+  lblRedoCount.Caption := IntToStr(FGantt.RedoCount);
+end;
+
 
 procedure TfrmVistaGantt.TimelineViewportChanged(Sender: TObject;
   const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
@@ -1516,6 +1775,238 @@ begin
     FCentrosControl.Invalidate;
   finally
     Screen.Cursor := crDefault;
+  end;
+end;
+
+procedure TfrmVistaGantt.Resetduracinoriginal1Click(Sender: TObject);
+begin
+  FGanttControl.ResetNodeDuration(FGanttControl.SelectedNodeIndex);
+end;
+
+{ ========================================================= }
+{      Handlers del menu contextual del nodo (popNode)       }
+{ ========================================================= }
+
+procedure TfrmVistaGantt.miGestionOperariosClick(Sender: TObject);
+var
+  Frm: TfrmGestionOperaris;
+begin
+  Frm := TfrmGestionOperaris.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+end;
+
+procedure TfrmVistaGantt.miAsignarOperariosClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  I: Integer;
+  node: TNode;
+  D: TNodeData;
+  AssignCount: Integer;
+  DataIds: TArray<Integer>;
+  Operaciones: TArray<string>;
+  TotalDur: Double;
+  TotalNec: Integer;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then Exit;
+
+  // Modo single
+  if Length(SelIndexes) = 1 then
+  begin
+    node := FGanttControl.GetNodeAt(SelIndexes[0]);
+    if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+
+    if TfrmAssignOperaris.Execute(
+      FOperariosRepo, D.DataId, D.Operacion,
+      D.DurationMin, D.OperariosNecesarios, AssignCount) then
+    begin
+      D.OperariosAsignados := AssignCount;
+      FNodeRepo.AddOrUpdate(D);
+      FGanttControl.Invalidate;
+    end;
+    Exit;
+  end;
+
+  // Modo multi
+  SetLength(DataIds, 0);
+  SetLength(Operaciones, 0);
+  TotalDur := 0;
+  TotalNec := 0;
+  for I := 0 to High(SelIndexes) do
+  begin
+    if (SelIndexes[I] < 0) or (SelIndexes[I] > FGanttControl.NodeCount - 1) then
+      Continue;
+    node := FGanttControl.GetNodeAt(SelIndexes[I]);
+    if not FNodeRepo.TryGetById(node.DataId, D) then Continue;
+
+    SetLength(DataIds, Length(DataIds) + 1);
+    DataIds[High(DataIds)] := D.DataId;
+    SetLength(Operaciones, Length(Operaciones) + 1);
+    Operaciones[High(Operaciones)] := D.Operacion;
+    TotalDur := TotalDur + D.DurationMin;
+    TotalNec := TotalNec + D.OperariosNecesarios;
+  end;
+
+  if Length(DataIds) = 0 then Exit;
+
+  if TfrmAssignOperaris.ExecuteMulti(
+    FOperariosRepo, DataIds, Operaciones, TotalDur, TotalNec) then
+  begin
+    for I := 0 to High(DataIds) do
+    begin
+      if FNodeRepo.TryGetById(DataIds[I], D) then
+      begin
+        D.OperariosAsignados := FOperariosRepo.CountAssignatsAlNode(DataIds[I]);
+        FNodeRepo.AddOrUpdate(D);
+      end;
+    end;
+    FGanttControl.Invalidate;
+  end;
+end;
+
+procedure TfrmVistaGantt.miEditarLinksClick(Sender: TObject);
+var
+  idx: Integer;
+  node: TNode;
+  D: TNodeData;
+  AllLinks: TArray<TErpLink>;
+  LinkIdxs: TArray<Integer>;
+  Items: TArray<TLinkEditItem>;
+  I, J: Integer;
+  OtherNode: TNode;
+  OtherData: TNodeData;
+  LResult: TLinkEditorResult;
+  OtherIdx: Integer;
+begin
+  if FGanttControl = nil then Exit;
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  node := FGanttControl.SelectedNode;
+  if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+
+  AllLinks := FGanttControl.GetLinks;
+  LinkIdxs := FGanttControl.GetLinksForNode(node.Id);
+
+  SetLength(Items, Length(LinkIdxs));
+  for I := 0 to High(LinkIdxs) do
+  begin
+    J := LinkIdxs[I];
+    Items[I].LinkIndex := J;
+    Items[I].FromNodeId := AllLinks[J].FromNodeId;
+    Items[I].ToNodeId := AllLinks[J].ToNodeId;
+    Items[I].LinkType := AllLinks[J].LinkType;
+    Items[I].PorcentajeDependencia := AllLinks[J].PorcentajeDependencia;
+    Items[I].Deleted := False;
+
+    if AllLinks[J].FromNodeId = node.Id then
+    begin
+      Items[I].FromCaption := D.Operacion;
+      OtherIdx := FGanttControl.FindNodeIndexById(AllLinks[J].ToNodeId);
+      if (OtherIdx >= 0) then
+      begin
+        OtherNode := FGanttControl.GetNodeAt(OtherIdx);
+        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
+          Items[I].ToCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
+        else
+          Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
+      end
+      else
+        Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
+    end
+    else
+    begin
+      Items[I].ToCaption := D.Operacion;
+      OtherIdx := FGanttControl.FindNodeIndexById(AllLinks[J].FromNodeId);
+      if (OtherIdx >= 0) then
+      begin
+        OtherNode := FGanttControl.GetNodeAt(OtherIdx);
+        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
+          Items[I].FromCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
+        else
+          Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
+      end
+      else
+        Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
+    end;
+  end;
+
+  if TfrmLinkEditor.Execute(node.Id,
+    D.Operacion + ' (OF ' + IntToStr(D.NumeroOrdenFabricacion) + ')',
+    Items, LResult) then
+  begin
+    var NewLinks: TArray<TErpLink>;
+    var EditedSet: TDictionary<Integer, Integer>;
+    var DeletedSet: TDictionary<Integer, Boolean>;
+    EditedSet := TDictionary<Integer, Integer>.Create;
+    DeletedSet := TDictionary<Integer, Boolean>.Create;
+    try
+      for I := 0 to High(LResult.Items) do
+      begin
+        J := LResult.Items[I].LinkIndex;
+        if J < 0 then Continue;
+        if LResult.Items[I].Deleted then
+          DeletedSet.AddOrSetValue(J, True)
+        else
+          EditedSet.AddOrSetValue(J, I);
+      end;
+
+      SetLength(NewLinks, 0);
+      for I := 0 to High(AllLinks) do
+      begin
+        if DeletedSet.ContainsKey(I) then Continue;
+
+        var L: TErpLink;
+        L := AllLinks[I];
+        if EditedSet.ContainsKey(I) then
+          L.PorcentajeDependencia := LResult.Items[EditedSet[I]].PorcentajeDependencia;
+
+        SetLength(NewLinks, Length(NewLinks) + 1);
+        NewLinks[High(NewLinks)] := L;
+      end;
+
+      FGanttControl.SetLinks(NewLinks);
+
+      // Forzar recalculo: por cada link editado, mover el sucesor
+      var K: Integer;
+      var MovedNodes: TIdxArray;
+      for K := 0 to High(NewLinks) do
+      begin
+        if NewLinks[K].FromNodeId = node.Id then
+        begin
+          var SuccNodeIdx: Integer;
+          SuccNodeIdx := FGanttControl.FindNodeIndexById(NewLinks[K].ToNodeId);
+          if SuccNodeIdx >= 0 then
+          begin
+            var MinStart: TDateTime;
+            MinStart := FGanttControl.GetDependencyMinStart(idx, NewLinks[K].PorcentajeDependencia);
+            FGanttControl.MoveNodeKeepingDuration(SuccNodeIdx, MinStart);
+            FGanttControl.ResolveDependenciesFromNode(SuccNodeIdx, MovedNodes);
+          end;
+        end;
+        if NewLinks[K].ToNodeId = node.Id then
+        begin
+          var PredNodeIdx: Integer;
+          PredNodeIdx := FGanttControl.FindNodeIndexById(NewLinks[K].FromNodeId);
+          if PredNodeIdx >= 0 then
+          begin
+            var MinStart: TDateTime;
+            MinStart := FGanttControl.GetDependencyMinStart(PredNodeIdx, NewLinks[K].PorcentajeDependencia);
+            FGanttControl.MoveNodeKeepingDuration(idx, MinStart);
+            FGanttControl.ResolveDependenciesFromNode(idx, MovedNodes);
+          end;
+        end;
+      end;
+      FGanttControl.RebuildLayout;
+    finally
+      EditedSet.Free;
+      DeletedSet.Free;
+    end;
   end;
 end;
 

@@ -136,6 +136,16 @@ object frmInstallWizard: TfrmInstallWizard
       TabOrder = 2
       OnClick = btnCancelarClick
     end
+    object Button1: TButton
+      Left = 16
+      Top = 12
+      Width = 73
+      Height = 30
+      Caption = 'Skip>>'
+      Default = True
+      TabOrder = 3
+      OnClick = Button1Click
+    end
   end
   object pcPasos: TPageControl
     Left = 0

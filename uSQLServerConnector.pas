@@ -26,6 +26,7 @@ type
     FConnection: TADOConnection;
     FOwnsConnection: Boolean;
     FOnProgress: TConnectorProgressEvent;
+    FCodigoEmpresa: SmallInt;
 
     procedure DoProgress(const APaso: string; APorcentaje: Integer);
     function ExecSQL(const ASQL: string): Integer;
@@ -81,6 +82,10 @@ type
     constructor Create(const AConfig: TSQLServerConnectorConfig); overload;
     constructor Create(AConnection: TADOConnection); overload;
     destructor Destroy; override;
+
+    // CodigoEmpresa de la sesi'on actual; usado por los INSERT/UPDATE
+    // que escriben en tablas con clave compuesta (CodigoEmpresa, ...).
+    property CodigoEmpresa: SmallInt read FCodigoEmpresa write FCodigoEmpresa;
 
     // --- IGanttDataConnector ---
     function Connect: TConnectorResult;
@@ -1402,19 +1407,22 @@ begin
     for I := 0 to High(ANodeData) do
       DataMap.AddOrSetValue(ANodeData[I].DataId, I);
 
-    // Borrar nodos del proyecto que ya no existen
-    ExecSQL('DELETE FROM FS_PL_Node WHERE ProjectId = ' + IntToStr(AProjectId) +
-      ' AND NodeId NOT IN (SELECT NodeId FROM FS_PL_Node WHERE ProjectId <> ' +
-      IntToStr(AProjectId) + ')');
+    // NOTA: el DELETE original "limpiar nodos hu'erfanos" era destructivo
+    // en escenarios de save parcial (write-behind incremental): borraba TODOS
+    // los nodos del proyecto si su NodeId no aparec'ia en otro proyecto.
+    // Eliminado a prop'osito: en este patr'on s'olo hacemos MERGE.
+    // Las eliminaciones expl'icitas se gestionan v'ia DeleteNodes(NodeIds).
 
     for I := 0 to High(ANodes) do
     begin
       N := ANodes[I];
 
-      // MERGE Node
+      // MERGE Node (clave (CodigoEmpresa, NodeId))
       ExecSQL(
-        'IF EXISTS (SELECT 1 FROM FS_PL_Node WHERE NodeId = ' + IntToStr(N.Id) + ') ' +
+        'IF EXISTS (SELECT 1 FROM FS_PL_Node WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+        '  AND NodeId = ' + IntToStr(N.Id) + ') ' +
         'UPDATE FS_PL_Node SET ' +
+          'ProjectId = ' + IntToStr(AProjectId) + ', ' +
           'CenterId = ' + IntToStr(N.CentreId) + ', ' +
           'FechaInicio = ' + DateTimeToSQL(N.StartTime) + ', ' +
           'FechaFin = ' + DateTimeToSQL(N.EndTime) + ', ' +
@@ -1424,11 +1432,13 @@ begin
           'ColorBorde = ' + ColorToSQL(N.BorderColor) + ', ' +
           'Visible = ' + IfThen(N.Visible, '1', '0') + ', ' +
           'Habilitado = ' + IfThen(N.Enabled, '1', '0') +
-        ' WHERE NodeId = ' + IntToStr(N.Id) + ' ' +
+        ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+        '   AND NodeId = ' + IntToStr(N.Id) + ' ' +
         'ELSE ' +
         'SET IDENTITY_INSERT FS_PL_Node ON; ' +
-        'INSERT INTO FS_PL_Node (NodeId, ProjectId, CenterId, FechaInicio, FechaFin, ' +
+        'INSERT INTO FS_PL_Node (CodigoEmpresa, NodeId, ProjectId, CenterId, FechaInicio, FechaFin, ' +
           'DuracionMin, Caption, ColorFondo, ColorBorde, Visible, Habilitado) VALUES (' +
+          IntToStr(FCodigoEmpresa) + ', ' +
           IntToStr(N.Id) + ', ' +
           IntToStr(AProjectId) + ', ' +
           IntToStr(N.CentreId) + ', ' +
@@ -1443,12 +1453,13 @@ begin
         'SET IDENTITY_INSERT FS_PL_Node OFF;'
       );
 
-      // NodeData (si existeix)
+      // NodeData (si existeix). Clave (CodigoEmpresa, NodeId)
       if DataMap.ContainsKey(N.DataId) then
       begin
         D := ANodeData[DataMap[N.DataId]];
         ExecSQL(
-          'IF EXISTS (SELECT 1 FROM FS_PL_NodeData WHERE NodeId = ' + IntToStr(N.Id) + ') ' +
+          'IF EXISTS (SELECT 1 FROM FS_PL_NodeData WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+          '   AND NodeId = ' + IntToStr(N.Id) + ') ' +
           'UPDATE FS_PL_NodeData SET ' +
             'Operacion = ' + QuotedStr(D.Operacion) + ', ' +
             'NumeroPedido = ' + IntToStr(D.NumeroPedido) + ', ' +
@@ -1478,15 +1489,17 @@ begin
             'ColorFondoOp = ' + ColorToSQL(D.bkColorOp) + ', ' +
             'ColorBordeOp = ' + ColorToSQL(D.borderColorOp) + ', ' +
             'LibreMovimiento = ' + IfThen(D.LibreMoviment, '1', '0') +
-          ' WHERE NodeId = ' + IntToStr(N.Id) + ' ' +
+          ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+          '   AND NodeId = ' + IntToStr(N.Id) + ' ' +
           'ELSE ' +
-          'INSERT INTO FS_PL_NodeData (NodeId, Operacion, NumeroPedido, SeriePedido, ' +
+          'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, NumeroPedido, SeriePedido, ' +
             'NumeroOF, SerieOF, NumeroTrabajo, FechaEntrega, FechaNecesaria, ' +
             'CodigoCliente, CodigoColor, CodigoTalla, Stock, CodigoArticulo, ' +
             'DescripcionArticulo, PorcentajeDependencia, UnidadesFabricadas, ' +
             'UnidadesAFabricar, TiempoUnidadFabSecs, DuracionMin, DuracionMinOriginal, ' +
             'OperariosNecesarios, OperariosAsignados, Estado, Tipo, Prioridad, ' +
             'ColorFondoOp, ColorBordeOp, LibreMovimiento) VALUES (' +
+            IntToStr(FCodigoEmpresa) + ', ' +
             IntToStr(N.Id) + ', ' +
             QuotedStr(D.Operacion) + ', ' +
             IntToStr(D.NumeroPedido) + ', ' +

@@ -36,6 +36,8 @@ uses
   uSampleDataGenerator in 'uSampleDataGenerator.pas',
   uGestionCalendarios in 'uGestionCalendarios.pas' {frmGestionCalendarios},
   uKanbanBoard in 'uKanbanBoard.pas',
+  uVistaKanban in 'uVistaKanban.pas' {VistaKanbanForm},
+  uPlanAutoSaver in 'uPlanAutoSaver.pas',
   uDispatchList in 'uDispatchList.pas' {frmDispatchList},
   uBacklog in 'uBacklog.pas' {frmBacklog},
   uDemoBacklog in 'uDemoBacklog.pas',

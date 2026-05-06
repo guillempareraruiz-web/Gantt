@@ -12,6 +12,7 @@ object frmVistaGantt: TfrmVistaGantt
   Font.Name = 'Segoe UI'
   Font.Style = []
   OnCreate = FormCreate
+  OnKeyDown = FormKeyDown
   PixelsPerInch = 96
   TextHeight = 15
   object pnlRoot: TPanel
@@ -263,6 +264,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         Caption = 'Refrescar'
         TabOrder = 0
+        OnClick = btnRefreshClick
       end
       object spCentros: TcxSpinEdit
         Left = 276
@@ -304,6 +306,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         TabOrder = 5
         Text = 'SearchBox1'
+        OnInvokeSearch = SearchBox1InvokeSearch
       end
       object RadioButton1: TRadioButton
         Left = 822
@@ -333,6 +336,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         Caption = 'X'
         TabOrder = 8
+        OnClick = Button3Click
       end
       object Button4: TButton
         Left = 938
@@ -342,6 +346,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         Caption = '<'
         TabOrder = 9
+        OnClick = Button4Click
       end
       object Button5: TButton
         Left = 962
@@ -351,6 +356,7 @@ object frmVistaGantt: TfrmVistaGantt
         Anchors = [akTop, akRight]
         Caption = '>'
         TabOrder = 10
+        OnClick = Button5Click
       end
       object Button6: TButton
         Left = 411
@@ -382,6 +388,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 13
+        OnClick = Button7Click
       end
       object Button8: TButton
         Tag = 1
@@ -398,6 +405,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 14
+        OnClick = Button8Click
       end
       object Button9: TButton
         Tag = 2
@@ -457,6 +465,7 @@ object frmVistaGantt: TfrmVistaGantt
         ItemIndex = 1
         TabOrder = 18
         Text = 'Solo ver dependencias del seleccionado'
+        OnChange = ComboBox1Change
         Items.Strings = (
           'Ver todas las dependencias'
           'Solo ver dependencias del seleccionado'
@@ -476,6 +485,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 19
+        OnClick = Button1Click
       end
       object btnUndo: TButton
         Tag = 1
@@ -491,6 +501,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 20
+        OnClick = btnUndoClick
       end
       object btnRedo: TButton
         Tag = 1
@@ -506,6 +517,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 21
+        OnClick = btnRedoClick
       end
       object Button12: TButton
         Tag = 1
@@ -521,6 +533,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 22
+        OnClick = Button12Click
       end
       object Button13: TButton
         Tag = 1
@@ -537,6 +550,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 23
+        OnClick = Button13Click
       end
       object FcxFilterOperarios: TcxCheckComboBox
         Left = 142
@@ -1067,6 +1081,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
         TabOrder = 16
+        OnClick = Button24Click
       end
       object btnResaltarOF: TcxButton
         Left = 346
@@ -2116,25 +2131,28 @@ object frmVistaGantt: TfrmVistaGantt
   end
   object popTimeline: TPopupMenu
     Left = 744
-    Top = 492
+    Top = 372
     object MenuItem2: TMenuItem
       Caption = 'PopTimeline'
     end
   end
   object popNode: TPopupMenu
     Left = 832
-    Top = 492
+    Top = 372
     object MenuItem3: TMenuItem
       AutoCheck = True
       Caption = 'Activar / bloquear'
       Checked = True
+      OnClick = MenuItem3Click
     end
     object LibreMovimiento1: TMenuItem
       AutoCheck = True
       Caption = 'Libre Movimiento'
+      OnClick = LibreMovimiento1Click
     end
     object Resetduracinoriginal1: TMenuItem
       Caption = 'Restablecer duraci'#243'n original'
+      OnClick = Resetduracinoriginal1Click
     end
     object CompactarOF1: TMenuItem
       Caption = 'Compactar OF'
@@ -2209,6 +2227,24 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object Info1: TMenuItem
       Caption = 'Info'
+    end
+    object SepOperarios1: TMenuItem
+      Caption = '-'
+    end
+    object miAsignarOperarios: TMenuItem
+      Caption = 'Asignar Operarios...'
+      OnClick = miAsignarOperariosClick
+    end
+    object miGestionOperarios: TMenuItem
+      Caption = 'Gesti'#243'n Operarios y Departamentos...'
+      OnClick = miGestionOperariosClick
+    end
+    object SepOperarios2: TMenuItem
+      Caption = '-'
+    end
+    object miEditarLinks: TMenuItem
+      Caption = 'Editar Links (Dependencias)...'
+      OnClick = miEditarLinksClick
     end
   end
 end

@@ -25,6 +25,7 @@ uses
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
   dxSkinXmas2008Blue, cxTextEdit, cxMaskEdit, cxSpinEdit, Vcl.ComCtrls, dxCore,
   cxDateUtils, cxDropDownEdit, cxCalendar, Vcl.Menus, Vcl.WinXCtrls, uNodeDataRepo,
+  uPlanAutoSaver,
   System.Generics.Collections, uErpTypes, uColorPalette64LayeredPopup,
   System.Threading,  System.SyncObjs, System.Diagnostics, uNodeInspector, uMarkerEditor, uGestionMarkers,
   cxStyles, cxFilter, dxScrollbarAnnotations, cxInplaceContainer, cxVGrid,
@@ -69,9 +70,6 @@ type
 
   TForm1 = class(TForm)
     popNode: TPopupMenu;
-    MenuItem3: TMenuItem;
-    Info1: TMenuItem;
-    Resetduracinoriginal1: TMenuItem;
     N1: TMenuItem;
     Color1: TMenuItem;
     Colordelnode1: TMenuItem;
@@ -80,7 +78,6 @@ type
     ColordelPedido1: TMenuItem;
     ColordelProyecto1: TMenuItem;
     ShiftRow2: TMenuItem;
-    LibreMovimiento1: TMenuItem;
     CompactarOFapartirdelNodo1: TMenuItem;
     CompactarOF1: TMenuItem;
     odalaOF1: TMenuItem;
@@ -141,42 +138,9 @@ type
     pnlToolbar: TPanel;
     Label1: TLabel;
     Label2: TLabel;
-    Label3: TLabel;
-    Label4: TLabel;
-    Label5: TLabel;
-    Label6: TLabel;
-    Label7: TLabel;
-    lblUndoCount: TLabel;
-    lblRedoCount: TLabel;
-    Label19: TLabel;
-    btnRefresh: TButton;
     spCentros: TcxSpinEdit;
     cxSpinEdit2: TcxSpinEdit;
-    dtFechaInicioGantt: TcxDateEdit;
-    dtFechaFinGantt: TcxDateEdit;
-    SearchBox1: TSearchBox;
-    RadioButton1: TRadioButton;
-    RadioButton2: TRadioButton;
-    Button3: TButton;
-    Button4: TButton;
-    Button5: TButton;
     Button6: TButton;
-    cxDateEdit1: TcxDateEdit;
-    Button7: TButton;
-    Button8: TButton;
-    Button9: TButton;
-    Button10: TButton;
-    Button11: TButton;
-    ComboBox1: TComboBox;
-    Button1: TButton;
-    btnUndo: TButton;
-    btnRedo: TButton;
-    Button12: TButton;
-    Button13: TButton;
-    FcxFilterOperarios: TcxCheckComboBox;
-    FchkSoloFiltrados: TcxCheckBox;
-    Button26: TButton;
-    Button24: TButton;
     N2: TMenuItem;
     Indicadoresdecentros1: TMenuItem;
 
@@ -196,35 +160,29 @@ type
     procedure OcultarDashboard;
     procedure DashboardAbrirGantt(Sender: TObject);
     procedure MostrarVistaGantt;
+    procedure LoadActivePlan;
+    function HasActivePlan: Boolean;
+
+    // Auto-save
+    procedure InitAutoSaver;
+    procedure DestroyAutoSaver;
+    procedure GanttPlanModified(Sender: TObject; const ADataIds: TArray<Integer>);
+    procedure SaveNodesViaConnector(AProjectId: Integer;
+      const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>);
+    procedure AutoSaverStatusChange(Sender: TObject; AStatus: TAutoSaveStatus);
+    procedure AutoSaverSaveStarted(Sender: TObject; ANodeCount: Integer);
+    procedure AutoSaverSaveCompleted(Sender: TObject; ANodeCount: Integer);
+    procedure AutoSaverSaveFailed(Sender: TObject; const AError: string);
+    procedure UpdateAutoSaveLabel;
     procedure FormCreate(Sender: TObject);
-    procedure btnRefreshClick(Sender: TObject);
-    procedure MenuItem3Click(Sender: TObject);
-    procedure SearchBox1InvokeSearch(Sender: TObject);
-    procedure Button3Click(Sender: TObject);
-    procedure Button5Click(Sender: TObject);
-    procedure Button4Click(Sender: TObject);
     procedure Button6Click(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure Info1Click(Sender: TObject);
-    procedure Button7Click(Sender: TObject);
-    procedure Button8Click(Sender: TObject);
-    procedure ComboBox1Change(Sender: TObject);
-    procedure Button1Click(Sender: TObject);
-    procedure Resetduracinoriginal1Click(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure Colordelnode1Click(Sender: TObject);
     procedure ShiftRow2Click(Sender: TObject);
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure btnUndoClick(Sender: TObject);
-    procedure btnRedoClick(Sender: TObject);
-    procedure Button12Click(Sender: TObject);
-    procedure Button13Click(Sender: TObject);
-    procedure LibreMovimiento1Click(Sender: TObject);
     procedure odalaOF1Click(Sender: TObject);
     procedure otalaOT1Click(Sender: TObject);
     procedure tmr1SecTimer(Sender: TObject);
-    procedure FchkSoloFiltradosPropertiesChange(Sender: TObject);
-    procedure FcxFilterOperariosPropertiesChange(Sender: TObject);
-    procedure Button24Click(Sender: TObject);
     procedure ResaltarOF1Click(Sender: TObject);
     procedure Moldes1Click(Sender: TObject);
     procedure Calendarios1Click(Sender: TObject);
@@ -240,7 +198,6 @@ type
     procedure FiniteCapacity1Click(Sender: TObject);
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
-    procedure Button26Click(Sender: TObject);
     procedure MnGanttClick(Sender: TObject);
     procedure Indicadoresdecentros1Click(Sender: TObject);
   private
@@ -249,18 +206,13 @@ type
     FCustomFieldDefs: TCustomFieldDefs;
     FPlanningRuleEngine: TPlanningRuleEngine;
     FUpdatingViewport: Boolean;
-    FFilterPopup: TfrmOperarioFilterPopup;
-    FBtnFilterOperarios: TButton;
 
-    FKPIDebounceTimer : TTimer;
     FTurnos: TArray<TTurno>;
 
 
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
 
-
-    procedure KPIDebounceTimerFired(Sender: TObject);
 
 
     function WorkingMinutesBetweenFallback(
@@ -295,8 +247,6 @@ type
 
     procedure UpdateViewportInfo;
 
-    procedure UpdateHistoryButtons;
-
     procedure TimelineViewportChanged(Sender: TObject; const StartTime: TDateTime;
       const PxPerMinute, ScrollX: Single);
     procedure TimelineInteraction(Sender: TObject; const Interacting: Boolean);
@@ -315,20 +265,19 @@ type
 
     function BuildNodeKPIItemsFromGanttNodes: TArray<TNodeKPIItem>;
 
-    procedure AssignarOperarisClick(Sender: TObject);
-    procedure GestionOperarisClick(Sender: TObject);
-    procedure EditarLinksClick(Sender: TObject);
-
-    // Filtro operarios
-    procedure BtnFilterOperariosClick(Sender: TObject);
-    procedure FilterPopupChanged(Sender: TObject; const SelectedIds: TArray<Integer>);
-    procedure RefreshOperarioFilterItems;
-    procedure ApplyOperarioFilter;
 
   public
     { Public declarations }
-    procedure GoToDate(const ADate: TDateTime);
 
+    // Llamar despues de cada operaci'on que modifica nodos (Kanban, Inspector, Gantt).
+    procedure NotifyPlanModified(const ADataIds: TArray<Integer>);
+
+  private
+    FAutoSaver: TPlanAutoSaver;
+    FAutoSavePanel: TPanel;
+    FAutoSaveLabel: TLabel;
+    FLastSaveTick: Cardinal;
+    FLastSavedNodes: Integer;
   end;
 
 var
@@ -349,12 +298,13 @@ var
 
 implementation
 
-uses uErpSampleBuilder, uGestionCentres, uKanbanBoard, uDispatchList, uBacklog,
+uses uErpSampleBuilder, uGestionCentres, uKanbanBoard, uVistaKanban, uDispatchList, uBacklog,
   uDemoBacklog,
   uFiniteCapacityPlanner, uCuadroPlanificacionDelDia, uGestionTurnos,
   uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
   uGestionProyectos, uGestionAreas, uGestionDepartamentos, uGestionCapacitaciones,
-  uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uInstallWizard;
+  uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uInstallWizard,
+  uDataConnector, uUserPrefs;
 
 {$R *.dfm}
 
@@ -411,59 +361,12 @@ begin
 end;
 
 
-procedure TForm1.LibreMovimiento1Click(Sender: TObject);
-var
-  idx: Integer;
-  n: TNode;
-  d: TNodeData;
-begin
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
-
-  n := FGantt.SelectedNode;
-
-  if FNodeRepo.TryGetById(n.DataId, D) then
-  begin
-    D.LibreMoviment := LibreMovimiento1.Checked;
-    FNodeRepo.AddOrUpdate(D);
-  end;
-
-end;
-
 procedure TForm1.LogPerf(const S: string);
 begin
   OutputDebugString(PChar(S));
   //Memo1.Lines.Add(S);
 end;
 
-
-procedure TForm1.btnRedoClick(Sender: TObject);
-begin
-  if not Assigned(FGantt) then
-   Exit;
-
-  FGantt.RedoLastAction;
-  UpdateHistoryButtons;
-end;
-
-procedure TForm1.btnRefreshClick(Sender: TObject);
-begin
-  if Assigned(FGantt) then
-  begin
-    FGantt.RebuildLayout;
-    FGantt.Invalidate;
-  end;
-end;
-
-
-procedure TForm1.btnUndoClick(Sender: TObject);
-begin
-  if not Assigned(FGantt) then
-   Exit;
-
-  FGantt.UndoLastAction;
-  UpdateHistoryButtons;
-end;
 
 procedure TForm1.TimelineViewportChanged(Sender: TObject; const StartTime: TDateTime;
   const PxPerMinute, ScrollX: Single);
@@ -476,12 +379,6 @@ begin
      FGantt.SetViewport(StartTime, PxPerMinute, ScrollX);
 
     UpdateViewportInfo;
-
-    if Assigned(FCentrosControl) and FCentrosControl.VerIndicadores then
-    begin
-      FKPIDebounceTimer.Enabled := False;
-      FKPIDebounceTimer.Enabled := True;
-    end;
 
 
   finally
@@ -497,7 +394,8 @@ end;
 
 procedure TForm1.tmr1SecTimer(Sender: TObject);
 begin
- //UpdateViewportInfo;
+  // Actualizar el label de auto-save ("Guardado hace Ns")
+  UpdateAutoSaveLabel;
 end;
 
 procedure TForm1.UpdateViewportInfo;
@@ -515,93 +413,6 @@ begin
       LblTiempos.Caption := S;
   end;
   }
-end;
-
-procedure TForm1.Button12Click(Sender: TObject);
-begin
-  UpdateHistoryButtons;
-end;
-
-procedure TForm1.Button13Click(Sender: TObject);
-begin
-
-  if Assigned(FGantt) then
-   FGantt.HideWeekends := not FGantt.HideWeekends;
-
-  //if Assigned(FTimeline) then
-  // FTimeline.HideWeekends := not FTimeline.HideWeekends;
-
-end;
-
-procedure TForm1.Button1Click(Sender: TObject);
-begin
-  GoToDate( Now );
-end;
-
-procedure TForm1.Button24Click(Sender: TObject);
-var ms1, ms2: Int64; moved1, moved2: Integer;
-begin
-  if not Assigned(FGantt) then
-   Exit;
-
-  Screen.Cursor := crHourGlass;
-
-  FGantt.ReplanAllFromDateV2(Now, 0, ms2, moved2);
-
-  Button24.Caption := Format('%d ms', [moved2, ms2]);
-
-  {
-  FGantt.ReplanAllFromDate(Now, 0, ms1, moved1);
-  Screen.Cursor := crHourGlass;
-
-  FGantt.ReplanAllFromDateV2(Now, 0, ms2, moved2);
-
-  Button24.Caption := Format('V1: %d mov %d ms | V2: %d mov %d ms',
-    [moved1, ms1, moved2, ms2]);
-    }
-end;
-
-procedure TForm1.Button26Click(Sender: TObject);
-begin
-
-  DMPlanner.ADOConnection.Close;
-  try
-    DMPlanner.ADOConnection.Open();
-
-    // Carregar planning
-    //DMPlanner.Connector.LoadPlanning(1, Data);
-
-    // Guardar
-    //DMPlanner.Connector.SavePlanning(Data);
-  finally
-
-  end;
-
-end;
-
-procedure TForm1.Button3Click(Sender: TObject);
-begin
-  if Assigned(FGantt) then
-   FGantt.ClearSearch;
-
-end;
-
-procedure TForm1.Button4Click(Sender: TObject);
-begin
-  if Assigned(FGantt) then
-  begin
-    FGantt.SearchPrev(True);
-
-  end;
-end;
-
-procedure TForm1.Button5Click(Sender: TObject);
-begin
-  if Assigned(FGantt) then
-  begin
-   FGantt.SearchNext(True);
-  end;
-
 end;
 
 procedure TForm1.Button6Click(Sender: TObject);
@@ -663,24 +474,13 @@ begin
 
   FGantt.OnViewportChanged := GanttViewportChanged;
   FGantt.OnScrollYChanged := GanttScrollYChanged;
+  FGantt.OnPlanModified := GanttPlanModified;
 
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
 
-  FKPIDebounceTimer := TTimer.Create(Self);
-  FKPIDebounceTimer.Enabled := False;
-  FKPIDebounceTimer.Interval := 300;
-  FKPIDebounceTimer.OnTimer := KPIDebounceTimerFired;
-
-
-  // Rang
-  //T0 := dtFechaInicioGantt.Date; //EncodeDateTime(2026, 2, 19, 0, 0, 0, 0);
-  //T1 := dtFechaFinGantt.Date; //IncDay(T0, 2);
-  //T1 := dtFechaFinGantt.Date + EncodeTime(23,59,59,999);
-
-  T0 := DayStart(dtFechaInicioGantt.Date-2);
-  T1 := DayEnd(dtFechaFinGantt.Date);
-  if T1 < T0 then
-   T1 := DayEnd(T0);
+  // Rang por defecto: Now +- 4 d'ias
+  T0 := DayStart(Now - 4);
+  T1 := DayEnd(Now + 4);
 
   FTimeline.SetTimeRange(T0, T1);
 
@@ -790,12 +590,7 @@ begin
   FCentrosControl.CurrentKPIRanges := FCentreKPIRanges;
 
 
-  GoToDate( Now );
-
   FGantt.RecalcCounters;
-  UpdateHistoryButtons;
-
-  RefreshOperarioFilterItems;
 
   Screen.Cursor := crDefault;
 
@@ -1275,11 +1070,6 @@ begin
   FGantt.HighlightOF(idx);
 end;
 
-procedure TForm1.Resetduracinoriginal1Click(Sender: TObject);
-begin
-  FGantt.ResetNodeDuration(FGantt.SelectedNodeIndex);
-end;
-
 procedure TForm1.CentresReordered(Sender: TObject; const NewOrderCentreIds: TArray<Integer>);
 var
   Old: TArray<TCentreTreball>;
@@ -1308,30 +1098,6 @@ begin
   begin
     FGantt.RebuildLayout;
     FGantt.Invalidate;
-  end;
-end;
-
-procedure TForm1.Button7Click(Sender: TObject);
-begin
-  if cxDateEdit1.EditValue<>null then
-   GoToDate( cxDateEdit1.Date );
-end;
-
-procedure TForm1.Button8Click(Sender: TObject);
-var
- iTag: Integer;
-begin
-
-
-  if Assigned(FTimeline) then
-  begin
-   iTag := TButton(Sender).Tag;
-   case iTag of
-   1: FTimeline.SetView(tvHours, 3); // 3 hores visibles
-   2: FTimeline.SetView(tvDay);
-   3: FTimeline.SetView(tvWeek);
-   4: FTimeline.SetView(tvMonth);
-   end;
   end;
 end;
 
@@ -1371,53 +1137,60 @@ begin
 end;
 
 procedure TForm1.Kanban1Click(Sender: TObject);
-var
-  Frm: TForm;
-  Kanban: TKanbanBoard;
 begin
-  Frm := TForm.Create(nil);
-  try
-    Frm.Caption := 'Vista Kanban';
-    Frm.Width := 1000;
-    Frm.Height := 700;
-    Frm.Position := poScreenCenter;
-    Frm.Color := $00F5F5F5;
-
-    Kanban := TKanbanBoard.Create(Frm);
-    Kanban.Parent := Frm;
-    Kanban.Align := alClient;
-    Kanban.SetNodeRepo(FNodeRepo);
-
-    // Callback para obtener tiempos teóricos del nodo Gantt
-    Kanban.SetGetNodeTimes(
-      function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
-      var
-        Nodes: TArray<TNode>;
-        J: Integer;
-      begin
-        Result := False;
-        AStart := 0;
-        AEnd := 0;
-        if not Assigned(FGantt) then Exit;
-        Nodes := FGantt.GetNodes;
-        for J := 0 to High(Nodes) do
-          if Nodes[J].DataId = DataId then
-          begin
-            AStart := Nodes[J].StartTime;
-            AEnd := Nodes[J].EndTime;
-            Exit(True);
-          end;
-      end
-    );
-
-    Frm.ShowModal;
-
-    // Tras cerrar el Kanban, refrescar Gantt por si hubo cambios de estado
-    if Assigned(FGantt) then
-      FGantt.Invalidate;
-  finally
-    Frm.Free;
+  if not HasActivePlan then
+  begin
+    MostrarDashboard;
+    ShowMessage('Selecciona o crea un proyecto antes de abrir el Kanban.');
+    Exit;
   end;
+
+  TVistaKanbanForm.Execute(
+    FNodeRepo,
+    FCentresRows,
+    function(const DataId: Integer; out AStart, AEnd: TDateTime): Boolean
+    var
+      Nodes: TArray<TNode>;
+      J: Integer;
+    begin
+      Result := False;
+      AStart := 0;
+      AEnd := 0;
+      if not Assigned(FGantt) then Exit;
+      Nodes := FGantt.GetNodes;
+      for J := 0 to High(Nodes) do
+        if Nodes[J].DataId = DataId then
+        begin
+          AStart := Nodes[J].StartTime;
+          AEnd := Nodes[J].EndTime;
+          Exit(True);
+        end;
+    end,
+    function(const DataId: Integer; out ACentreId: Integer): Boolean
+    var
+      Nodes: TArray<TNode>;
+      J: Integer;
+    begin
+      Result := False;
+      ACentreId := -1;
+      if not Assigned(FGantt) then Exit;
+      Nodes := FGantt.GetNodes;
+      for J := 0 to High(Nodes) do
+        if Nodes[J].DataId = DataId then
+        begin
+          ACentreId := Nodes[J].CentreId;
+          Exit(True);
+        end;
+    end,
+    procedure(const ADataIds: TArray<Integer>)
+    begin
+      NotifyPlanModified(ADataIds);
+    end
+  );
+
+  // Tras cerrar el Kanban, refrescar Gantt por si hubo cambios de estado
+  if Assigned(FGantt) then
+    FGantt.Invalidate;
 end;
 
 procedure TForm1.DispatchList1Click(Sender: TObject);
@@ -1450,7 +1223,7 @@ procedure TForm1.Backlog1Click(Sender: TObject);
 begin
   uBacklog.ShowBacklog;
   if FVistaGantt <> nil then
-    FVistaGantt.Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
+    FVistaGantt.Inicializar;
 end;
 
 procedure TForm1.GenerarBacklogDemo1Click(Sender: TObject);
@@ -1529,11 +1302,6 @@ begin
     FTurnos);
 end;
 
-procedure TForm1.KPIDebounceTimerFired(Sender: TObject);
-begin
-  FKPIDebounceTimer.Enabled := False;
-  RebuildCentreKPIs_Parallel(False);
-end;
 
 procedure TForm1.GanttViewportChanged(Sender: TObject;
   const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
@@ -1555,12 +1323,6 @@ begin
 
     UpdateViewportInfo;
 
-    if Assigned(FCentrosControl) and FCentrosControl.VerIndicadores then
-    begin
-      FKPIDebounceTimer.Enabled := False;
-      FKPIDebounceTimer.Enabled := True;
-    end;
-
   finally
     FUpdatingViewport := False;
   end;
@@ -1578,39 +1340,6 @@ begin
     FVistaGantt.FNodeRepo,
     FVistaGantt.FOperariosRepo,
     0);
-
-end;
-
-procedure TForm1.Info1Click(Sender: TObject);
-var
-  idx: Integer;
-  node: TNode;
-  AnodeData: TNodeData;
-begin
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
-
-  node := FGantt.SelectedNode;
-
-  if FNodeRepo.TryGetById(node.DataId, AnodeData) then
-  begin
-    ShowMessage( 'OF: ' + inttostr(AnodeData.NumeroOrdenFabricacion) + chr(13) + chr(10) +
-                 'Articulo: ' + AnodeData.CodigoArticulo + chr(13) + chr(10) +
-                 'FechaEntrega: ' + datetostr( AnodeData.FechaEntrega ) );
-  end;
-
-end;
-
-procedure TForm1.MenuItem3Click(Sender: TObject);
-var
-  idx: Integer;
-  node: TNode;
-begin
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
-  node := FGantt.SelectedNode;
-  node.Enabled := not node.Enabled;
-  FGantt.UpdateNode(idx, node);
 
 end;
 
@@ -1732,12 +1461,19 @@ end;
 procedure TForm1.Proyectos1Click(Sender: TObject);
 var
   Frm: TfrmGestionProyectos;
+  OldProjectId: Integer;
 begin
   if not IsAdmin then
   begin
     ShowMessage('Solo el administrador puede gestionar proyectos.');
     Exit;
   end;
+
+  if Assigned(DMPlanner) then
+    OldProjectId := DMPlanner.CurrentProjectId
+  else
+    OldProjectId := -1;
+
   Frm := TfrmGestionProyectos.Create(Self);
   try
     Frm.ShowModal;
@@ -1745,6 +1481,9 @@ begin
     Frm.Free;
   end;
 
+  // Si el proyecto activo ha cambiado, recargar el plan
+  if Assigned(DMPlanner) and (DMPlanner.CurrentProjectId <> OldProjectId) then
+    LoadActivePlan;
 end;
 
 procedure TForm1.otalaOT1Click(Sender: TObject);
@@ -1769,32 +1508,6 @@ begin
  Close;
 end;
 
-procedure TForm1.SearchBox1InvokeSearch(Sender: TObject);
-var
-  nodes: TArray<Integer>;
-  iVal: Integer;
-begin
-  if not Assigned(FGantt) then
-   Exit;
-
-  iVal := 20000 + strtointdef( SearchBox1.Text, 0);
-
-  if radiobutton1.checked then
-   nodes := FGantt.FindNodesByOF( iVal, 'A')
-  else
-   nodes := FGantt.FindNodesByTrabajo('TR-001');
-
-
-  if Length(nodes) = 0 then
-  begin
-    FGantt.ClearSearch;
-    Exit;
-  end;
-
-  FGantt.SetSearchResults(nodes, True);
-  FGantt.SelectNodeByIndex(nodes[0], True);
-
-end;
 
 procedure TForm1.ShiftRow2Click(Sender: TObject);
 begin
@@ -1855,22 +1568,6 @@ begin
     end,
     160, 160);
 
-end;
-
-procedure TForm1.ComboBox1Change(Sender: TObject);
-begin
-  if Assigned(FGantt) then
-  begin
-    case ComboBox1.itemindex of
-    0:  FGantt.LinksVisible := lvAlways;
-    1:  FGantt.LinksVisible := lvSelected;
-    2:  FGantt.LinksVisible := lvNever;
-    end;
-
-    //FGantt.LinksAllVisible
-    //FGantt.RebuildLayout;
-    //FGantt.Invalidate;
-  end;
 end;
 
 procedure TForm1.ConfiguraCalendariCentre(const Gantt: TGanttControl; const CentreId: Integer);
@@ -1973,15 +1670,8 @@ procedure TForm1.FormCreate(Sender: TObject);
 begin
   Randomize;
   Width := 1900;
-  pnlGanttContainer.Caption := '';
-  pnlGanttContainer.Align := alClient;
-
-    pnlCentros.Caption := '';
-  cxDateEdit1.Date := Now;
 
 
-  dtFechaInicioGantt.Date := Trunc( strtodatetime('01/01/2026') );
-  dtFechaFinGantt.Date := Trunc( strtodatetime('31/12/2026') ); // IncDay(Now, 30);
 
   FNodeRepo := TNodeDataRepo.Create;
   FCustomFieldDefs := TCustomFieldDefs.Create;
@@ -1993,50 +1683,13 @@ begin
   FOperariosRepo := TOperariosRepo.Create;
   FMoldeRepo := TMoldeRepo.Create;
 
-  pnlCentros.Width := 220;
-
-  // Afegir opció "Assignar Operaris" al menú contextual del node
-  begin
-    var mi: TMenuItem;
-    mi := TMenuItem.Create(popNode);
-    mi.Caption := '-';
-    popNode.Items.Add(mi);
-
-    mi := TMenuItem.Create(popNode);
-    mi.Caption := 'Asignar Operarios...';
-    mi.OnClick := AssignarOperarisClick;
-    popNode.Items.Add(mi);
-
-    mi := TMenuItem.Create(popNode);
-    mi.Caption := 'Gesti'#243'n Operarios y Departamentos...';
-    mi.OnClick := GestionOperarisClick;
-    popNode.Items.Add(mi);
-
-    mi := TMenuItem.Create(popNode);
-    mi.Caption := '-';
-    popNode.Items.Add(mi);
-
-    mi := TMenuItem.Create(popNode);
-    mi.Caption := 'Editar Links (Dependencias)...';
-    mi.OnClick := EditarLinksClick;
-    popNode.Items.Add(mi);
-  end;
-
-
-  // Popup grid de filtro de operarios
-  FFilterPopup := TfrmOperarioFilterPopup.CreatePopup(Self, FOperariosRepo);
-  FFilterPopup.OnFilterChanged := FilterPopupChanged;
-
-  // Botón para abrir el popup (al lado del cxCheckComboBox existente)
-  FBtnFilterOperarios := TButton.Create(Self);
-  FBtnFilterOperarios.Parent := pnlToolbar;
-  FBtnFilterOperarios.SetBounds(FcxFilterOperarios.Left + FcxFilterOperarios.Width + 4,
-    FcxFilterOperarios.Top, 26, FcxFilterOperarios.Height);
-  FBtnFilterOperarios.Caption := '...';
-  FBtnFilterOperarios.Font.Style := [fsBold];
-  FBtnFilterOperarios.OnClick := BtnFilterOperariosClick;
 
   MostrarDashboard;
+
+  LoadActivePlan;
+
+  // Conectar handler de cierre con check de dirty + flush
+  Self.OnCloseQuery := FormCloseQuery;
 end;
 
 procedure TForm1.MostrarDashboard;
@@ -2067,6 +1720,11 @@ end;
 
 procedure TForm1.MostrarVistaGantt;
 begin
+  if not HasActivePlan then
+  begin
+    MostrarDashboard;
+    Exit;
+  end;
   if FVistaGantt = nil then
   begin
     FVistaGantt := TfrmVistaGantt.CreateVista(Self,
@@ -2075,9 +1733,254 @@ begin
     FVistaGantt.Parent := Self;
     FVistaGantt.Align := alClient;
   end;
-  FVistaGantt.Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
+  FVistaGantt.Inicializar;
+
+  // Cablar OnPlanModified del control interno hacia el AutoSaver del Main
+  if Assigned(FVistaGantt.GanttControl) then
+    FVistaGantt.GanttControl.OnPlanModified := GanttPlanModified;
+
   FVistaGantt.Visible := True;
   FVistaGantt.BringToFront;
+end;
+
+function TForm1.HasActivePlan: Boolean;
+begin
+  Result := Assigned(DMPlanner) and (DMPlanner.CurrentProjectId > 0);
+end;
+
+procedure TForm1.LoadActivePlan;
+begin
+  // Antes de descartar el plan en memoria, persistir cualquier dirty pendiente
+  if Assigned(FAutoSaver) then
+    FAutoSaver.Flush(True);
+
+  // Tambien persistir viewport actual del Gantt antes de cargar nuevo plan
+  if Assigned(FVistaGantt) then
+    FVistaGantt.SaveViewportPrefs;
+
+  // Carga el plan activo del usuario desde BD a FNodeRepo.
+  // Si no hay sesion / proyecto, deja el repo vacio y muestra el Dashboard.
+  if FNodeRepo = nil then
+    FNodeRepo := TNodeDataRepo.Create;
+  FNodeRepo.Clear;
+
+  if not Assigned(DMPlanner) or not DMPlanner.IsConnected then
+  begin
+    MostrarDashboard;
+    Exit;
+  end;
+
+  // Resolver proyecto activo del usuario logueado
+  if CurrentSession.UserId > 0 then
+    DMPlanner.LoadUserActiveProject(CurrentSession.UserId)
+  else
+    DMPlanner.LoadMasterProject;
+
+  if DMPlanner.CurrentProjectId <= 0 then
+  begin
+    MostrarDashboard;
+    Exit;
+  end;
+
+  // Cargar centros de la empresa (ya cargados por DMPlanner.LoadEmpresaInfo,
+  // aqu'i sincronizamos la copia local FCentresRows que usan las pantallas).
+  if Assigned(DMPlanner.CentresRepo) then
+    FCentresRows := Copy(DMPlanner.CentresRepo.GetAll);
+
+  // Cargar nodos del proyecto activo a FNodeRepo
+  DMPlanner.LoadNodes(FNodeRepo);
+
+  // Inicializar / re-cablear el auto-saver para el plan recien cargado
+  InitAutoSaver;
+
+  // Si la VistaGantt ya existe, refrescarla con los nuevos datos
+  if Assigned(FVistaGantt) and FVistaGantt.Visible then
+    FVistaGantt.Inicializar;
+end;
+
+{ ========================================================= }
+{                       Auto-saver                           }
+{ ========================================================= }
+
+procedure TForm1.InitAutoSaver;
+begin
+  if FAutoSaver = nil then
+  begin
+    FAutoSaver := TPlanAutoSaver.Create(
+      Self, FNodeRepo, DMPlanner.NodesRepo,
+      function: Integer
+      begin
+        if Assigned(DMPlanner) then
+          Result := DMPlanner.CurrentProjectId
+        else
+          Result := -1;
+      end,
+      procedure(AProjectId: Integer;
+        const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>)
+      begin
+        SaveNodesViaConnector(AProjectId, ANodes, ANodeData);
+      end);
+
+    FAutoSaver.OnStatusChange := AutoSaverStatusChange;
+    FAutoSaver.OnSaveStarted := AutoSaverSaveStarted;
+    FAutoSaver.OnSaveCompleted := AutoSaverSaveCompleted;
+    FAutoSaver.OnSaveFailed := AutoSaverSaveFailed;
+
+    // Configurable via UserPrefs
+    FAutoSaver.DebounceMs := uUserPrefs.GetPrefInt('Planner', 'AutoSaveDebounceMs', 2000);
+    if FAutoSaver.DebounceMs < 500 then FAutoSaver.DebounceMs := 500;
+
+    // Panel de status (pie de pantalla)
+    if FAutoSavePanel = nil then
+    begin
+      FAutoSavePanel := TPanel.Create(Self);
+      FAutoSavePanel.Parent := Self;
+      FAutoSavePanel.Align := alBottom;
+      FAutoSavePanel.Height := 22;
+      FAutoSavePanel.BevelOuter := bvNone;
+      FAutoSavePanel.Color := $00F0F0F0;
+      FAutoSavePanel.Caption := '';
+
+      FAutoSaveLabel := TLabel.Create(Self);
+      FAutoSaveLabel.Parent := FAutoSavePanel;
+      FAutoSaveLabel.Align := alClient;
+      FAutoSaveLabel.AutoSize := False;
+      FAutoSaveLabel.Caption := '   Listo';
+      FAutoSaveLabel.Font.Color := $00666666;
+      FAutoSaveLabel.Layout := tlCenter;
+    end;
+  end;
+  UpdateAutoSaveLabel;
+end;
+
+procedure TForm1.DestroyAutoSaver;
+begin
+  if Assigned(FAutoSaver) then
+  begin
+    FAutoSaver.Flush(True);
+    FreeAndNil(FAutoSaver);
+  end;
+end;
+
+procedure TForm1.SaveNodesViaConnector(AProjectId: Integer;
+  const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>);
+var
+  Res: TConnectorResult;
+begin
+  if not Assigned(DMPlanner) or not Assigned(DMPlanner.Connector) then
+    raise Exception.Create('No hay conexi'#243'n a BD');
+
+  Res := DMPlanner.Connector.SaveNodes(AProjectId, ANodes, ANodeData);
+  if not Res.Success then
+    raise Exception.Create(Res.ErrorMessage);
+end;
+
+procedure TForm1.AutoSaverStatusChange(Sender: TObject; AStatus: TAutoSaveStatus);
+begin
+  UpdateAutoSaveLabel;
+end;
+
+procedure TForm1.AutoSaverSaveStarted(Sender: TObject; ANodeCount: Integer);
+begin
+  FLastSavedNodes := ANodeCount;
+  UpdateAutoSaveLabel;
+end;
+
+procedure TForm1.AutoSaverSaveCompleted(Sender: TObject; ANodeCount: Integer);
+begin
+  FLastSaveTick := GetTickCount;
+  FLastSavedNodes := ANodeCount;
+  UpdateAutoSaveLabel;
+end;
+
+procedure TForm1.AutoSaverSaveFailed(Sender: TObject; const AError: string);
+begin
+  UpdateAutoSaveLabel;
+  // Solo mostramos di'alogo en errores; los reintentos los gestiona el timer.
+  ShowMessage('Error al guardar el plan: ' + AError);
+end;
+
+procedure TForm1.UpdateAutoSaveLabel;
+var
+  S: string;
+  Secs: Cardinal;
+begin
+  if FAutoSaveLabel = nil then Exit;
+  if FAutoSaver = nil then
+  begin
+    FAutoSaveLabel.Caption := '   Listo';
+    Exit;
+  end;
+
+  case FAutoSaver.Status of
+    assIdle:
+      begin
+        if FLastSaveTick = 0 then
+          S := '   Listo'
+        else
+        begin
+          Secs := (GetTickCount - FLastSaveTick) div 1000;
+          if Secs < 5 then
+            S := Format('   Guardado (%d nodos)', [FLastSavedNodes])
+          else
+            S := Format('   Guardado hace %ds', [Secs]);
+        end;
+      end;
+    assDirty:    S := '   Cambios pendientes...';
+    assSaving:   S := Format('   Guardando %d nodos...', [FLastSavedNodes]);
+    assError:    S := '   Error al guardar';
+  end;
+  FAutoSaveLabel.Caption := S;
+end;
+
+procedure TForm1.NotifyPlanModified(const ADataIds: TArray<Integer>);
+begin
+  if Assigned(FAutoSaver) then
+    FAutoSaver.MarkDirty(ADataIds);
+end;
+
+procedure TForm1.GanttPlanModified(Sender: TObject;
+  const ADataIds: TArray<Integer>);
+var
+  I, J: Integer;
+  AllNodes: TArray<TNode>;
+  Affected: TArray<TNode>;
+  IdSet: TDictionary<Integer, Boolean>;
+  Cnt: Integer;
+  SrcGantt: TGanttControl;
+begin
+  // 1) Sincronizar TNodes modificados al DMPlanner.NodesRepo, para que
+  //    el save batch tenga StartTime/EndTime/CentreId actualizados.
+  //    Sender = TGanttControl que dispar'o el evento (esperado: VistaGantt.GanttControl).
+  if not (Sender is TGanttControl) then Exit;
+  SrcGantt := TGanttControl(Sender);
+
+  if Assigned(SrcGantt) and Assigned(DMPlanner) and Assigned(DMPlanner.NodesRepo) then
+  begin
+    AllNodes := SrcGantt.GetNodes;
+    IdSet := TDictionary<Integer, Boolean>.Create;
+    try
+      for J := 0 to High(ADataIds) do
+        IdSet.AddOrSetValue(ADataIds[J], True);
+
+      SetLength(Affected, Length(AllNodes));
+      Cnt := 0;
+      for I := 0 to High(AllNodes) do
+        if IdSet.ContainsKey(AllNodes[I].DataId) then
+        begin
+          Affected[Cnt] := AllNodes[I];
+          Inc(Cnt);
+        end;
+      SetLength(Affected, Cnt);
+
+      DMPlanner.NodesRepo.UpsertNodes(Affected);
+    finally
+      IdSet.Free;
+    end;
+  end;
+
+  // 2) Disparar el debounce del AutoSaver
+  NotifyPlanModified(ADataIds);
 end;
 
 procedure TForm1.ConfigEmpresa1Click(Sender: TObject);
@@ -2174,354 +2077,65 @@ begin
   end;
 end;
 
-procedure TForm1.EditarLinksClick(Sender: TObject);
+// Handlers EditarLinksClick / GestionOperarisClick / AssignarOperarisClick
+// migrados a uVistaGantt.pas (ahora viven en el form de la VistaGantt).
+
+procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
 var
-  idx: Integer;
-  node: TNode;
-  D: TNodeData;
-  AllLinks: TArray<TErpLink>;
-  LinkIdxs: TArray<Integer>;
-  Items: TArray<TLinkEditItem>;
-  I, J: Integer;
-  OtherNode: TNode;
-  OtherData: TNodeData;
-  LResult: TLinkEditorResult;
-  OtherIdx: Integer;
+  Btn: Integer;
 begin
-  idx := FGantt.SelectedNodeIndex;
-  if idx < 0 then Exit;
+  CanClose := True;
 
-  node := FGantt.SelectedNode;
-  if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+  if not Assigned(FAutoSaver) then Exit;
+  if FNodeRepo = nil then Exit;
+  if not FNodeRepo.HasDirty then Exit;
 
-  AllLinks := FGantt.GetLinks;
-  LinkIdxs := FGantt.GetLinksForNode(node.Id);
-
-  // Construir items per l'editor
-  SetLength(Items, Length(LinkIdxs));
-  for I := 0 to High(LinkIdxs) do
-  begin
-    J := LinkIdxs[I];
-    Items[I].LinkIndex := J;
-    Items[I].FromNodeId := AllLinks[J].FromNodeId;
-    Items[I].ToNodeId := AllLinks[J].ToNodeId;
-    Items[I].LinkType := AllLinks[J].LinkType;
-    Items[I].PorcentajeDependencia := AllLinks[J].PorcentajeDependencia;
-    Items[I].Deleted := False;
-
-    // Resolucionar noms
-    if AllLinks[J].FromNodeId = node.Id then
-    begin
-      Items[I].FromCaption := D.Operacion;
-      OtherIdx := FGantt.FindNodeIndexById(AllLinks[J].ToNodeId);
-      if (OtherIdx >= 0) then
-      begin
-        OtherNode := FGantt.GetNodeAt(OtherIdx);
-        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
-          Items[I].ToCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
-        else
-          Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
-      end
-      else
-        Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
-    end
-    else
-    begin
-      Items[I].ToCaption := D.Operacion;
-      OtherIdx := FGantt.FindNodeIndexById(AllLinks[J].FromNodeId);
-      if (OtherIdx >= 0) then
-      begin
-        OtherNode := FGantt.GetNodeAt(OtherIdx);
-        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
-          Items[I].FromCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
-        else
-          Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
-      end
-      else
-        Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
-    end;
+  // Hay cambios sin guardar. Intentar flush s'incrono.
+  try
+    FAutoSaver.Flush(True);
+  except
+    // Continuamos al chequeo de abajo
   end;
 
-  if TfrmLinkEditor.Execute(node.Id,
-    D.Operacion + ' (OF ' + IntToStr(D.NumeroOrdenFabricacion) + ')',
-    Items, LResult) then
+  // Si despu'es del flush a'un quedan dirty, ofrecer 3 opciones
+  if FNodeRepo.HasDirty then
   begin
-    // Reconstruir array de links complet
-    var NewLinks: TArray<TErpLink>;
-    var EditedSet: TDictionary<Integer, Integer>; // LinkIndex -> index dins LResult.Items
-    var DeletedSet: TDictionary<Integer, Boolean>;
-    EditedSet := TDictionary<Integer, Integer>.Create;
-    DeletedSet := TDictionary<Integer, Boolean>.Create;
-    try
-      for I := 0 to High(LResult.Items) do
-      begin
-        J := LResult.Items[I].LinkIndex;
-        if J < 0 then Continue;
-        if LResult.Items[I].Deleted then
-          DeletedSet.AddOrSetValue(J, True)
-        else
-          EditedSet.AddOrSetValue(J, I);
-      end;
+    Btn := MessageDlg(
+      'Hay cambios sin guardar y el guardado autom'#225'tico ha fallado.' + sLineBreak +
+      sLineBreak +
+      'S'#237 + ': Reintentar guardar ahora.' + sLineBreak +
+      'No: Salir descartando los cambios.' + sLineBreak +
+      'Cancelar: Volver a la aplicaci'#243'n.',
+      mtWarning, [mbYes, mbNo, mbCancel], 0);
 
-      SetLength(NewLinks, 0);
-      for I := 0 to High(AllLinks) do
-      begin
-        if DeletedSet.ContainsKey(I) then
-          Continue; // eliminat
-
-        var L: TErpLink;
-        L := AllLinks[I];
-        if EditedSet.ContainsKey(I) then
-          L.PorcentajeDependencia := LResult.Items[EditedSet[I]].PorcentajeDependencia;
-
-        SetLength(NewLinks, Length(NewLinks) + 1);
-        NewLinks[High(NewLinks)] := L;
-      end;
-
-      FGantt.SetLinks(NewLinks);
-
-      // Forçar recàlcul: per cada link editat, moure el successor
-      // a la posició mínima que marca el nou percentatge
-      var K: Integer;
-      var MovedNodes: TIdxArray;
-      for K := 0 to High(NewLinks) do
-      begin
-        // Links on aquest node és predecessor (sortida)
-        if NewLinks[K].FromNodeId = node.Id then
+    case Btn of
+      mrYes:
         begin
-          var SuccNodeIdx: Integer;
-          SuccNodeIdx := FGantt.FindNodeIndexById(NewLinks[K].ToNodeId);
-          if SuccNodeIdx >= 0 then
-          begin
-            var MinStart: TDateTime;
-            MinStart := FGantt.GetDependencyMinStart(idx, NewLinks[K].PorcentajeDependencia);
-            FGantt.MoveNodeKeepingDuration(SuccNodeIdx, MinStart);
-            FGantt.ResolveDependenciesFromNode(SuccNodeIdx, MovedNodes);
+          try
+            FAutoSaver.Flush(True);
+          except
+            on E: Exception do
+              ShowMessage('Persiste el error: ' + E.Message);
           end;
+          // Si a'un dirty, no cerrar
+          if FNodeRepo.HasDirty then
+            CanClose := False;
         end;
-        // Links on aquest node és successor (entrada)
-        if NewLinks[K].ToNodeId = node.Id then
-        begin
-          var PredNodeIdx: Integer;
-          PredNodeIdx := FGantt.FindNodeIndexById(NewLinks[K].FromNodeId);
-          if PredNodeIdx >= 0 then
-          begin
-            var MinStart: TDateTime;
-            MinStart := FGantt.GetDependencyMinStart(PredNodeIdx, NewLinks[K].PorcentajeDependencia);
-            FGantt.MoveNodeKeepingDuration(idx, MinStart);
-            FGantt.ResolveDependenciesFromNode(idx, MovedNodes);
-          end;
-        end;
-      end;
-      FGantt.RebuildLayout;
-    finally
-      EditedSet.Free;
-      DeletedSet.Free;
+      mrNo:    CanClose := True;   // Descartar
+      mrCancel: CanClose := False;
     end;
-  end;
-end;
-
-procedure TForm1.GestionOperarisClick(Sender: TObject);
-var
-  Frm: TfrmGestionOperaris;
-begin
-  Frm := TfrmGestionOperaris.Create(Self);
-  try
-    Frm.ShowModal;
-  finally
-    Frm.Free;
-  end;
-  RefreshOperarioFilterItems;
-end;
-
-
-procedure TForm1.RefreshOperarioFilterItems;
-var
-  Ops: TArray<TOperario>;
-  I: Integer;
-  SelIds: TArray<Integer>;
-begin
-  // Guardar selección del popup antes de recargar
-  SelIds := FFilterPopup.GetSelectedIds;
-
-  // Recargar cxCheckComboBox
-  FcxFilterOperarios.Properties.Items.Clear;
-  Ops := FOperariosRepo.GetOperarios;
-  for I := 0 to High(Ops) do
-    FcxFilterOperarios.Properties.Items.AddCheckItem(Ops[I].Nombre);
-
-  // Recrear popup con datos actualizados
-  FFilterPopup.Free;
-  FFilterPopup := TfrmOperarioFilterPopup.CreatePopup(Self, FOperariosRepo);
-  FFilterPopup.OnFilterChanged := FilterPopupChanged;
-  FFilterPopup.SetSelectedIds(SelIds);
-end;
-
-procedure TForm1.BtnFilterOperariosClick(Sender: TObject);
-var
-  Pt: TPoint;
-begin
-  Pt := FBtnFilterOperarios.ClientToScreen(Point(0, FBtnFilterOperarios.Height));
-  FFilterPopup.ShowAt(Pt.X, Pt.Y);
-end;
-
-procedure TForm1.FilterPopupChanged(Sender: TObject; const SelectedIds: TArray<Integer>);
-begin
-  ApplyOperarioFilter;
-end;
-
-procedure TForm1.FchkSoloFiltradosPropertiesChange(Sender: TObject);
-begin
- ApplyOperarioFilter;
-end;
-
-procedure TForm1.FcxFilterOperariosPropertiesChange(Sender: TObject);
-begin
-  ApplyOperarioFilter;
-end;
-
-
-procedure TForm1.ApplyOperarioFilter;
-var
-  Ops: TArray<TOperario>;
-  I, J: Integer;
-  SelOperarioIds: TArray<Integer>;
-  PopupIds: TArray<Integer>;
-  Asigs: TArray<TAsignacionOperario>;
-  DataIdSet: TDictionary<Integer, Byte>;
-  IdSet: TDictionary<Integer, Byte>;
-  DataIds: TArray<Integer>;
-  AnyChecked: Boolean;
-begin
-  Ops := FOperariosRepo.GetOperarios;
-  IdSet := TDictionary<Integer, Byte>.Create;
-  try
-    // Fuente 1: cxCheckComboBox
-    for I := 0 to FcxFilterOperarios.Properties.Items.Count - 1 do
-      if FcxFilterOperarios.States[I] = cbsChecked then
-        if I <= High(Ops) then
-          IdSet.AddOrSetValue(Ops[I].Id, 1);
-
-    // Fuente 2: Popup grid
-    PopupIds := FFilterPopup.GetSelectedIds;
-    for I := 0 to High(PopupIds) do
-      IdSet.AddOrSetValue(PopupIds[I], 1);
-
-    AnyChecked := IdSet.Count > 0;
-    if not AnyChecked then
-    begin
-      FGantt.ClearOperarioFilter;
-      Exit;
-    end;
-
-    // IDs seleccionados
-    SetLength(SelOperarioIds, IdSet.Count);
-    I := 0;
-    for J in IdSet.Keys do
-    begin
-      SelOperarioIds[I] := J;
-      Inc(I);
-    end;
-  finally
-    IdSet.Free;
-  end;
-
-  // Recoger DataIds de los nodos asignados a esos operarios
-  DataIdSet := TDictionary<Integer, Byte>.Create;
-  try
-    for I := 0 to High(SelOperarioIds) do
-    begin
-      Asigs := FOperariosRepo.GetAsignacionsByOperario(SelOperarioIds[I]);
-      for J := 0 to High(Asigs) do
-        DataIdSet.AddOrSetValue(Asigs[J].DataId, 1);
-    end;
-
-    SetLength(DataIds, DataIdSet.Count);
-    I := 0;
-    for J in DataIdSet.Keys do
-    begin
-      DataIds[I] := J;
-      Inc(I);
-    end;
-  finally
-    DataIdSet.Free;
-  end;
-
-  FGantt.SetOperarioFilter(DataIds, FchkSoloFiltrados.Checked);
-end;
-
-procedure TForm1.AssignarOperarisClick(Sender: TObject);
-var
-  SelIndexes: TArray<Integer>;
-  I: Integer;
-  node: TNode;
-  D: TNodeData;
-  AssignCount: Integer;
-  DataIds: TArray<Integer>;
-  Operaciones: TArray<string>;
-  TotalDur: Double;
-  TotalNec: Integer;
-begin
-  SelIndexes := FGantt.GetSelectedNodeIndexes;
-  if Length(SelIndexes) = 0 then Exit;
-
-  // Modo single
-  if Length(SelIndexes) = 1 then
-  begin
-    node := FGantt.GetNodeAt(SelIndexes[0]);
-    if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
-
-    if TfrmAssignOperaris.Execute(
-      FOperariosRepo, D.DataId, D.Operacion,
-      D.DurationMin, D.OperariosNecesarios, AssignCount) then
-    begin
-      D.OperariosAsignados := AssignCount;
-      FNodeRepo.AddOrUpdate(D);
-      FGantt.Invalidate;
-    end;
-    Exit;
-  end;
-
-  // Modo multi: recoger DataIds, sumar duraciones y necesarios
-  SetLength(DataIds, 0);
-  SetLength(Operaciones, 0);
-  TotalDur := 0;
-  TotalNec := 0;
-  for I := 0 to High(SelIndexes) do
-  begin
-    if (SelIndexes[I] < 0) or (SelIndexes[I] > FGantt.NodeCount - 1) then
-      Continue;
-    node := FGantt.GetNodeAt(SelIndexes[I]);
-    if not FNodeRepo.TryGetById(node.DataId, D) then Continue;
-
-    SetLength(DataIds, Length(DataIds) + 1);
-    DataIds[High(DataIds)] := D.DataId;
-    SetLength(Operaciones, Length(Operaciones) + 1);
-    Operaciones[High(Operaciones)] := D.Operacion;
-    TotalDur := TotalDur + D.DurationMin;
-    TotalNec := TotalNec + D.OperariosNecesarios;
-  end;
-
-  if Length(DataIds) = 0 then Exit;
-
-  if TfrmAssignOperaris.ExecuteMulti(
-    FOperariosRepo, DataIds, Operaciones, TotalDur, TotalNec) then
-  begin
-    // Actualizar OperariosAsignados de cada nodo
-    for I := 0 to High(DataIds) do
-    begin
-      if FNodeRepo.TryGetById(DataIds[I], D) then
-      begin
-        D.OperariosAsignados := FOperariosRepo.CountAssignatsAlNode(DataIds[I]);
-        FNodeRepo.AddOrUpdate(D);
-      end;
-    end;
-    FGantt.Invalidate;
   end;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
+  // Persistir viewport actual antes de liberar
+  if Assigned(FVistaGantt) then
+    FVistaGantt.SaveViewportPrefs;
+
+  // Flush final del auto-saver antes de liberar repos
+  DestroyAutoSaver;
+
   FNodeRepo.Free;
   FPlanningRuleEngine.Free;
   FCustomFieldDefs.Free;
@@ -2534,50 +2148,8 @@ begin
 end;
 
 
-procedure TForm1.UpdateHistoryButtons;
-begin
-  btnUndo.Enabled := FGantt.CanUndo;
-  btnRedo.Enabled := FGantt.CanRedo;
-  lblUndoCount.Caption := IntToStr(FGantt.UndoCount);
-  lblRedoCount.Caption := IntToStr(FGantt.RedoCount);
-end;
 
 
-procedure TForm1.FormKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
-begin
 
-  if NOT assigned(FGantt) then
-   Exit;
-
-  if Key = VK_F1 then
-  begin
-    TfrmHelpGuide.Execute;
-    Key := 0;
-  end
-  else if (ssCtrl in Shift) and (Key = Ord('Z')) then
-  begin
-    FGantt.UndoLastAction;
-    UpdateHistoryButtons;
-    Key := 0;
-  end
-  else if (ssCtrl in Shift) and (Key = Ord('Y')) then
-  begin
-    FGantt.RedoLastAction;
-    UpdateHistoryButtons;
-    Key := 0;
-  end;
-end;
-
-procedure TForm1.GoToDate(const ADate: TDateTime);
-var
-  sx: Single;
-begin
-  if (not Assigned(FTimeline)) or (not assigned(FGantt)) then
-   Exit;
-  sx := FTimeline.CalcScrollXToCenterDate(ADate);
-  FTimeline.ScrollX := sx; // via setter (recomanat)
-  FGantt.ScrollX := sx;    // via setter (recomanat)
-end;
 
 end.

@@ -27,8 +27,24 @@ type
     Id: Integer;
     Caption: string;
     Color: TColor;
-    MappedEstado: Integer;  // -1 = libre; 0..3 = TNodoEstado
+    MappedEstado: Integer;  // -2 = Backlog (especial); -1 = libre; 0..3 = TNodoEstado
     Order: Integer;
+  end;
+
+  TKanbanBacklogCard = record
+    SyntheticId: Integer;        // id sint'etico negativo, evita colisi'on con DataId reales
+    RawId: Int64;                // RawOFId / RawComandaId / RawProjecteId del Backlog
+    TipoOrigen: string;          // 'OF ', 'PED', 'PRJ'
+    CodigoDocumento: string;
+    CodigoArticulo: string;
+    DescripcionArticulo: string;
+    NombreCliente: string;
+    Cantidad: Double;
+    UnidadMedida: string;
+    FechaCompromiso: TDateTime;
+    Prioridad: Integer;
+    HorasEstimadas: Double;
+    CentroPreferente: string;
   end;
 
   TKanbanColumnLayout = record
@@ -39,6 +55,9 @@ type
     Caption: string;
     Color: TColor;
     CardCount: Integer;
+    BacklogMoreRect: TRectF;  // rect del badge "+N m'as" si aplica (s'olo Backlog)
+    VScrollTrack: TRectF;     // pista vertical (todo el alto del body)
+    VScrollThumb: TRectF;     // thumb dentro de la pista; vac'io si no hay overflow
   end;
 
   TKanbanCardLayout = record
@@ -50,14 +69,19 @@ type
     StartTime: TDateTime;
     EndTime: TDateTime;
     Hovered: Boolean;
+    IsBacklog: Boolean;     // True -> data en FBacklogData[DataId], no en FNodeRepo
   end;
 
   TKanbanCardEvent = procedure(Sender: TObject; const DataId: Integer) of object;
   TKanbanCardMoveEvent = procedure(Sender: TObject; const DataId: Integer;
     const OldState, NewState: TNodoEstado) of object;
+  TKanbanLayoutChangedEvent = procedure(Sender: TObject) of object;
 
   TGetNodeTimesFunc = reference to function(const DataId: Integer;
     out AStart, AEnd: TDateTime): Boolean;
+
+  TGetNodeCentreFunc = reference to function(const DataId: Integer;
+    out ACentreId: Integer): Boolean;
 
   TKanbanFilterField = (kffNone, kffCentre, kffPrioridad, kffArticulo);
 
@@ -71,6 +95,8 @@ type
     COLUMN_WIDTH = 280;     // ancho fijo estilo Trello
     ADD_COL_BTN_WIDTH = 280;
     SCROLLBAR_SIZE = 14;
+    BACKLOG_BADGE_H = 28;
+    VSCROLLBAR_W = 8;
 
   private
     FNodeRepo: TNodeDataRepo;
@@ -82,6 +108,12 @@ type
 
     // Cards
     FCards: TArray<TKanbanCardLayout>;
+
+    // Backlog (columna especial "Sin Planificar")
+    FBacklogData: TDictionary<Integer, TKanbanBacklogCard>; // SyntheticId -> data
+    FBacklogColId: Integer;     // -1 si no hay columna Backlog
+    FBacklogTotal: Integer;     // total de filas en BD (puede superar el top mostrado)
+    FOnBacklogMoreClick: TNotifyEvent;
 
     // Scroll
     FScrollX: Single;                           // scroll horizontal global
@@ -107,6 +139,8 @@ type
 
     // Tiempos
     FGetNodeTimes: TGetNodeTimesFunc;
+    // Centre asignado (para filtro por centre)
+    FGetNodeCentre: TGetNodeCentreFunc;
 
     // Orden (DataId -> SortIndex)
     FCardOrder: TDictionary<Integer, Integer>;
@@ -121,6 +155,7 @@ type
     FmiColor: TMenuItem;
     FmiMoveLeft: TMenuItem;
     FmiMoveRight: TMenuItem;
+    FmiAbrirBacklog: TMenuItem;
 
     // Column drag (reorder by header)
     FDraggingCol: Boolean;
@@ -129,15 +164,26 @@ type
     FDragColOrigOrder: Integer;
     FDragColScreenX: Single;  // posición X actual de la columna arrastrada
 
-    // Scrollbar drag
+    // Scrollbar drag (horizontal)
     FDraggingHScrollbar: Boolean;
     FHScrollbarGrabX: Single;
     FHScrollbarGrabScrollX: Single;
+
+    // Scrollbar drag (vertical por columna)
+    FDraggingVScroll: Boolean;
+    FDragVScrollColId: Integer;
+    FDragVScrollGrabY: Single;
+    FDragVScrollGrabScrollY: Single;
 
     // Eventos
     FOnCardDblClick: TKanbanCardEvent;
     FOnCardMoved: TKanbanCardMoveEvent;
     FOnCardClick: TKanbanCardEvent;
+    FOnLayoutChanged: TKanbanLayoutChangedEvent;
+    FSuspendLayoutEvents: Integer;
+
+    procedure NotifyLayoutChanged;
+    procedure BacklogToNodeData(const Bk: TKanbanBacklogCard; out D: TNodeData);
 
     // Helpers
     function ColIdFromEstado(const E: TNodoEstado): Integer;
@@ -191,6 +237,7 @@ type
     procedure PopupColorClick(Sender: TObject);
     procedure PopupMoveLeftClick(Sender: TObject);
     procedure PopupMoveRightClick(Sender: TObject);
+    procedure PopupAbrirBacklogClick(Sender: TObject);
 
   protected
     procedure Paint; override;
@@ -207,10 +254,13 @@ type
 
     procedure SetNodeRepo(ARepo: TNodeDataRepo);
     procedure SetGetNodeTimes(AFunc: TGetNodeTimesFunc);
+    procedure SetGetNodeCentre(AFunc: TGetNodeCentreFunc);
     procedure RefreshBoard;
 
     function AddColumn(const ACaption: string; const AColor: TColor;
-      const AMappedEstado: Integer = -1): Integer;
+      const AMappedEstado: Integer = -1): Integer; overload;
+    function AddColumn(const AId: Integer; const ACaption: string;
+      const AColor: TColor; const AMappedEstado, AOrder: Integer): Integer; overload;
     procedure RemoveColumn(const ColId: Integer);
     procedure RenameColumn(const ColId: Integer; const NewCaption: string);
     function ColumnCount: Integer;
@@ -220,9 +270,29 @@ type
     procedure FilterByArticulo(const CodigoArticulo: string);
     procedure ClearFilter;
 
+    // Columna especial "Sin Planificar" (Backlog).
+    // ATotalCount permite indicar que hay m'as filas que las pasadas (mostrar "+ N m'as").
+    procedure SetBacklogCards(const ACards: TArray<TKanbanBacklogCard>;
+      const ATotalCount: Integer);
+    procedure ClearBacklog;
+    property OnBacklogMoreClick: TNotifyEvent
+      read FOnBacklogMoreClick write FOnBacklogMoreClick;
+
+    // Acceso al layout (para persistencia externa)
+    procedure ClearColumns;
+    procedure BeginLoadLayout;
+    procedure EndLoadLayout;
+    function GetColumnDefs: TArray<TKanbanColumnDef>;
+    function GetCardOrders: TArray<TPair<Integer, Integer>>;
+    function GetCardColAssigns: TArray<TPair<Integer, Integer>>;
+    procedure SetCardOrder(const DataId, SortIndex: Integer);
+    procedure SetCardColAssign(const DataId, ColId: Integer);
+
     property OnCardDblClick: TKanbanCardEvent read FOnCardDblClick write FOnCardDblClick;
     property OnCardMoved: TKanbanCardMoveEvent read FOnCardMoved write FOnCardMoved;
     property OnCardClick: TKanbanCardEvent read FOnCardClick write FOnCardClick;
+    property OnLayoutChanged: TKanbanLayoutChangedEvent
+      read FOnLayoutChanged write FOnLayoutChanged;
   end;
 
 implementation
@@ -243,7 +313,9 @@ begin
   FDraggingCol := False;
   FDragColId := -1;
   FDraggingHScrollbar := False;
-  FHoverDataId := -1;
+  FDraggingVScroll := False;
+  FDragVScrollColId := -1;
+  FHoverDataId := MaxInt;
   FHoverColId := -1;
   FFilterField := kffNone;
   FFilterCentreId := -1;
@@ -257,12 +329,21 @@ begin
   FScrollYMap := TDictionary<Integer, Single>.Create;
   FCardOrder := TDictionary<Integer, Integer>.Create;
   FCardColAssign := TDictionary<Integer, Integer>.Create;
+  FBacklogData := TDictionary<Integer, TKanbanBacklogCard>.Create;
+  FBacklogColId := -1;
+  FBacklogTotal := 0;
+  FSuspendLayoutEvents := 0;
 
   // Columnas de estado por defecto
-  AddColumn('Pendiente',  $00F1F2F4, Ord(nePendiente));
-  AddColumn('En Curso',   $00F1F2F4, Ord(neEnCurso));
-  AddColumn('Bloqueado',  $00F1F2F4, Ord(neBloqueado));
-  AddColumn('Finalizado', $00F1F2F4, Ord(neFinalizado));
+  BeginLoadLayout;
+  try
+    AddColumn('Pendiente',  $00F1F2F4, Ord(nePendiente));
+    AddColumn('En Curso',   $00F1F2F4, Ord(neEnCurso));
+    AddColumn('Bloqueado',  $00F1F2F4, Ord(neBloqueado));
+    AddColumn('Finalizado', $00F1F2F4, Ord(neFinalizado));
+  finally
+    EndLoadLayout;
+  end;
 
   // Popup
   FColPopup := TPopupMenu.Create(Self);
@@ -299,6 +380,12 @@ begin
   FmiDelete.Caption := 'Eliminar columna';
   FmiDelete.OnClick := PopupDeleteClick;
   FColPopup.Items.Add(FmiDelete);
+
+  // Item s'olo visible en columna Backlog
+  FmiAbrirBacklog := TMenuItem.Create(FColPopup);
+  FmiAbrirBacklog.Caption := 'Abrir Backlog';
+  FmiAbrirBacklog.OnClick := PopupAbrirBacklogClick;
+  FColPopup.Items.Add(FmiAbrirBacklog);
 end;
 
 destructor TKanbanBoard.Destroy;
@@ -307,6 +394,7 @@ begin
   FScrollYMap.Free;
   FCardOrder.Free;
   FCardColAssign.Free;
+  FBacklogData.Free;
   inherited;
 end;
 
@@ -437,18 +525,17 @@ end;
 
 function TKanbanBoard.PassFilter(const D: TNodeData): Boolean;
 var
-  I: Integer;
+  CentreId: Integer;
 begin
   Result := True;
   case FFilterField of
     kffCentre:
       begin
         if FFilterCentreId < 0 then Exit(True);
-        if Length(D.CentresPermesos) = 0 then Exit(True);
-        Result := False;
-        for I := 0 to High(D.CentresPermesos) do
-          if D.CentresPermesos[I] = FFilterCentreId then
-            Exit(True);
+        // Filtrar por centre actual donde est'a planificado el nodo.
+        if not Assigned(FGetNodeCentre) then Exit(True);
+        if not FGetNodeCentre(D.DataId, CentreId) then Exit(False);
+        Result := (CentreId = FFilterCentreId);
       end;
     kffPrioridad:
       Result := (D.Prioridad = StrToIntDef(FFilterValue, -1));
@@ -483,6 +570,24 @@ begin
   Col.Order := FColumnDefs.Count;
   FColumnDefs.Add(Col);
   Result := Col.Id;
+  NotifyLayoutChanged;
+end;
+
+function TKanbanBoard.AddColumn(const AId: Integer; const ACaption: string;
+  const AColor: TColor; const AMappedEstado, AOrder: Integer): Integer;
+var
+  Col: TKanbanColumnDef;
+begin
+  Col.Id := AId;
+  Col.Caption := ACaption;
+  Col.Color := AColor;
+  Col.MappedEstado := AMappedEstado;
+  Col.Order := AOrder;
+  FColumnDefs.Add(Col);
+  if AId >= FNextColId then
+    FNextColId := AId + 1;
+  Result := AId;
+  NotifyLayoutChanged;
 end;
 
 procedure TKanbanBoard.RemoveColumn(const ColId: Integer);
@@ -495,6 +600,12 @@ begin
   if FColumnDefs[Idx].MappedEstado >= 0 then
   begin
     MessageDlg('No se pueden eliminar las columnas de estado predeterminadas.',
+      mtWarning, [mbOK], 0);
+    Exit;
+  end;
+  if FColumnDefs[Idx].MappedEstado = -2 then
+  begin
+    MessageDlg('La columna "Sin Planificar" no puede eliminarse.',
       mtWarning, [mbOK], 0);
     Exit;
   end;
@@ -522,6 +633,7 @@ begin
   end;
 
   RefreshBoard;
+  NotifyLayoutChanged;
 end;
 
 procedure TKanbanBoard.RenameColumn(const ColId: Integer; const NewCaption: string);
@@ -535,6 +647,7 @@ begin
   C.Caption := NewCaption;
   FColumnDefs[Idx] := C;
   RefreshBoard;
+  NotifyLayoutChanged;
 end;
 
 function TKanbanBoard.ColumnCount: Integer;
@@ -594,6 +707,7 @@ begin
       C.Color := Dlg.Color;
       FColumnDefs[Idx] := C;
       RefreshBoard;
+      NotifyLayoutChanged;
     end;
   finally
     Dlg.Free;
@@ -628,6 +742,7 @@ begin
   FColumnDefs[Idx] := C;
 
   RefreshBoard;
+  NotifyLayoutChanged;
 end;
 
 { ========================================================= }
@@ -696,6 +811,7 @@ begin
   end;
 
   RefreshBoard;
+  NotifyLayoutChanged;
 end;
 
 { ========================================================= }
@@ -716,6 +832,12 @@ begin DoMoveColumn(FPopupColId, -1); end;
 
 procedure TKanbanBoard.PopupMoveRightClick(Sender: TObject);
 begin DoMoveColumn(FPopupColId, 1); end;
+
+procedure TKanbanBoard.PopupAbrirBacklogClick(Sender: TObject);
+begin
+  if Assigned(FOnBacklogMoreClick) then
+    FOnBacklogMoreClick(Self);
+end;
 
 { ========================================================= }
 {                     Layout                                 }
@@ -762,6 +884,38 @@ begin
       begin
         Counts[CL.ColId] := Counts[CL.ColId] + 1;
         List.Add(CL);
+      end;
+    end;
+
+    // A~nadir cards de Backlog (columna especial "Sin Planificar").
+    // No se filtran por centre (decision de UX); s'i por art'iculo/prioridad.
+    if FBacklogColId >= 0 then
+    begin
+      var Bk: TKanbanBacklogCard;
+      var Idx: Integer := 0;
+      for Bk in FBacklogData.Values do
+      begin
+        case FFilterField of
+          kffPrioridad:
+            if Bk.Prioridad <> StrToIntDef(FFilterValue, -1) then Continue;
+          kffArticulo:
+            if not SameText(Bk.CodigoArticulo, FFilterValue) then Continue;
+        end;
+
+        FillChar(CL, SizeOf(CL), 0);
+        CL.DataId := Bk.SyntheticId;       // negativo, no colisiona
+        CL.ColId := FBacklogColId;
+        CL.Priority := Bk.Prioridad;
+        CL.SortIndex := Idx;
+        CL.IsBacklog := True;
+        CL.Hovered := (Bk.SyntheticId = FHoverDataId);
+        Inc(Idx);
+
+        if Counts.ContainsKey(CL.ColId) then
+        begin
+          Counts[CL.ColId] := Counts[CL.ColId] + 1;
+          List.Add(CL);
+        end;
       end;
     end;
 
@@ -823,12 +977,24 @@ begin
     FColumnLayouts[I].HeaderRect := RectF(ScreenX, 0, ScreenX + COLUMN_WIDTH, HEADER_HEIGHT);
   end;
 
-  // Posicionar cards en pantalla
+  // Posicionar cards y badge "+ N m'as" en pantalla
   for I := 0 to High(FColumnLayouts) do
   begin
     var ColId := FColumnLayouts[I].ColId;
     var ScrLeft := FColumnLayouts[I].ScreenRect.Left;
     var ColBodyTop: Single := HEADER_HEIGHT;
+    var BX := ScrLeft + CARD_MARGIN;
+    var BW := COLUMN_WIDTH - 2 * CARD_MARGIN;
+
+    // Badge "+ N m'as": fijo en la parte superior del body (no scrollea)
+    FColumnLayouts[I].BacklogMoreRect := RectF(0, 0, 0, 0);
+    if (ColId = FBacklogColId) and (FBacklogTotal > FColumnLayouts[I].CardCount) then
+    begin
+      FColumnLayouts[I].BacklogMoreRect :=
+        RectF(BX, ColBodyTop + 4, BX + BW, ColBodyTop + 4 + BACKLOG_BADGE_H);
+      ColBodyTop := ColBodyTop + 4 + BACKLOG_BADGE_H + CARD_MARGIN;
+    end;
+
     Y := ColBodyTop + CARD_MARGIN - GetColScrollY(ColId);
 
     for J := 0 to High(FCards) do
@@ -840,7 +1006,35 @@ begin
       FCards[J].Rect := RectF(CX, Y, CX + CW, Y + CARD_HEIGHT);
       Y := Y + CARD_HEIGHT + CARD_MARGIN;
     end;
+
+    // Scrollbar vertical de la columna
+    var BodyBottom: Single := ClientHeight - SCROLLBAR_SIZE - 4;
+    var TrackTop: Single := ColBodyTop + 2;
+    var TrackRight: Single := FColumnLayouts[I].ScreenRect.Right - 4;
+    var TrackLeft: Single := TrackRight - VSCROLLBAR_W;
+    FColumnLayouts[I].VScrollTrack :=
+      RectF(TrackLeft, TrackTop, TrackRight, BodyBottom);
+
+    var MaxSY := MaxColScrollY(ColId);
+    if MaxSY > 0 then
+    begin
+      var TrackH := BodyBottom - TrackTop;
+      // contenido total = trackH visible + lo que sobresale
+      var ContentH := TrackH + MaxSY;
+      var ThumbH := Max(20.0, TrackH * (TrackH / ContentH));
+      var ThumbY := TrackTop + (TrackH - ThumbH) * (GetColScrollY(ColId) / MaxSY);
+      FColumnLayouts[I].VScrollThumb :=
+        RectF(TrackLeft, ThumbY, TrackRight, ThumbY + ThumbH);
+    end
+    else
+      FColumnLayouts[I].VScrollThumb := RectF(0, 0, 0, 0);
   end;
+end;
+
+procedure TKanbanBoard.SetGetNodeCentre(AFunc: TGetNodeCentreFunc);
+begin
+  FGetNodeCentre := AFunc;
+  RefreshBoard;
 end;
 
 procedure TKanbanBoard.SetGetNodeTimes(AFunc: TGetNodeTimesFunc);
@@ -896,6 +1090,7 @@ begin
   finally
     ColCards.Free;
   end;
+  NotifyLayoutChanged;
 end;
 
 procedure TKanbanBoard.RefreshBoard;
@@ -930,8 +1125,7 @@ function TKanbanBoard.CardAtPoint(const P: TPoint): Integer;
 var
   I: Integer;
 begin
-  Result := -1;
-  // Solo cards visibles (dentro de la zona de body, no bajo header)
+  Result := MaxInt;   // sentinela "no encontrado" (DataId reales pueden ser <0 si son Backlog)
   if P.Y < HEADER_HEIGHT then Exit;
   for I := High(FCards) downto 0 do
     if FCards[I].Rect.Contains(PointF(P.X, P.Y)) then
@@ -1005,8 +1199,10 @@ begin
   // Botón "+"
   DrawAddColumnButton(Canvas);
 
-  // Cards (clipped bajo header)
-  ClipRgn := CreateRectRgn(0, HEADER_HEIGHT, ClientWidth, ClientHeight - SCROLLBAR_SIZE);
+  // Cards (clipped bajo header y por encima del scrollbar / borde inferior).
+  // Se a~naden 2px de margen para no cortar la curva inferior de la columna.
+  ClipRgn := CreateRectRgn(0, HEADER_HEIGHT,
+    ClientWidth, ClientHeight - SCROLLBAR_SIZE - 4);
   SelectClipRgn(Canvas.Handle, ClipRgn);
   try
     for I := 0 to High(FCards) do
@@ -1018,12 +1214,64 @@ begin
       if FCards[I].Rect.Bottom < HEADER_HEIGHT then Continue;
       if FCards[I].Rect.Top > ClientHeight - SCROLLBAR_SIZE then Continue;
 
-      if FNodeRepo.TryGetById(FCards[I].DataId, D) then
-        DrawCardGDI(Canvas, FCards[I], D, False);
+      if FCards[I].IsBacklog then
+      begin
+        var Bk: TKanbanBacklogCard;
+        if FBacklogData.TryGetValue(FCards[I].DataId, Bk) then
+        begin
+          BacklogToNodeData(Bk, D);
+          DrawCardGDI(Canvas, FCards[I], D, False);
+        end;
+      end
+      else
+      begin
+        if FNodeRepo.TryGetById(FCards[I].DataId, D) then
+          DrawCardGDI(Canvas, FCards[I], D, False);
+      end;
     end;
+
   finally
     SelectClipRgn(Canvas.Handle, 0);
     DeleteObject(ClipRgn);
+  end;
+
+  // Badge "+ N m'as" (fuera del clip: queda fijo en la cabecera del body)
+  for I := 0 to High(FColumnLayouts) do
+  begin
+    if FColumnLayouts[I].BacklogMoreRect.Width <= 0 then Continue;
+    var BR := FColumnLayouts[I].BacklogMoreRect;
+    if BR.Right < 0 then Continue;
+    if BR.Left > ClientWidth then Continue;
+    var BadgeR := Rect(Round(BR.Left), Round(BR.Top),
+                       Round(BR.Right), Round(BR.Bottom));
+
+    Canvas.Brush.Color := $00DCDCDC;
+    Canvas.Pen.Color := $00B0B0B0;
+    Canvas.RoundRect(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom, 6, 6);
+
+    Canvas.Brush.Style := bsClear;
+    Canvas.Font.Size := 9;
+    Canvas.Font.Style := [fsBold];
+    Canvas.Font.Color := $00444444;
+    var Extra := FBacklogTotal - FColumnLayouts[I].CardCount;
+    var S := '+ ' + IntToStr(Extra) + ' m'#225's  ->  abrir Backlog';
+    DrawTextEllipsis(Canvas, S, BadgeR, DT_CENTER);
+    Canvas.Brush.Style := bsSolid;
+  end;
+
+  // Scrollbar vertical por columna (overlay)
+  for I := 0 to High(FColumnLayouts) do
+  begin
+    var Th := FColumnLayouts[I].VScrollThumb;
+    if Th.Width <= 0 then Continue;
+    if Th.Right < 0 then Continue;
+    if Th.Left > ClientWidth then Continue;
+
+    var ThR := Rect(Round(Th.Left), Round(Th.Top),
+                    Round(Th.Right), Round(Th.Bottom));
+    Canvas.Brush.Color := $00B8B8B8;
+    Canvas.Pen.Color := $00808080;
+    Canvas.RoundRect(ThR.Left, ThR.Top, ThR.Right, ThR.Bottom, 4, 4);
   end;
 
   // Tarjeta arrastrada (sin clip)
@@ -1308,7 +1556,11 @@ begin
   Canvas.Font.Size := 8;
   Canvas.Font.Style := [];
   Canvas.Font.Color := $00888888;
-  var CountStr := IntToStr(CL.CardCount);
+  var CountStr: string;
+  if (CL.ColId = FBacklogColId) and (FBacklogTotal > 0) then
+    CountStr := IntToStr(CL.CardCount) + '/' + IntToStr(FBacklogTotal)
+  else
+    CountStr := IntToStr(CL.CardCount);
   var CountW := Canvas.TextWidth(CountStr);
   // Dibuixar a la dreta del títol dins el header
   var CountX := HR.Right - CountW - 2;
@@ -1506,6 +1758,23 @@ begin
     Exit;
   end;
 
+  // Scrollbar vertical de una columna
+  if Button = mbLeft then
+  begin
+    for I := 0 to High(FColumnLayouts) do
+    begin
+      if FColumnLayouts[I].VScrollThumb.Width <= 0 then Continue;
+      if FColumnLayouts[I].VScrollThumb.Contains(PointF(X, Y)) then
+      begin
+        FDraggingVScroll := True;
+        FDragVScrollColId := FColumnLayouts[I].ColId;
+        FDragVScrollGrabY := Y;
+        FDragVScrollGrabScrollY := GetColScrollY(FDragVScrollColId);
+        Exit;
+      end;
+    end;
+  end;
+
   // Botón "+"
   if (Button = mbLeft) and IsOnAddButton(Point(X, Y)) then
   begin
@@ -1519,9 +1788,20 @@ begin
     ColId := IsOnColumnHeader(Point(X, Y));
     if ColId >= 0 then
     begin
-      FPopupColId := ColId;
       var Def := GetColDefById(ColId);
+      FPopupColId := ColId;
+
+      var IsBacklogCol := (Def.MappedEstado = -2);
+
+      // En la columna Backlog s'olo aplica "Abrir Backlog"; resto de items se ocultan.
+      FmiRename.Visible := not IsBacklogCol;
+      FmiColor.Visible := not IsBacklogCol;
+      FmiMoveLeft.Visible := not IsBacklogCol;
+      FmiMoveRight.Visible := not IsBacklogCol;
+      FmiDelete.Visible := not IsBacklogCol;
       FmiDelete.Enabled := (Def.MappedEstado < 0);
+      FmiAbrirBacklog.Visible := IsBacklogCol;
+
       FColPopup.Popup(ClientToScreen(Point(X, Y)).X, ClientToScreen(Point(X, Y)).Y);
       Exit;
     end;
@@ -1529,9 +1809,21 @@ begin
 
   if Button <> mbLeft then Exit;
 
+  // Click en badge "+ N m'as" del Backlog
+  for I := 0 to High(FColumnLayouts) do
+  begin
+    if FColumnLayouts[I].BacklogMoreRect.Width <= 0 then Continue;
+    if FColumnLayouts[I].BacklogMoreRect.Contains(PointF(X, Y)) then
+    begin
+      if Assigned(FOnBacklogMoreClick) then
+        FOnBacklogMoreClick(Self);
+      Exit;
+    end;
+  end;
+
   // Column header drag (reorder)
   ColId := IsOnColumnHeader(Point(X, Y));
-  if (ColId >= 0) and (CardAtPoint(Point(X, Y)) < 0) then
+  if (ColId >= 0) and (CardAtPoint(Point(X, Y)) = MaxInt) then
   begin
     FDraggingCol := False; // s'activa amb threshold al MouseMove
     FDragColId := ColId;
@@ -1542,10 +1834,13 @@ begin
 
   // Card drag
   DataId := CardAtPoint(Point(X, Y));
-  if DataId >= 0 then
+  if DataId <> MaxInt then
   begin
     if Assigned(FOnCardClick) then
       FOnCardClick(Self, DataId);
+
+    // Cards de Backlog (DataId negativo): solo click, no drag (MVP read-only)
+    if DataId < 0 then Exit;
 
     FDragging := False;
     FDragDataId := DataId;
@@ -1580,6 +1875,40 @@ begin
       FScrollX := Max(0, Min(FHScrollbarGrabScrollX + Delta * Ratio, MxSX));
       BuildLayout;
       Invalidate;
+    end;
+    Exit;
+  end;
+
+  // Scrollbar vertical drag (por columna)
+  if FDraggingVScroll then
+  begin
+    var MaxSY := MaxColScrollY(FDragVScrollColId);
+    if MaxSY > 0 then
+    begin
+      // Mapear pixeles -> contenido. Buscar el track de la columna.
+      var TrackH: Single := 0;
+      for I := 0 to High(FColumnLayouts) do
+        if FColumnLayouts[I].ColId = FDragVScrollColId then
+        begin
+          TrackH := FColumnLayouts[I].VScrollTrack.Height;
+          Break;
+        end;
+      var ThumbH := FColumnLayouts[0].VScrollThumb.Height; // se sobreescribe abajo
+      for I := 0 to High(FColumnLayouts) do
+        if FColumnLayouts[I].ColId = FDragVScrollColId then
+        begin
+          ThumbH := FColumnLayouts[I].VScrollThumb.Height;
+          Break;
+        end;
+      var Travel := TrackH - ThumbH;
+      if Travel > 0 then
+      begin
+        var DY := Y - FDragVScrollGrabY;
+        var NewSY := FDragVScrollGrabScrollY + (DY / Travel) * MaxSY;
+        SetColScrollY(FDragVScrollColId, NewSY);
+        BuildLayout;
+        Invalidate;
+      end;
     end;
     Exit;
   end;
@@ -1642,6 +1971,13 @@ begin
   if FDraggingHScrollbar then
   begin
     FDraggingHScrollbar := False;
+    Exit;
+  end;
+
+  if FDraggingVScroll then
+  begin
+    FDraggingVScroll := False;
+    FDragVScrollColId := -1;
     Exit;
   end;
 
@@ -1734,6 +2070,7 @@ begin
   end
   else
     FCardColAssign.AddOrSetValue(DataId, NewColId);
+  NotifyLayoutChanged;
 end;
 
 { ========================================================= }
@@ -1783,6 +2120,148 @@ begin
   FFilterField := kffNone;
   FFilterValue := '';
   FFilterCentreId := -1;
+  RefreshBoard;
+end;
+
+{ ========================================================= }
+{                Layout API (persistencia externa)           }
+{ ========================================================= }
+
+procedure TKanbanBoard.NotifyLayoutChanged;
+begin
+  if FSuspendLayoutEvents > 0 then Exit;
+  if Assigned(FOnLayoutChanged) then
+    FOnLayoutChanged(Self);
+end;
+
+procedure TKanbanBoard.BacklogToNodeData(const Bk: TKanbanBacklogCard;
+  out D: TNodeData);
+begin
+  FillChar(D, SizeOf(D), 0);
+  D.DataId := Bk.SyntheticId;
+  D.CodigoArticulo := Bk.CodigoArticulo;
+  D.DescripcionArticulo := Bk.DescripcionArticulo;
+  D.Operacion := Bk.CodigoDocumento;
+  D.NumeroTrabajo := Bk.TipoOrigen;
+  D.CodigoCliente := Bk.NombreCliente;
+  D.FechaEntrega := Bk.FechaCompromiso;
+  D.FechaNecesaria := Bk.FechaCompromiso;
+  D.Prioridad := Bk.Prioridad;
+  D.UnidadesAFabricar := Bk.Cantidad;
+  D.DurationMin := Bk.HorasEstimadas * 60;
+  D.Estado := nePendiente;
+end;
+
+procedure TKanbanBoard.BeginLoadLayout;
+begin
+  Inc(FSuspendLayoutEvents);
+end;
+
+procedure TKanbanBoard.EndLoadLayout;
+begin
+  if FSuspendLayoutEvents > 0 then
+    Dec(FSuspendLayoutEvents);
+end;
+
+procedure TKanbanBoard.ClearColumns;
+begin
+  FColumnDefs.Clear;
+  FScrollYMap.Clear;
+  FCardColAssign.Clear;
+  FNextColId := 1;
+end;
+
+function TKanbanBoard.GetColumnDefs: TArray<TKanbanColumnDef>;
+begin
+  Result := FColumnDefs.ToArray;
+end;
+
+function TKanbanBoard.GetCardOrders: TArray<TPair<Integer, Integer>>;
+var
+  I: Integer;
+  P: TPair<Integer, Integer>;
+begin
+  SetLength(Result, FCardOrder.Count);
+  I := 0;
+  for P in FCardOrder do
+  begin
+    Result[I] := P;
+    Inc(I);
+  end;
+end;
+
+function TKanbanBoard.GetCardColAssigns: TArray<TPair<Integer, Integer>>;
+var
+  I: Integer;
+  P: TPair<Integer, Integer>;
+begin
+  SetLength(Result, FCardColAssign.Count);
+  I := 0;
+  for P in FCardColAssign do
+  begin
+    Result[I] := P;
+    Inc(I);
+  end;
+end;
+
+procedure TKanbanBoard.SetCardOrder(const DataId, SortIndex: Integer);
+begin
+  FCardOrder.AddOrSetValue(DataId, SortIndex);
+  if SortIndex >= FNextSortIndex then
+    FNextSortIndex := SortIndex + 1;
+end;
+
+procedure TKanbanBoard.SetCardColAssign(const DataId, ColId: Integer);
+begin
+  FCardColAssign.AddOrSetValue(DataId, ColId);
+end;
+
+{ ========================================================= }
+{               Columna especial Backlog                     }
+{ ========================================================= }
+
+procedure TKanbanBoard.SetBacklogCards(const ACards: TArray<TKanbanBacklogCard>;
+  const ATotalCount: Integer);
+var
+  Col: TKanbanColumnDef;
+  I: Integer;
+begin
+  FBacklogData.Clear;
+  FBacklogTotal := ATotalCount;
+
+  // Crear columna especial si no existe
+  if FBacklogColId < 0 then
+  begin
+    Col.Id := FNextColId;
+    Inc(FNextColId);
+    Col.Caption := 'Sin Planificar';
+    Col.Color := $00E0E0E0;
+    Col.MappedEstado := -2;     // marca columna Backlog
+    Col.Order := -1;             // siempre primera
+    FColumnDefs.Add(Col);
+    FBacklogColId := Col.Id;
+  end;
+
+  for I := 0 to High(ACards) do
+    FBacklogData.AddOrSetValue(ACards[I].SyntheticId, ACards[I]);
+
+  RefreshBoard;
+end;
+
+procedure TKanbanBoard.ClearBacklog;
+var
+  Idx: Integer;
+begin
+  FBacklogData.Clear;
+  FBacklogTotal := 0;
+  if FBacklogColId >= 0 then
+  begin
+    Idx := GetColDefIndexById(FBacklogColId);
+    if Idx >= 0 then
+      FColumnDefs.Delete(Idx);
+    FScrollYMap.Remove(FBacklogColId);
+    FBacklogColId := -1;
+  end;
   RefreshBoard;
 end;
 

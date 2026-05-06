@@ -15,13 +15,12 @@ object Form1: TForm1
   WindowState = wsMaximized
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  OnKeyDown = FormKeyDown
   PixelsPerInch = 96
   TextHeight = 15
   object pnlOldGantt: TPanel
-    Left = 8
-    Top = 52
-    Width = 1089
+    Left = 56
+    Top = 76
+    Width = 833
     Height = 397
     TabOrder = 0
     Visible = False
@@ -69,8 +68,8 @@ object Form1: TForm1
       end
     end
     object pnlGanttContainer: TPanel
-      Left = 289
-      Top = 137
+      Left = 273
+      Top = 120
       Width = 269
       Height = 253
       BevelOuter = bvNone
@@ -82,15 +81,12 @@ object Form1: TForm1
     object pnlToolbar: TPanel
       Left = 1
       Top = 1
-      Width = 1087
+      Width = 831
       Height = 113
       Align = alTop
       Color = 15395562
       ParentBackground = False
       TabOrder = 2
-      DesignSize = (
-        1087
-        113)
       object Label1: TLabel
         Left = 288
         Top = 15
@@ -105,97 +101,12 @@ object Form1: TForm1
         Height = 15
         Caption = 'Total OFs'
       end
-      object Label3: TLabel
-        Left = 23
-        Top = 15
-        Width = 95
-        Height = 15
-        Caption = 'Fecha Inicio Gantt'
-      end
-      object Label4: TLabel
-        Left = 150
-        Top = 15
-        Width = 80
-        Height = 15
-        Caption = 'Fecha fin Gantt'
-      end
-      object Label5: TLabel
-        Left = 777
-        Top = 14
-        Width = 35
-        Height = 15
-        Anchors = [akTop, akRight]
-        Caption = 'Buscar'
-      end
-      object Label6: TLabel
-        Left = 629
-        Top = 15
-        Width = 48
-        Height = 15
-        Anchors = [akTop, akRight]
-        Caption = 'Ir a fecha'
-      end
-      object Label7: TLabel
-        Left = 619
-        Top = 58
-        Width = 78
-        Height = 15
-        Anchors = [akTop, akRight]
-        Caption = 'Zoom timeline'
-      end
-      object lblUndoCount: TLabel
-        Left = 23
-        Top = 91
-        Width = 23
-        Height = 15
-        Alignment = taCenter
-        AutoSize = False
-        Caption = '0'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-      end
-      object lblRedoCount: TLabel
-        Left = 45
-        Top = 91
-        Width = 23
-        Height = 15
-        Alignment = taCenter
-        AutoSize = False
-        Caption = '0'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-      end
-      object Label19: TLabel
-        Left = 155
-        Top = 70
-        Width = 51
-        Height = 15
-        Caption = 'Operarios'
-      end
-      object btnRefresh: TButton
-        Left = 1009
-        Top = 30
-        Width = 75
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Refrescar'
-        TabOrder = 0
-        OnClick = btnRefreshClick
-      end
       object spCentros: TcxSpinEdit
         Left = 288
         Top = 31
         Properties.AssignedValues.MinValue = True
         Properties.ImmediatePost = True
-        TabOrder = 1
+        TabOrder = 0
         Value = 3
         Width = 57
       end
@@ -204,83 +115,9 @@ object Form1: TForm1
         Top = 31
         Properties.AssignedValues.MinValue = True
         Properties.ImmediatePost = True
-        TabOrder = 2
+        TabOrder = 1
         Value = 30
         Width = 66
-      end
-      object dtFechaInicioGantt: TcxDateEdit
-        Left = 21
-        Top = 31
-        Properties.ShowTime = False
-        TabOrder = 3
-        Width = 121
-      end
-      object dtFechaFinGantt: TcxDateEdit
-        Left = 148
-        Top = 31
-        Properties.ShowTime = False
-        TabOrder = 4
-        Width = 121
-      end
-      object SearchBox1: TSearchBox
-        Left = 777
-        Top = 31
-        Width = 145
-        Height = 23
-        Anchors = [akTop, akRight]
-        TabOrder = 5
-        Text = 'SearchBox1'
-        OnInvokeSearch = SearchBox1InvokeSearch
-      end
-      object RadioButton1: TRadioButton
-        Left = 834
-        Top = 14
-        Width = 40
-        Height = 17
-        Anchors = [akTop, akRight]
-        Caption = 'OF'
-        Checked = True
-        TabOrder = 6
-        TabStop = True
-      end
-      object RadioButton2: TRadioButton
-        Left = 880
-        Top = 14
-        Width = 40
-        Height = 17
-        Anchors = [akTop, akRight]
-        Caption = 'OT'
-        TabOrder = 7
-      end
-      object Button3: TButton
-        Left = 926
-        Top = 30
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'X'
-        TabOrder = 8
-        OnClick = Button3Click
-      end
-      object Button4: TButton
-        Left = 950
-        Top = 30
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = '<'
-        TabOrder = 9
-        OnClick = Button4Click
-      end
-      object Button5: TButton
-        Left = 974
-        Top = 30
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = '>'
-        TabOrder = 10
-        OnClick = Button5Click
       end
       object Button6: TButton
         Left = 423
@@ -288,266 +125,14 @@ object Form1: TForm1
         Width = 75
         Height = 25
         Caption = 'Recrear Raw'
-        TabOrder = 11
+        TabOrder = 2
         OnClick = Button6Click
-      end
-      object cxDateEdit1: TcxDateEdit
-        Left = 627
-        Top = 31
-        Anchors = [akTop, akRight]
-        Properties.ShowTime = False
-        TabOrder = 12
-        Width = 94
-      end
-      object Button7: TButton
-        Left = 721
-        Top = 30
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Go'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 13
-        OnClick = Button7Click
-      end
-      object Button8: TButton
-        Tag = 1
-        Left = 619
-        Top = 73
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'H'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 14
-        OnClick = Button8Click
-      end
-      object Button9: TButton
-        Tag = 2
-        Left = 643
-        Top = 73
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'D'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 15
-        OnClick = Button8Click
-      end
-      object Button10: TButton
-        Tag = 3
-        Left = 667
-        Top = 73
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'S'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 16
-        OnClick = Button8Click
-      end
-      object Button11: TButton
-        Tag = 4
-        Left = 691
-        Top = 73
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'M'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 17
-        OnClick = Button8Click
-      end
-      object ComboBox1: TComboBox
-        Left = 831
-        Top = 74
-        Width = 253
-        Height = 23
-        Style = csDropDownList
-        Anchors = [akTop, akRight]
-        ItemIndex = 1
-        TabOrder = 18
-        Text = 'Solo ver dependencias del seleccionado'
-        OnChange = ComboBox1Change
-        Items.Strings = (
-          'Ver todas las dependencias'
-          'Solo ver dependencias del seleccionado'
-          'Nunca ver dependencias')
-      end
-      object Button1: TButton
-        Left = 745
-        Top = 30
-        Width = 25
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Now'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 19
-        OnClick = Button1Click
-      end
-      object btnUndo: TButton
-        Tag = 1
-        Left = 21
-        Top = 67
-        Width = 25
-        Height = 25
-        Caption = 'Undo'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 20
-        OnClick = btnUndoClick
-      end
-      object btnRedo: TButton
-        Tag = 1
-        Left = 45
-        Top = 67
-        Width = 25
-        Height = 25
-        Caption = 'Redo'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 21
-        OnClick = btnRedoClick
-      end
-      object Button12: TButton
-        Tag = 1
-        Left = 71
-        Top = 67
-        Width = 39
-        Height = 25
-        Caption = 'Check'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 22
-        OnClick = Button12Click
-      end
-      object Button13: TButton
-        Tag = 1
-        Left = 722
-        Top = 73
-        Width = 52
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Weekends'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 23
-        OnClick = Button13Click
-      end
-      object FcxFilterOperarios: TcxCheckComboBox
-        Left = 154
-        Top = 86
-        Properties.DropDownRows = 30
-        Properties.Items = <>
-        Properties.OnChange = FcxFilterOperariosPropertiesChange
-        TabOrder = 24
-        Width = 185
-      end
-      object FchkSoloFiltrados: TcxCheckBox
-        Left = 229
-        Top = 67
-        Caption = 'Ver solo filtrados'
-        Properties.Alignment = taRightJustify
-        Style.TransparentBorder = False
-        TabOrder = 25
-      end
-      object Button26: TButton
-        Left = 1009
-        Top = 11
-        Width = 75
-        Height = 20
-        Anchors = [akTop, akRight]
-        Caption = 'bbdd Connect'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 26
-        OnClick = Button26Click
-      end
-      object Button24: TButton
-        Left = 498
-        Top = 28
-        Width = 126
-        Height = 25
-        Caption = 'Replan'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentFont = False
-        TabOrder = 27
-        OnClick = Button24Click
       end
     end
   end
   object popNode: TPopupMenu
-    Left = 1008
-    Top = 268
-    object MenuItem3: TMenuItem
-      AutoCheck = True
-      Caption = 'Activar / bloquear'
-      Checked = True
-      OnClick = MenuItem3Click
-    end
-    object LibreMovimiento1: TMenuItem
-      AutoCheck = True
-      Caption = 'Libre Movimiento'
-      OnClick = LibreMovimiento1Click
-    end
-    object Resetduracinoriginal1: TMenuItem
-      Caption = 'Restablecer duraci'#243'n original'
-      OnClick = Resetduracinoriginal1Click
-    end
+    Left = 968
+    Top = 12
     object CompactarOF1: TMenuItem
       Caption = 'Compactar OF'
       object odalaOF1: TMenuItem
@@ -632,19 +217,15 @@ object Form1: TForm1
       Caption = 'Resaltar OF'
       OnClick = ResaltarOF1Click
     end
-    object Info1: TMenuItem
-      Caption = 'Info'
-      OnClick = Info1Click
-    end
   end
   object tmr1Sec: TTimer
     OnTimer = tmr1SecTimer
-    Left = 704
-    Top = 240
+    Left = 760
+    Top = 8
   end
   object MainMenu1: TMainMenu
-    Left = 736
-    Top = 368
+    Left = 864
+    Top = 8
     object Archivo1: TMenuItem
       Caption = 'Archivo'
       object N4: TMenuItem

@@ -18,6 +18,7 @@ type
     ADOConnection: TADOConnection;
   private
     FConnector: IGanttDataConnector;
+    FConnectorObj: TObject;   // referencia paralela al objeto concreto
     FServer: string;
     FDatabase: string;
     FUserName: string;
@@ -39,6 +40,7 @@ type
     FCentresRepo: TCentresRepo;
     FNodesRepo: TNodesRepo;
     procedure BuildConnectionString;
+    procedure SetCodigoEmpresa(AValue: SmallInt);
   public
     procedure AfterConstruction; override;
     destructor Destroy; override;
@@ -74,7 +76,7 @@ type
     property CurrentProjectRowMode: string read FCurrentProjectRowMode;
     property CurrentProjectNivelAgrupacion: Integer read FCurrentProjectNivelAgrupacion;
     property CurrentEmpresaNombre: string read FCurrentEmpresaNombre;
-    property CodigoEmpresa: SmallInt read FCodigoEmpresa write FCodigoEmpresa;
+    property CodigoEmpresa: SmallInt read FCodigoEmpresa write SetCodigoEmpresa;
     property PlanificaOperarios: Boolean read FPlanificaOperarios;
     property PlanificaMoldes: Boolean read FPlanificaMoldes;
     property EstructuraNodos: TEstructuraNodos read FEstructuraNodos;
@@ -129,6 +131,15 @@ begin
   FCalendarsRepo := TCalendarsRepo.Create(ADOConnection);
   FCentresRepo := TCentresRepo.Create(ADOConnection, FCalendarsRepo);
   FNodesRepo := TNodesRepo.Create(ADOConnection);
+end;
+
+procedure TDMPlanner.SetCodigoEmpresa(AValue: SmallInt);
+begin
+  FCodigoEmpresa := AValue;
+  // Propagar al conector concreto para que los INSERT/UPDATE puedan rellenar
+  // la columna CodigoEmpresa de las tablas FS_PL_*.
+  if Assigned(FConnectorObj) and (FConnectorObj is TSQLServerConnector) then
+    TSQLServerConnector(FConnectorObj).CodigoEmpresa := AValue;
 end;
 
 destructor TDMPlanner.Destroy;
@@ -200,7 +211,10 @@ begin
     if FServer <> '' then
       BuildConnectionString;
     ADOConnection.Connected := True;
-    FConnector := TSQLServerConnector.Create(ADOConnection);
+    var SQLConn := TSQLServerConnector.Create(ADOConnection);
+    SQLConn.CodigoEmpresa := FCodigoEmpresa;
+    FConnectorObj := SQLConn;
+    FConnector := SQLConn;
 
     // Aplicar migraciones pendientes automáticamente
     MigrationsPath := TPath.Combine(ExtractFilePath(ParamStr(0)), 'SQL\migrations');
@@ -240,6 +254,7 @@ end;
 procedure TDMPlanner.Disconnect;
 begin
   FConnector := nil;
+  FConnectorObj := nil;
   if ADOConnection.Connected then
     ADOConnection.Connected := False;
 end;

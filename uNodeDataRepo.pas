@@ -53,6 +53,12 @@ type
     function GetAllData: TArray<TNodeData>;
     function Count: Integer;
 
+    // Dirty tracking (para auto-save)
+    function GetDirtyData: TArray<TNodeData>;
+    procedure ClearModifiedFlags(const DataIds: TArray<Integer>);
+    procedure SetModifiedFlags(const DataIds: TArray<Integer>);
+    function HasDirty: Boolean;
+
   end;
 
 implementation
@@ -353,6 +359,64 @@ begin
   Result := Length(FData);
 end;
 
+function TNodeDataRepo.GetDirtyData: TArray<TNodeData>;
+var
+  I, K: Integer;
+begin
+  SetLength(Result, Length(FData));
+  K := 0;
+  for I := 0 to High(FData) do
+    if FData[I].Modified then
+    begin
+      Result[K] := FData[I];
+      Inc(K);
+    end;
+  SetLength(Result, K);
+end;
 
+procedure TNodeDataRepo.ClearModifiedFlags(const DataIds: TArray<Integer>);
+var
+  I, J: Integer;
+  IdSet: TDictionary<Integer, Boolean>;
+begin
+  if Length(DataIds) = 0 then Exit;
+  IdSet := TDictionary<Integer, Boolean>.Create;
+  try
+    for J := 0 to High(DataIds) do
+      IdSet.AddOrSetValue(DataIds[J], True);
+    for I := 0 to High(FData) do
+      if IdSet.ContainsKey(FData[I].DataId) then
+        FData[I].Modified := False;
+  finally
+    IdSet.Free;
+  end;
+end;
+
+procedure TNodeDataRepo.SetModifiedFlags(const DataIds: TArray<Integer>);
+var
+  I, J: Integer;
+  IdSet: TDictionary<Integer, Boolean>;
+begin
+  if Length(DataIds) = 0 then Exit;
+  IdSet := TDictionary<Integer, Boolean>.Create;
+  try
+    for J := 0 to High(DataIds) do
+      IdSet.AddOrSetValue(DataIds[J], True);
+    for I := 0 to High(FData) do
+      if IdSet.ContainsKey(FData[I].DataId) then
+        FData[I].Modified := True;
+  finally
+    IdSet.Free;
+  end;
+end;
+
+function TNodeDataRepo.HasDirty: Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FData) do
+    if FData[I].Modified then Exit(True);
+  Result := False;
+end;
 
 end.

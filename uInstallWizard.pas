@@ -61,6 +61,7 @@ type
     btnConfigurarErp: TButton;
     btnConfigurarDespues: TButton;
     lblErpConnEstado: TLabel;
+    Button1: TButton;
 
     procedure FormCreate(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -81,6 +82,7 @@ type
     procedure btnConfigurarErpClick(Sender: TObject);
     procedure btnConfigurarDespuesClick(Sender: TObject);
     procedure chkSimulacionClick(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
   private
     FStep: TWizardStep;
     FDBPlannerOk: Boolean;
@@ -342,6 +344,11 @@ begin
     Result := Result + ';Integrated Security=SSPI'
   else
     Result := Result + ';User ID=' + ACfg.UserName + ';Password=' + ACfg.Password;
+end;
+
+procedure TfrmInstallWizard.Button1Click(Sender: TObject);
+begin
+ ModalResult := mrOk;
 end;
 
 procedure TfrmInstallWizard.SetPResultado(const AMsg: string; AColor: TColor);
