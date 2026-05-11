@@ -1,0 +1,27 @@
+﻿{
+  "activeIndex": 0,
+  "profiles": [
+    {
+      "name": "Agrupado por Operación",
+      "description": "Agrupado por Operación",
+      "sortRules": [
+        {
+          "field": "FechaEntrega",
+          "direction": "asc",
+          "weight": 5,
+          "enabled": true
+        },
+        {
+          "field": "FechaNecesaria",
+          "direction": "asc",
+          "weight": 5,
+          "enabled": true
+        }
+      ],
+      "filterRules": [
+      ],
+      "groupRules": [
+      ]
+    }
+  ]
+}

@@ -187,18 +187,145 @@ begin
 end;
 
 procedure TfrmErpPrefsSage200.btnCargarEmpresasClick(Sender: TObject);
+var
+  Cfg: TErpSage200Config;
+  Conn: TADOConnection;
+  Qry: TADOQuery;
+  Cnt: Integer;
+  CodigoActual: string;
 begin
-  // TODO: cuando tengamos acceso a una BBDD Sage200 real,
-  // ejecutar SELECT contra la tabla GrupoEmpresa/Empresas y poblar combos.
-  SetResultado('Carga de empresas a'#250'n no implementada.', clOlive);
+  Cfg := LeerDeControles;
+  if not Cfg.IsValid then
+  begin
+    SetResultado('Faltan datos de conexi'#243'n.', clRed);
+    Exit;
+  end;
+
+  CodigoActual := cmbCodigoEmpresa.Text;
+  SetResultado('Cargando empresas...', clBlue);
+  Conn := TADOConnection.Create(nil);
+  Qry := TADOQuery.Create(nil);
+  try
+    Conn.LoginPrompt := False;
+    Conn.ConnectionString := BuildConnectionString(Cfg);
+    try
+      Conn.Connected := True;
+    except
+      on E: Exception do
+      begin
+        SetResultado('Error de conexi'#243'n: ' + E.Message, clRed);
+        Exit;
+      end;
+    end;
+
+    Qry.Connection := Conn;
+    Qry.SQL.Text :=
+      'SELECT CodigoEmpresa, Empresa ' +
+      'FROM dbo.Empresas ' +
+      'ORDER BY CodigoEmpresa';
+    try
+      Qry.Open;
+      cmbCodigoEmpresa.Items.BeginUpdate;
+      try
+        cmbCodigoEmpresa.Items.Clear;
+        Cnt := 0;
+        while not Qry.Eof do
+        begin
+          cmbCodigoEmpresa.Items.Add(
+            Format('%d - %s',
+              [Qry.FieldByName('CodigoEmpresa').AsInteger,
+               Qry.FieldByName('Empresa').AsString]));
+          Inc(Cnt);
+          Qry.Next;
+        end;
+      finally
+        cmbCodigoEmpresa.Items.EndUpdate;
+      end;
+      if CodigoActual <> '' then
+        cmbCodigoEmpresa.Text := CodigoActual;
+      SetResultado(Format('Cargadas %d empresas.', [Cnt]), clGreen);
+    except
+      on E: Exception do
+        SetResultado('Error leyendo dbo.Empresas: ' + E.Message, clRed);
+    end;
+  finally
+    Qry.Free;
+    Conn.Free;
+  end;
 end;
 
 procedure TfrmErpPrefsSage200.btnProbarLecturaClick(Sender: TObject);
+var
+  Cfg: TErpSage200Config;
+  Conn: TADOConnection;
+  Qry: TADOQuery;
+  CodigoEmp: Integer;
+  PosSep: Integer;
+  CodTxt: string;
+  Filas: Integer;
 begin
-  // TODO: cuando tengamos acceso a una BBDD Sage200 real,
-  // hacer SELECT TOP 1 de una tabla conocida (p.ej. GrupoEmpresa)
-  // y reportar OK + n'#250'mero de filas.
-  SetResultado('Test de lectura ERP a'#250'n no implementado.', clOlive);
+  Cfg := LeerDeControles;
+  if not Cfg.IsValid then
+  begin
+    SetResultado('Faltan datos de conexi'#243'n.', clRed);
+    Exit;
+  end;
+
+  CodTxt := Trim(Cfg.CodigoEmpresa);
+  PosSep := Pos(' ', CodTxt);
+  if PosSep > 0 then
+    CodTxt := Copy(CodTxt, 1, PosSep - 1);
+  CodigoEmp := StrToIntDef(CodTxt, 0);
+  if CodigoEmp = 0 then
+  begin
+    SetResultado('Selecciona primero una empresa.', clRed);
+    Exit;
+  end;
+  if Cfg.Ejercicio <= 0 then
+  begin
+    SetResultado('Ejercicio no v'#225'lido.', clRed);
+    Exit;
+  end;
+
+  SetResultado('Probando lectura ERP...', clBlue);
+  Conn := TADOConnection.Create(nil);
+  Qry := TADOQuery.Create(nil);
+  try
+    Conn.LoginPrompt := False;
+    Conn.ConnectionString := BuildConnectionString(Cfg);
+    try
+      Conn.Connected := True;
+    except
+      on E: Exception do
+      begin
+        SetResultado('Error de conexi'#243'n: ' + E.Message, clRed);
+        Exit;
+      end;
+    end;
+
+    Qry.Connection := Conn;
+    Qry.SQL.Text :=
+      'SELECT COUNT(*) AS N ' +
+      'FROM dbo.LineasPedidoCliente ' +
+      'WHERE CodigoEmpresa = :CodEmp ' +
+      '  AND EjercicioPedido = :Ejer';
+    Qry.Parameters.ParamByName('CodEmp').Value := CodigoEmp;
+    Qry.Parameters.ParamByName('Ejer').Value := Cfg.Ejercicio;
+    try
+      Qry.Open;
+      Filas := Qry.FieldByName('N').AsInteger;
+      SetResultado(
+        Format('Lectura OK: %d l'#237'neas de pedido cliente (empresa %d, ejercicio %d).',
+          [Filas, CodigoEmp, Cfg.Ejercicio]),
+        clGreen);
+    except
+      on E: Exception do
+        SetResultado('Error en lectura: ' + E.Message, clRed);
+    end;
+  finally
+    Qry.Free;
+    Conn.Free;
+  end;
 end;
 
 procedure TfrmErpPrefsSage200.btnGuardarClick(Sender: TObject);

@@ -157,6 +157,7 @@ type
     FOnNodeSelected: TNotifyEvent;
     FOnVoid: TNotifyEvent;
     FOnPlanModified: TGanttPlanModifiedEvent;
+    FOnLinksModified: TNotifyEvent;
 
     FMouseDownPos: TPoint;
     FMouseDownNodeIndex: Integer;
@@ -750,6 +751,8 @@ type
     property OnVoid: TNotifyEvent read FOnVoid write FOnVoid;
     property OnPlanModified: TGanttPlanModifiedEvent
       read FOnPlanModified write FOnPlanModified;
+    property OnLinksModified: TNotifyEvent
+      read FOnLinksModified write FOnLinksModified;
   end;
 
 
@@ -1960,6 +1963,7 @@ begin
   FLinks[High(FLinks)] := ALink;
   RebuildGraphIndex;
   Invalidate;
+  if Assigned(FOnLinksModified) then FOnLinksModified(Self);
 end;
 
 procedure TGanttControl.RemoveLinkAt(const AIndex: Integer);
@@ -1970,7 +1974,9 @@ begin
   for I := AIndex to High(FLinks) - 1 do
     FLinks[I] := FLinks[I + 1];
   SetLength(FLinks, Length(FLinks) - 1);
+  RebuildGraphIndex;
   Invalidate;
+  if Assigned(FOnLinksModified) then FOnLinksModified(Self);
 end;
 
 function TGanttControl.GetLinksForNode(const ANodeId: Integer): TArray<Integer>;

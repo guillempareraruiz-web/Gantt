@@ -83,6 +83,18 @@ const
     'CORTAR', 'PULIR', 'MONTAR', 'PINTAR', 'LACAR',
     'EMBALAR', 'BRONCEAR', 'TALADRAR', 'SOLDAR', 'MECANIZAR'
   );
+  DEMO_ARTS: array[0..7] of string = (
+    'ART-1001', 'ART-1002', 'ART-2050', 'ART-2051',
+    'ART-3100', 'ART-3101', 'ART-4200', 'ART-4201'
+  );
+  DEMO_DESCS: array[0..7] of string = (
+    'Pieza A grande', 'Pieza A peque'#241'a', 'Pieza B chasis',
+    'Pieza B soporte', 'Caja electronica', 'Caja sensores',
+    'Conjunto C ensamblado', 'Conjunto C revision'
+  );
+  DEMO_CLIENTES: array[0..4] of string = (
+    'CLI-001', 'CLI-002', 'CLI-003', 'CLI-004', 'CLI-005'
+  );
 
 class function TfrmGenerarNodosDemo.Execute: Boolean;
 var
@@ -319,20 +331,40 @@ begin
     Q.Free;
   end;
 
-  // NodeData
+  // NodeData - poblamos campos adicionales para que el motor de scoring
+  // y la vista 'Operarios' del Gantt tengan datos realistas:
+  //   Prioridad (1..5), FechaEntrega/FechaNecesaria, CodigoArticulo,
+  //   DescripcionArticulo, CodigoCliente, OperariosNecesarios.
+  var Prio: Integer := 1 + Random(5);
+  var DiasACompromiso: Integer := 5 + Random(60);
+  var FechaEntregaCalc: TDateTime := Date + DiasACompromiso;
+  var FechaNecCalc: TDateTime := FechaEntregaCalc - 2 - Random(5);
+  var FechaEntSQL: string := FmtDT(FechaEntregaCalc);
+  var FechaNecSQL: string := FmtDT(FechaNecCalc);
+  var ArtIdx: Integer := Random(Length(DEMO_ARTS));
+  var CliIdx: Integer := Random(Length(DEMO_CLIENTES));
+  var NumOpsNec: Integer := 1 + Random(3);
+
   Cmd := TADOCommand.Create(nil);
   try
     Cmd.Connection := AConn;
     Cmd.CommandText :=
       'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
       '  NumeroOF, NumeroPedido, NumeroTrabajo, DuracionMin, DuracionMinOriginal, ' +
-      '  UnidadesAFabricar, OperariosNecesarios, ColorFondoOp, ColorBordeOp) VALUES (' +
+      '  UnidadesAFabricar, OperariosNecesarios, ColorFondoOp, ColorBordeOp, ' +
+      '  Prioridad, FechaEntrega, FechaNecesaria, ' +
+      '  CodigoArticulo, DescripcionArticulo, CodigoCliente) VALUES (' +
       ACE + ', ' + IntToStr(NodeId) + ', ' + QStr(AOperacion) + ', ' +
       IntToStr(ANumOF) + ', ' + IntToStr(ANumPedido) + ', ' +
       QStr(IntToStr(ANumTrabajo)) + ', ' +
       FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
       FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
-      IntToStr(100 + Random(900)) + ', 1, 15251072, 11166760)';
+      IntToStr(100 + Random(900)) + ', ' + IntToStr(NumOpsNec) +
+      ', 15251072, 11166760, ' +
+      IntToStr(Prio) + ', ' + FechaEntSQL + ', ' + FechaNecSQL + ', ' +
+      QStr(DEMO_ARTS[ArtIdx]) + ', ' +
+      QStr(DEMO_DESCS[ArtIdx]) + ', ' +
+      QStr(DEMO_CLIENTES[CliIdx]) + ')';
     Cmd.Execute;
   finally
     Cmd.Free;

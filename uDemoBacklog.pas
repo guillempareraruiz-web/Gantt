@@ -344,14 +344,16 @@ begin
       if Length(ACentros) > 0 then
         Centro := ACentros[Random(Length(ACentros))];
 
+      // OPs heredan articulo y prioridad de la OF madre para que el motor
+      // de scoring tenga datos coherentes (la OP es el nivel planificable).
       OPId := InsertarItem(AConn, ACE, 'OF ', 3, OTId,
         ClaveOP, ClaveOT,
         NumOFVal, SerieOF, iOP,
         '', Operacion, Operacion,
-        '', '', 0, '',   // OPs no tienen articulo
+        CodArt, ARTICULOS[ArtIdx], 0, '',
         COD_CLIENTES[ClienteIdx], CLIENTES[ClienteIdx],
         FComp, FNec, 0,
-        0, iOP,
+        1 + Random(5), iOP,    // prioridad propia 1..5
         Centro, HorasPorOP,
         ESTADOS[EstIdx]);
 
@@ -436,10 +438,10 @@ begin
         ClaveOP, ClaveLin,
         NumPed, SeriePed, iOP,
         '', Operacion, Operacion,
-        '', '', 0, '',
+        COD_ARTICULOS[ArtIdx], ARTICULOS[ArtIdx], 0, '',
         COD_CLIENTES[ClienteIdx], CLIENTES[ClienteIdx],
         FComp, 0, 0,
-        0, iOP,
+        1 + Random(5), iOP,
         Centro, HorasPorOP,
         ESTADOS[EstIdx]);
 
@@ -524,7 +526,7 @@ begin
         '', '', 0, '',
         COD_CLIENTES[ClienteIdx], CLIENTES[ClienteIdx],
         FComp, 0, 0,
-        0, iOP,
+        1 + Random(5), iOP,
         Centro, HorasPorOP,
         ESTADOS[EstIdx]);
 

@@ -114,14 +114,24 @@ object frmGestionOperaris: TfrmGestionOperaris
       TabOrder = 3
       OnClick = btnDepartamentosClick
     end
-    object btnCapacitaciones: TButton
+    object btnPolivalencia: TButton
       Left = 480
       Top = 6
-      Width = 140
+      Width = 180
       Height = 28
-      Caption = 'Capacitaciones...'
+      Caption = 'Polivalencia y coste...'
       TabOrder = 4
-      OnClick = btnCapacitacionesClick
+      OnClick = btnPolivalenciaClick
+    end
+    object btnConfigurarColumnas: TButton
+      Left = 664
+      Top = 6
+      Width = 180
+      Height = 28
+      Caption = 'Configurar columnas...'
+      TabOrder = 5
+      Visible = False
+      OnClick = btnConfigurarColumnasClick
     end
   end
   object gridOperaris: TcxGrid
@@ -166,7 +176,7 @@ object frmGestionOperaris: TfrmGestionOperaris
         Width = 240
       end
       object colOpCapacitaciones: TcxGridColumn
-        Caption = 'Capacitaciones'
+        Caption = 'Habilidades'
         Options.Editing = False
         Width = 90
       end

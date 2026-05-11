@@ -13,6 +13,7 @@ object frmBacklog: TfrmBacklog
   Position = poScreenCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnShow = FormShow
   PixelsPerInch = 96
   DesignSize = (
     1280
@@ -247,6 +248,16 @@ object frmBacklog: TfrmBacklog
       Caption = 'Restablecer layout'
       TabOrder = 2
       OnClick = btnResetLayoutClick
+    end
+    object btnConfigurarColumnas: TButton
+      Left = 660
+      Top = 6
+      Width = 180
+      Height = 28
+      Caption = 'Configurar columnas...'
+      TabOrder = 7
+      Visible = False
+      OnClick = btnConfigurarColumnasClick
     end
     object btnAbrirGantt: TButton
       Left = 1064

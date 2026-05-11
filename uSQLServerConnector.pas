@@ -897,6 +897,16 @@ begin
     begin
       C.OperarioId := Q.FieldByName('OperatorId').AsInteger;
       C.Operacion := Q.FieldByName('Operacion').AsString;
+      // Campos V019+: Nivel + FactorEficiencia
+      if Q.FindField('Nivel') <> nil then
+        C.Nivel := TinyIntToNivelSkill(Byte(Q.FieldByName('Nivel').AsInteger))
+      else
+        C.Nivel := nsSenior;
+      if Q.FindField('FactorEficiencia') <> nil then
+        C.FactorEficiencia := SQLToFloat(Q.FieldByName('FactorEficiencia').Value)
+      else
+        C.FactorEficiencia := 1.0;
+      if C.FactorEficiencia <= 0 then C.FactorEficiencia := 1.0;
       Result[I] := C;
       Inc(I);
       Q.Next;
@@ -925,6 +935,20 @@ begin
       A.OperarioId := Q.FieldByName('OperatorId').AsInteger;
       A.DataId := Q.FieldByName('NodeId').AsInteger;
       A.Horas := SQLToFloat(Q.FieldByName('Horas').Value);
+      // Campos opcionales (V019+): IsLocked, LockedBy, LockedAt
+      if Q.FindField('IsLocked') <> nil then
+        A.IsLocked := Q.FieldByName('IsLocked').AsBoolean
+      else
+        A.IsLocked := False;
+      if Q.FindField('LockedBy') <> nil then
+        A.LockedBy := SQLToStr(Q.FieldByName('LockedBy').Value)
+      else
+        A.LockedBy := '';
+      if (Q.FindField('LockedAt') <> nil) and
+         not Q.FieldByName('LockedAt').IsNull then
+        A.LockedAt := Q.FieldByName('LockedAt').AsDateTime
+      else
+        A.LockedAt := 0;
       Result[I] := A;
       Inc(I);
       Q.Next;
@@ -1558,18 +1582,22 @@ procedure TSQLServerConnector.InternalSaveLinks(AProjectId: Integer;
 var
   I: Integer;
   L: TErpLink;
+  CE: string;
 begin
-  ExecSQL('DELETE FROM FS_PL_Dependency WHERE ProjectId = ' + IntToStr(AProjectId));
+  CE := IntToStr(FCodigoEmpresa);
+  ExecSQL('DELETE FROM FS_PL_Dependency WHERE CodigoEmpresa = ' + CE +
+    ' AND ProjectId = ' + IntToStr(AProjectId));
   for I := 0 to High(ALinks) do
   begin
     L := ALinks[I];
-    ExecSQL('INSERT INTO FS_PL_Dependency (ProjectId, FromNodeId, ToNodeId, TipoLink, ' +
+    ExecSQL('INSERT INTO FS_PL_Dependency (CodigoEmpresa, ProjectId, FromNodeId, ToNodeId, TipoLink, ' +
       'PorcentajeDependencia) VALUES (' +
+      CE + ', ' +
       IntToStr(AProjectId) + ', ' +
       IntToStr(L.FromNodeId) + ', ' +
       IntToStr(L.ToNodeId) + ', ' +
       IntToStr(Ord(L.LinkType)) + ', ' +
-      FloatToStr(L.PorcentajeDependencia) + ')');
+      FloatToStr(L.PorcentajeDependencia, TFormatSettings.Invariant) + ')');
   end;
 end;
 
@@ -1579,13 +1607,15 @@ var
   I: Integer;
   M: TGanttMarker;
 begin
-  ExecSQL('DELETE FROM FS_PL_Marker WHERE ProjectId = ' + IntToStr(AProjectId));
+  ExecSQL('DELETE FROM FS_PL_Marker WHERE CodigoEmpresa = ' +
+    IntToStr(FCodigoEmpresa) + ' AND ProjectId = ' + IntToStr(AProjectId));
   for I := 0 to High(AMarkers) do
   begin
     M := AMarkers[I];
-    ExecSQL('INSERT INTO FS_PL_Marker (ProjectId, FechaHora, Caption, Color, Estilo, ' +
+    ExecSQL('INSERT INTO FS_PL_Marker (CodigoEmpresa, ProjectId, FechaHora, Caption, Color, Estilo, ' +
       'GrosorLinea, Movible, Visible, Tag, FontName, FontSize, FontColor, FontStyle, ' +
       'OrientacionTexto, AlineacionTexto) VALUES (' +
+      IntToStr(FCodigoEmpresa) + ', ' +
       IntToStr(AProjectId) + ', ' +
       DateTimeToSQL(M.DateTime) + ', ' +
       QuotedStr(M.Caption) + ', ' +

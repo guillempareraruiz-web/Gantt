@@ -174,8 +174,6 @@ object frmErpPrefsSage200: TfrmErpPrefsSage200
       Top = 24
       Width = 130
       Height = 23
-      Date = 0d
-      Time = 0d
       TabOrder = 0
     end
     object dtFechaHasta: TDateTimePicker
@@ -183,8 +181,6 @@ object frmErpPrefsSage200: TfrmErpPrefsSage200
       Top = 24
       Width = 130
       Height = 23
-      Date = 0d
-      Time = 0d
       TabOrder = 1
     end
     object chkIncluirFinalizadas: TCheckBox

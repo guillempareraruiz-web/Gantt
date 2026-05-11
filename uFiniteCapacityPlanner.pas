@@ -359,12 +359,20 @@ type
     // Filtro de centros
     FFilterCheckList: TCheckListBox;
     FFilterDropDown: TForm;
+    FFilterLastCloseTick: Cardinal; // anti-rebote del boto centros
     FVisibleCentreIds: TList<Integer>;
 
     // Búsqueda y ordenación pendientes
     FSearchFilter: string;
     FSortMode: TPendingSortMode;
     FEstadoFilter: set of TNodoEstado;  // estats visibles
+    FOperacionFilter: TStringList;      // operacions visibles (buit = totes)
+
+    // Dialeg "Filtros" (Estados + Operacion) - modal centrat
+    FFiltrosBtn: TPanel;
+    FFiltrosBtnLbl: TLabel;
+    FFiltrosEstadoChecks: array[TNodoEstado] of TCheckBox;
+    FFiltrosOpList: TCheckListBox;
 
     // Undo / Redo
     FUndoStack: TList<TFCPAction>;
@@ -412,6 +420,24 @@ type
     procedure OnClearAllClick(Sender: TObject);
     procedure OnSortClick(Sender: TObject);
     procedure OnEstadoFilterClick(Sender: TObject);
+    procedure OnOperacionFilterClick(Sender: TObject);
+    procedure OnOperacionMarkAllClick(Sender: TObject);
+    procedure OnOperacionUnmarkAllClick(Sender: TObject);
+    procedure LoadOperacionesFromDB(AList: TStringList);
+    procedure RefreshOperacionMenuChecks(AMenu: TMenuItem);
+    // Dropdown "Filtros" (Estados + Operacion)
+    procedure BuildFiltrosBtn;
+    procedure OnFiltrosBtnClick(Sender: TObject);
+    procedure ShowFiltrosDropDown;
+    procedure CloseFiltrosDropDown;
+    procedure OnFiltrosDropDownDeactivate(Sender: TObject);
+    procedure CloseAllDropDowns;
+    procedure WMMove(var Msg: TMessage); message WM_MOVE;
+    procedure WMSize(var Msg: TMessage); message WM_SIZE;
+    procedure OnFiltrosEstadoChange(Sender: TObject);
+    procedure OnFiltrosOpClick(Sender: TObject);
+    procedure OnFiltrosOpMarkAllClick(Sender: TObject);
+    procedure OnFiltrosOpUnmarkAllClick(Sender: TObject);
     procedure OnSelectAllClick(Sender: TObject);
     procedure OnDeselectAllClick(Sender: TObject);
     procedure UpdateFooter;
@@ -431,6 +457,7 @@ type
     procedure RecalcAllCentreTimes;
     procedure RecalcCentreTimes(const CentreId: Integer);
     procedure OnFilterBtnClick(Sender: TObject);
+    procedure OnFilterDropDownDeactivate(Sender: TObject);
     procedure OnFilterCheckClick(Sender: TObject);
     procedure CloseFilterDropDown;
     procedure UpdateFilterText;
@@ -2369,8 +2396,8 @@ var
   Iv: TAbsInterval;
 begin
   // Omplir el repo de NodeData amb el projecte actiu
-  if (ANodeRepo <> nil) and (DMPlanner <> nil) then
-    DMPlanner.LoadNodes(ANodeRepo);
+  if DMPlanner <> nil then
+    DMPlanner.LoadNodes;
 
   // Obtenir centres del repo central
   if (DMPlanner <> nil) and (DMPlanner.CentresRepo <> nil) then
@@ -2504,6 +2531,7 @@ begin
     Frm.FBtnOptions.BringToFront;
 
     Frm.BuildOptionsPopup;
+    Frm.BuildFiltrosBtn;
     Frm.BuildCentrePopup;
     Frm.BuildCentreHeaderPopup;
 
@@ -2708,6 +2736,10 @@ begin
   FSearchFilter := '';
   FSortMode := smPrioridad;
   FEstadoFilter := [nePendiente, neEnCurso, neBloqueado];
+  FOperacionFilter := TStringList.Create;
+  FOperacionFilter.CaseSensitive := False;
+  FOperacionFilter.Sorted := True;
+  FOperacionFilter.Duplicates := dupIgnore;
   FUndoStack := TList<TFCPAction>.Create;
   FRedoStack := TList<TFCPAction>.Create;
   FPlanningRange := pr1Setmana;
@@ -2721,6 +2753,7 @@ begin
   FGhostBmp.SetSize(240, 60);
   FGhostForm := nil;
   FFilterDropDown := nil;
+  FFilterLastCloseTick := 0;
   FVisibleCentreIds := TList<Integer>.Create;
 end;
 
@@ -2734,6 +2767,7 @@ begin
   FUndoStack.Free;
   FRedoStack.Free;
   FCalculatedTimes.Free;
+  FOperacionFilter.Free;
 end;
 
 procedure TfrmFiniteCapacityPlanner.FormResize(Sender: TObject);
@@ -3011,14 +3045,17 @@ begin
     for I := 0 to High(AllData) do
     begin
       D := AllData[I];
-      if D.Estado = neFinalizado then Continue;
       if not (D.Estado in FEstadoFilter) then Continue;
+      // Items sense Operacion (cadena buida) no es filtren per Operacion.
+      if (FOperacionFilter.Count > 0) and (D.Operacion <> '') and
+         (FOperacionFilter.IndexOf(D.Operacion) < 0) then Continue;
       if (FCentreColumns <> nil) and FCentreColumns.IsAssigned(D.DataId) then
         Continue;
       if not MatchesSearch(D, FSearchFilter) then
         Continue;
       Ids.Add(D.DataId);
     end;
+
 
     Ids.Sort(TComparer<Integer>.Construct(
       function(const A, B: Integer): Integer
@@ -3334,31 +3371,9 @@ begin
   Sub.OnClick := OnSortClick;
   Parent.Add(Sub);
 
-  // --- Filtrar por estado (submenú) ---
-  Parent := TMenuItem.Create(FPendingPopup);
-  Parent.Caption := 'Filtrar por estado';
-  FPendingPopup.Items.Add(Parent);
-
-  Sub := TMenuItem.Create(Parent);
-  Sub.Caption := 'Pendiente';
-  Sub.Tag := Ord(nePendiente);
-  Sub.Checked := True;
-  Sub.OnClick := OnEstadoFilterClick;
-  Parent.Add(Sub);
-
-  Sub := TMenuItem.Create(Parent);
-  Sub.Caption := 'En curso';
-  Sub.Tag := Ord(neEnCurso);
-  Sub.Checked := True;
-  Sub.OnClick := OnEstadoFilterClick;
-  Parent.Add(Sub);
-
-  Sub := TMenuItem.Create(Parent);
-  Sub.Caption := 'Bloqueado';
-  Sub.Tag := Ord(neBloqueado);
-  Sub.Checked := True;
-  Sub.OnClick := OnEstadoFilterClick;
-  Parent.Add(Sub);
+  // El filtre 'Estados' i 'Operacion' es gestiona des d'un dropdown ancorat al
+  // boto Filtros del toolbar (TfrmFCPFiltrosDropDown). No es posa al popup
+  // perque clicar un menuitem el tancaria i el multi-select no seria operatiu.
 
   // --- Separador + Vaciar ---
   Mi := TMenuItem.Create(FPendingPopup);
@@ -3421,6 +3436,12 @@ var
   I: Integer;
   ItemH, TotalH: Integer;
 begin
+  // Anti-rebote: si l'OnDeactivate l'ha tancat fa <250ms a causa d'aquest mateix
+  // clic al boto (perd focus -> Close), no reobrir.
+  if (FFilterLastCloseTick > 0) and
+     (GetTickCount - FFilterLastCloseTick < 250) then
+    Exit;
+
   // Si ja està obert, tancar
   if (FFilterDropDown <> nil) and FFilterDropDown.Visible then
   begin
@@ -3435,6 +3456,7 @@ begin
     FFilterDropDown.BorderStyle := bsNone;
     FFilterDropDown.FormStyle := fsStayOnTop;
     FFilterDropDown.Color := clWhite;
+    FFilterDropDown.OnDeactivate := OnFilterDropDownDeactivate;
 
     FFilterCheckList := TCheckListBox.Create(FFilterDropDown);
     FFilterCheckList.Parent := FFilterDropDown;
@@ -3464,8 +3486,14 @@ begin
   if ItemH < 20 then ItemH := 22;
   TotalH := Min(FFilterCheckList.Items.Count * ItemH + 4, 400);
   FFilterDropDown.SetBounds(Pt.X, Pt.Y, pnlFilterBtn.Width, TotalH);
-  ShowWindow(FFilterDropDown.Handle, SW_SHOWNOACTIVATE);
-  FFilterDropDown.Visible := True;
+  // Show actiu (no SW_SHOWNOACTIVATE) perque OnDeactivate funcioni
+  FFilterDropDown.Show;
+  FFilterDropDown.SetFocus;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFilterDropDownDeactivate(Sender: TObject);
+begin
+  CloseFilterDropDown;
 end;
 
 procedure TfrmFiniteCapacityPlanner.OnFilterCheckClick(Sender: TObject);
@@ -3490,7 +3518,10 @@ end;
 procedure TfrmFiniteCapacityPlanner.CloseFilterDropDown;
 begin
   if (FFilterDropDown <> nil) and FFilterDropDown.Visible then
+  begin
     FFilterDropDown.Hide;
+    FFilterLastCloseTick := GetTickCount;
+  end;
 end;
 
 procedure TfrmFiniteCapacityPlanner.UpdateFilterText;
@@ -4221,6 +4252,114 @@ begin
   UpdatePendingCount;
 end;
 
+procedure TfrmFiniteCapacityPlanner.LoadOperacionesFromDB(AList: TStringList);
+var
+  Q: TADOQuery;
+begin
+  AList.Clear;
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT Operacion FROM FS_PL_OperationType ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa ' +
+      'ORDER BY Operacion';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      AList.Add(Q.FieldByName('Operacion').AsString);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnOperacionFilterClick(Sender: TObject);
+var
+  Mi: TMenuItem;
+  Op: string;
+  Idx: Integer;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  Mi := TMenuItem(Sender);
+  Op := StringReplace(Mi.Caption, '&', '', [rfReplaceAll]);
+
+  // Toggle: si esta a la llista, l'extreu; si no, l'afegeix.
+  Idx := FOperacionFilter.IndexOf(Op);
+  if Idx >= 0 then
+    FOperacionFilter.Delete(Idx)
+  else
+    FOperacionFilter.Add(Op);
+
+  Mi.Checked := FOperacionFilter.IndexOf(Op) >= 0;
+
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
+procedure TfrmFiniteCapacityPlanner.RefreshOperacionMenuChecks(AMenu: TMenuItem);
+var
+  I: Integer;
+  Child: TMenuItem;
+  Op: string;
+begin
+  if AMenu = nil then Exit;
+  for I := 0 to AMenu.Count - 1 do
+  begin
+    Child := AMenu.Items[I];
+    if Child.Tag <> 0 then Continue; // saltar separadors/accions r\303\240pides
+    Op := StringReplace(Child.Caption, '&', '', [rfReplaceAll]);
+    Child.Checked := FOperacionFilter.IndexOf(Op) >= 0;
+  end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnOperacionMarkAllClick(Sender: TObject);
+var
+  Mi, Parent: TMenuItem;
+  Ops: TStringList;
+  K: Integer;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  Mi := TMenuItem(Sender);
+  Parent := Mi.Parent;
+
+  Ops := TStringList.Create;
+  try
+    LoadOperacionesFromDB(Ops);
+    FOperacionFilter.Clear;
+    for K := 0 to Ops.Count - 1 do
+      FOperacionFilter.Add(Ops[K]);
+  finally
+    Ops.Free;
+  end;
+
+  RefreshOperacionMenuChecks(Parent);
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnOperacionUnmarkAllClick(Sender: TObject);
+var
+  Mi, Parent: TMenuItem;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  Mi := TMenuItem(Sender);
+  Parent := Mi.Parent;
+
+  FOperacionFilter.Clear;
+  // Marquem una operacio "sentinel" perqu\303\250 el filtre s'apliqui amb llista
+  // no-buida i tots els items amb Operaci\303\263 quedin fora. Items amb Operaci\303\263
+  // buida segueixen passant (decisi\303\263 ja documentada a BuildPendingList).
+  FOperacionFilter.Add(#1);
+
+  RefreshOperacionMenuChecks(Parent);
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
 procedure TfrmFiniteCapacityPlanner.OnSelectAllClick(Sender: TObject);
 var
   I: Integer;
@@ -4689,6 +4828,269 @@ begin
   finally
     F.Free;
   end;
+end;
+
+// ===========================================================================
+// DROPDOWN "Filtros" (Estados + Operacion) - ancorat al boto del toolbar
+// ===========================================================================
+
+procedure TfrmFiniteCapacityPlanner.BuildFiltrosBtn;
+var
+  Lbl: TLabel;
+begin
+  FFiltrosBtn := TPanel.Create(Self);
+  FFiltrosBtn.Parent := lblPendingTitle.Parent; // pnlPending
+  FFiltrosBtn.SetBounds(pnlPending.Width - 120, 4, 76, 28);
+  FFiltrosBtn.Anchors := [akTop, akRight];
+  FFiltrosBtn.BevelOuter := bvNone;
+  FFiltrosBtn.Color := pnlPending.Color;
+  FFiltrosBtn.ParentBackground := False;
+  FFiltrosBtn.Cursor := crHandPoint;
+  FFiltrosBtn.OnClick := OnFiltrosBtnClick;
+
+  Lbl := TLabel.Create(FFiltrosBtn);
+  Lbl.Parent := FFiltrosBtn;
+  Lbl.Align := alClient;
+  Lbl.Alignment := taCenter;
+  Lbl.Layout := tlCenter;
+  Lbl.Caption := 'Filtros';
+  Lbl.Font.Size := 9;
+  Lbl.Font.Color := $00666666;
+  Lbl.Cursor := crHandPoint;
+  Lbl.OnClick := OnFiltrosBtnClick;
+  FFiltrosBtnLbl := Lbl;
+  FFiltrosBtn.BringToFront;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFiltrosBtnClick(Sender: TObject);
+begin
+  ShowFiltrosDropDown;
+end;
+
+procedure TfrmFiniteCapacityPlanner.ShowFiltrosDropDown;
+var
+  Dlg: TForm;
+  pnlEstados, pnlOps, pnlBottom: TPanel;
+  lblEstadosTitle, lblOpsTitle: TLabel;
+  cb: TCheckBox;
+  btnAll, btnNone, btnClose: TButton;
+  Ops: TStringList;
+  K, TopY: Integer;
+  E: TNodoEstado;
+  EstadoNames: array[TNodoEstado] of string;
+const
+  DD_W = 480;
+  DD_H = 400;
+  COL_W = 220;
+  BOTTOM_H = 44;
+begin
+  EstadoNames[nePendiente]  := 'Pendiente';
+  EstadoNames[neEnCurso]    := 'En curso';
+  EstadoNames[neBloqueado]  := 'Bloqueado';
+  EstadoNames[neFinalizado] := 'Finalizado';
+
+  Dlg := TForm.CreateNew(Self);
+  try
+    Dlg.Caption := 'Filtros';
+    Dlg.BorderStyle := bsDialog;
+    Dlg.Position := poScreenCenter;
+    Dlg.Color := clWhite;
+    Dlg.ClientWidth := DD_W;
+    Dlg.ClientHeight := DD_H;
+    Dlg.Font.Name := 'Segoe UI';
+    Dlg.Font.Size := 9;
+
+    // Columna Estados (esquerra)
+    pnlEstados := TPanel.Create(Dlg);
+    pnlEstados.Parent := Dlg;
+    pnlEstados.SetBounds(0, 0, COL_W, DD_H - BOTTOM_H);
+    pnlEstados.BevelOuter := bvNone;
+    pnlEstados.Color := clWhite;
+
+    lblEstadosTitle := TLabel.Create(pnlEstados);
+    lblEstadosTitle.Parent := pnlEstados;
+    lblEstadosTitle.SetBounds(16, 12, 200, 18);
+    lblEstadosTitle.Caption := 'Estados';
+    lblEstadosTitle.Font.Style := [fsBold];
+    lblEstadosTitle.Font.Color := $00444444;
+
+    TopY := 40;
+    for E := Low(TNodoEstado) to High(TNodoEstado) do
+    begin
+      cb := TCheckBox.Create(pnlEstados);
+      cb.Parent := pnlEstados;
+      cb.SetBounds(20, TopY, COL_W - 28, 22);
+      cb.Caption := EstadoNames[E];
+      cb.Checked := E in FEstadoFilter;
+      cb.Tag := Ord(E);
+      cb.OnClick := OnFiltrosEstadoChange;
+      FFiltrosEstadoChecks[E] := cb;
+      Inc(TopY, 28);
+    end;
+
+    // Columna Operacion (dreta)
+    pnlOps := TPanel.Create(Dlg);
+    pnlOps.Parent := Dlg;
+    pnlOps.SetBounds(COL_W, 0, DD_W - COL_W, DD_H - BOTTOM_H);
+    pnlOps.BevelOuter := bvNone;
+    pnlOps.Color := clWhite;
+
+    lblOpsTitle := TLabel.Create(pnlOps);
+    lblOpsTitle.Parent := pnlOps;
+    lblOpsTitle.SetBounds(12, 12, 200, 18);
+    lblOpsTitle.Caption := 'Operaci'#243'n';
+    lblOpsTitle.Font.Style := [fsBold];
+    lblOpsTitle.Font.Color := $00444444;
+
+    btnAll := TButton.Create(pnlOps);
+    btnAll.Parent := pnlOps;
+    btnAll.SetBounds(12, 36, 110, 26);
+    btnAll.Caption := 'Marcar todas';
+    btnAll.OnClick := OnFiltrosOpMarkAllClick;
+
+    btnNone := TButton.Create(pnlOps);
+    btnNone.Parent := pnlOps;
+    btnNone.SetBounds(128, 36, 110, 26);
+    btnNone.Caption := 'Desmarcar';
+    btnNone.OnClick := OnFiltrosOpUnmarkAllClick;
+
+    FFiltrosOpList := TCheckListBox.Create(pnlOps);
+    FFiltrosOpList.Parent := pnlOps;
+    FFiltrosOpList.SetBounds(12, 68, DD_W - COL_W - 24, DD_H - BOTTOM_H - 68 - 8);
+    FFiltrosOpList.BorderStyle := bsSingle;
+    FFiltrosOpList.Color := clWhite;
+    FFiltrosOpList.Font.Name := 'Segoe UI';
+    FFiltrosOpList.Font.Size := 9;
+    FFiltrosOpList.OnClickCheck := OnFiltrosOpClick;
+
+    Ops := TStringList.Create;
+    try
+      LoadOperacionesFromDB(Ops);
+      if FOperacionFilter.Count = 0 then
+        for K := 0 to Ops.Count - 1 do
+          FOperacionFilter.Add(Ops[K]);
+      for K := 0 to Ops.Count - 1 do
+      begin
+        FFiltrosOpList.Items.Add(Ops[K]);
+        FFiltrosOpList.Checked[K] := FOperacionFilter.IndexOf(Ops[K]) >= 0;
+      end;
+    finally
+      Ops.Free;
+    end;
+
+    // Panel inferior amb boto Cerrar
+    pnlBottom := TPanel.Create(Dlg);
+    pnlBottom.Parent := Dlg;
+    pnlBottom.SetBounds(0, DD_H - BOTTOM_H, DD_W, BOTTOM_H);
+    pnlBottom.BevelOuter := bvNone;
+    pnlBottom.Color := $00F5F5F5;
+    pnlBottom.Align := alBottom;
+
+    btnClose := TButton.Create(pnlBottom);
+    btnClose.Parent := pnlBottom;
+    btnClose.SetBounds(DD_W - 110, 8, 96, 28);
+    btnClose.Caption := 'Cerrar';
+    btnClose.Default := True;
+    btnClose.Cancel := True;
+    btnClose.ModalResult := mrOk;
+
+    Dlg.ShowModal;
+  finally
+    FFiltrosOpList := nil; // s'ha alliberat dins de Dlg.Free
+    Dlg.Free;
+  end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.CloseFiltrosDropDown;
+begin
+  // Ja no aplica: el dialeg es modal i es tanca per si sol.
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFiltrosDropDownDeactivate(Sender: TObject);
+begin
+  // Ja no aplica al ser modal.
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFiltrosEstadoChange(Sender: TObject);
+var
+  cb: TCheckBox;
+  E: TNodoEstado;
+begin
+  if not (Sender is TCheckBox) then Exit;
+  cb := TCheckBox(Sender);
+  E := TNodoEstado(cb.Tag);
+  if cb.Checked then Include(FEstadoFilter, E)
+                else Exclude(FEstadoFilter, E);
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFiltrosOpClick(Sender: TObject);
+var
+  I, Idx: Integer;
+  Op: string;
+begin
+  // Reconstruir FOperacionFilter des de l'estat checked actual
+  FOperacionFilter.Clear;
+  for I := 0 to FFiltrosOpList.Items.Count - 1 do
+    if FFiltrosOpList.Checked[I] then
+      FOperacionFilter.Add(FFiltrosOpList.Items[I]);
+
+  // Si l'usuari ho ha desmarcat tot, posem una sentinel perque el filtre
+  // s'apliqui (set buit = "totes les operacions visibles" segons la logica
+  // de BuildPendingList).
+  if FOperacionFilter.Count = 0 then
+    FOperacionFilter.Add(#1);
+
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFiltrosOpMarkAllClick(Sender: TObject);
+var
+  I: Integer;
+begin
+  if FFiltrosOpList = nil then Exit;
+  FOperacionFilter.Clear;
+  for I := 0 to FFiltrosOpList.Items.Count - 1 do
+  begin
+    FFiltrosOpList.Checked[I] := True;
+    FOperacionFilter.Add(FFiltrosOpList.Items[I]);
+  end;
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnFiltrosOpUnmarkAllClick(Sender: TObject);
+var
+  I: Integer;
+begin
+  if FFiltrosOpList = nil then Exit;
+  for I := 0 to FFiltrosOpList.Items.Count - 1 do
+    FFiltrosOpList.Checked[I] := False;
+  FOperacionFilter.Clear;
+  FOperacionFilter.Add(#1); // sentinel "tot exclos"
+  BuildPendingList;
+  UpdatePendingCount;
+end;
+
+procedure TfrmFiniteCapacityPlanner.CloseAllDropDowns;
+begin
+  // Nomes el filtre de centros es no-modal i necessita auto-close.
+  // El de Filtros (Estados+Operacion) ja es un dialeg modal centrat.
+  CloseFilterDropDown;
+end;
+
+procedure TfrmFiniteCapacityPlanner.WMMove(var Msg: TMessage);
+begin
+  inherited;
+  CloseAllDropDowns;
+end;
+
+procedure TfrmFiniteCapacityPlanner.WMSize(var Msg: TMessage);
+begin
+  inherited;
+  CloseAllDropDowns;
 end;
 
 end.

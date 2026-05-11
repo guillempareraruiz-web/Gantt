@@ -64,6 +64,13 @@ type
     function GetHoresOperariEnNode(OperarioId, DataId: Integer): Double;
     function CountAssignatsAlNode(DataId: Integer): Integer;
 
+    // --- Lock de asignaciones ---
+    procedure SetAsignacionLock(OperarioId, DataId: Integer;
+      const ALocked: Boolean; const ALockedBy: string = '');
+    function IsAsignacionLocked(OperarioId, DataId: Integer): Boolean;
+    function GetCapacitacioInfo(OperarioId: Integer; const Operacion: string;
+      out Cap: TCapacitacion): Boolean;
+
     // --- Dades de mostra ---
     procedure LoadSampleData;
   end;
@@ -523,6 +530,61 @@ begin
       Inc(Result);
 end;
 
+{ --- Lock de asignaciones --- }
+
+procedure TOperariosRepo.SetAsignacionLock(OperarioId, DataId: Integer;
+  const ALocked: Boolean; const ALockedBy: string);
+var
+  I: Integer;
+  A: TAsignacionOperario;
+begin
+  for I := 0 to FAsignacions.Count - 1 do
+    if (FAsignacions[I].OperarioId = OperarioId) and
+       (FAsignacions[I].DataId = DataId) then
+    begin
+      A := FAsignacions[I];
+      A.IsLocked := ALocked;
+      if ALocked then
+      begin
+        A.LockedBy := ALockedBy;
+        A.LockedAt := Now;
+      end
+      else
+      begin
+        A.LockedBy := '';
+        A.LockedAt := 0;
+      end;
+      FAsignacions[I] := A;
+      Exit;
+    end;
+end;
+
+function TOperariosRepo.IsAsignacionLocked(OperarioId, DataId: Integer): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to FAsignacions.Count - 1 do
+    if (FAsignacions[I].OperarioId = OperarioId) and
+       (FAsignacions[I].DataId = DataId) then
+      Exit(FAsignacions[I].IsLocked);
+  Result := False;
+end;
+
+function TOperariosRepo.GetCapacitacioInfo(OperarioId: Integer;
+  const Operacion: string; out Cap: TCapacitacion): Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to FCapacitacions.Count - 1 do
+    if (FCapacitacions[I].OperarioId = OperarioId) and
+       SameText(FCapacitacions[I].Operacion, Operacion) then
+    begin
+      Cap := FCapacitacions[I];
+      Exit(True);
+    end;
+  Result := False;
+end;
+
 { --- Dades de mostra --- }
 
 procedure TOperariosRepo.LoadSampleData;
@@ -585,6 +647,10 @@ begin
     if I >= Length(Cognoms) then
       Op.Nombre := Op.Nombre + ' ' + IntToStr(I div Length(Cognoms) + 1);
     Op.Calendario := Calendaris[Random(Length(Calendaris))];
+    // Coste laboral sample: rango 14-26 eur/h, recargos est'andar
+    Op.SueldoEurHora := 14 + Random(13);
+    Op.RecargoTurnoNoche := 1.25;
+    Op.RecargoFestivo := 1.75;
     AddOperario(Op);
   end;
 
@@ -604,6 +670,13 @@ begin
       begin
         Used[J] := True;
         Cap.Operacion := Ops[J];
+        // Distribucion realista de niveles: 15% Aprendiz, 25% Junior, 45% Senior, 15% Experto
+        case Random(100) of
+           0..14: begin Cap.Nivel := nsAprendiz; Cap.FactorEficiencia := 1.30; end;
+          15..39: begin Cap.Nivel := nsJunior;   Cap.FactorEficiencia := 1.10; end;
+          40..84: begin Cap.Nivel := nsSenior;   Cap.FactorEficiencia := 1.00; end;
+        else      begin Cap.Nivel := nsExperto;  Cap.FactorEficiencia := 0.85; end;
+        end;
         AddCapacitacion(Cap);
         Dec(NCaps);
       end;

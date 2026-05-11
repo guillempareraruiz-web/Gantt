@@ -181,10 +181,92 @@
             <Form>frmBacklogSchedPreview</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uBacklogCustomCols.pas">
+            <Form>frmBacklogCustomCols</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uBacklogCustomColEdit.pas">
+            <Form>frmBacklogCustomColEdit</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uCentresCustomCols.pas">
+            <Form>frmCentresCustomCols</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uCentresCustomColEdit.pas">
+            <Form>frmCentresCustomColEdit</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uBusyDialog.pas">
+            <Form>frmBusyDialog</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uFiniteCapacityPlanner.pas">
             <Form>frmFiniteCapacityPlanner</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uFiniteCapacityOperaris.pas">
+            <Form>frmFiniteCapacityOperaris</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperariosVisiblesDlg.pas">
+            <Form>frmOperariosVisibles</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperatorAbsencesRepo.pas"/>
+        <DCCReference Include="uPlanProdTypes.pas"/>
+        <DCCReference Include="uHabilidadRepo.pas"/>
+        <DCCReference Include="uPlanProdEngine.pas"/>
+        <DCCReference Include="uHabilidadEdit.pas">
+            <Form>frmHabilidadEdit</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uHabilidadPicker.pas">
+            <Form>frmHabilidadPicker</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uGestionHabilidades.pas">
+            <Form>frmGestionHabilidades</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uGestionOperacionHabilidades.pas">
+            <Form>frmGestionOperacionHabilidades</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperationTypeEdit.pas">
+            <Form>frmOperationTypeEdit</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uGestionOperationTypes.pas">
+            <Form>frmGestionOperationTypes</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperarioPolivalencia.pas">
+            <Form>frmOperarioPolivalencia</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uPesosScoring.pas">
+            <Form>frmPesosScoring</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uPesosScoringRepo.pas"/>
+        <DCCReference Include="uAutoPlanificacion.pas">
+            <Form>frmAutoPlanificacion</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uScoreBreakdown.pas">
+            <Form>frmScoreBreakdown</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uAusenciaEdit.pas">
+            <Form>frmAusenciaEdit</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperarioAusencias.pas">
+            <Form>frmOperarioAusencias</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperationTypesRepo.pas"/>
         <DCCReference Include="uPlanningRulesEditor.pas">
             <Form>frmPlanningRulesEditor</Form>
             <FormType>dfm</FormType>

@@ -7,7 +7,9 @@ uses
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
   cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
   cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
+  cxCalc, cxCalendar,
   cxDropDownEdit, cxSpinEdit, cxButtonEdit,
+  System.NetEncoding, System.Generics.Collections,
   cxContainer, cxClasses, cxFilter,
   dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
@@ -40,6 +42,8 @@ type
     btnAdd: TButton;
     btnDel: TButton;
     btnSave: TButton;
+    btnConfigurarColumnas: TButton;
+    btnAsignarMaquinas: TButton;
     gridCentros: TcxGrid;
     tvCentros: TcxGridTableView;
     colCentroId: TcxGridColumn;
@@ -58,14 +62,28 @@ type
     LookAndFeel: TcxLookAndFeelController;
     ColorDialog: TColorDialog;
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure btnCloseClick(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnSaveClick(Sender: TObject);
+    procedure btnConfigurarColumnasClick(Sender: TObject);
+    procedure btnAsignarMaquinasClick(Sender: TObject);
     procedure colCentroColorButtonClick(Sender: TObject; AButtonIndex: Integer);
     procedure colCentroColorCustomDrawCell(Sender: TcxCustomGridTableView;
       ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
       var ADone: Boolean);
+    procedure tvCentrosCustomEditValueChanged(Sender: TcxCustomGridTableView;
+      AItem: TcxCustomGridTableItem);
+  private
+    type
+      TCenterCustomCol = record
+        ColumnKey: string;
+        Caption: string;
+        DataType: Char;
+        OrderDefault: Integer;
+        WidthDefault: Integer;
+      end;
   private
     FCenterIds: TArray<Integer>;
     FColors: TArray<Integer>;
@@ -73,8 +91,13 @@ type
     FAreaNames: TArray<string>;
     FCalendarIds: TArray<Integer>;
     FCalendarNames: TArray<string>;
+    FCustomCols: TArray<TCenterCustomCol>;
+    FCustomColumns: TArray<TcxGridColumn>;
+    FColKeyByTag: TDictionary<Integer, string>;
     procedure LoadAreas;
     procedure LoadCalendars;
+    procedure LoadCustomColumnDefs;
+    procedure BuildCustomColumns;
     procedure LoadCentros;
     procedure SetupCombos;
     function GetSelectedIdx: Integer;
@@ -86,12 +109,20 @@ type
     function OpenQuery(const ASQL: string): TADOQuery;
     function QStr(const S: string): string;
     function QStrNullable(AId: Integer): string;
+    function UserLogin: string;
     procedure RefreshColorCell(ARecIdx: Integer);
+    function EncodeFieldValue(ADataType: Char; const V: Variant): string;
+    function DecodeFieldValue(ADataType: Char; const S: string): Variant;
+    procedure SaveCustomFieldValue(ACenterId: Integer; const FieldKey: string;
+      ADataType: Char; const Value: Variant);
   end;
 implementation
 {$R *.dfm}
 uses
-  uDMPlanner;
+  uDMPlanner, uLogin, uCentresCustomCols, uAsignarMaquinasCentro;
+
+const
+  CENTROS_GRID_ID = 'CENTROS';
 function TfrmGestionCentres.QStr(const S: string): string;
 begin
   Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
@@ -123,11 +154,22 @@ begin
   Result.SQL.Text := ASQL;
   Result.Open;
 end;
+procedure TfrmGestionCentres.FormDestroy(Sender: TObject);
+begin
+  FColKeyByTag.Free;
+end;
+
 procedure TfrmGestionCentres.FormCreate(Sender: TObject);
 begin
+  FColKeyByTag := TDictionary<Integer, string>.Create;
+  btnConfigurarColumnas.Visible := uLogin.IsAdmin;
+
   LoadAreas;
   LoadCalendars;
   SetupCombos;
+  LoadCustomColumnDefs;
+  BuildCustomColumns;
+  tvCentros.OnEditValueChanged := tvCentrosCustomEditValueChanged;
   LoadCentros;
 end;
 procedure TfrmGestionCentres.btnCloseClick(Sender: TObject);
@@ -241,20 +283,39 @@ end;
 procedure TfrmGestionCentres.LoadCentros;
 var
   Q: TADOQuery;
-  I, AreaId, CalId: Integer;
+  I, J, AreaId, CalId: Integer;
+  Sel, Joins, Alias, FldName, Key: string;
+  Col: TcxGridColumn;
+  V: Variant;
 begin
   tvCentros.BeginUpdate;
   try
     tvCentros.DataController.RecordCount := 0;
+
+    // JOIN dinamico para columnas custom: cada una se trae como X_<key>.
+    Sel := '';
+    Joins := '';
+    for I := 0 to High(FCustomCols) do
+    begin
+      Alias := 'x' + IntToStr(I);
+      Sel := Sel + ', ' + Alias + '.FieldValue AS [X_' + FCustomCols[I].ColumnKey + ']';
+      Joins := Joins +
+        ' LEFT JOIN FS_PL_Center_Extra ' + Alias +
+        '   ON ' + Alias + '.CodigoEmpresa = c.CodigoEmpresa' +
+        '  AND ' + Alias + '.CenterId = c.CenterId' +
+        '  AND ' + Alias + '.FieldKey = ' + QStr(FCustomCols[I].ColumnKey);
+    end;
+
     Q := OpenQuery(
       'SELECT c.CenterId, c.CodigoCentro, c.Titulo, c.Subtitulo, ' +
       '  ISNULL(c.AreaId, 0) AS AreaId, ' +
       '  c.EsSecuencial, c.MaxLanes, c.Orden, c.Visible, c.Habilitado, ' +
       '  ISNULL(c.ColorFondo, 0) AS ColorFondo, ' +
       '  ISNULL((SELECT MIN(cc.CalendarId) FROM FS_PL_CenterCalendar cc ' +
-      '    WHERE cc.CodigoEmpresa = c.CodigoEmpresa AND cc.CenterId = c.CenterId), 0) AS CalendarId ' +
-      'FROM FS_PL_Center c ' +
-      'WHERE c.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+      '    WHERE cc.CodigoEmpresa = c.CodigoEmpresa AND cc.CenterId = c.CenterId), 0) AS CalendarId' +
+      Sel + ' ' +
+      'FROM FS_PL_Center c ' + Joins +
+      ' WHERE c.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
       ' ORDER BY c.Orden, c.CenterId');
     try
       SetLength(FCenterIds, Q.RecordCount);
@@ -279,6 +340,30 @@ begin
         FCenterIds[I] := Q.FieldByName('CenterId').AsInteger;
         FColors[I] := Q.FieldByName('ColorFondo').AsInteger;
         RefreshColorCell(I);
+
+        // Volcar valores de columnas custom al grid
+        for J := 0 to High(FCustomCols) do
+        begin
+          FldName := 'X_' + FCustomCols[J].ColumnKey;
+          if Q.FindField(FldName) <> nil then
+          begin
+            // Localizar la columna del grid por su key
+            Col := nil;
+            if FColKeyByTag.TryGetValue(FCustomColumns[J].Tag, Key) then
+              Col := FCustomColumns[J];
+            if Col = nil then Continue;
+
+            if Q.FieldByName(FldName).IsNull then
+              tvCentros.DataController.Values[I, Col.Index] := Null
+            else
+            begin
+              V := DecodeFieldValue(FCustomCols[J].DataType,
+                                    Q.FieldByName(FldName).AsString);
+              tvCentros.DataController.Values[I, Col.Index] := V;
+            end;
+          end;
+        end;
+
         Inc(I);
         Q.Next;
       end;
@@ -453,4 +538,298 @@ begin
   ACanvas.FillRect(R);
   ADone := True;
 end;
+
+// ===========================================================================
+// CAMPS CUSTOM
+// ===========================================================================
+
+function TfrmGestionCentres.UserLogin: string;
+begin
+  Result := uLogin.CurrentSession.Login;
+  if Result = '' then Result := '(anon)';
+end;
+
+procedure TfrmGestionCentres.LoadCustomColumnDefs;
+var
+  Q: TADOQuery;
+  L: TList<TCenterCustomCol>;
+  Def: TCenterCustomCol;
+  DT: string;
+begin
+  L := TList<TCenterCustomCol>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT ColumnKey, Caption, DataType, OrderDefault, WidthDefault ' +
+      'FROM FS_PL_Cfg_GridColumns ' +
+      'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+      '  AND GridId = ''' + CENTROS_GRID_ID + '''' +
+      '  AND IsCustomField = 1 AND Activo = 1 ' +
+      'ORDER BY OrderDefault, ColumnKey';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Def.ColumnKey := Q.FieldByName('ColumnKey').AsString;
+      Def.Caption   := Q.FieldByName('Caption').AsString;
+      DT := Q.FieldByName('DataType').AsString;
+      if DT = '' then Def.DataType := 'S' else Def.DataType := DT[1];
+      Def.OrderDefault := Q.FieldByName('OrderDefault').AsInteger;
+      Def.WidthDefault := Q.FieldByName('WidthDefault').AsInteger;
+      L.Add(Def);
+      Q.Next;
+    end;
+    FCustomCols := L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+procedure TfrmGestionCentres.BuildCustomColumns;
+var
+  I: Integer;
+  Col: TcxGridColumn;
+  Cols: TList<TcxGridColumn>;
+  W: Integer;
+begin
+  // Eliminar columnas custom previas (en caso de recarga tras gestionar)
+  for I := High(FCustomColumns) downto 0 do
+    if FCustomColumns[I] <> nil then
+      FCustomColumns[I].Free;
+  SetLength(FCustomColumns, 0);
+  FColKeyByTag.Clear;
+
+  Cols := TList<TcxGridColumn>.Create;
+  tvCentros.BeginUpdate;
+  try
+    for I := 0 to High(FCustomCols) do
+    begin
+      Col := tvCentros.CreateColumn;
+      Col.Caption := FCustomCols[I].Caption + '  '#9998;
+      Col.HeaderHint := 'Campo personalizado editable. Doble clic para modificar el valor.';
+      Col.Name := 'colx_' + FCustomCols[I].ColumnKey;
+      W := FCustomCols[I].WidthDefault;
+      if W < 30 then W := 120;
+      Col.Width := W;
+      case UpCase(FCustomCols[I].DataType) of
+        'N': Col.PropertiesClass := TcxCalcEditProperties;
+        'D': Col.PropertiesClass := TcxDateEditProperties;
+        'B': Col.PropertiesClass := TcxCheckBoxProperties;
+      else
+        Col.PropertiesClass := TcxTextEditProperties;
+      end;
+      Col.Options.Editing := True;
+      Col.Tag := tvCentros.ColumnCount - 1;
+      FColKeyByTag.Add(Col.Tag, 'X:' + FCustomCols[I].ColumnKey);
+      Cols.Add(Col);
+    end;
+    FCustomColumns := Cols.ToArray;
+
+    if Length(FCustomCols) > 0 then
+    begin
+      tvCentros.OptionsData.Editing := True;
+      tvCentros.OptionsSelection.CellSelect := True;
+      tvCentros.OptionsBehavior.CellHints := True;
+      tvCentros.OptionsBehavior.ColumnHeaderHints := True;
+    end;
+  finally
+    tvCentros.EndUpdate;
+    Cols.Free;
+  end;
+end;
+
+function TfrmGestionCentres.EncodeFieldValue(ADataType: Char; const V: Variant): string;
+var
+  D: Double;
+  Dt: TDateTime;
+begin
+  Result := '';
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  case UpCase(ADataType) of
+    'N':
+      begin
+        D := V;
+        Result := FloatToStr(D, TFormatSettings.Invariant);
+      end;
+    'D':
+      begin
+        Dt := V;
+        Result := FormatDateTime('yyyy"-"mm"-"dd"T"hh":"nn":"ss', Dt);
+      end;
+    'B':
+      begin
+        if Boolean(V) then Result := '1' else Result := '0';
+      end;
+  else
+    Result := VarToStr(V);
+  end;
+end;
+
+function TfrmGestionCentres.DecodeFieldValue(ADataType: Char; const S: string): Variant;
+var
+  D: Double;
+  Dt: TDateTime;
+begin
+  Result := Null;
+  if S = '' then Exit;
+  case UpCase(ADataType) of
+    'N':
+      begin
+        if TryStrToFloat(S, D, TFormatSettings.Invariant) then Result := D
+        else if TryStrToFloat(S, D) then Result := D
+        else Result := Null;
+      end;
+    'D':
+      begin
+        if TryStrToDateTime(S, Dt, TFormatSettings.Invariant) then Result := Dt
+        else if TryStrToDateTime(S, Dt) then Result := Dt
+        else Result := Null;
+      end;
+    'B':
+      Result := (S = '1') or SameText(S, 'true');
+  else
+    Result := S;
+  end;
+end;
+
+procedure TfrmGestionCentres.SaveCustomFieldValue(ACenterId: Integer;
+  const FieldKey: string; ADataType: Char; const Value: Variant);
+var
+  Cmd: TADOCommand;
+  IsEmpty: Boolean;
+  StrVal: string;
+begin
+  if ACenterId <= 0 then Exit;
+
+  IsEmpty := VarIsNull(Value) or VarIsEmpty(Value);
+  if not IsEmpty then
+  begin
+    StrVal := EncodeFieldValue(ADataType, Value);
+    if Trim(StrVal) = '' then IsEmpty := True;
+  end;
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    if IsEmpty then
+    begin
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_Center_Extra ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+        '  AND CenterId = ' + IntToStr(ACenterId) +
+        '  AND FieldKey = ' + QStr(FieldKey) +
+        '  AND Source = ''MANUAL''';
+      Cmd.Execute;
+    end
+    else
+    begin
+      Cmd.CommandText :=
+        'MERGE FS_PL_Center_Extra AS T ' +
+        'USING (SELECT ' + IntToStr(DMPlanner.CodigoEmpresa) + ' AS CodigoEmpresa, ' +
+        IntToStr(ACenterId) + ' AS CenterId, ' +
+        QStr(FieldKey) + ' AS FieldKey, :V AS FieldValue, :U AS UpdatedBy) AS S ' +
+        '  ON T.CodigoEmpresa = S.CodigoEmpresa AND T.CenterId = S.CenterId AND T.FieldKey = S.FieldKey ' +
+        'WHEN MATCHED THEN UPDATE SET ' +
+        '  FieldValue = S.FieldValue, Source = ''MANUAL'', ' +
+        '  UpdatedBy = S.UpdatedBy, UpdatedAt = SYSUTCDATETIME() ' +
+        'WHEN NOT MATCHED THEN INSERT (CodigoEmpresa, CenterId, FieldKey, FieldValue, Source, UpdatedBy, UpdatedAt) ' +
+        '  VALUES (S.CodigoEmpresa, S.CenterId, S.FieldKey, S.FieldValue, ''MANUAL'', S.UpdatedBy, SYSUTCDATETIME());';
+      Cmd.Parameters.Clear;
+      with Cmd.Parameters.AddParameter do
+      begin
+        Name := 'V';
+        DataType := ftWideMemo;
+        Direction := pdInput;
+        Value := StrVal;
+      end;
+      with Cmd.Parameters.AddParameter do
+      begin
+        Name := 'U';
+        DataType := ftWideString;
+        Direction := pdInput;
+        Value := UserLogin;
+      end;
+      Cmd.Execute;
+    end;
+  finally
+    Cmd.Free;
+  end;
+end;
+
+procedure TfrmGestionCentres.tvCentrosCustomEditValueChanged(
+  Sender: TcxCustomGridTableView; AItem: TcxCustomGridTableItem);
+var
+  Key, ColumnKey: string;
+  RecIdx, I: Integer;
+  CenterId: Integer;
+  ColDef: TCenterCustomCol;
+  Found: Boolean;
+  NewVal: Variant;
+begin
+  if AItem = nil then Exit;
+  if not FColKeyByTag.TryGetValue(AItem.Tag, Key) then Exit;
+  if Copy(Key, 1, 2) <> 'X:' then Exit;
+
+  ColumnKey := Copy(Key, 3, MaxInt);
+  Found := False;
+  ColDef := Default(TCenterCustomCol);
+  for I := 0 to High(FCustomCols) do
+    if SameText(FCustomCols[I].ColumnKey, ColumnKey) then
+    begin
+      ColDef := FCustomCols[I];
+      Found := True;
+      Break;
+    end;
+  if not Found then Exit;
+
+  RecIdx := Sender.Controller.FocusedRecordIndex;
+  if (RecIdx < 0) or (RecIdx > High(FCenterIds)) then Exit;
+  CenterId := FCenterIds[RecIdx];
+  if CenterId <= 0 then Exit;
+
+  // Capturar valor del editor en vivo
+  NewVal := Null;
+  if (Sender.Controller <> nil) and
+     (Sender.Controller.EditingController <> nil) and
+     (Sender.Controller.EditingController.Edit <> nil) then
+    NewVal := Sender.Controller.EditingController.Edit.EditingValue;
+  if VarIsNull(NewVal) or VarIsEmpty(NewVal) then
+    NewVal := AItem.EditValue;
+
+  try
+    SaveCustomFieldValue(CenterId, ColDef.ColumnKey, ColDef.DataType, NewVal);
+  except
+    on E: Exception do
+      ShowMessage('No se pudo guardar el valor: ' + E.Message);
+  end;
+end;
+
+procedure TfrmGestionCentres.btnConfigurarColumnasClick(Sender: TObject);
+begin
+  if uCentresCustomCols.TfrmCentresCustomCols.Execute then
+  begin
+    LoadCustomColumnDefs;
+    BuildCustomColumns;
+    LoadCentros;
+  end;
+end;
+
+procedure TfrmGestionCentres.btnAsignarMaquinasClick(Sender: TObject);
+var
+  Idx, CenterId: Integer;
+  Caption: string;
+begin
+  Idx := GetSelectedIdx;
+  if (Idx < 0) or (Idx > High(FCenterIds)) then
+  begin
+    ShowMessage('Selecciona primero un centro.');
+    Exit;
+  end;
+  CenterId := FCenterIds[Idx];
+  Caption := VarToStr(tvCentros.DataController.Values[Idx, colCentroCodigo.Index]) +
+             ' - ' + VarToStr(tvCentros.DataController.Values[Idx, colCentroTitulo.Index]);
+  TfrmAsignarMaquinasCentro.Execute(CenterId, Caption);
+end;
+
 end.

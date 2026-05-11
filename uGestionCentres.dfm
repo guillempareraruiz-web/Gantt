@@ -12,6 +12,7 @@ object frmGestionCentres: TfrmGestionCentres
   Font.Style = []
   Position = poScreenCenter
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
@@ -104,6 +105,25 @@ object frmGestionCentres: TfrmGestionCentres
       Caption = 'Guardar cambios'
       TabOrder = 2
       OnClick = btnSaveClick
+    end
+    object btnConfigurarColumnas: TButton
+      Left = 296
+      Top = 6
+      Width = 180
+      Height = 28
+      Caption = 'Configurar columnas...'
+      TabOrder = 3
+      Visible = False
+      OnClick = btnConfigurarColumnasClick
+    end
+    object btnAsignarMaquinas: TButton
+      Left = 484
+      Top = 6
+      Width = 180
+      Height = 28
+      Caption = 'Asignar m'#225'quinas...'
+      TabOrder = 4
+      OnClick = btnAsignarMaquinasClick
     end
   end
   object gridCentros: TcxGrid

@@ -212,8 +212,8 @@ object frmVistaGantt: TfrmVistaGantt
         Caption = 'Ir a fecha'
       end
       object Label7: TLabel
-        Left = 607
-        Top = 50
+        Left = 606
+        Top = 63
         Width = 78
         Height = 15
         Anchors = [akTop, akRight]
@@ -265,6 +265,36 @@ object frmVistaGantt: TfrmVistaGantt
         Caption = 'Refrescar'
         TabOrder = 0
         OnClick = btnRefreshClick
+      end
+      object btnAutoPlanSel: TButton
+        Left = 847
+        Top = 52
+        Width = 130
+        Height = 25
+        Anchors = [akTop, akRight]
+        Caption = 'Auto-planificar sel.'
+        TabOrder = 28
+        OnClick = btnAutoPlanSelClick
+      end
+      object btnAutoPlanAll: TButton
+        Left = 982
+        Top = 52
+        Width = 137
+        Height = 25
+        Anchors = [akTop, akRight]
+        Caption = 'Auto-planificar todo'
+        TabOrder = 29
+        OnClick = btnAutoPlanAllClick
+      end
+      object btnDesasignarSel: TButton
+        Left = 709
+        Top = 52
+        Width = 135
+        Height = 25
+        Anchors = [akTop, akRight]
+        Caption = 'Desasignar oper. sel.'
+        TabOrder = 30
+        OnClick = btnDesasignarSelClick
       end
       object spCentros: TcxSpinEdit
         Left = 276
@@ -392,8 +422,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button8: TButton
         Tag = 1
-        Left = 607
-        Top = 65
+        Left = 606
+        Top = 78
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -409,8 +439,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button9: TButton
         Tag = 2
-        Left = 631
-        Top = 65
+        Left = 630
+        Top = 78
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -425,8 +455,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button10: TButton
         Tag = 3
-        Left = 655
-        Top = 65
+        Left = 654
+        Top = 78
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -441,8 +471,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button11: TButton
         Tag = 4
-        Left = 679
-        Top = 65
+        Left = 678
+        Top = 78
         Width = 25
         Height = 25
         Anchors = [akTop, akRight]
@@ -457,7 +487,7 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object ComboBox1: TComboBox
         Left = 819
-        Top = 66
+        Top = 80
         Width = 253
         Height = 23
         Style = csDropDownList
@@ -537,8 +567,8 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object Button13: TButton
         Tag = 1
-        Left = 710
-        Top = 65
+        Left = 709
+        Top = 78
         Width = 52
         Height = 25
         Anchors = [akTop, akRight]
@@ -2159,18 +2189,22 @@ object frmVistaGantt: TfrmVistaGantt
       object odalaOF1: TMenuItem
         Tag = 1
         Caption = 'Toda la OF'
+        OnClick = odalaOF1Click
       end
       object odalaOF2: TMenuItem
         Tag = 1
         Caption = 'Toda la OF con prioridad'
         HelpContext = 1
+        OnClick = odalaOF1Click
       end
       object CompactarOFapartirdelNodo1: TMenuItem
         Caption = 'A partir del Nodo'
+        OnClick = odalaOF1Click
       end
       object ApartirdelNodoconprioridad1: TMenuItem
         Caption = 'A partir del Nodo con prioridad'
         HelpContext = 1
+        OnClick = odalaOF1Click
       end
     end
     object CompactarOT1: TMenuItem
@@ -2178,22 +2212,27 @@ object frmVistaGantt: TfrmVistaGantt
       object otalaOT1: TMenuItem
         Tag = 1
         Caption = 'Toda la OT'
+        OnClick = otalaOT1Click
       end
       object odalaOTconprioridad1: TMenuItem
         Tag = 1
         Caption = 'Toda la OT con prioridad'
         HelpContext = 1
+        OnClick = otalaOT1Click
       end
       object ApartirdelNodo1: TMenuItem
         Caption = 'A partir del Nodo'
+        OnClick = otalaOT1Click
       end
       object ApartirdelNodoconprioridad2: TMenuItem
         Caption = 'A partir del Nodo con prioridad'
         HelpContext = 1
+        OnClick = otalaOT1Click
       end
     end
     object ShiftRow2: TMenuItem
       Caption = 'ShiftRow'
+      OnClick = ShiftRow2Click
     end
     object N1: TMenuItem
       Caption = '-'
@@ -2202,14 +2241,17 @@ object frmVistaGantt: TfrmVistaGantt
       Caption = 'Color'
       object Colordelnode1: TMenuItem
         Caption = 'Color del node...'
+        OnClick = Colordelnode1Click
       end
       object ColordelaOrdendetrabajo1: TMenuItem
         Tag = 1
         Caption = 'Color de la Orden de trabajo...'
+        OnClick = Colordelnode1Click
       end
       object ColordelaOrdendeFabricacin1: TMenuItem
         Tag = 2
         Caption = 'Color de la Orden de Fabricaci'#243'n'
+        OnClick = Colordelnode1Click
       end
       object ColordelPedido1: TMenuItem
         Tag = -1
@@ -2224,6 +2266,7 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object ResaltarOF1: TMenuItem
       Caption = 'Resaltar OF'
+      OnClick = ResaltarOF1Click
     end
     object Info1: TMenuItem
       Caption = 'Info'

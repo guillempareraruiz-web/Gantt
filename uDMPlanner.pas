@@ -39,6 +39,7 @@ type
     FCalendarsRepo: TCalendarsRepo;
     FCentresRepo: TCentresRepo;
     FNodesRepo: TNodesRepo;
+    FNodeDataRepo: TNodeDataRepo;
     procedure BuildConnectionString;
     procedure SetCodigoEmpresa(AValue: SmallInt);
   public
@@ -59,12 +60,13 @@ type
     procedure LoadEmpresaInfo;
     procedure LoadCalendars;
     procedure LoadCentres;
-    procedure LoadNodes(ANodeDataRepo: TNodeDataRepo = nil);
+    procedure LoadNodes;
     function CountTable(const ATableName: string): Integer;
 
     property CalendarsRepo: TCalendarsRepo read FCalendarsRepo;
     property CentresRepo: TCentresRepo read FCentresRepo;
     property NodesRepo: TNodesRepo read FNodesRepo;
+    property NodeDataRepo: TNodeDataRepo read FNodeDataRepo;
 
     // Acceso al conector
     property Connector: IGanttDataConnector read FConnector;
@@ -131,6 +133,7 @@ begin
   FCalendarsRepo := TCalendarsRepo.Create(ADOConnection);
   FCentresRepo := TCentresRepo.Create(ADOConnection, FCalendarsRepo);
   FNodesRepo := TNodesRepo.Create(ADOConnection);
+  FNodeDataRepo := TNodeDataRepo.Create;
 end;
 
 procedure TDMPlanner.SetCodigoEmpresa(AValue: SmallInt);
@@ -144,6 +147,7 @@ end;
 
 destructor TDMPlanner.Destroy;
 begin
+  FNodeDataRepo.Free;
   FNodesRepo.Free;
   FCentresRepo.Free;
   FCalendarsRepo.Free;
@@ -162,10 +166,12 @@ begin
     FCentresRepo.LoadFromDB(FCodigoEmpresa);
 end;
 
-procedure TDMPlanner.LoadNodes(ANodeDataRepo: TNodeDataRepo);
+procedure TDMPlanner.LoadNodes;
 begin
+  if Assigned(FNodeDataRepo) then
+    FNodeDataRepo.Clear;
   if (FNodesRepo <> nil) and IsConnected and (FCurrentProjectId > 0) then
-    FNodesRepo.LoadFromDB(FCodigoEmpresa, FCurrentProjectId, ANodeDataRepo);
+    FNodesRepo.LoadFromDB(FCodigoEmpresa, FCurrentProjectId, FNodeDataRepo);
 end;
 
 function TDMPlanner.CountTable(const ATableName: string): Integer;

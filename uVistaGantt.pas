@@ -36,7 +36,7 @@ uses
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
   uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttCentres, uGanttTypes, uErpTypes,
   System.Generics.Collections, System.Threading, System.Math, uHelpGuide,
-  uOperariosTypes, System.Variants;
+  uOperariosTypes, System.Variants, uColorPalette64LayeredPopup;
 type
   // Items agregados de nodos usados para calculo de KPIs por centro.
   TNodeKPIItem = record
@@ -73,6 +73,9 @@ type
     lblRedoCount: TLabel;
     Label19: TLabel;
     btnRefresh: TButton;
+    btnAutoPlanSel: TButton;
+    btnAutoPlanAll: TButton;
+    btnDesasignarSel: TButton;
     spCentros: TcxSpinEdit;
     cxSpinEdit2: TcxSpinEdit;
     dtFechaInicioGantt: TcxDateEdit;
@@ -257,6 +260,9 @@ type
     procedure GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
     procedure GanttMarkerDblClick(Sender: TObject; const MarkerId: Integer);
     procedure miAsignarOperariosClick(Sender: TObject);
+    procedure btnAutoPlanSelClick(Sender: TObject);
+    procedure btnAutoPlanAllClick(Sender: TObject);
+    procedure btnDesasignarSelClick(Sender: TObject);
     procedure miGestionOperariosClick(Sender: TObject);
     procedure miEditarLinksClick(Sender: TObject);
     procedure CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
@@ -308,6 +314,11 @@ type
     procedure LibreMovimiento1Click(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
     procedure Resetduracinoriginal1Click(Sender: TObject);
+    procedure ShiftRow2Click(Sender: TObject);
+    procedure Colordelnode1Click(Sender: TObject);
+    procedure odalaOF1Click(Sender: TObject);
+    procedure otalaOT1Click(Sender: TObject);
+    procedure ResaltarOF1Click(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -321,6 +332,8 @@ type
 
     procedure UpdateKPIs;
 
+    procedure GanttControlVerticalScrolled(const ScrollY: Single);
+
     function BuildNodeKPIItemsFromGanttNodes: TArray<TNodeKPIItem>;
     function CalcCentreKPI_FastPrecomputed(
       const ANodes: TArray<TNodeKPIItem>;
@@ -332,14 +345,12 @@ type
     FGanttControl: TGanttControl;
     FTimelineControl: TGanttTimelineControl;
     FCentrosControl: TGanttCentresControl;
-    FNodeRepo: TNodeDataRepo;
     FOperariosRepo: TOperariosRepo;
     FMoldeRepo: TMoldeRepo;
 
     procedure GoToDate(const ADate: TDateTime);
 
     constructor CreateVista(AOwner: TComponent;
-      ANodeRepo: TNodeDataRepo;
       AOperariosRepo: TOperariosRepo;
       AMoldeRepo: TMoldeRepo;
       ACustomFieldDefs: TCustomFieldDefs;
@@ -369,6 +380,62 @@ uses
 
 
 
+procedure TfrmVistaGantt.Colordelnode1Click(Sender: TObject);
+ var
+  P: TPoint;
+  F: TColorPalette64LayeredPopup;
+  iTag: Integer;
+  SelIndexes: TArray<Integer>;
+begin
+
+  iTag := TMenuItem(Sender).Tag;
+
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then Exit;
+
+  P := Mouse.CursorPos; // coordenades de pantalla
+
+  F := TColorPalette64LayeredPopup.Create(Self);
+  F.PopupAtScreen(P.X, P.Y,
+    procedure(const C: TColor)
+    var
+      I: Integer;
+      node: TNode;
+      d: TNodeData;
+      iOT, iOF: Integer;
+      sOF, sOT: String;
+    begin
+        for I := 0 to High(SelIndexes) do
+        begin
+          node := FGanttControl.GetNodeAt(SelIndexes[I]);
+
+          if (node.DataId = 0) or (not DMPlanner.NodeDataRepo.TryGetById(node.DataId, d)) then
+            Continue;
+
+          sOT := d.NumeroTrabajo;
+          iOT := strtointdef(d.NumeroTrabajo,0);
+          iOF := d.NumeroOrdenFabricacion;
+          sOF := d.SerieFabricacion;
+
+          case iTag of
+          0: begin //...assignem color a node
+               FGanttControl.ApplyOpColorsByNode(node.DataId, octOnlyNode, c, AdjustColorBrightness(c, -40));
+             end;
+          1: begin //...assignem color a node i OT
+               FGanttControl.ApplyOpColorsByNode(node.DataId, octByTrabajo, c, AdjustColorBrightness(c, -40), sOT, sOF, iOF);
+             end;
+          2: begin //...assignem color a node i OF
+               FGanttControl.ApplyOpColorsByNode(node.DataId, octByFabricacionSerie, c, AdjustColorBrightness(c, -40), '', sOF, iOF);
+             end;
+          end;
+        end;
+
+        FGanttControl.Invalidate;
+    end,
+    160, 160);
+
+end;
+
 procedure TfrmVistaGantt.ComboBox1Change(Sender: TObject);
 begin
     case ComboBox1.itemindex of
@@ -379,7 +446,6 @@ begin
 end;
 
 constructor TfrmVistaGantt.CreateVista(AOwner: TComponent;
-  ANodeRepo: TNodeDataRepo;
   AOperariosRepo: TOperariosRepo;
   AMoldeRepo: TMoldeRepo;
   ACustomFieldDefs: TCustomFieldDefs;
@@ -387,7 +453,6 @@ constructor TfrmVistaGantt.CreateVista(AOwner: TComponent;
 begin
   inherited Create(AOwner);
   FCentreKPIs := TDictionary<Integer, TCentreKPI>.Create;
-  FNodeRepo := ANodeRepo;
   FOperariosRepo := AOperariosRepo;
   FMoldeRepo := AMoldeRepo;
   FCustomFieldDefs := ACustomFieldDefs;
@@ -417,7 +482,8 @@ begin
   FGanttControl.PopupMenu := popGantt;
   // Importante: el Gantt necesita el repo para resolver NodeData al pintar.
   // Sin esto, BuildDataIdIndex/RebuildLayout acceden a puntero nil.
-  FGanttControl.SetNodeRepo(FNodeRepo);
+  FGanttControl.SetNodeRepo(DMPlanner.NodeDataRepo);
+
   FCentrosControl := TGanttCentresControl.Create(Self);
   FCentrosControl.Parent := pnlCentros;
   FCentrosControl.Align := alLeft;
@@ -427,6 +493,7 @@ begin
   // Cablear eventos (stubs por ahora — lógica real en pasos siguientes)
   FTimelineControl.OnViewportChanged := TimelineViewportChanged;
   FTimelineControl.OnInteraction := TimelineInteraction;
+
   FGanttControl.OnViewportChanged := GanttViewportChanged;
   FGanttControl.OnScrollYChanged := GanttScrollYChanged;
   FGanttControl.OnNodeDblClick := GanttNodeDblClick;
@@ -436,6 +503,7 @@ begin
   FGanttControl.OnNodeSelected := GanttNodeSelected;
   FGanttControl.OnVoid := GanttVoidClick;
   FGanttControl.OnFechaBloqueoChanged := GanttFechaBloqueoChanged;
+
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
 
 end;
@@ -497,6 +565,12 @@ begin
 
 end;
 
+procedure TfrmVistaGantt.GanttControlVerticalScrolled(const ScrollY: Single);
+begin
+  if Assigned(FCentrosControl) then
+   FCentrosControl.ScrollY := ScrollY;
+end;
+
 procedure TfrmVistaGantt.FormCreate(Sender: TObject);
 var
   Modo: string;
@@ -553,7 +627,7 @@ procedure TfrmVistaGantt.Indicadores1Click(Sender: TObject);
 begin
   TfrmCentresKPI.Execute(Self,
   DMPlanner.CentresRepo.GetAll,
-  FGanttControl, FNodeRepo, FOperariosRepo,
+  FGanttControl, DMPlanner.NodeDataRepo, FOperariosRepo,
   FGanttControl.FindCentreIndexById(FCentrosControl.SelectedCentreId));
 end;
 
@@ -708,7 +782,7 @@ begin
     FGanttControl.ShowHint := True;
     FGanttControl.NodePopupMenu := popNode;
     FGanttControl.PopupMenu := popGantt;
-    FGanttControl.SetNodeRepo(FNodeRepo);
+    FGanttControl.SetNodeRepo(DMPlanner.NodeDataRepo);
     FGanttControl.OnViewportChanged := GanttViewportChanged;
     FGanttControl.OnScrollYChanged := GanttScrollYChanged;
     FGanttControl.OnNodeDblClick := GanttNodeDblClick;
@@ -796,8 +870,8 @@ begin
     Exit;
   end;
 
-  FGantt.SetSearchResults(nodes, True);
-  FGantt.SelectNodeByIndex(nodes[0], True);
+  FGanttControl.SetSearchResults(nodes, True);
+  FGanttControl.SelectNodeByIndex(nodes[0], True);
 end;
 
 procedure TfrmVistaGantt.Button20Click(Sender: TObject);
@@ -997,8 +1071,8 @@ begin
     FCentrosControl.SetCentres(Centres);
   end;
   // Cargar nodos reales del proyecto activo desde BD.
-  // LoadNodes limpia y rellena el FNodeRepo con los NodeData correspondientes.
-  DMPlanner.LoadNodes(FNodeRepo);
+  // LoadNodes limpia y rellena el DMPlanner.NodeDataRepo con los NodeData correspondientes.
+  DMPlanner.LoadNodes;
   if DMPlanner.NodesRepo <> nil then
     Nodes := DMPlanner.NodesRepo.GetAll
   else
@@ -1172,10 +1246,10 @@ begin
 
   n := FGanttControl.SelectedNode;
 
-  if FNodeRepo.TryGetById(n.DataId, D) then
+  if DMPlanner.NodeDataRepo.TryGetById(n.DataId, D) then
   begin
     D.LibreMoviment := LibreMovimiento1.Checked;
-    FNodeRepo.AddOrUpdate(D);
+    DMPlanner.NodeDataRepo.AddOrUpdate(D);
   end;
 end;
 
@@ -1351,6 +1425,11 @@ begin
   FGanttControl.ShiftLeftSequentialCentresFromDate( FGanttControl.FClickDatetime, 0);
 end;
 
+procedure TfrmVistaGantt.ShiftRow2Click(Sender: TObject);
+begin
+  FGanttControl.ShiftLeftSequentialCentresFromDate( FGanttControl.FClickDatetime, 0);
+end;
+
 procedure TfrmVistaGantt.ShiftRowallimpact1Click(Sender: TObject);
 begin
   FGanttControl.ShiftLeftAllImpactedSequentialFromDate( FGanttControl.FClickDatetime, 0);
@@ -1358,10 +1437,10 @@ end;
 
 procedure TfrmVistaGantt.UpdateHistoryButtons;
 begin
-  btnUndo.Enabled := FGantt.CanUndo;
-  btnRedo.Enabled := FGantt.CanRedo;
-  lblUndoCount.Caption := IntToStr(FGantt.UndoCount);
-  lblRedoCount.Caption := IntToStr(FGantt.RedoCount);
+  btnUndo.Enabled := FGanttControl.CanUndo;
+  btnRedo.Enabled := FGanttControl.CanRedo;
+  lblUndoCount.Caption := IntToStr(FGanttControl.UndoCount);
+  lblRedoCount.Caption := IntToStr(FGanttControl.RedoCount);
 end;
 
 
@@ -1465,12 +1544,16 @@ var
 begin
   if NodeIndex < 0 then Exit;
   node := FGanttControl.SelectedNode;
-  if not FNodeRepo.TryGetById(node.DataId, ANodeData) then Exit;
+  if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, ANodeData) then Exit;
 
   if TfrmNodeInspector.Execute(ANodeData, False, FCustomFieldDefs) then
   begin
-    FNodeRepo.AddOrUpdate(ANodeData);
+    ANodeData.Modified := True;
+    DMPlanner.NodeDataRepo.AddOrUpdate(ANodeData);
     FGanttControl.Invalidate;
+    // Notificar al Main para que el AutoSaver persista el cambio en BD.
+    if Assigned(Form1) then
+      Form1.NotifyPlanModified([ANodeData.DataId]);
   end;
 
 end;
@@ -1546,7 +1629,7 @@ begin
     Result[I].StartTime  := N.StartTime;
     Result[I].EndTime    := N.EndTime;
     Result[I].DurationMin := N.DurationMin;
-    if (FNodeRepo <> nil) and FNodeRepo.TryGetById(N.DataId, D) then
+    if (DMPlanner.NodeDataRepo <> nil) and DMPlanner.NodeDataRepo.TryGetById(N.DataId, D) then
       Result[I].OperariosAsignados := D.OperariosAsignados
     else
       Result[I].OperariosAsignados := 0;
@@ -1778,6 +1861,16 @@ begin
   end;
 end;
 
+procedure TfrmVistaGantt.ResaltarOF1Click(Sender: TObject);
+var
+  idx: Integer;
+  node: TNode;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+  FGanttControl.HighlightOF(idx);
+end;
+
 procedure TfrmVistaGantt.Resetduracinoriginal1Click(Sender: TObject);
 begin
   FGanttControl.ResetNodeDuration(FGanttControl.SelectedNodeIndex);
@@ -1797,6 +1890,37 @@ begin
   finally
     Frm.Free;
   end;
+end;
+
+procedure TfrmVistaGantt.odalaOF1Click(Sender: TObject);
+var
+  idx: Integer;
+  iAllOF, iPrioridad: Integer;
+begin
+
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  iAllOF := TMenuItem(Sender).Tag;
+  iPrioridad := TMenuItem(Sender).HelpContext;
+
+  FGanttControl.CompactOFFromNode( idx, 0, (iAllOF=1) , (iPrioridad=1) );
+end;
+
+procedure TfrmVistaGantt.otalaOT1Click(Sender: TObject);
+var
+  idx: Integer;
+  iAllOT, iPrioridad: Integer;
+begin
+
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  iAllOT := TMenuItem(Sender).Tag;
+  iPrioridad := TMenuItem(Sender).HelpContext;
+
+  FGanttControl.CompactOTFromNode( idx, 0, (iAllOT=1) , (iPrioridad=1) );
+
 end;
 
 procedure TfrmVistaGantt.miAsignarOperariosClick(Sender: TObject);
@@ -1819,14 +1943,14 @@ begin
   if Length(SelIndexes) = 1 then
   begin
     node := FGanttControl.GetNodeAt(SelIndexes[0]);
-    if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+    if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, D) then Exit;
 
     if TfrmAssignOperaris.Execute(
       FOperariosRepo, D.DataId, D.Operacion,
       D.DurationMin, D.OperariosNecesarios, AssignCount) then
     begin
       D.OperariosAsignados := AssignCount;
-      FNodeRepo.AddOrUpdate(D);
+      DMPlanner.NodeDataRepo.AddOrUpdate(D);
       FGanttControl.Invalidate;
     end;
     Exit;
@@ -1842,7 +1966,7 @@ begin
     if (SelIndexes[I] < 0) or (SelIndexes[I] > FGanttControl.NodeCount - 1) then
       Continue;
     node := FGanttControl.GetNodeAt(SelIndexes[I]);
-    if not FNodeRepo.TryGetById(node.DataId, D) then Continue;
+    if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, D) then Continue;
 
     SetLength(DataIds, Length(DataIds) + 1);
     DataIds[High(DataIds)] := D.DataId;
@@ -1859,10 +1983,10 @@ begin
   begin
     for I := 0 to High(DataIds) do
     begin
-      if FNodeRepo.TryGetById(DataIds[I], D) then
+      if DMPlanner.NodeDataRepo.TryGetById(DataIds[I], D) then
       begin
         D.OperariosAsignados := FOperariosRepo.CountAssignatsAlNode(DataIds[I]);
-        FNodeRepo.AddOrUpdate(D);
+        DMPlanner.NodeDataRepo.AddOrUpdate(D);
       end;
     end;
     FGanttControl.Invalidate;
@@ -1888,7 +2012,7 @@ begin
   if idx < 0 then Exit;
 
   node := FGanttControl.SelectedNode;
-  if not FNodeRepo.TryGetById(node.DataId, D) then Exit;
+  if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, D) then Exit;
 
   AllLinks := FGanttControl.GetLinks;
   LinkIdxs := FGanttControl.GetLinksForNode(node.Id);
@@ -1911,7 +2035,7 @@ begin
       if (OtherIdx >= 0) then
       begin
         OtherNode := FGanttControl.GetNodeAt(OtherIdx);
-        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
+        if DMPlanner.NodeDataRepo.TryGetById(OtherNode.DataId, OtherData) then
           Items[I].ToCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
         else
           Items[I].ToCaption := 'Node ' + IntToStr(AllLinks[J].ToNodeId);
@@ -1926,7 +2050,7 @@ begin
       if (OtherIdx >= 0) then
       begin
         OtherNode := FGanttControl.GetNodeAt(OtherIdx);
-        if FNodeRepo.TryGetById(OtherNode.DataId, OtherData) then
+        if DMPlanner.NodeDataRepo.TryGetById(OtherNode.DataId, OtherData) then
           Items[I].FromCaption := OtherData.Operacion + ' (OF ' + IntToStr(OtherData.NumeroOrdenFabricacion) + ')'
         else
           Items[I].FromCaption := 'Node ' + IntToStr(AllLinks[J].FromNodeId);
@@ -2008,6 +2132,81 @@ begin
       DeletedSet.Free;
     end;
   end;
+end;
+
+procedure TfrmVistaGantt.btnAutoPlanSelClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  I: Integer;
+  Ids: TArray<Integer>;
+  N: TNode;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then
+  begin
+    ShowMessage('Selecciona al menos un nodo en el Gantt para planificar.');
+    Exit;
+  end;
+  SetLength(Ids, Length(SelIndexes));
+  for I := 0 to High(SelIndexes) do
+  begin
+    N := FGanttControl.GetNodeAt(SelIndexes[I]);
+    Ids[I] := N.DataId;
+  end;
+  if Assigned(Form1) then
+    Form1.LaunchAutoPlanificacion(Ids);
+  FGanttControl.Invalidate;
+end;
+
+procedure TfrmVistaGantt.btnAutoPlanAllClick(Sender: TObject);
+begin
+  if Assigned(Form1) then
+    Form1.LaunchAutoPlanificacion([]);  // [] = todo el plan
+  if Assigned(FGanttControl) then
+    FGanttControl.Invalidate;
+end;
+
+procedure TfrmVistaGantt.btnDesasignarSelClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  I: Integer;
+  N: TNode;
+  D: TNodeData;
+  Ids: TArray<Integer>;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then
+  begin
+    ShowMessage('Selecciona al menos un nodo en el Gantt.');
+    Exit;
+  end;
+  if MessageDlg(Format('?Quitar TODAS las asignaciones de operarios de %d nodo(s)?',
+       [Length(SelIndexes)]),
+     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  if not Assigned(FOperariosRepo) or not Assigned(DMPlanner.NodeDataRepo) then
+    Exit;
+
+  SetLength(Ids, Length(SelIndexes));
+  for I := 0 to High(SelIndexes) do
+  begin
+    N := FGanttControl.GetNodeAt(SelIndexes[I]);
+    Ids[I] := N.DataId;
+    FOperariosRepo.ClearAsignacionsByNode(N.DataId);
+    if DMPlanner.NodeDataRepo.TryGetById(N.DataId, D) then
+    begin
+      D.OperariosAsignados := 0;
+      D.Modified := True;
+      DMPlanner.NodeDataRepo.AddOrUpdate(D);
+    end;
+  end;
+
+  FGanttControl.RebuildLayout;
+  FGanttControl.Invalidate;
+  if Assigned(Form1) then
+    Form1.NotifyPlanModified(Ids);
 end;
 
 end.

@@ -110,6 +110,94 @@ type
     Links: TArray<TErpLink>;
   end;
 
+  // ==========================================================================
+  // Tipos neutros para lectura de detalle de Pedido (multi-ERP).
+  // Cada implementacion concreta (Sage 200, SAP, Dynamics...) traduce de su
+  // dialecto a estos registros.
+  // ==========================================================================
+  TPedidoCabecera = record
+    Encontrado: Boolean;     // False = no existe en el ERP
+    SeriePedido: string;
+    NumeroPedido: Integer;
+    EjercicioPedido: SmallInt;
+    FechaPedido: TDateTime;
+    FechaTope: TDateTime;
+    NumeroLineas: Integer;
+    CodigoCliente: string;
+    RazonSocial: string;
+    NombreComercial: string;
+    CifDni: string;
+    Domicilio: string;
+    CodigoPostal: string;
+    Municipio: string;
+    Provincia: string;
+    Nacion: string;
+    FormaPago: string;
+    NumeroPlazos: Integer;
+    CodigoDivisa: string;
+    FactorCambio: Double;
+    BaseImponible: Double;
+    TotalIva: Double;
+    ImporteLiquido: Double;
+    Aprobado: Boolean;
+    Comentario: string;
+    Comentarios: string;
+  end;
+
+  TPedidoLinea = record
+    Orden: Integer;
+    CodigoArticulo: string;
+    DescripcionArticulo: string;
+    CodigoAlmacen: string;
+    Unidades: Double;
+    UnidadMedida: string;
+    Precio: Double;
+    Descuento1: Double;
+    Descuento2: Double;
+    ImporteLiquido: Double;
+    FechaServicio: TDateTime;
+    FechaNecesaria: TDateTime;
+    UnidadesServidas: Double;
+    UnidadesPendientes: Double;
+    Comentario: string;
+  end;
+
+  // ==========================================================================
+  // Tipos neutros para lectura de Formula / Escandall (multi-ERP).
+  // ==========================================================================
+  TFormulaCabecera = record
+    Encontrada: Boolean;
+    CodigoArticulo: string;
+    DescripcionArticulo: string;
+    Version: SmallInt;        // 'Formula' en Sage; identificador de version
+    CosteArticulos: Double;
+  end;
+
+  TFormulaComponente = record
+    Orden: Integer;
+    CodigoArticuloComponente: string;
+    DescripcionArticulo: string;
+    UnidadesNecesarias: Double;
+    UnidadMedida: string;
+    Mermas: Double;
+    CosteUnitario: Double;
+    CosteComponente: Double;
+    EsSemielaborado: Boolean;       // True si tiene formula propia
+    VersionFormulaComp: SmallInt;   // version de la formula del semielab. (0 si N/A)
+    OperacionAsociada: string;      // operacion donde se consume
+  end;
+
+  TFormulaOperacion = record
+    Orden: Integer;
+    Operacion: string;
+    DescripcionOperacion: string;
+    CentroTrabajo: string;
+    TiempoPreparacionMin: Double;
+    TiempoFabricacionMin: Double;
+    TiempoTotalMin: Double;
+    EsExterna: Boolean;
+  end;
+
 implementation
 
 end.
