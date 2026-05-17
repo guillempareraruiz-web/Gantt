@@ -336,8 +336,25 @@
         <DCCReference Include="uErpSelector.pas">
             <Form>frmErpSelector</Form>
         </DCCReference>
-        <DCCReference Include="uErpPrefsSage200.pas">
-            <Form>frmErpPrefsSage200</Form>
+        <DCCReference Include="uErpExplorer.pas">
+            <Form>frmErpExplorer</Form>
+        </DCCReference>
+        <DCCReference Include="uRttiGridFiller.pas"/>
+        <DCCReference Include="uStockProjection.pas"/>
+        <DCCReference Include="uArticuloPicker.pas">
+            <Form>frmArticuloPicker</Form>
+        </DCCReference>
+        <DCCReference Include="uArticleDetail.pas">
+            <Form>frmArticleDetail</Form>
+        </DCCReference>
+        <DCCReference Include="uStockCockpit.pas">
+            <Form>frmStockCockpit</Form>
+        </DCCReference>
+        <DCCReference Include="uDashboardOperativo.pas">
+            <Form>frmDashboardOperativo</Form>
+        </DCCReference>
+        <DCCReference Include="uOFInspector.pas">
+            <Form>frmOFInspector</Form>
         </DCCReference>
         <DCCReference Include="uInstallWizard.pas">
             <Form>frmInstallWizard</Form>

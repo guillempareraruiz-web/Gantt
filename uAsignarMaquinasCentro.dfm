@@ -12,8 +12,8 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
   Font.Style = []
   Position = poScreenCenter
   OnCreate = FormCreate
-  OnShow = FormShow
   OnDestroy = FormDestroy
+  OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
@@ -29,7 +29,7 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 162
+      Width = 153
       Height = 25
       Caption = 'Asignar m'#225'quinas'
       Font.Charset = DEFAULT_CHARSET
@@ -42,7 +42,7 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
     object lblSubtitle: TLabel
       Left = 16
       Top = 36
-      Width = 180
+      Width = 182
       Height = 15
       Caption = 'Marca las m'#225'quinas de este centro'
       Font.Charset = DEFAULT_CHARSET
@@ -97,8 +97,6 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
       DataController.Summary.SummaryGroups = <>
       OptionsData.Deleting = False
       OptionsData.Inserting = False
-      OptionsData.Editing = True
-      OptionsSelection.CellSelect = True
       OptionsView.GroupByBox = False
       OptionsView.Indicator = True
       object colSel: TcxGridColumn

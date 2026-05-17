@@ -115,7 +115,7 @@ implementation
 
 uses
   System.IOUtils,
-  uDMPlanner, uDataConnector, uErpPrefsSage200;
+  uDMPlanner, uDataConnector, uErpExplorer;
 
 function NeedsInstallWizard: Boolean;
 var
@@ -672,7 +672,7 @@ begin
   end;
   case FErpSeleccionado of
     esSage200:
-      if TfrmErpPrefsSage200.Execute then
+      if TfrmErpExplorer.Execute then
       begin
         FErpConnHecho := True;
         SetErpConnEstado('Conexi'#243'n con Sage 200 configurada.', clGreen);

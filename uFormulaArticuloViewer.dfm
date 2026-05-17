@@ -11,8 +11,8 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
   Font.Name = 'Segoe UI'
   Font.Style = []
   Position = poScreenCenter
-  OnShow = FormShow
   OnDestroy = FormDestroy
+  OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
@@ -28,7 +28,7 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 100
+      Width = 69
       Height = 25
       Caption = 'Art'#237'culo'
       Font.Charset = DEFAULT_CHARSET
@@ -41,7 +41,7 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
     object lblSubtitle: TLabel
       Left = 16
       Top = 36
-      Width = 200
+      Width = 94
       Height = 15
       Caption = 'Visor de escandall'
       Font.Charset = DEFAULT_CHARSET
@@ -82,6 +82,12 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
     Color = clWhite
     ParentBackground = False
     TabOrder = 2
+    object splitter: TSplitter
+      Left = 440
+      Top = 0
+      Height = 540
+      ResizeStyle = rsUpdate
+    end
     object pnlLeft: TPanel
       Left = 0
       Top = 0
@@ -105,7 +111,7 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
         object lblVersion: TLabel
           Left = 8
           Top = 10
-          Width = 50
+          Width = 47
           Height = 15
           Caption = 'F'#243'rmula:'
         end
@@ -138,61 +144,62 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
           item
           end>
         LookAndFeel.NativeStyle = False
+        LookAndFeel.ScrollbarMode = sbmClassic
         LookAndFeel.SkinName = 'Office2019Colorful'
+        Navigator.Buttons.CustomButtons = <>
         OptionsBehavior.CellHints = True
         OptionsBehavior.IncSearch = True
         OptionsCustomizing.BandMoving = False
         OptionsData.Editing = False
         OptionsSelection.CellSelect = False
-        OptionsSelection.MultiSelect = False
+        OptionsView.ColumnAutoWidth = True
         OptionsView.GridLines = tlglBoth
         OptionsView.ShowRoot = False
+        ScrollbarAnnotations.CustomAnnotations = <>
         TabOrder = 1
-        OnFocusedNodeChanged = tlFormulaFocusedNodeChanged
         OnExpanding = tlFormulaExpanding
+        OnFocusedNodeChanged = tlFormulaFocusedNodeChanged
         object colTLArticulo: TcxTreeListColumn
           Caption.Text = 'Estructura'
-          DataBinding.ValueType = 'String'
+          MinWidth = 220
           Width = 220
           Position.ColIndex = 0
           Position.RowIndex = 0
           Position.BandIndex = 0
-          SortOrder = soNone
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colTLTipo: TcxTreeListColumn
           Caption.Text = 'Tipo'
-          DataBinding.ValueType = 'String'
-          Width = 75
+          MinWidth = 80
+          Width = 80
           Position.ColIndex = 1
           Position.RowIndex = 0
           Position.BandIndex = 0
-          SortOrder = soNone
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colTLUnidades: TcxTreeListColumn
           Caption.Text = 'Unidades'
-          DataBinding.ValueType = 'String'
-          Width = 70
+          MinWidth = 80
+          Width = 80
           Position.ColIndex = 2
           Position.RowIndex = 0
           Position.BandIndex = 0
-          SortOrder = soNone
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colTLCentro: TcxTreeListColumn
           Caption.Text = 'Centro'
-          DataBinding.ValueType = 'String'
-          Width = 75
+          MinWidth = 80
+          Width = 80
           Position.ColIndex = 3
           Position.RowIndex = 0
           Position.BandIndex = 0
-          SortOrder = soNone
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
       end
-    end
-    object splitter: TSplitter
-      Left = 440
-      Top = 0
-      Height = 540
-      ResizeStyle = rsUpdate
     end
     object pnlRight: TPanel
       Left = 443
@@ -203,7 +210,15 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
       BevelOuter = bvNone
       Color = clWhite
       ParentBackground = False
-      TabOrder = 2
+      TabOrder = 1
+      object splitterRight: TSplitter
+        Left = 0
+        Top = 260
+        Width = 757
+        Height = 4
+        Cursor = crVSplit
+        Align = alTop
+      end
       object pnlComponentes: TPanel
         Left = 0
         Top = 0
@@ -217,7 +232,7 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
         object lblComponentes: TLabel
           Left = 12
           Top = 6
-          Width = 100
+          Width = 85
           Height = 17
           Caption = 'Componentes'
           Font.Charset = DEFAULT_CHARSET
@@ -229,11 +244,12 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
         end
         object gridComponentes: TcxGrid
           Left = 0
-          Top = 28
+          Top = 0
           Width = 757
-          Height = 232
+          Height = 260
           Align = alClient
           TabOrder = 0
+          LookAndFeel.ScrollbarMode = sbmClassic
           object tvComponentes: TcxGridTableView
             Navigator.Buttons.CustomButtons = <>
             ScrollbarAnnotations.CustomAnnotations = <>
@@ -250,14 +266,6 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
           end
         end
       end
-      object splitterRight: TSplitter
-        Left = 0
-        Top = 260
-        Width = 757
-        Height = 4
-        Cursor = crVSplit
-        Align = alTop
-      end
       object pnlOperaciones: TPanel
         Left = 0
         Top = 264
@@ -267,11 +275,11 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
         BevelOuter = bvNone
         Color = clWhite
         ParentBackground = False
-        TabOrder = 2
+        TabOrder = 1
         object lblOperaciones: TLabel
           Left = 12
           Top = 6
-          Width = 100
+          Width = 76
           Height = 17
           Caption = 'Operaciones'
           Font.Charset = DEFAULT_CHARSET
@@ -283,11 +291,12 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
         end
         object gridOperaciones: TcxGrid
           Left = 0
-          Top = 28
+          Top = 0
           Width = 757
-          Height = 248
+          Height = 276
           Align = alClient
           TabOrder = 0
+          LookAndFeel.ScrollbarMode = sbmClassic
           object tvOperaciones: TcxGridTableView
             Navigator.Buttons.CustomButtons = <>
             ScrollbarAnnotations.CustomAnnotations = <>

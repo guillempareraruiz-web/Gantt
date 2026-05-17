@@ -199,6 +199,24 @@ object Form1: TForm1
         OnClick = ReglasPlanificacion1Click
       end
     end
+    object Funcionalidades1: TMenuItem
+      Caption = 'An'#225'lisis'
+      object DashboardOperativo1: TMenuItem
+        Caption = 'Dashboard general...'
+        OnClick = DashboardOperativo1Click
+      end
+      object N5: TMenuItem
+        Caption = '-'
+      end
+      object StockCockpit1: TMenuItem
+        Caption = 'An'#225'lisis de stock...'
+        OnClick = StockCockpit1Click
+      end
+      object ArticleDetail1: TMenuItem
+        Caption = 'An'#225'lisis de art'#237'culo...'
+        OnClick = ArticleDetail1Click
+      end
+    end
     object Ayuda1: TMenuItem
       Caption = 'Ayuda'
       object Acercade1: TMenuItem

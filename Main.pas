@@ -68,6 +68,11 @@ type
     MnGantt: TMenuItem;
     N2: TMenuItem;
     Indicadoresdecentros1: TMenuItem;
+    Funcionalidades1: TMenuItem;
+    DashboardOperativo1: TMenuItem;
+    N5: TMenuItem;
+    StockCockpit1: TMenuItem;
+    ArticleDetail1: TMenuItem;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -75,6 +80,9 @@ type
     procedure Proyectos1Click(Sender: TObject);
     procedure ConfigEmpresa1Click(Sender: TObject);
     procedure SelectorErp1Click(Sender: TObject);
+    procedure StockCockpit1Click(Sender: TObject);
+    procedure ArticleDetail1Click(Sender: TObject);
+    procedure DashboardOperativo1Click(Sender: TObject);
     procedure AsistenteInstalacion1Click(Sender: TObject);
     procedure GenerarNodosDemo1Click(Sender: TObject);
     procedure Dashboard1Click(Sender: TObject);
@@ -181,7 +189,9 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
   uGestionProyectos, uGestionAreas, uGestionDepartamentos,
   uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uInstallWizard,
-  uDataConnector, uUserPrefs;
+  uDataConnector, uUserPrefs,
+  uErpReader, uErpReaderFactory, uArticleDetail, uStockCockpit,
+  uDashboardOperativo;
 
 {$R *.dfm}
 
@@ -1233,6 +1243,48 @@ begin
     Exit;
   end;
   TfrmErpSelector.Execute;
+end;
+
+procedure TForm1.StockCockpit1Click(Sender: TObject);
+var
+  Reader: IErpReader;
+begin
+  Reader := GetActiveErpReader;
+  if Reader = nil then
+  begin
+    ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
+      + ' Configuraci'#243'n > Selector de ERP.');
+    Exit;
+  end;
+  TfrmStockCockpit.Execute(Reader);
+end;
+
+procedure TForm1.DashboardOperativo1Click(Sender: TObject);
+var
+  Reader: IErpReader;
+begin
+  Reader := GetActiveErpReader;
+  if Reader = nil then
+  begin
+    ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
+      + ' Configuraci'#243'n > Selector de ERP.');
+    Exit;
+  end;
+  TfrmDashboardOperativo.Execute(Reader);
+end;
+
+procedure TForm1.ArticleDetail1Click(Sender: TObject);
+var
+  Reader: IErpReader;
+begin
+  Reader := GetActiveErpReader;
+  if Reader = nil then
+  begin
+    ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
+      + ' Configuraci'#243'n > Selector de ERP.');
+    Exit;
+  end;
+  TfrmArticleDetail.Execute(Reader);
 end;
 
 procedure TForm1.AsistenteInstalacion1Click(Sender: TObject);

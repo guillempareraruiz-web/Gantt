@@ -49,7 +49,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uAppConfig, uErpPrefsSage200;
+  uAppConfig, uErpExplorer;
 
 class function TfrmErpSelector.Execute: Boolean;
 var
@@ -229,7 +229,7 @@ procedure TfrmErpSelector.btnPreferenciasClick(Sender: TObject);
 begin
   case FSeleccionado of
     esSage200:
-      TfrmErpPrefsSage200.Execute;
+      TfrmErpExplorer.Execute;
   else
     ShowMessage('Preferencias para ' + ERP_SISTEMAS[FSeleccionado].Nombre +
       ' a'#250'n no implementadas.');
