@@ -71,6 +71,7 @@ type
     function DateTimeToSQL(const DT: TDateTime): string;
     function TimeToSQL(const T: TDateTime): string;
     function ColorToSQL(C: Integer): string;
+    function FloatToSQL(const V: Double): string;
     function SQLToColor(const V: Variant): Integer;
     function SQLToDateTime(const V: Variant): TDateTime;
     function SQLToStr(const V: Variant): string;
@@ -226,6 +227,11 @@ begin
     Result := 'NULL'
   else
     Result := IntToStr(C);
+end;
+
+function TSQLServerConnector.FloatToSQL(const V: Double): string;
+begin
+  Result := System.SysUtils.FloatToStr(V, TFormatSettings.Invariant);
 end;
 
 function TSQLServerConnector.SQLToColor(const V: Variant): Integer;
@@ -1391,7 +1397,7 @@ begin
         'Subtitulo = ' + QuotedStr(C.Subtitulo) + ', ' +
         'EsSecuencial = ' + IfThen(C.IsSequencial, '1', '0') + ', ' +
         'MaxLanes = ' + IntToStr(C.MaxLaneCount) + ', ' +
-        'AlturaBase = ' + FloatToStr(C.BaseHeight) + ', ' +
+        'AlturaBase = ' + FloatToSQL(C.BaseHeight) + ', ' +
         'Orden = ' + IntToStr(C.Order) + ', ' +
         'Visible = ' + IfThen(C.Visible, '1', '0') + ', ' +
         'Habilitado = ' + IfThen(C.Enabled, '1', '0') + ', ' +
@@ -1407,7 +1413,7 @@ begin
         QuotedStr(C.Subtitulo) + ', ' +
         IfThen(C.IsSequencial, '1', '0') + ', ' +
         IntToStr(C.MaxLaneCount) + ', ' +
-        FloatToStr(C.BaseHeight) + ', ' +
+        FloatToSQL(C.BaseHeight) + ', ' +
         IntToStr(C.Order) + ', ' +
         IfThen(C.Visible, '1', '0') + ', ' +
         IfThen(C.Enabled, '1', '0') + ', ' +
@@ -1450,7 +1456,7 @@ begin
           'CenterId = ' + IntToStr(N.CentreId) + ', ' +
           'FechaInicio = ' + DateTimeToSQL(N.StartTime) + ', ' +
           'FechaFin = ' + DateTimeToSQL(N.EndTime) + ', ' +
-          'DuracionMin = ' + FloatToStr(N.DurationMin) + ', ' +
+          'DuracionMin = ' + FloatToSQL(N.DurationMin) + ', ' +
           'Caption = ' + QuotedStr(N.Caption) + ', ' +
           'ColorFondo = ' + ColorToSQL(N.FillColor) + ', ' +
           'ColorBorde = ' + ColorToSQL(N.BorderColor) + ', ' +
@@ -1468,7 +1474,7 @@ begin
           IntToStr(N.CentreId) + ', ' +
           DateTimeToSQL(N.StartTime) + ', ' +
           DateTimeToSQL(N.EndTime) + ', ' +
-          FloatToStr(N.DurationMin) + ', ' +
+          FloatToSQL(N.DurationMin) + ', ' +
           QuotedStr(N.Caption) + ', ' +
           ColorToSQL(N.FillColor) + ', ' +
           ColorToSQL(N.BorderColor) + ', ' +
@@ -1496,15 +1502,15 @@ begin
             'CodigoCliente = ' + QuotedStr(D.CodigoCliente) + ', ' +
             'CodigoColor = ' + QuotedStr(D.CodigoColor) + ', ' +
             'CodigoTalla = ' + QuotedStr(D.CodigoTalla) + ', ' +
-            'Stock = ' + FloatToStr(D.Stock) + ', ' +
+            'Stock = ' + FloatToSQL(D.Stock) + ', ' +
             'CodigoArticulo = ' + QuotedStr(D.CodigoArticulo) + ', ' +
             'DescripcionArticulo = ' + QuotedStr(D.DescripcionArticulo) + ', ' +
-            'PorcentajeDependencia = ' + FloatToStr(D.PorcentajeDependencia) + ', ' +
-            'UnidadesFabricadas = ' + FloatToStr(D.UnidadesFabricadas) + ', ' +
-            'UnidadesAFabricar = ' + FloatToStr(D.UnidadesAFabricar) + ', ' +
-            'TiempoUnidadFabSecs = ' + FloatToStr(D.TiempoUnidadFabSecs) + ', ' +
-            'DuracionMin = ' + FloatToStr(D.DurationMin) + ', ' +
-            'DuracionMinOriginal = ' + FloatToStr(D.DurationMinOriginal) + ', ' +
+            'PorcentajeDependencia = ' + FloatToSQL(D.PorcentajeDependencia) + ', ' +
+            'UnidadesFabricadas = ' + FloatToSQL(D.UnidadesFabricadas) + ', ' +
+            'UnidadesAFabricar = ' + FloatToSQL(D.UnidadesAFabricar) + ', ' +
+            'TiempoUnidadFabSecs = ' + FloatToSQL(D.TiempoUnidadFabSecs) + ', ' +
+            'DuracionMin = ' + FloatToSQL(D.DurationMin) + ', ' +
+            'DuracionMinOriginal = ' + FloatToSQL(D.DurationMinOriginal) + ', ' +
             'OperariosNecesarios = ' + IntToStr(D.OperariosNecesarios) + ', ' +
             'OperariosAsignados = ' + IntToStr(D.OperariosAsignados) + ', ' +
             'Estado = ' + IntToStr(Ord(D.Estado)) + ', ' +
@@ -1536,15 +1542,15 @@ begin
             QuotedStr(D.CodigoCliente) + ', ' +
             QuotedStr(D.CodigoColor) + ', ' +
             QuotedStr(D.CodigoTalla) + ', ' +
-            FloatToStr(D.Stock) + ', ' +
+            FloatToSQL(D.Stock) + ', ' +
             QuotedStr(D.CodigoArticulo) + ', ' +
             QuotedStr(D.DescripcionArticulo) + ', ' +
-            FloatToStr(D.PorcentajeDependencia) + ', ' +
-            FloatToStr(D.UnidadesFabricadas) + ', ' +
-            FloatToStr(D.UnidadesAFabricar) + ', ' +
-            FloatToStr(D.TiempoUnidadFabSecs) + ', ' +
-            FloatToStr(D.DurationMin) + ', ' +
-            FloatToStr(D.DurationMinOriginal) + ', ' +
+            FloatToSQL(D.PorcentajeDependencia) + ', ' +
+            FloatToSQL(D.UnidadesFabricadas) + ', ' +
+            FloatToSQL(D.UnidadesAFabricar) + ', ' +
+            FloatToSQL(D.TiempoUnidadFabSecs) + ', ' +
+            FloatToSQL(D.DurationMin) + ', ' +
+            FloatToSQL(D.DurationMinOriginal) + ', ' +
             IntToStr(D.OperariosNecesarios) + ', ' +
             IntToStr(D.OperariosAsignados) + ', ' +
             IntToStr(Ord(D.Estado)) + ', ' +
@@ -1597,7 +1603,7 @@ begin
       IntToStr(L.FromNodeId) + ', ' +
       IntToStr(L.ToNodeId) + ', ' +
       IntToStr(Ord(L.LinkType)) + ', ' +
-      FloatToStr(L.PorcentajeDependencia, TFormatSettings.Invariant) + ')');
+      FloatToSQL(L.PorcentajeDependencia) + ')');
   end;
 end;
 
@@ -1621,7 +1627,7 @@ begin
       QuotedStr(M.Caption) + ', ' +
       ColorToSQL(M.Color) + ', ' +
       IntToStr(Ord(M.Style)) + ', ' +
-      FloatToStr(M.StrokeWidth) + ', ' +
+      FloatToSQL(M.StrokeWidth) + ', ' +
       IfThen(M.Moveable, '1', '0') + ', ' +
       IfThen(M.Visible, '1', '0') + ', ' +
       IntToStr(M.Tag) + ', ' +
@@ -1709,7 +1715,7 @@ begin
   for I := 0 to High(AAsig) do
     ExecSQL('INSERT INTO FS_PL_OperatorAssignment (OperatorId, NodeId, Horas) VALUES (' +
       IntToStr(AAsig[I].OperarioId) + ', ' + IntToStr(AAsig[I].DataId) + ', ' +
-      FloatToStr(AAsig[I].Horas) + ')');
+      FloatToSQL(AAsig[I].Horas) + ')');
 end;
 
 procedure TSQLServerConnector.InternalSaveMoldes(const AMoldes: TArray<TMolde>);
@@ -1738,9 +1744,9 @@ begin
         IntToStr(Ord(M.Estado)) + ', ' +
         QuotedStr(M.UbicacionActual) + ', ' +
         IntToStr(M.NumeroCavidades) + ', ' +
-        FloatToStr(M.TiempoMontaje) + ', ' +
-        FloatToStr(M.TiempoDesmontaje) + ', ' +
-        FloatToStr(M.TiempoAjuste) + ', ' +
+        FloatToSQL(M.TiempoMontaje) + ', ' +
+        FloatToSQL(M.TiempoDesmontaje) + ', ' +
+        FloatToSQL(M.TiempoAjuste) + ', ' +
         IntToStr(M.CiclosAcumulados) + ', ' +
         DateTimeToSQL(M.FechaProximoMantenimiento) + ', ' +
         IfThen(M.DisponiblePlanificacion, '1', '0') + ', ' +
@@ -1753,9 +1759,9 @@ begin
         'Estado = ' + IntToStr(Ord(M.Estado)) + ', ' +
         'UbicacionActual = ' + QuotedStr(M.UbicacionActual) + ', ' +
         'NumeroCavidades = ' + IntToStr(M.NumeroCavidades) + ', ' +
-        'TiempoMontaje = ' + FloatToStr(M.TiempoMontaje) + ', ' +
-        'TiempoDesmontaje = ' + FloatToStr(M.TiempoDesmontaje) + ', ' +
-        'TiempoAjuste = ' + FloatToStr(M.TiempoAjuste) + ', ' +
+        'TiempoMontaje = ' + FloatToSQL(M.TiempoMontaje) + ', ' +
+        'TiempoDesmontaje = ' + FloatToSQL(M.TiempoDesmontaje) + ', ' +
+        'TiempoAjuste = ' + FloatToSQL(M.TiempoAjuste) + ', ' +
         'CiclosAcumulados = ' + IntToStr(M.CiclosAcumulados) + ', ' +
         'FechaProxMantenimiento = ' + DateTimeToSQL(M.FechaProximoMantenimiento) + ', ' +
         'DisponiblePlanificacion = ' + IfThen(M.DisponiblePlanificacion, '1', '0') + ', ' +
@@ -1803,8 +1809,8 @@ begin
         'Visible = ' + IfThen(D.Visible, '1', '0') + ', ' +
         'Grupo = ' + QuotedStr(D.Grupo) + ', ' +
         'Tooltip = ' + QuotedStr(D.Tooltip) + ', ' +
-        'ValorMinimo = ' + FloatToStr(D.MinValue) + ', ' +
-        'ValorMaximo = ' + FloatToStr(D.MaxValue) + ', ' +
+        'ValorMinimo = ' + FloatToSQL(D.MinValue) + ', ' +
+        'ValorMaximo = ' + FloatToSQL(D.MaxValue) + ', ' +
         'FormatoMascara = ' + QuotedStr(D.FormatMask) +
       ' WHERE FieldName = ' + QuotedStr(D.FieldName) + ' ' +
       'ELSE ' +
@@ -1822,8 +1828,8 @@ begin
         IfThen(D.Visible, '1', '0') + ', ' +
         QuotedStr(D.Grupo) + ', ' +
         QuotedStr(D.Tooltip) + ', ' +
-        FloatToStr(D.MinValue) + ', ' +
-        FloatToStr(D.MaxValue) + ', ' +
+        FloatToSQL(D.MinValue) + ', ' +
+        FloatToSQL(D.MaxValue) + ', ' +
         QuotedStr(D.FormatMask) + ')');
   end;
 end;

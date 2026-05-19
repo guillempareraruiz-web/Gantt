@@ -325,6 +325,7 @@ type
     FPlanningRuleEngine: TPlanningRuleEngine;
 
     FUpdatingViewport: Boolean;
+    FLoadingFechaBloqueo: Boolean;
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
 
@@ -1088,10 +1089,15 @@ begin
   // Marcadores verticales del proyecto
   CargarMarcadores;
   // Fecha de bloqueo del proyecto (si el proyecto la tiene configurada)
-  if DMPlanner.CurrentProjectTieneBloqueo then
-    FGanttControl.FechaBloqueo := DMPlanner.CurrentProjectFechaBloqueo
-  else
-    FGanttControl.FechaBloqueo := 0;
+  FLoadingFechaBloqueo := True;
+  try
+    if DMPlanner.CurrentProjectTieneBloqueo then
+      FGanttControl.FechaBloqueo := DMPlanner.CurrentProjectFechaBloqueo
+    else
+      FGanttControl.FechaBloqueo := 0;
+  finally
+    FLoadingFechaBloqueo := False;
+  end;
   // Usar el layout calculado por el Gantt y publicarlo a la columna de centros.
   // Así ambos controles comparten las mismas filas y el scroll/zoom las mantiene.
   FCentrosControl.SetRows(FGanttControl.GetRowsCopy);
@@ -1265,7 +1271,6 @@ var
 begin
   dt := FGanttControl.GetDateTimeFromPoint( FGanttControl.FClickPoint.X, 0);
   FGanttControl.FechaBloqueo := dt;
-  GuardarFechaBloqueo(dt);
 end;
 
 procedure TfrmVistaGantt.MenuItem3Click(Sender: TObject);
@@ -1282,6 +1287,7 @@ end;
 
 procedure TfrmVistaGantt.GanttFechaBloqueoChanged(Sender: TObject);
 begin
+  if FLoadingFechaBloqueo then Exit;
   GuardarFechaBloqueo(FGanttControl.FechaBloqueo);
 end;
 

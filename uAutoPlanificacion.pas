@@ -126,9 +126,16 @@ type
 implementation
 
 uses
-  uPesosScoring, uScoreBreakdown;
+  uPesosScoring, uScoreBreakdown, uDMPlanner, uCentreCalendar;
 
 {$R *.dfm}
+
+function ResolveCalendar: TCentreCalendar;
+begin
+  Result := nil;
+  if (DMPlanner <> nil) and (DMPlanner.CalendarsRepo <> nil) then
+    Result := DMPlanner.CalendarsRepo.GetDefault;
+end;
 
 class function TfrmAutoPlanificacion.Execute(ANodeRepo: TNodeDataRepo;
   AOpRepo: TOperariosRepo; AAbsRepo: TOperatorAbsencesRepo;
@@ -193,6 +200,7 @@ begin
   Engine := TPlanProdEngine.Create(FNodeRepo, FOpRepo, FAbsRepo, FHabRepo,
     FOpTypesRepo);
   try
+    Engine.CalendarioFestivos := ResolveCalendar;
     Engine.Pesos := FPesos;
     Engine.GetPredecesores := FGetPredecesores;
     FResultado := Engine.PlanificarBatch(FNodeIds, Fecha);
@@ -328,6 +336,7 @@ begin
   Engine := TPlanProdEngine.Create(FNodeRepo, FOpRepo, FAbsRepo, FHabRepo,
     FOpTypesRepo);
   try
+    Engine.CalendarioFestivos := ResolveCalendar;
     Cand := Engine.MejorOperarioPara(Node, Fecha);
     if Cand.MotivoNoElegible <> '' then
       Result := Cand.MotivoNoElegible;
@@ -443,6 +452,7 @@ begin
   Engine := TPlanProdEngine.Create(FNodeRepo, FOpRepo, FAbsRepo, FHabRepo,
     FOpTypesRepo);
   try
+    Engine.CalendarioFestivos := ResolveCalendar;
     Engine.Pesos := FPesos;
     Engine.GetPredecesores := FGetPredecesores;
     // PlanificarBatch con array vacio siembra la continuidad del repo.

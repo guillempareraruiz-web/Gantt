@@ -52,6 +52,7 @@ type
     function TryGetById(ACalendarId: Integer;
       out ACalendar: TCentreCalendar): Boolean;
     function GetById(ACalendarId: Integer): TCentreCalendar;
+    function GetDefault: TCentreCalendar;
     function Count: Integer;
 
     // ----- Shift Models (V030) ----------------------------------------------
@@ -268,6 +269,21 @@ function TCalendarsRepo.GetById(ACalendarId: Integer): TCentreCalendar;
 begin
   if not FCalendars.TryGetValue(ACalendarId, Result) then
     Result := nil;
+end;
+
+function TCalendarsRepo.GetDefault: TCentreCalendar;
+var
+  Pair: TPair<Integer, TCentreCalendar>;
+  MinId: Integer;
+begin
+  Result := nil;
+  MinId := MaxInt;
+  for Pair in FCalendars do
+    if Pair.Key < MinId then
+    begin
+      MinId := Pair.Key;
+      Result := Pair.Value;
+    end;
 end;
 
 // ===========================================================================

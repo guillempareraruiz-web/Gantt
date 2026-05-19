@@ -3007,7 +3007,9 @@ begin
   if SameValue(FFechaBloqueo, Value) then
     Exit;
   FFechaBloqueo := Value;
-  Invalidate;   // <-- fa repaint automàtic
+  Invalidate;
+  if Assigned(FOnFechaBloqueoChanged) then
+    FOnFechaBloqueoChanged(Self);
 end;
 
 

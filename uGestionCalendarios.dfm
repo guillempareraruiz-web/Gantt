@@ -342,6 +342,7 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Width = 568
       Height = 568
       Align = alClient
+      OnDblClick = pbCalendarDblClick
       OnMouseMove = pbCalendarMouseMove
       OnPaint = pbCalendarPaint
       ExplicitTop = 26

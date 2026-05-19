@@ -42,11 +42,13 @@ type
     FCalendarId: Integer;
     FExceptionId: Integer;
     FEsNuevo: Boolean;
+    FPrefilledDate: TDateTime;
     procedure RefreshHorasEnabled;
     procedure LoadExistingException;
   public
     class function Execute(ARepo: TCalendarsRepo; ACodigoEmpresa: SmallInt;
-      ACalendarId: Integer; AExceptionId: Integer): Boolean;
+      ACalendarId: Integer; AExceptionId: Integer;
+      APrefilledDate: TDateTime = 0): Boolean;
   end;
 
 implementation
@@ -54,7 +56,8 @@ implementation
 {$R *.dfm}
 
 class function TfrmCalendarExceptionEditDialog.Execute(ARepo: TCalendarsRepo;
-  ACodigoEmpresa: SmallInt; ACalendarId: Integer; AExceptionId: Integer): Boolean;
+  ACodigoEmpresa: SmallInt; ACalendarId: Integer; AExceptionId: Integer;
+  APrefilledDate: TDateTime): Boolean;
 var
   F: TfrmCalendarExceptionEditDialog;
 begin
@@ -65,6 +68,7 @@ begin
     F.FCalendarId := ACalendarId;
     F.FExceptionId := AExceptionId;
     F.FEsNuevo := (AExceptionId <= 0);
+    F.FPrefilledDate := APrefilledDate;
     Result := F.ShowModal = mrOk;
   finally
     F.Free;
@@ -76,7 +80,10 @@ begin
   if FEsNuevo then
   begin
     Caption := 'Nueva excepci'#243'n';
-    dtFecha.Date := Date;
+    if FPrefilledDate > 0 then
+      dtFecha.Date := FPrefilledDate
+    else
+      dtFecha.Date := Date;
     rbFestivo.Checked := True;
     dtHoraIni.Time := EncodeTime(8, 0, 0, 0);
     dtHoraFin.Time := EncodeTime(13, 0, 0, 0);

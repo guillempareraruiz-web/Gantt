@@ -312,7 +312,7 @@ begin
       '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde) VALUES (' +
       ACE + ', ' + APID + ', ' + CenterSQL + ', ' +
       FechaIniSQL + ', ' + FechaFinSQL + ', ' +
-      FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
+      FloatToStr(ADuracionMin, TFormatSettings.Invariant) + ', ' +
       QStr(AOperacion) + ', 15251072, 11166760)';
     Cmd.Execute;
   finally
@@ -357,8 +357,8 @@ begin
       ACE + ', ' + IntToStr(NodeId) + ', ' + QStr(AOperacion) + ', ' +
       IntToStr(ANumOF) + ', ' + IntToStr(ANumPedido) + ', ' +
       QStr(IntToStr(ANumTrabajo)) + ', ' +
-      FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
-      FloatToStr(ADuracionMin).Replace(',', '.') + ', ' +
+      FloatToStr(ADuracionMin, TFormatSettings.Invariant) + ', ' +
+      FloatToStr(ADuracionMin, TFormatSettings.Invariant) + ', ' +
       IntToStr(100 + Random(900)) + ', ' + IntToStr(NumOpsNec) +
       ', 15251072, 11166760, ' +
       IntToStr(Prio) + ', ' + FechaEntSQL + ', ' + FechaNecSQL + ', ' +
@@ -382,7 +382,7 @@ begin
         Cmd.CommandText :=
           'INSERT INTO FS_PL_OperatorAssignment (CodigoEmpresa, OperatorId, NodeId, Horas) ' +
           'VALUES (' + ACE + ', ' + IntToStr(OpId) + ', ' + IntToStr(NodeId) + ', ' +
-          FloatToStr(ADuracionMin / 60).Replace(',', '.') + ')';
+          FloatToStr(ADuracionMin / 60, TFormatSettings.Invariant) + ')';
         Cmd.Execute;
       finally
         Cmd.Free;

@@ -519,7 +519,7 @@ begin
       if (Item.FechaInicio = 0) or (Item.FechaFin = 0) then Continue;
       if Item.CenterId <= 0 then Continue;
 
-      DurStr := StringReplace(FloatToStr(Item.DuracionMin), ',', '.', [rfReplaceAll]);
+      DurStr := FloatToStr(Item.DuracionMin, TFormatSettings.Invariant);
       FIniStr := FmtDT(Item.FechaInicio);
       FFinStr := FmtDT(Item.FechaFin);
       CenterStr := IntToStr(Item.CenterId);
@@ -554,7 +554,7 @@ begin
 
       // Insert FS_PL_NodeData con NumeroOF / NumeroPedido para ligar al staging
       if Item.Input.UnidadesAFabricar > 0 then
-        UdsStr := StringReplace(FloatToStr(Item.Input.UnidadesAFabricar), ',', '.', [rfReplaceAll])
+        UdsStr := FloatToStr(Item.Input.UnidadesAFabricar, TFormatSettings.Invariant)
       else
         UdsStr := '1';
       if Item.Input.FechaCompromiso > 0 then

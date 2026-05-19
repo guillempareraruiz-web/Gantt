@@ -102,7 +102,7 @@ begin
       '  Subtitulo = ''' + StringReplace(ACentre.Subtitulo, '''', '''''', [rfReplaceAll]) + ''', ' +
       '  EsSecuencial = ' + IntToStr(Ord(ACentre.IsSequencial)) + ', ' +
       '  MaxLanes = ' + IntToStr(ACentre.MaxLaneCount) + ', ' +
-      '  AlturaBase = ' + FloatToStr(ACentre.BaseHeight).Replace(',', '.') + ', ' +
+      '  AlturaBase = ' + FloatToStr(ACentre.BaseHeight, TFormatSettings.Invariant) + ', ' +
       '  Orden = ' + IntToStr(ACentre.Order) + ', ' +
       '  Visible = ' + IntToStr(Ord(ACentre.Visible)) + ', ' +
       '  Habilitado = ' + IntToStr(Ord(ACentre.Enabled)) + ', ' +

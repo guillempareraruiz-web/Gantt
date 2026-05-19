@@ -91,7 +91,7 @@ end;
 
 function FmtNum(const V: Double): string;
 begin
-  Result := StringReplace(FloatToStr(V), ',', '.', [rfReplaceAll]);
+  Result := FloatToStr(V, TFormatSettings.Invariant);
 end;
 
 // ---------------------------------------------------------------------------

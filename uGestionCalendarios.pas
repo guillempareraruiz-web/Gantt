@@ -80,6 +80,7 @@ type
     procedure lbCalendariosClick(Sender: TObject);
     procedure pbCalendarPaint(Sender: TObject);
     procedure pbCalendarMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure pbCalendarDblClick(Sender: TObject);
     procedure btnCalAddClick(Sender: TObject);
     procedure btnCalEditClick(Sender: TObject);
     procedure btnCalDelClick(Sender: TObject);
@@ -143,7 +144,8 @@ var
 implementation
 
 uses
-  uDMPlanner, uCalendarsRepo, uShiftModelEdit, uCalendarExceptionsEdit;
+  uDMPlanner, uCalendarsRepo, uShiftModelEdit, uCalendarExceptionsEdit,
+  uCalendarExceptionEditDialog;
 
 {$R *.dfm}
 
@@ -861,6 +863,25 @@ begin
     pbCalendar.Hint := '';
     pbCalendar.ShowHint := False;
   end;
+end;
+
+procedure TfrmGestionCalendarios.pbCalendarDblClick(Sender: TObject);
+var
+  P: TPoint;
+  Mo, D, CalId: Integer;
+  ADate: TDateTime;
+begin
+  CalId := SelectedCalendarId;
+  if CalId < 0 then Exit;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  P := pbCalendar.ScreenToClient(Mouse.CursorPos);
+  if not HitTestDay(P.X, P.Y, Mo, D) then Exit;
+
+  ADate := EncodeDate(FYear, Mo, D);
+  if TfrmCalendarExceptionEditDialog.Execute(DMPlanner.CalendarsRepo,
+       DMPlanner.CodigoEmpresa, CalId, -1, ADate) then
+    RefreshAfterModelChange;
 end;
 
 { ========== Leyenda ========== }
