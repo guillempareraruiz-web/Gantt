@@ -16,6 +16,16 @@ object frmArticleDetail: TfrmArticleDetail
   OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 15
+  object splitLog: TSplitter
+    Left = 0
+    Top = 510
+    Width = 1100
+    Height = 5
+    Cursor = crVSplit
+    Align = alBottom
+    ExplicitTop = 550
+    ExplicitWidth = 100
+  end
   object pnlTop: TPanel
     Left = 0
     Top = 0
@@ -29,7 +39,7 @@ object frmArticleDetail: TfrmArticleDetail
     object lblArticulo: TLabel
       Left = 12
       Top = 10
-      Width = 49
+      Width = 45
       Height = 15
       Caption = 'Art'#237'culo:'
     end
@@ -39,7 +49,6 @@ object frmArticleDetail: TfrmArticleDetail
       Width = 500
       Height = 15
       AutoSize = False
-      Caption = ''
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clNavy
       Font.Height = -12
@@ -50,7 +59,7 @@ object frmArticleDetail: TfrmArticleDetail
     object lblAlmacenes: TLabel
       Left = 12
       Top = 46
-      Width = 62
+      Width = 61
       Height = 15
       Caption = 'Almacenes:'
     end
@@ -80,8 +89,9 @@ object frmArticleDetail: TfrmArticleDetail
     object ccbAlmacenes: TcxCheckComboBox
       Left = 80
       Top = 42
-      Width = 400
+      Properties.Items = <>
       TabOrder = 2
+      Width = 400
     end
     object dtFecha: TDateTimePicker
       Left = 600
@@ -89,7 +99,7 @@ object frmArticleDetail: TfrmArticleDetail
       Width = 130
       Height = 23
       Date = 44562.000000000000000000
-      Time = 0.000000000000000000
+      Time = 44562.000000000000000000
       TabOrder = 3
     end
     object btnCalcular: TButton
@@ -430,18 +440,23 @@ object frmArticleDetail: TfrmArticleDetail
     Left = 0
     Top = 170
     Width = 1100
-    Height = 485
+    Height = 340
     Align = alClient
     TabOrder = 1
     Properties.ActivePage = tabATP
     Properties.CustomButtons.Buttons = <>
     OnChange = pgcTabsChange
-    ClientRectBottom = 573
+    ExplicitHeight = 485
+    ClientRectBottom = 338
     ClientRectLeft = 2
     ClientRectRight = 1098
-    ClientRectTop = 27
+    ClientRectTop = 25
     object tabDisponibilidad: TcxTabSheet
       Caption = 'Disponibilidad fabricaci'#243'n'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlDispTop: TPanel
         Left = 0
         Top = 0
@@ -453,14 +468,14 @@ object frmArticleDetail: TfrmArticleDetail
         object lblDispCantidad: TLabel
           Left = 12
           Top = 12
-          Width = 92
+          Width = 94
           Height = 15
           Caption = 'Cantidad fabricar:'
         end
         object lblDispFecha: TLabel
           Left = 240
           Top = 12
-          Width = 88
+          Width = 80
           Height = 15
           Caption = 'Fecha objetivo:'
         end
@@ -470,7 +485,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 600
           Height = 25
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -16
@@ -484,7 +498,9 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 800
           Height = 15
           AutoSize = False
-          Caption = 'Tipo: P=Producto fabricado  S=Semielaborado  M=Materia prima  |  Estado: OK / FALTA / CRITICO'
+          Caption = 
+            'Tipo: P=Producto fabricado  S=Semielaborado  M=Materia prima  | ' +
+            ' Estado: OK / FALTA / CRITICO'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clGrayText
           Font.Height = -11
@@ -498,7 +514,7 @@ object frmArticleDetail: TfrmArticleDetail
           Properties.MinValue = 1.000000000000000000
           Properties.ValueType = vtFloat
           TabOrder = 0
-          Value = 1
+          Value = 1.000000000000000000
           Width = 110
         end
         object dtDispFecha: TDateTimePicker
@@ -507,7 +523,7 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 130
           Height = 23
           Date = 44562.000000000000000000
-          Time = 0.000000000000000000
+          Time = 44562.000000000000000000
           TabOrder = 1
         end
         object btnRecargarDisp: TButton
@@ -529,10 +545,11 @@ object frmArticleDetail: TfrmArticleDetail
         Bands = <
           item
           end>
+        Navigator.Buttons.CustomButtons = <>
         OptionsBehavior.CellHints = True
         OptionsData.Editing = False
         OptionsView.GridLines = tlglBoth
-        OptionsView.ShowEditButtons = ecsbNever
+        ScrollbarAnnotations.CustomAnnotations = <>
         TabOrder = 1
         OnCustomDrawDataCell = tlDispCustomDrawDataCell
         object colDispArticulo: TcxTreeListColumn
@@ -541,6 +558,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 0
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispDescripcion: TcxTreeListColumn
           Caption.Text = 'Descripci'#243'n'
@@ -548,6 +567,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 1
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispTipo: TcxTreeListColumn
           Caption.Text = 'Tipo'
@@ -555,6 +576,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 2
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispNecesario: TcxTreeListColumn
           Caption.Text = 'Necesario'
@@ -562,6 +585,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 3
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispStockActual: TcxTreeListColumn
           Caption.Text = 'Stock actual'
@@ -569,6 +594,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 4
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispStockProy: TcxTreeListColumn
           Caption.Text = 'Stock proyectado'
@@ -576,6 +603,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 5
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispFaltaActual: TcxTreeListColumn
           Caption.Text = 'Falta hoy'
@@ -583,6 +612,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 6
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispFaltaProy: TcxTreeListColumn
           Caption.Text = 'Falta proyect.'
@@ -590,6 +621,8 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 7
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
         object colDispEstado: TcxTreeListColumn
           Caption.Text = 'Estado'
@@ -597,11 +630,17 @@ object frmArticleDetail: TfrmArticleDetail
           Position.ColIndex = 8
           Position.RowIndex = 0
           Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
         end
       end
     end
     object tabDondeUsa: TcxTabSheet
       Caption = 'D'#243'nde se usa'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlDondeUsaTop: TPanel
         Left = 0
         Top = 0
@@ -616,7 +655,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 600
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -643,6 +681,7 @@ object frmArticleDetail: TfrmArticleDetail
         TabOrder = 1
         object grdDondeUsaView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
+          ScrollbarAnnotations.CustomAnnotations = <>
           DataController.DataSource = dsDondeUsa
           DataController.Summary.DefaultGroupSummaryItems = <>
           DataController.Summary.FooterSummaryItems = <>
@@ -652,26 +691,26 @@ object frmArticleDetail: TfrmArticleDetail
           OptionsData.Editing = False
           OptionsData.Inserting = False
           OptionsSelection.CellSelect = False
-          OptionsView.GridLines = glBoth
         end
         object grdDondeUsaLevel: TcxGridLevel
           GridView = grdDondeUsaView
         end
       end
-      object cdsDondeUsa: TClientDataSet
-        Aggregates = <>
-        Params = <>
-        Left = 560
-        Top = 200
-      end
-      object dsDondeUsa: TDataSource
-        DataSet = cdsDondeUsa
-        Left = 640
-        Top = 200
-      end
     end
     object tabHistorico: TcxTabSheet
       Caption = 'Hist'#243'rico'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
+      object pbHistorico: TPaintBox
+        Left = 0
+        Top = 40
+        Width = 1096
+        Height = 506
+        Align = alClient
+        OnPaint = pbHistoricoPaint
+      end
       object pnlHistTop: TPanel
         Left = 0
         Top = 0
@@ -683,7 +722,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblHistMeses: TLabel
           Left = 12
           Top = 12
-          Width = 41
+          Width = 36
           Height = 15
           Caption = 'Meses:'
         end
@@ -693,7 +732,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 700
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -704,12 +742,11 @@ object frmArticleDetail: TfrmArticleDetail
         object seHistMeses: TcxSpinEdit
           Left = 60
           Top = 9
-          Width = 80
-          Height = 23
           Properties.MaxValue = 60.000000000000000000
           Properties.MinValue = 3.000000000000000000
           TabOrder = 0
           Value = 12
+          Width = 80
         end
         object btnRecargarHist: TButton
           Left = 970
@@ -721,17 +758,13 @@ object frmArticleDetail: TfrmArticleDetail
           OnClick = btnRecargarHistClick
         end
       end
-      object pbHistorico: TPaintBox
-        Left = 0
-        Top = 40
-        Width = 1096
-        Height = 506
-        Align = alClient
-        OnPaint = pbHistoricoPaint
-      end
     end
     object tabOFs: TcxTabSheet
       Caption = 'OFs activas'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlOFsTop: TPanel
         Left = 0
         Top = 0
@@ -746,7 +779,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 700
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -773,6 +805,7 @@ object frmArticleDetail: TfrmArticleDetail
         TabOrder = 1
         object grdOFsView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
+          ScrollbarAnnotations.CustomAnnotations = <>
           DataController.DataSource = dsOFs
           DataController.Summary.DefaultGroupSummaryItems = <>
           DataController.Summary.FooterSummaryItems = <>
@@ -781,26 +814,18 @@ object frmArticleDetail: TfrmArticleDetail
           OptionsData.Editing = False
           OptionsData.Inserting = False
           OptionsSelection.CellSelect = False
-          OptionsView.GridLines = glBoth
         end
         object grdOFsLevel: TcxGridLevel
           GridView = grdOFsView
         end
       end
-      object cdsOFs: TClientDataSet
-        Aggregates = <>
-        Params = <>
-        Left = 560
-        Top = 200
-      end
-      object dsOFs: TDataSource
-        DataSet = cdsOFs
-        Left = 640
-        Top = 200
-      end
     end
     object tabProveedores: TcxTabSheet
       Caption = 'Proveedores'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlProvTop: TPanel
         Left = 0
         Top = 0
@@ -812,7 +837,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblProvMeses: TLabel
           Left = 12
           Top = 12
-          Width = 89
+          Width = 114
           Height = 15
           Caption = 'Meses atr'#225's (0=todo):'
         end
@@ -822,7 +847,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 700
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -833,12 +857,11 @@ object frmArticleDetail: TfrmArticleDetail
         object seProvMeses: TcxSpinEdit
           Left = 110
           Top = 9
-          Width = 80
-          Height = 23
+          Properties.AssignedValues.MinValue = True
           Properties.MaxValue = 120.000000000000000000
-          Properties.MinValue = 0.000000000000000000
           TabOrder = 0
           Value = 24
+          Width = 80
         end
         object btnRecargarProv: TButton
           Left = 970
@@ -859,6 +882,7 @@ object frmArticleDetail: TfrmArticleDetail
         TabOrder = 1
         object grdProvView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
+          ScrollbarAnnotations.CustomAnnotations = <>
           DataController.DataSource = dsProv
           DataController.Summary.DefaultGroupSummaryItems = <>
           DataController.Summary.FooterSummaryItems = <>
@@ -867,26 +891,18 @@ object frmArticleDetail: TfrmArticleDetail
           OptionsData.Editing = False
           OptionsData.Inserting = False
           OptionsSelection.CellSelect = False
-          OptionsView.GridLines = glBoth
         end
         object grdProvLevel: TcxGridLevel
           GridView = grdProvView
         end
       end
-      object cdsProv: TClientDataSet
-        Aggregates = <>
-        Params = <>
-        Left = 560
-        Top = 200
-      end
-      object dsProv: TDataSource
-        DataSet = cdsProv
-        Left = 640
-        Top = 200
-      end
     end
     object tabClientes: TcxTabSheet
       Caption = 'Clientes'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlCliTop: TPanel
         Left = 0
         Top = 0
@@ -898,7 +914,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblCliMeses: TLabel
           Left = 12
           Top = 12
-          Width = 89
+          Width = 114
           Height = 15
           Caption = 'Meses atr'#225's (0=todo):'
         end
@@ -908,7 +924,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 700
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -919,12 +934,11 @@ object frmArticleDetail: TfrmArticleDetail
         object seCliMeses: TcxSpinEdit
           Left = 110
           Top = 9
-          Width = 80
-          Height = 23
+          Properties.AssignedValues.MinValue = True
           Properties.MaxValue = 120.000000000000000000
-          Properties.MinValue = 0.000000000000000000
           TabOrder = 0
           Value = 24
+          Width = 80
         end
         object btnRecargarCli: TButton
           Left = 970
@@ -945,6 +959,7 @@ object frmArticleDetail: TfrmArticleDetail
         TabOrder = 1
         object grdCliView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
+          ScrollbarAnnotations.CustomAnnotations = <>
           DataController.DataSource = dsCli
           DataController.Summary.DefaultGroupSummaryItems = <>
           DataController.Summary.FooterSummaryItems = <>
@@ -953,26 +968,18 @@ object frmArticleDetail: TfrmArticleDetail
           OptionsData.Editing = False
           OptionsData.Inserting = False
           OptionsSelection.CellSelect = False
-          OptionsView.GridLines = glBoth
         end
         object grdCliLevel: TcxGridLevel
           GridView = grdCliView
         end
       end
-      object cdsCli: TClientDataSet
-        Aggregates = <>
-        Params = <>
-        Left = 560
-        Top = 200
-      end
-      object dsCli: TDataSource
-        DataSet = cdsCli
-        Left = 640
-        Top = 200
-      end
     end
     object tabMovimientos: TcxTabSheet
       Caption = 'Movimientos futuros'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlMovsFutTop: TPanel
         Left = 0
         Top = 0
@@ -984,14 +991,14 @@ object frmArticleDetail: TfrmArticleDetail
         object lblMovsFutDesde: TLabel
           Left = 12
           Top = 12
-          Width = 40
+          Width = 35
           Height = 15
           Caption = 'Desde:'
         end
         object lblMovsFutHasta: TLabel
           Left = 195
           Top = 12
-          Width = 38
+          Width = 33
           Height = 15
           Caption = 'Hasta:'
         end
@@ -1001,7 +1008,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 480
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -1015,7 +1021,7 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 120
           Height = 23
           Date = 44562.000000000000000000
-          Time = 0.000000000000000000
+          Time = 44562.000000000000000000
           TabOrder = 0
         end
         object dtMovsFutHasta: TDateTimePicker
@@ -1024,7 +1030,7 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 120
           Height = 23
           Date = 44562.000000000000000000
-          Time = 0.000000000000000000
+          Time = 44562.000000000000000000
           TabOrder = 1
         end
         object chkMovFutCompras: TCheckBox
@@ -1079,6 +1085,7 @@ object frmArticleDetail: TfrmArticleDetail
         TabOrder = 1
         object grdMovsFutView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
+          ScrollbarAnnotations.CustomAnnotations = <>
           OnCustomDrawCell = grdMovsFutViewCustomDrawCell
           DataController.DataSource = dsMovsFut
           DataController.Summary.DefaultGroupSummaryItems = <>
@@ -1089,7 +1096,6 @@ object frmArticleDetail: TfrmArticleDetail
           OptionsData.Editing = False
           OptionsData.Inserting = False
           OptionsSelection.CellSelect = False
-          OptionsView.GridLines = glBoth
         end
         object grdMovsFutLevel: TcxGridLevel
           GridView = grdMovsFutView
@@ -1098,6 +1104,10 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabPartidas: TcxTabSheet
       Caption = 'Stock por partida / lote'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlPartidasTop: TPanel
         Left = 0
         Top = 0
@@ -1112,7 +1122,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 600
           Height = 17
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
           Font.Height = -12
@@ -1150,6 +1159,7 @@ object frmArticleDetail: TfrmArticleDetail
         TabOrder = 1
         object grdPartidasView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
+          ScrollbarAnnotations.CustomAnnotations = <>
           OnCustomDrawCell = grdPartidasViewCustomDrawCell
           DataController.DataSource = dsPartidas
           DataController.Summary.DefaultGroupSummaryItems = <>
@@ -1160,7 +1170,6 @@ object frmArticleDetail: TfrmArticleDetail
           OptionsData.Editing = False
           OptionsData.Inserting = False
           OptionsSelection.CellSelect = False
-          OptionsView.GridLines = glBoth
           OptionsView.Footer = True
         end
         object grdPartidasLevel: TcxGridLevel
@@ -1170,6 +1179,10 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabATP: TcxTabSheet
       Caption = 'Projected Stock (ATP)'
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object pnlResumen: TPanel
         Left = 0
         Top = 0
@@ -1183,7 +1196,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblTitResumen: TLabel
           Left = 12
           Top = 6
-          Width = 60
+          Width = 55
           Height = 15
           Caption = 'Resumen:'
           Font.Charset = DEFAULT_CHARSET
@@ -1196,7 +1209,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblStockInicial: TLabel
           Left = 12
           Top = 28
-          Width = 90
+          Width = 66
           Height = 15
           Caption = 'Stock inicial:'
         end
@@ -1217,7 +1230,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblTotalEntradas: TLabel
           Left = 160
           Top = 28
-          Width = 120
+          Width = 48
           Height = 15
           Caption = 'Entradas:'
         end
@@ -1238,7 +1251,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblTotalSalidas: TLabel
           Left = 310
           Top = 28
-          Width = 120
+          Width = 39
           Height = 15
           Caption = 'Salidas:'
         end
@@ -1259,7 +1272,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblStockFinal: TLabel
           Left = 470
           Top = 28
-          Width = 120
+          Width = 99
           Height = 15
           Caption = 'Stock final a fecha:'
         end
@@ -1280,7 +1293,7 @@ object frmArticleDetail: TfrmArticleDetail
         object lblStockMinimo: TLabel
           Left = 640
           Top = 28
-          Width = 120
+          Width = 97
           Height = 15
           Caption = 'Stock m'#237'nimo art.:'
         end
@@ -1304,7 +1317,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 280
           Height = 18
           AutoSize = False
-          Caption = ''
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clRed
           Font.Height = -13
@@ -1331,6 +1343,7 @@ object frmArticleDetail: TfrmArticleDetail
           TabOrder = 0
           object grdMovsView: TcxGridDBTableView
             Navigator.Buttons.CustomButtons = <>
+            ScrollbarAnnotations.CustomAnnotations = <>
             OnCustomDrawCell = grdMovsViewCustomDrawCell
             DataController.DataSource = dsMovs
             DataController.Summary.DefaultGroupSummaryItems = <>
@@ -1341,7 +1354,6 @@ object frmArticleDetail: TfrmArticleDetail
             OptionsData.Editing = False
             OptionsData.Inserting = False
             OptionsSelection.CellSelect = False
-            OptionsView.GridLines = glBoth
           end
           object grdMovsLevel: TcxGridLevel
             GridView = grdMovsView
@@ -1349,16 +1361,6 @@ object frmArticleDetail: TfrmArticleDetail
         end
       end
     end
-  end
-  object splitLog: TSplitter
-    Left = 0
-    Top = 510
-    Width = 1100
-    Height = 5
-    Cursor = crVSplit
-    Align = alBottom
-    ExplicitTop = 550
-    ExplicitWidth = 100
   end
   object pnlLog: TPanel
     Left = 0
@@ -1402,6 +1404,50 @@ object frmArticleDetail: TfrmArticleDetail
       TabOrder = 0
       OnClick = btnCerrarClick
     end
+  end
+  object cdsDondeUsa: TClientDataSet
+    Aggregates = <>
+    Params = <>
+    Left = 560
+    Top = 200
+  end
+  object dsDondeUsa: TDataSource
+    DataSet = cdsDondeUsa
+    Left = 640
+    Top = 200
+  end
+  object cdsOFs: TClientDataSet
+    Aggregates = <>
+    Params = <>
+    Left = 560
+    Top = 200
+  end
+  object dsOFs: TDataSource
+    DataSet = cdsOFs
+    Left = 640
+    Top = 200
+  end
+  object cdsProv: TClientDataSet
+    Aggregates = <>
+    Params = <>
+    Left = 560
+    Top = 200
+  end
+  object dsProv: TDataSource
+    DataSet = cdsProv
+    Left = 640
+    Top = 200
+  end
+  object cdsCli: TClientDataSet
+    Aggregates = <>
+    Params = <>
+    Left = 560
+    Top = 200
+  end
+  object dsCli: TDataSource
+    DataSet = cdsCli
+    Left = 640
+    Top = 200
   end
   object cdsMovs: TClientDataSet
     Aggregates = <>

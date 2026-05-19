@@ -478,6 +478,12 @@ procedure TForm1.Calendarios1Click(Sender: TObject);
 begin
   TfrmGestionCalendarios.Execute(YearOf(Now));
   DMPlanner.LoadCalendars;
+  if Assigned(FVistaGantt) then
+  begin
+    FVistaGantt.AplicarCalendariosAGantt;
+    if Assigned(FVistaGantt.GanttControl) then
+      FVistaGantt.GanttControl.Invalidate;
+  end;
 end;
 
 procedure TForm1.Turnos1Click(Sender: TObject);

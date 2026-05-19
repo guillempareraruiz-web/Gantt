@@ -46,16 +46,16 @@ object frmCalendarExceptionEditDialog: TfrmCalendarExceptionEditDialog
     object lblHoraIni: TLabel
       Left = 16
       Top = 132
-      Width = 56
+      Width = 110
       Height = 15
-      Caption = 'Hora ini.:'
+      Caption = 'Inicio no laborable:'
     end
     object lblHoraFin: TLabel
       Left = 16
       Top = 162
-      Width = 58
+      Width = 110
       Height = 15
-      Caption = 'Hora fin.:'
+      Caption = 'Fin no laborable:'
     end
     object lblDescripcion: TLabel
       Left = 16
@@ -89,7 +89,7 @@ object frmCalendarExceptionEditDialog: TfrmCalendarExceptionEditDialog
       Top = 104
       Width = 200
       Height = 17
-      Caption = 'Laborable parcial (horas custom)'
+      Caption = 'Pausa / franja no laborable'
       TabOrder = 2
       OnClick = rbLaborableClick
     end

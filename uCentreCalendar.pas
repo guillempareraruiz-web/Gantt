@@ -59,6 +59,10 @@ type
     procedure SetDayNonWorkingPeriods(const WeekDayISO: Integer; const Periods: TArray<TNonWorkingPeriod>);
     procedure SetDayException(const ADate: TDateTime; const AException: TDayException);
     procedure ClearExceptions;
+    function TryGetException(const ADate: TDateTime; out AException: TDayException): Boolean;
+    function GetExceptionDates: TArray<TDateTime>;
+    // Regla setmanal sense aplicar excepcions (per separar capes al render)
+    function WeeklyRulePeriodsForDate(const ADate: TDateTime): TArray<TNonWorkingPeriod>;
 
     function IsNonWorkingTime(const T: TDateTime): Boolean;
     function IsWorkingTime(const T: TDateTime): Boolean;
@@ -171,6 +175,32 @@ begin
   InvalidateCaches;
 end;
 
+function TCentreCalendar.TryGetException(const ADate: TDateTime;
+  out AException: TDayException): Boolean;
+begin
+  Result := FExceptions.TryGetValue(Trunc(DateOf(ADate)), AException);
+end;
+
+function TCentreCalendar.WeeklyRulePeriodsForDate(
+  const ADate: TDateTime): TArray<TNonWorkingPeriod>;
+begin
+  Result := GetPeriodsForDate(ADate);
+end;
+
+function TCentreCalendar.GetExceptionDates: TArray<TDateTime>;
+var
+  K: Integer;
+  I: Integer;
+begin
+  SetLength(Result, FExceptions.Count);
+  I := 0;
+  for K in FExceptions.Keys do
+  begin
+    Result[I] := K;
+    Inc(I);
+  end;
+end;
+
 procedure TCentreCalendar.InvalidateCaches;
 begin
   FDayIntervalsCache.Clear;
@@ -187,7 +217,38 @@ end;
 
 function TCentreCalendar.NonWorkingPeriodsForDate(
   const ADate: TDateTime): TArray<TNonWorkingPeriod>;
+var
+  Exc: TDayException;
+  P: TNonWorkingPeriod;
+  Tmp: TArray<TNonWorkingPeriod>;
+  C: Integer;
 begin
+  // Excepcio per data concreta: te prioritat sobre la regla del dia setmana
+  if FExceptions.TryGetValue(Trunc(DateOf(ADate)), Exc) then
+  begin
+    SetLength(Tmp, 0);
+    C := 0;
+    if not Exc.EsLaborable then
+    begin
+      // Festiu: tot el dia no laborable (00:00 -> fi de dia)
+      SetLength(Tmp, 1);
+      Tmp[0].StartTimeOfDay := 0;
+      Tmp[0].EndTimeOfDay   := 1 - COneMs;
+    end
+    else
+    begin
+      // Parcial: [HoraInicio, HoraFin] = franja NO laborable extra;
+      // s'afegeix a les franges no-laborables de la regla setmanal.
+      Tmp := GetPeriodsForDate(ADate);
+      C := Length(Tmp);
+      SetLength(Tmp, C + 1);
+      Tmp[C].StartTimeOfDay := Exc.HoraInicio;
+      Tmp[C].EndTimeOfDay   := Exc.HoraFin;
+    end;
+    Result := Tmp;
+    Exit;
+  end;
+
   Result := GetPeriodsForDate(ADate);
 end;
 
@@ -324,11 +385,24 @@ begin
     end
     else
     begin
-      // Laborable parcial: no laborable abans HoraInicio i despres HoraFin
-      if Exc.HoraInicio > 0 then
-        AddInt(D0, D0 + Exc.HoraInicio);
-      if Exc.HoraFin < 1 - COneMs then
-        AddInt(D0 + Exc.HoraFin, D0 + 1 - COneMs);
+      // Parcial: [HoraInicio, HoraFin] = franja NO laborable extra; la resta
+      // del dia segueix la regla setmanal.
+      AddInt(D0 + Exc.HoraInicio, D0 + Exc.HoraFin);
+      // Combinem amb les regles setmanals del dia
+      Periods := GetPeriodsForDate(D0);
+      for P in Periods do
+      begin
+        StartTOD := NormalizeTimeBoundary(P.StartTimeOfDay);
+        EndTOD   := NormalizeTimeBoundary(P.EndTimeOfDay);
+        A := D0 + StartTOD;
+        B := D0 + EndTOD;
+        if (EndTOD = 0) and (StartTOD > 0) then
+          B := IncDay(D0, 1)
+        else if B <= A then
+          B := IncDay(B, 1);
+        AddInt(A, B);
+      end;
+      Tmp := MergeIntervals(Tmp);
     end;
     Result := Tmp;
     Exit;

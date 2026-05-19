@@ -1358,14 +1358,12 @@ var
   SrcCal, DstCal: TCentreCalendar;
   RefDate: TDateTime;
   Periods: TArray<TNonWorkingPeriod>;
+  ExcDates: TArray<TDateTime>;
+  D: TDateTime;
+  Exc: TDayException;
 begin
   if (DMPlanner.CentresRepo = nil) or (FGanttControl = nil) then Exit;
   Centres := DMPlanner.CentresRepo.GetAll;
-  // Tomamos una semana de referencia (lunes=1..domingo=7) y pedimos al
-  // calendario de cada centro las franjas de cada día. Esas franjas se copian
-  // al calendario interno del Gantt para ese centro.
-  // Usamos DayOfTheWeek (Delphi: 1=Dom..7=Sáb) — aquí iteramos valores brutos 1..7
-  // tal como los expone uCentreCalendar, que usa DayOfTheWeek internamente.
   for I := 0 to High(Centres) do
   begin
     SrcCal := DMPlanner.CentresRepo.GetCalendarFor(Centres[I].Id);
@@ -1373,16 +1371,22 @@ begin
     DstCal := FGanttControl.GetCalendar(Centres[I].Id);
     if DstCal = nil then Continue;
     DstCal.Name := SrcCal.Name;
-    // Recorremos 7 días consecutivos a partir de un lunes conocido
-    // (01/01/2024 fue lunes). Así cubrimos los 7 posibles valores del día.
+    // 01/01/2024 fue lunes — cubrimos los 7 días con las reglas semanales.
+    // Hay que pedirlas SIN que la excepción intercepte: usamos una fecha
+    // de referencia que asumimos sin excepciones en SrcCal.
     RefDate := EncodeDate(2024, 1, 1);
     for Dia := 0 to 6 do
     begin
       Periods := SrcCal.NonWorkingPeriodsForDate(RefDate + Dia);
-      // SetDayNonWorkingPeriods espera el mismo índice que DayOfTheWeek
       DstCal.SetDayNonWorkingPeriods(
         DayOfTheWeek(RefDate + Dia), Periods);
     end;
+    // Propagar excepciones por fecha (festivos, laborables parciales)
+    DstCal.ClearExceptions;
+    ExcDates := SrcCal.GetExceptionDates;
+    for D in ExcDates do
+      if SrcCal.TryGetException(D, Exc) then
+        DstCal.SetDayException(D, Exc);
   end;
   FGanttControl.Invalidate;
 end;

@@ -105,19 +105,95 @@ object frmCalendarExceptionsEdit: TfrmCalendarExceptionsEdit
       TabOrder = 2
       OnClick = btnDelClick
     end
+    object btnDelSelected: TButton
+      Left = 294
+      Top = 6
+      Width = 180
+      Height = 26
+      Caption = 'Eliminar seleccionadas'
+      TabOrder = 3
+      OnClick = btnDelSelectedClick
+    end
+    object lblTotales: TLabel
+      Left = 484
+      Top = 11
+      Width = 260
+      Height = 17
+      Alignment = taRightJustify
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = ''
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 4474440
+      Font.Height = -12
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
+      ParentFont = False
+    end
   end
-  object grdExcepciones: TStringGrid
+  object grdExc: TcxGrid
     Left = 0
     Top = 94
     Width = 760
     Height = 342
     Align = alClient
-    ColCount = 4
-    DefaultRowHeight = 22
-    FixedCols = 0
-    RowCount = 2
-    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect, goThumbTracking]
     TabOrder = 3
-    OnDblClick = grdExcepcionesDblClick
+    object grdExcView: TcxGridDBTableView
+      OnDblClick = grdExcViewDblClick
+      DataController.DataSource = dsExc
+      DataController.Summary.DefaultGroupSummaryItems = <>
+      DataController.Summary.FooterSummaryItems = <>
+      DataController.Summary.SummaryGroups = <>
+      OptionsCustomize.ColumnFiltering = True
+      OptionsData.Deleting = False
+      OptionsData.Inserting = False
+      OptionsSelection.CellSelect = False
+      OptionsSelection.MultiSelect = True
+      OptionsSelection.CheckBoxVisibility = [cbvDataRow, cbvColumnHeader]
+      OptionsSelection.ShowCheckBoxesDynamically = False
+      OptionsView.GridLines = glBoth
+      OptionsView.GroupByBox = False
+      OptionsView.HeaderAutoHeight = True
+      OptionsView.ColumnAutoWidth = True
+      object colFecha: TcxGridDBColumn
+        Caption = 'Fecha'
+        DataBinding.FieldName = 'Fecha'
+        Options.Editing = False
+        Width = 140
+      end
+      object colTipo: TcxGridDBColumn
+        Caption = 'Tipo'
+        DataBinding.FieldName = 'Tipo'
+        Options.Editing = False
+        Width = 130
+      end
+      object colHorario: TcxGridDBColumn
+        Caption = 'Horario'
+        DataBinding.FieldName = 'Horario'
+        Options.Editing = False
+        Width = 100
+      end
+      object colDescripcion: TcxGridDBColumn
+        Caption = 'Descripci'#243'n'
+        DataBinding.FieldName = 'Descripcion'
+        Options.Editing = False
+        MinWidth = 200
+        Width = 340
+      end
+    end
+    object grdExcLevel: TcxGridLevel
+      GridView = grdExcView
+    end
+  end
+  object cdsExc: TClientDataSet
+    Aggregates = <>
+    Params = <>
+    Left = 600
+    Top = 10
+  end
+  object dsExc: TDataSource
+    DataSet = cdsExc
+    Left = 660
+    Top = 10
   end
 end

@@ -105,10 +105,6 @@ object frmErpExplorer: TfrmErpExplorer
         ClientRectTop = 1
         object tabSage200: TcxTabSheet
           Caption = 'Sage 200'
-          ExplicitLeft = 0
-          ExplicitTop = 0
-          ExplicitWidth = 0
-          ExplicitHeight = 0
           object pnlConexion: TGroupBox
             Left = 12
             Top = 12
@@ -259,6 +255,10 @@ object frmErpExplorer: TfrmErpExplorer
     object tabExplorador: TcxTabSheet
       Caption = 'Explorador'
       ImageIndex = 1
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       object splitVertical: TSplitter
         Left = 220
         Top = 0
@@ -355,6 +355,10 @@ object frmErpExplorer: TfrmErpExplorer
             ClientRectTop = 1
             object tabParamNinguno: TcxTabSheet
               Caption = 'Ninguno'
+              ExplicitLeft = 0
+              ExplicitTop = 0
+              ExplicitWidth = 0
+              ExplicitHeight = 0
             end
             object tabParamSerieNumEj: TcxTabSheet
               Caption = 'SerieNumEj'
@@ -429,6 +433,14 @@ object frmErpExplorer: TfrmErpExplorer
                 Height = 15
                 Caption = 'Versi'#243'n:'
               end
+              object lblEjercicioStock: TLabel
+                Left = 296
+                Top = 8
+                Width = 47
+                Height = 15
+                Caption = 'Ejercicio:'
+                Visible = False
+              end
               object edArticulo: TEdit
                 Left = 8
                 Top = 28
@@ -444,24 +456,14 @@ object frmErpExplorer: TfrmErpExplorer
                 NumbersOnly = True
                 TabOrder = 1
               end
-              object lblEjercicioStock: TLabel
-                Left = 296
-                Top = 8
-                Width = 49
-                Height = 15
-                Caption = 'Ejercicio:'
-                Visible = False
-              end
               object seEjercicioStock: TcxSpinEdit
                 Left = 296
                 Top = 28
-                Width = 80
-                Height = 23
+                Properties.AssignedValues.MinValue = True
                 Properties.MaxValue = 9999.000000000000000000
-                Properties.MinValue = 0.000000000000000000
                 TabOrder = 2
-                Value = 0
                 Visible = False
+                Width = 80
               end
             end
             object tabParamFiltro: TcxTabSheet

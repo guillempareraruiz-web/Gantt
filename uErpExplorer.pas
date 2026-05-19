@@ -43,7 +43,7 @@ uses
   dxSkinSummer2008, dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, cxDBData;
+  dxSkinXmas2008Blue, cxDBData, dxBarBuiltInMenu, cxContainer, cxTextEdit;
 
 type
   TEntidadExplorador = (

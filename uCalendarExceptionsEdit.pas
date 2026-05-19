@@ -2,17 +2,24 @@ unit uCalendarExceptionsEdit;
 
 // ============================================================================
 // Editor de excepciones (festivos, puentes, dias especiales) de un calendario.
-// Lista las excepciones existentes y permite alta/edicion/eliminacion.
-// La alta/edicion es un mini-dialog inline (fecha + tipo + horas si parcial).
+// Grid DevExpress (cxGrid) con multiselect NATIU via CheckBoxVisibility:
+//   - cbvDataRow + cbvColumnHeader habiliten checkbox per fila i al header.
+//   - Controller.SelectedRecords dona accs a les files marcades.
+// Doc: docs/design/ExcepcionesGrid.md
 // ============================================================================
 
 interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  System.UITypes, System.DateUtils,
+  System.UITypes, System.DateUtils, System.Variants,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
-  Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.Grids,
+  Vcl.ExtCtrls, Vcl.ComCtrls,
+  Data.DB, Datasnap.DBClient,
+  cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters, cxStyles,
+  cxClasses, cxCustomData, cxFilter, cxData, cxDataStorage, cxEdit,
+  cxNavigator, cxGridLevel, cxGridCustomTableView, cxGridTableView,
+  cxGridDBTableView, cxGridCustomView, cxGrid,
   uCalendarsRepo;
 
 type
@@ -26,21 +33,33 @@ type
     btnAdd: TButton;
     btnEdit: TButton;
     btnDel: TButton;
-    grdExcepciones: TStringGrid;
+    btnDelSelected: TButton;
+    lblTotales: TLabel;
+    grdExc: TcxGrid;
+    grdExcView: TcxGridDBTableView;
+    grdExcLevel: TcxGridLevel;
+    colFecha: TcxGridDBColumn;
+    colTipo: TcxGridDBColumn;
+    colHorario: TcxGridDBColumn;
+    colDescripcion: TcxGridDBColumn;
+    cdsExc: TClientDataSet;
+    dsExc: TDataSource;
     procedure FormShow(Sender: TObject);
     procedure btnCerrarClick(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnEditClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
-    procedure grdExcepcionesDblClick(Sender: TObject);
+    procedure btnDelSelectedClick(Sender: TObject);
+    procedure grdExcViewDblClick(Sender: TObject);
   private
     FRepo: TCalendarsRepo;
     FCodigoEmpresa: SmallInt;
     FCalendarId: Integer;
     FCalendarNombre: string;
-    FExceptionIds: TArray<Integer>;
+    procedure BuildDataset;
     procedure Reload;
     function SelectedId: Integer;
+    procedure UpdateTotalesLabel;
   public
     class function Execute(ARepo: TCalendarsRepo; ACodigoEmpresa: SmallInt;
       ACalendarId: Integer; const ACalendarNombre: string): Boolean;
@@ -74,18 +93,21 @@ end;
 procedure TfrmCalendarExceptionsEdit.FormShow(Sender: TObject);
 begin
   lblCalendarNombre.Caption := FCalendarNombre;
-  grdExcepciones.ColCount := 4;
-  grdExcepciones.RowCount := 2;
-  grdExcepciones.FixedRows := 1;
-  grdExcepciones.Cells[0, 0] := 'Fecha';
-  grdExcepciones.Cells[1, 0] := 'Tipo';
-  grdExcepciones.Cells[2, 0] := 'Horario';
-  grdExcepciones.Cells[3, 0] := 'Descripci'#243'n';
-  grdExcepciones.ColWidths[0] := 100;
-  grdExcepciones.ColWidths[1] := 90;
-  grdExcepciones.ColWidths[2] := 130;
-  grdExcepciones.ColWidths[3] := 360;
+  BuildDataset;
   Reload;
+end;
+
+procedure TfrmCalendarExceptionsEdit.BuildDataset;
+begin
+  cdsExc.Close;
+  cdsExc.FieldDefs.Clear;
+  cdsExc.FieldDefs.Add('ExceptionId', ftInteger);
+  cdsExc.FieldDefs.Add('Fecha', ftDate);
+  cdsExc.FieldDefs.Add('Tipo', ftString, 30);
+  cdsExc.FieldDefs.Add('Horario', ftString, 20);
+  cdsExc.FieldDefs.Add('Descripcion', ftString, 200);
+  cdsExc.FieldDefs.Add('EsLaborable', ftBoolean);
+  cdsExc.CreateDataSet;
 end;
 
 procedure TfrmCalendarExceptionsEdit.Reload;
@@ -94,48 +116,78 @@ var
   i: Integer;
   Tipo, Hora: string;
 begin
-  Items := FRepo.LoadExceptions(FCodigoEmpresa, FCalendarId);
-  SetLength(FExceptionIds, Length(Items));
-  if Length(Items) = 0 then
-  begin
-    grdExcepciones.RowCount := 2;
-    grdExcepciones.Cells[0, 1] := '';
-    grdExcepciones.Cells[1, 1] := '(sin excepciones)';
-    grdExcepciones.Cells[2, 1] := '';
-    grdExcepciones.Cells[3, 1] := '';
-    Exit;
-  end;
-  grdExcepciones.RowCount := Length(Items) + 1;
-  for i := 0 to High(Items) do
-  begin
-    FExceptionIds[i] := Items[i].ExceptionId;
-    grdExcepciones.Cells[0, i + 1] := FormatDateTime('dddd dd/mm/yyyy', Items[i].Fecha);
-    if Items[i].EsLaborable then
+  cdsExc.DisableControls;
+  try
+    cdsExc.EmptyDataSet;
+    Items := FRepo.LoadExceptions(FCodigoEmpresa, FCalendarId);
+    for i := 0 to High(Items) do
     begin
-      Tipo := 'Laborable parcial';
-      Hora := Format('%s - %s',
-        [FormatDateTime('hh:nn', Items[i].HoraInicio),
-         FormatDateTime('hh:nn', Items[i].HoraFin)]);
-    end
-    else
-    begin
-      Tipo := 'Festivo / cerrado';
-      Hora := '';
+      if Items[i].EsLaborable then
+      begin
+        Tipo := 'Pausa parcial';
+        Hora := Format('%s - %s',
+          [FormatDateTime('hh:nn', Items[i].HoraInicio),
+           FormatDateTime('hh:nn', Items[i].HoraFin)]);
+      end
+      else
+      begin
+        Tipo := 'Festivo / cerrado';
+        Hora := '';
+      end;
+
+      cdsExc.Append;
+      cdsExc.FieldByName('ExceptionId').AsInteger := Items[i].ExceptionId;
+      cdsExc.FieldByName('Fecha').AsDateTime := Items[i].Fecha;
+      cdsExc.FieldByName('Tipo').AsString := Tipo;
+      cdsExc.FieldByName('Horario').AsString := Hora;
+      cdsExc.FieldByName('Descripcion').AsString := Items[i].Descripcion;
+      cdsExc.FieldByName('EsLaborable').AsBoolean := Items[i].EsLaborable;
+      cdsExc.Post;
     end;
-    grdExcepciones.Cells[1, i + 1] := Tipo;
-    grdExcepciones.Cells[2, i + 1] := Hora;
-    grdExcepciones.Cells[3, i + 1] := Items[i].Descripcion;
+    cdsExc.First;
+  finally
+    cdsExc.EnableControls;
   end;
+  UpdateTotalesLabel;
 end;
 
 function TfrmCalendarExceptionsEdit.SelectedId: Integer;
-var
-  Row: Integer;
 begin
   Result := -1;
-  Row := grdExcepciones.Row - 1;
-  if (Row < 0) or (Row > High(FExceptionIds)) then Exit;
-  Result := FExceptionIds[Row];
+  if not cdsExc.Active or cdsExc.IsEmpty then Exit;
+  Result := cdsExc.FieldByName('ExceptionId').AsInteger;
+end;
+
+procedure TfrmCalendarExceptionsEdit.UpdateTotalesLabel;
+var
+  NFest, NParc: Integer;
+  BM: TBookmark;
+begin
+  NFest := 0;
+  NParc := 0;
+  if cdsExc.Active and not cdsExc.IsEmpty then
+  begin
+    BM := cdsExc.GetBookmark;
+    cdsExc.DisableControls;
+    try
+      cdsExc.First;
+      while not cdsExc.Eof do
+      begin
+        if cdsExc.FieldByName('EsLaborable').AsBoolean then
+          Inc(NParc)
+        else
+          Inc(NFest);
+        cdsExc.Next;
+      end;
+    finally
+      if cdsExc.BookmarkValid(BM) then
+        cdsExc.GotoBookmark(BM);
+      cdsExc.FreeBookmark(BM);
+      cdsExc.EnableControls;
+    end;
+  end;
+  lblTotales.Caption := Format('Festivas: %d   Parciales: %d   Total: %d',
+    [NFest, NParc, NFest + NParc]);
 end;
 
 procedure TfrmCalendarExceptionsEdit.btnCerrarClick(Sender: TObject);
@@ -178,7 +230,51 @@ begin
   end;
 end;
 
-procedure TfrmCalendarExceptionsEdit.grdExcepcionesDblClick(Sender: TObject);
+procedure TfrmCalendarExceptionsEdit.btnDelSelectedClick(Sender: TObject);
+var
+  N, i: Integer;
+  RecIndex: Integer;
+  Ids: TArray<Integer>;
+  Borradas, Errores: Integer;
+  IdFieldIdx: Integer;
+begin
+  N := grdExcView.Controller.SelectedRecordCount;
+  if N = 0 then
+  begin
+    ShowMessage('No hay excepciones marcadas.');
+    Exit;
+  end;
+  if MessageDlg(Format('Eliminar %d excepciones marcadas?', [N]),
+       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  // Recollim ids dels records seleccionats via DataController
+  IdFieldIdx := grdExcView.DataController.GetItemByFieldName('ExceptionId').Index;
+  SetLength(Ids, N);
+  for i := 0 to N - 1 do
+  begin
+    RecIndex := grdExcView.Controller.SelectedRecords[i].RecordIndex;
+    Ids[i] := grdExcView.DataController.Values[RecIndex, IdFieldIdx];
+  end;
+
+  Borradas := 0;
+  Errores := 0;
+  for i := 0 to High(Ids) do
+  begin
+    try
+      FRepo.DeleteException(FCodigoEmpresa, Ids[i]);
+      Inc(Borradas);
+    except
+      Inc(Errores);
+    end;
+  end;
+
+  if Errores > 0 then
+    ShowMessage(Format('Eliminadas: %d. Errores: %d.', [Borradas, Errores]));
+
+  Reload;
+end;
+
+procedure TfrmCalendarExceptionsEdit.grdExcViewDblClick(Sender: TObject);
 begin
   btnEditClick(Sender);
 end;

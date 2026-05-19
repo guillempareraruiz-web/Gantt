@@ -18,16 +18,26 @@ object frmGestionCalendarios: TfrmGestionCalendarios
   PixelsPerInch = 96
   TextHeight = 15
   object splMain: TSplitter
-    Left = 260
+    Left = 180
     Top = 60
     Width = 6
     Height = 600
+    Align = alLeft
   end
   object splModels: TSplitter
-    Left = 526
+    Left = 386
     Top = 60
     Width = 6
     Height = 600
+    Align = alLeft
+  end
+  object splDetalle: TSplitter
+    Left = 804
+    Top = 60
+    Width = 6
+    Height = 600
+    Align = alRight
+    Visible = False
   end
   object pnlHeader: TPanel
     Left = 0
@@ -72,6 +82,32 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Font.Style = []
       ParentFont = False
     end
+    object chkVerIndicadores: TCheckBox
+      Left = 930
+      Top = 20
+      Width = 120
+      Height = 21
+      Anchors = [akTop, akRight]
+      Caption = 'Ver indicadores'
+      TabOrder = 0
+      OnClick = chkVerIndicadoresClick
+    end
+    object btnAyuda: TButton
+      Left = 1060
+      Top = 16
+      Width = 28
+      Height = 28
+      Anchors = [akTop, akRight]
+      Caption = '?'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -16
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = [fsBold]
+      ParentFont = False
+      TabOrder = 1
+      OnClick = btnAyudaClick
+    end
     object shpHeaderLine: TShape
       Left = 0
       Top = 58
@@ -80,16 +116,6 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Align = alBottom
       Brush.Color = 15061727
       Pen.Style = psClear
-    end
-    object chkDarkMode: TCheckBox
-      Left = 1010
-      Top = 8
-      Width = 80
-      Height = 17
-      Anchors = [akTop, akRight]
-      Caption = 'Oscuro'
-      TabOrder = 0
-      OnClick = chkDarkModeClick
     end
   end
   object pnlBottom: TPanel
@@ -118,7 +144,7 @@ object frmGestionCalendarios: TfrmGestionCalendarios
   object pnlLeft: TPanel
     Left = 0
     Top = 60
-    Width = 260
+    Width = 180
     Height = 600
     Align = alLeft
     BevelOuter = bvNone
@@ -139,8 +165,8 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object lbCalendarios: TListBox
       Left = 0
       Top = 24
-      Width = 260
-      Height = 304
+      Width = 180
+      Height = 506
       Align = alClient
       ItemHeight = 15
       TabOrder = 0
@@ -148,84 +174,98 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     end
     object pnlCalToolbar: TPanel
       Left = 0
-      Top = 328
-      Width = 260
-      Height = 36
+      Top = 530
+      Width = 180
+      Height = 70
       Align = alBottom
       BevelOuter = bvNone
-      TabOrder = 2
+      TabOrder = 1
       object btnCalAdd: TButton
         Left = 4
         Top = 4
-        Width = 75
+        Width = 54
         Height = 28
         Caption = 'A'#241'adir'
         TabOrder = 0
         OnClick = btnCalAddClick
       end
       object btnCalEdit: TButton
-        Left = 83
+        Left = 62
         Top = 4
-        Width = 75
+        Width = 54
         Height = 28
         Caption = 'Editar'
         TabOrder = 1
         OnClick = btnCalEditClick
       end
       object btnCalDel: TButton
-        Left = 162
+        Left = 120
         Top = 4
-        Width = 75
+        Width = 56
         Height = 28
         Caption = 'Eliminar'
         TabOrder = 2
         OnClick = btnCalDelClick
       end
-    end
-    object pnlDetalle: TPanel
-      Left = 0
-      Top = 364
-      Width = 260
-      Height = 236
-      Align = alBottom
-      BevelOuter = bvNone
-      TabOrder = 1
-      object lblDetalleTitulo: TLabel
-        Left = 8
-        Top = 4
-        Width = 129
-        Height = 17
-        Caption = 'Detalle del calendario'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = 4474440
-        Font.Height = -13
-        Font.Name = 'Segoe UI Semibold'
-        Font.Style = []
-        ParentFont = False
+      object btnCalClone: TButton
+        Left = 4
+        Top = 38
+        Width = 172
+        Height = 28
+        Caption = 'Clonar...'
+        TabOrder = 3
+        OnClick = btnCalCloneClick
       end
-      object memoDetalle: TMemo
+    end
+  end
+  object pnlDetalle: TPanel
+    Left = 810
+    Top = 60
+    Width = 290
+    Height = 600
+    Align = alRight
+    BevelOuter = bvNone
+    Color = clWhite
+    ParentBackground = False
+    TabOrder = 5
+    Visible = False
+    object lblDetalleTitulo: TLabel
+      Left = 8
+      Top = 4
+      Width = 270
+      Height = 17
+      Caption = 'Detalle del calendario'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 4474440
+      Font.Height = -13
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
+      ParentFont = False
+    end
+    object sbDetalle: TScrollBox
+      Left = 0
+      Top = 26
+      Width = 290
+      Height = 574
+      Align = alClient
+      BorderStyle = bsNone
+      Color = clWhite
+      ParentColor = False
+      TabOrder = 0
+      object pbDetalle: TPaintBox
         Left = 0
-        Top = 26
-        Width = 260
-        Height = 204
-        Align = alBottom
-        Anchors = [akLeft, akTop, akRight, akBottom]
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -11
-        Font.Name = 'Consolas'
-        Font.Style = []
-        ParentFont = False
-        ReadOnly = True
-        ScrollBars = ssVertical
-        TabOrder = 0
+        Top = 0
+        Width = 290
+        Height = 800
+        Align = alTop
+        OnPaint = pbDetallePaint
       end
     end
   end
   object pnlModels: TPanel
-    Left = 266
+    Left = 186
     Top = 60
-    Width = 260
+    Width = 200
     Height = 600
     Align = alLeft
     BevelOuter = bvNone
@@ -233,7 +273,7 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object lblModelos: TLabel
       Left = 8
       Top = 4
-      Width = 130
+      Width = 180
       Height = 17
       Caption = 'Modelos horarios'
       Font.Charset = DEFAULT_CHARSET
@@ -246,11 +286,11 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object lblModelosHint: TLabel
       Left = 8
       Top = 22
-      Width = 240
+      Width = 184
       Height = 30
       AutoSize = False
       WordWrap = True
-      Caption = 'Plantillas horarias que definen las franjas laborables del calendario. Cada calendario puede tener varios modelos (jornada normal, nocturna, etc.).'
+      Caption = 'Plantillas horarias que definen las franjas laborables del calendario.'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGrayText
       Font.Height = -10
@@ -261,8 +301,8 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object lbModelos: TListBox
       Left = 0
       Top = 56
-      Width = 260
-      Height = 508
+      Width = 200
+      Height = 472
       Align = alClient
       ItemHeight = 15
       TabOrder = 0
@@ -271,34 +311,34 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     end
     object pnlModelosToolbar: TPanel
       Left = 0
-      Top = 528
-      Width = 260
-      Height = 72
+      Top = 458
+      Width = 200
+      Height = 142
       Align = alBottom
       BevelOuter = bvNone
       TabOrder = 1
       object btnModeloAdd: TButton
         Left = 4
         Top = 4
-        Width = 75
+        Width = 60
         Height = 28
         Caption = 'A'#241'adir'
         TabOrder = 0
         OnClick = btnModeloAddClick
       end
       object btnModeloEdit: TButton
-        Left = 83
+        Left = 68
         Top = 4
-        Width = 75
+        Width = 60
         Height = 28
         Caption = 'Editar'
         TabOrder = 1
         OnClick = btnModeloEditClick
       end
       object btnModeloDel: TButton
-        Left = 162
+        Left = 132
         Top = 4
-        Width = 75
+        Width = 64
         Height = 28
         Caption = 'Eliminar'
         TabOrder = 2
@@ -307,18 +347,36 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       object btnExcepciones: TButton
         Left = 4
         Top = 40
-        Width = 250
+        Width = 192
         Height = 28
-        Caption = 'Excepciones del calendario...'
+        Caption = 'Excepciones...'
         TabOrder = 3
         OnClick = btnExcepcionesClick
+      end
+      object btnImportFestivos: TButton
+        Left = 4
+        Top = 74
+        Width = 192
+        Height = 28
+        Caption = 'Importar festivos...'
+        TabOrder = 4
+        OnClick = btnImportFestivosClick
+      end
+      object btnExcRecurrente: TButton
+        Left = 4
+        Top = 108
+        Width = 192
+        Height = 28
+        Caption = 'Excepci'#243'n recurrente...'
+        TabOrder = 5
+        OnClick = btnExcRecurrenteClick
       end
     end
   end
   object pnlRight: TPanel
-    Left = 532
+    Left = 392
     Top = 60
-    Width = 568
+    Width = 412
     Height = 600
     Align = alClient
     BevelOuter = bvNone
@@ -339,19 +397,17 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object pbCalendar: TPaintBox
       Left = 0
       Top = 0
-      Width = 568
+      Width = 412
       Height = 568
       Align = alClient
       OnDblClick = pbCalendarDblClick
       OnMouseMove = pbCalendarMouseMove
       OnPaint = pbCalendarPaint
-      ExplicitTop = 26
-      ExplicitHeight = 542
     end
     object pnlLeyenda: TPanel
       Left = 0
       Top = 568
-      Width = 568
+      Width = 412
       Height = 32
       Align = alBottom
       BevelOuter = bvNone

@@ -1,0 +1,100 @@
+{
+  "nombre": "España (nacionales)",
+  "descripcion": "Festivos nacionales de España. Las CCAA pueden añadir más.",
+  "anios": {
+    "2025": [
+      { "fecha": "2025-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2025-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2025-04-18", "descripcion": "Viernes Santo" },
+      { "fecha": "2025-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2025-08-15", "descripcion": "Asunción de la Virgen" },
+      { "fecha": "2025-10-13", "descripcion": "Fiesta Nacional (trasladado)" },
+      { "fecha": "2025-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2025-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2025-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2025-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2026": [
+      { "fecha": "2026-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2026-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2026-04-03", "descripcion": "Viernes Santo" },
+      { "fecha": "2026-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2026-08-15", "descripcion": "Asunción de la Virgen" },
+      { "fecha": "2026-10-12", "descripcion": "Fiesta Nacional" },
+      { "fecha": "2026-11-02", "descripcion": "Todos los Santos (trasladado)" },
+      { "fecha": "2026-12-07", "descripcion": "Día de la Constitución (trasladado)" },
+      { "fecha": "2026-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2026-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2027": [
+      { "fecha": "2027-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2027-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2027-03-26", "descripcion": "Viernes Santo" },
+      { "fecha": "2027-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2027-08-16", "descripcion": "Asunción de la Virgen (trasladado)" },
+      { "fecha": "2027-10-12", "descripcion": "Fiesta Nacional" },
+      { "fecha": "2027-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2027-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2027-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2027-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2028": [
+      { "fecha": "2028-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2028-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2028-04-14", "descripcion": "Viernes Santo" },
+      { "fecha": "2028-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2028-08-15", "descripcion": "Asunción de la Virgen" },
+      { "fecha": "2028-10-12", "descripcion": "Fiesta Nacional" },
+      { "fecha": "2028-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2028-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2028-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2028-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2029": [
+      { "fecha": "2029-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2029-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2029-03-30", "descripcion": "Viernes Santo" },
+      { "fecha": "2029-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2029-08-15", "descripcion": "Asunción de la Virgen" },
+      { "fecha": "2029-10-12", "descripcion": "Fiesta Nacional" },
+      { "fecha": "2029-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2029-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2029-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2029-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2030": [
+      { "fecha": "2030-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2030-04-19", "descripcion": "Viernes Santo" },
+      { "fecha": "2030-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2030-08-15", "descripcion": "Asunción de la Virgen" },
+      { "fecha": "2030-10-12", "descripcion": "Fiesta Nacional" },
+      { "fecha": "2030-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2030-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2030-12-09", "descripcion": "Inmaculada Concepción (trasladado)" },
+      { "fecha": "2030-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2031": [
+      { "fecha": "2031-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2031-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2031-04-11", "descripcion": "Viernes Santo" },
+      { "fecha": "2031-05-01", "descripcion": "Día del Trabajador" },
+      { "fecha": "2031-08-15", "descripcion": "Asunción de la Virgen" },
+      { "fecha": "2031-10-13", "descripcion": "Fiesta Nacional (trasladado)" },
+      { "fecha": "2031-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2031-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2031-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2031-12-25", "descripcion": "Natividad del Señor" }
+    ],
+    "2032": [
+      { "fecha": "2032-01-01", "descripcion": "Año Nuevo" },
+      { "fecha": "2032-01-06", "descripcion": "Epifanía del Señor (Reyes)" },
+      { "fecha": "2032-03-26", "descripcion": "Viernes Santo" },
+      { "fecha": "2032-08-16", "descripcion": "Asunción de la Virgen (trasladado)" },
+      { "fecha": "2032-10-12", "descripcion": "Fiesta Nacional" },
+      { "fecha": "2032-11-01", "descripcion": "Todos los Santos" },
+      { "fecha": "2032-12-06", "descripcion": "Día de la Constitución" },
+      { "fecha": "2032-12-08", "descripcion": "Inmaculada Concepción" },
+      { "fecha": "2032-12-25", "descripcion": "Natividad del Señor" }
+    ]
+  }
+}

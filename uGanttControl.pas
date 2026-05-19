@@ -7674,6 +7674,10 @@ var
   A, B: TDateTime;
   X1, X2: Single;
   RS: TRectF;
+  HasExc: Boolean;
+  Exc: TDayException;
+  ShadeColor: TColor;
+  ShadeAlpha: Single;
 
   function D2DRectF(const R: TRectF): TD2D1RectF;
   begin
@@ -7724,47 +7728,91 @@ begin
   try
     while Day <= LastDay do
     begin
-      Periods := Cal.NonWorkingPeriodsForDate(Day);
+      HasExc := Cal.TryGetException(Day, Exc);
 
+      // Linea vertical al canvi de dia
+      X1 := TimeToX(Day);
+      RT.DrawLine(D2D1PointF(X1, GanttRectS.Top), D2D1PointF(X1, GanttRectS.Bottom), FillBrush, 1.0);
+
+      // --- Capa 1: regla setmanal (gris amb dots), sempre ---
+      Periods := Cal.WeeklyRulePeriodsForDate(Day);
       for P in Periods do
       begin
-
-        X1 := TimeToX(Day);
-        RT.DrawLine(D2D1PointF(X1, GanttRectS.Top), D2D1PointF(X1, GanttRectS.Bottom), FillBrush, 1.0);
-
         A := Day + Frac(P.StartTimeOfDay);
         B := Day + Frac(P.EndTimeOfDay);
-
-
-
-        if B <= A then
-          Continue;
-
-        if B <= VisibleStart then
-          Continue;
-        if A >= VisibleEnd then
-          Continue;
-
+        if B <= A then Continue;
+        if B <= VisibleStart then Continue;
+        if A >= VisibleEnd then Continue;
         X1 := TimeToX(A);
         X2 := TimeToX(B);
-
-        if X2 <= X1 then
-          Continue;
-
+        if X2 <= X1 then Continue;
         RS := TRectF.Create(
-          Max(GanttRectS.Left, X1),
-          GanttRectS.Top,
-          Min(GanttRectS.Right, X2),
-          GanttRectS.Bottom
-        );
-
+          Max(GanttRectS.Left, X1), GanttRectS.Top,
+          Min(GanttRectS.Right, X2), GanttRectS.Bottom);
         if RS.Right > RS.Left then
         begin
           FillBrush.SetColor(D2DColorFromTColor($00DCDCDC, 0.18));
           RT.FillRectangle(D2DRectF(RS), FillBrush);
-
           DotBrush.SetOpacity(0.55);
           RT.FillRectangle(D2DRectF(RS), DotBrush);
+        end;
+      end;
+
+      // --- Capa 2: delta de l'excepció (rosa/groc semitransparent) ---
+      if HasExc then
+      begin
+        if not Exc.EsLaborable then
+        begin
+          // Festiu: rosa molt suau sobre tot el dia (deixa veure els dots grisos
+          // de la capa 1 a sota a les hores no-laborables habituals)
+          ShadeColor := $008087FF; // RGB(255,135,128)
+          ShadeAlpha := 0.22;
+          A := Day;
+          B := IncDay(Day);
+          if (B > VisibleStart) and (A < VisibleEnd) then
+          begin
+            X1 := TimeToX(Max(A, VisibleStart));
+            X2 := TimeToX(Min(B, VisibleEnd));
+            if X2 > X1 then
+            begin
+              RS := TRectF.Create(
+                Max(GanttRectS.Left, X1), GanttRectS.Top,
+                Min(GanttRectS.Right, X2), GanttRectS.Bottom);
+              if RS.Right > RS.Left then
+              begin
+                FillBrush.SetColor(D2DColorFromTColor(ShadeColor, ShadeAlpha));
+                RT.FillRectangle(D2DRectF(RS), FillBrush);
+              end;
+            end;
+          end;
+        end
+        else
+        begin
+          // Parcial: groc dins [HoraInicio, HoraFin] = franja no laborable extra
+          ShadeColor := $0080E6FF; // RGB(255,230,128)
+          ShadeAlpha := 0.45;
+
+          A := Day + Frac(Exc.HoraInicio);
+          B := Day + Frac(Exc.HoraFin);
+          if B > A then
+          begin
+            if (B > VisibleStart) and (A < VisibleEnd) then
+            begin
+              X1 := TimeToX(Max(A, VisibleStart));
+              X2 := TimeToX(Min(B, VisibleEnd));
+              if X2 > X1 then
+              begin
+                RS := TRectF.Create(
+                  Max(GanttRectS.Left, X1), GanttRectS.Top,
+                  Min(GanttRectS.Right, X2), GanttRectS.Bottom);
+                if RS.Right > RS.Left then
+                begin
+                  FillBrush.SetColor(D2DColorFromTColor(ShadeColor, ShadeAlpha));
+                  RT.FillRectangle(D2DRectF(RS), FillBrush);
+                end;
+              end;
+            end;
+          end;
         end;
       end;
 

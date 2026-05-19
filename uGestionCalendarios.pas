@@ -44,7 +44,9 @@ type
     lblTitle: TLabel;
     lblSubtitle: TLabel;
     shpHeaderLine: TShape;
-    chkDarkMode: TCheckBox;
+    chkVerIndicadores: TCheckBox;
+    splDetalle: TSplitter;
+    btnAyuda: TButton;
     pnlBottom: TPanel;
     btnCerrar: TButton;
     splMain: TSplitter;
@@ -55,9 +57,11 @@ type
     btnCalAdd: TButton;
     btnCalEdit: TButton;
     btnCalDel: TButton;
+    btnCalClone: TButton;
     pnlDetalle: TPanel;
     lblDetalleTitulo: TLabel;
-    memoDetalle: TMemo;
+    sbDetalle: TScrollBox;
+    pbDetalle: TPaintBox;
     pnlRight: TPanel;
     lblAnioCaption: TLabel;
     pnlLeyenda: TPanel;
@@ -73,23 +77,30 @@ type
     btnModeloEdit: TButton;
     btnModeloDel: TButton;
     btnExcepciones: TButton;
+    btnImportFestivos: TButton;
+    btnExcRecurrente: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnCerrarClick(Sender: TObject);
-    procedure chkDarkModeClick(Sender: TObject);
     procedure lbCalendariosClick(Sender: TObject);
     procedure pbCalendarPaint(Sender: TObject);
     procedure pbCalendarMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure pbCalendarDblClick(Sender: TObject);
+    procedure pbDetallePaint(Sender: TObject);
     procedure btnCalAddClick(Sender: TObject);
     procedure btnCalEditClick(Sender: TObject);
     procedure btnCalDelClick(Sender: TObject);
+    procedure btnCalCloneClick(Sender: TObject);
     procedure lbModelosClick(Sender: TObject);
     procedure lbModelosDblClick(Sender: TObject);
     procedure btnModeloAddClick(Sender: TObject);
     procedure btnModeloEditClick(Sender: TObject);
     procedure btnModeloDelClick(Sender: TObject);
     procedure btnExcepcionesClick(Sender: TObject);
+    procedure btnImportFestivosClick(Sender: TObject);
+    procedure btnExcRecurrenteClick(Sender: TObject);
+    procedure chkVerIndicadoresClick(Sender: TObject);
+    procedure btnAyudaClick(Sender: TObject);
   private
     FYear: Word;
     FDark: Boolean;
@@ -103,6 +114,19 @@ type
 
     FCalendarIds: TArray<Integer>;  // CalendarId per cada entrada al ListBox
     FModelIds: TArray<Integer>;     // ShiftModelId per cada entrada de lbModelos
+
+    // Cache del Detalle (poblat a BuildDetalleText, pintat a pbDetallePaint)
+    FDetCalName: string;
+    FDetCalDesc: string;
+    FDetWeekendClosed: Boolean;
+    FDetCentros: TArray<string>;
+    FDetModelos: TArray<string>;       // "Nombre (N lineas)[ *Default]"
+    FDetExcepciones: TArray<string>;   // "dd/mm/yyyy - Tipo - desc"
+    FDetExcTipos: TArray<Boolean>;     // True=parcial, False=festivo (per color)
+    FDetTotalLab: Integer;
+    FDetTotalParcial: Integer;
+    FDetTotalNoLab: Integer;
+    FDetHorasAnuales: Integer;     // minuts totals laborables / 60
 
     procedure LoadCalendarioList;
     procedure LoadModelosList;
@@ -145,7 +169,8 @@ implementation
 
 uses
   uDMPlanner, uCalendarsRepo, uShiftModelEdit, uCalendarExceptionsEdit,
-  uCalendarExceptionEditDialog;
+  uCalendarExceptionEditDialog, uFestivosImportDialog, uExcepcionRecurrenteDialog,
+  uHelpViewer;
 
 {$R *.dfm}
 
@@ -193,6 +218,12 @@ end;
 procedure TfrmGestionCalendarios.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
+  if (Key = VK_F1) and (Shift = []) then
+  begin
+    Key := 0;
+    btnAyudaClick(nil);
+    Exit;
+  end;
   if Key = VK_ESCAPE then
     ModalResult := mrCancel;
 end;
@@ -426,6 +457,63 @@ begin
     RefreshAfterModelChange;  // recarrega motor + vista anual
 end;
 
+procedure TfrmGestionCalendarios.btnImportFestivosClick(Sender: TObject);
+var
+  CalId: Integer;
+  Nom: string;
+begin
+  CalId := SelectedCalendarId;
+  if CalId < 0 then
+  begin
+    ShowMessage('Selecciona un calendario primero.');
+    Exit;
+  end;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  if (FSelectedCalIdx >= 0) and (FSelectedCalIdx < lbCalendarios.Items.Count) then
+    Nom := lbCalendarios.Items[FSelectedCalIdx]
+  else
+    Nom := '';
+
+  if TfrmFestivosImport.Execute(DMPlanner.CalendarsRepo,
+       DMPlanner.CodigoEmpresa, CalId, Nom, FYear) then
+    RefreshAfterModelChange;
+end;
+
+procedure TfrmGestionCalendarios.btnExcRecurrenteClick(Sender: TObject);
+var
+  CalId: Integer;
+  Nom: string;
+begin
+  CalId := SelectedCalendarId;
+  if CalId < 0 then
+  begin
+    ShowMessage('Selecciona un calendario primero.');
+    Exit;
+  end;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  if (FSelectedCalIdx >= 0) and (FSelectedCalIdx < lbCalendarios.Items.Count) then
+    Nom := lbCalendarios.Items[FSelectedCalIdx]
+  else
+    Nom := '';
+
+  if TfrmExcepcionRecurrente.Execute(DMPlanner.CalendarsRepo,
+       DMPlanner.CodigoEmpresa, CalId, Nom, FYear) then
+    RefreshAfterModelChange;
+end;
+
+procedure TfrmGestionCalendarios.chkVerIndicadoresClick(Sender: TObject);
+begin
+  pnlDetalle.Visible := chkVerIndicadores.Checked;
+  splDetalle.Visible := chkVerIndicadores.Checked;
+end;
+
+procedure TfrmGestionCalendarios.btnAyudaClick(Sender: TObject);
+begin
+  THelpViewer.Show('uGestionCalendarios', 'Gesti'#243'n de calendarios');
+end;
+
 { ========== Build day cache ========== }
 
 procedure TfrmGestionCalendarios.BuildDayCache;
@@ -498,113 +586,178 @@ var
   TotalLab, TotalNoLab, TotalParcial: Integer;
   Mo, D, DaysInMo: Integer;
   CE: string;
+  TotMin: Integer;
+  Cal: TCentreCalendar;
+  ADate: TDateTime;
+  S: string;
+  NLineas: Integer;
+  EsDef: Boolean;
+  TipoTxt: string;
 begin
-  memoDetalle.Lines.Clear;
-  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then Exit;
+  // Reset cache
+  FDetCalName := '';
+  FDetCalDesc := '';
+  FDetWeekendClosed := False;
+  SetLength(FDetCentros, 0);
+  SetLength(FDetModelos, 0);
+  SetLength(FDetExcepciones, 0);
+  SetLength(FDetExcTipos, 0);
+  FDetTotalLab := 0;
+  FDetTotalParcial := 0;
+  FDetTotalNoLab := 0;
+  FDetHorasAnuales := 0;
 
-  CalId := FCalendarIds[FSelectedCalIdx];
-  CE := IntToStr(DMPlanner.CodigoEmpresa);
-
-  // Nombre del calendario
-  Q := TADOQuery.Create(nil);
   try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text := 'SELECT Nombre, Descripcion FROM FS_PL_Calendar WHERE CodigoEmpresa = ' +
-      CE + ' AND CalendarId = ' + IntToStr(CalId);
-    Q.Open;
-    if Q.Eof then Exit;
-    CalNombre := Q.FieldByName('Nombre').AsString;
-    memoDetalle.Lines.Add('CALENDARIO: ' + CalNombre);
-    if Q.FieldByName('Descripcion').AsString <> '' then
-      memoDetalle.Lines.Add(Q.FieldByName('Descripcion').AsString);
-    memoDetalle.Lines.Add('');
-  finally
-    Q.Free;
-  end;
+    if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then Exit;
 
-  // Períodos no laborables L-V (día 1 como ejemplo)
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text := 'SELECT DiaSemana, ' +
-      'CONVERT(VARCHAR(5), HoraInicioNoLab, 108) AS HoraInicio, ' +
-      'CONVERT(VARCHAR(5), HoraFinNoLab, 108) AS HoraFin ' +
-      'FROM FS_PL_CalendarDayRule ' +
-      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId) +
-      ' AND DiaSemana = 1 ORDER BY HoraInicioNoLab';
-    Q.Open;
-    if Q.Eof then
-      memoDetalle.Lines.Add('L-V: 24h laborable')
-    else
-    begin
-      memoDetalle.Lines.Add('L-V periodos NO laborables:');
+    CalId := FCalendarIds[FSelectedCalIdx];
+    CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+    // Nombre y descripcion
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT Nombre, Descripcion FROM FS_PL_Calendar WHERE CodigoEmpresa = ' +
+        CE + ' AND CalendarId = ' + IntToStr(CalId);
+      Q.Open;
+      if Q.Eof then Exit;
+      FDetCalName := Q.FieldByName('Nombre').AsString;
+      FDetCalDesc := Q.FieldByName('Descripcion').AsString;
+    finally
+      Q.Free;
+    end;
+
+    // Fin de semana cerrado
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT COUNT(*) AS Cnt FROM FS_PL_CalendarDayRule ' +
+        'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId) +
+        ' AND DiaSemana IN (6,7)';
+      Q.Open;
+      FDetWeekendClosed := Q.FieldByName('Cnt').AsInteger > 0;
+    finally
+      Q.Free;
+    end;
+
+    // Centros asignados
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text := 'SELECT c.Titulo FROM FS_PL_CenterCalendar cc ' +
+        'INNER JOIN FS_PL_Center c ON c.CodigoEmpresa = cc.CodigoEmpresa AND c.CenterId = cc.CenterId ' +
+        'WHERE cc.CodigoEmpresa = ' + CE + ' AND cc.CalendarId = ' + IntToStr(CalId) +
+        ' ORDER BY c.Titulo';
+      Q.Open;
       while not Q.Eof do
       begin
-        memoDetalle.Lines.Add('  ' +
-          Q.FieldByName('HoraInicio').AsString + ' - ' +
-          Q.FieldByName('HoraFin').AsString);
+        SetLength(FDetCentros, Length(FDetCentros) + 1);
+        FDetCentros[High(FDetCentros)] := Q.FieldByName('Titulo').AsString;
         Q.Next;
       end;
+    finally
+      Q.Free;
     end;
-  finally
-    Q.Free;
-  end;
 
-  // Fin de semana
-  memoDetalle.Lines.Add('');
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text := 'SELECT COUNT(*) AS Cnt FROM FS_PL_CalendarDayRule ' +
-      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId) +
-      ' AND DiaSemana IN (6,7)';
-    Q.Open;
-    if Q.FieldByName('Cnt').AsInteger > 0 then
-      memoDetalle.Lines.Add('Fin de semana: CERRADO')
-    else
-      memoDetalle.Lines.Add('Fin de semana: ABIERTO');
-  finally
-    Q.Free;
-  end;
-
-  // Centros asignados
-  memoDetalle.Lines.Add('');
-  memoDetalle.Lines.Add('Centros asignados:');
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text := 'SELECT c.Titulo FROM FS_PL_CenterCalendar cc ' +
-      'INNER JOIN FS_PL_Center c ON c.CodigoEmpresa = cc.CodigoEmpresa AND c.CenterId = cc.CenterId ' +
-      'WHERE cc.CodigoEmpresa = ' + CE + ' AND cc.CalendarId = ' + IntToStr(CalId) +
-      ' ORDER BY c.Titulo';
-    Q.Open;
-    while not Q.Eof do
-    begin
-      memoDetalle.Lines.Add('  ' + Q.FieldByName('Titulo').AsString);
-      Q.Next;
-    end;
-  finally
-    Q.Free;
-  end;
-
-  // Estadísticas anuales
-  TotalLab := 0; TotalNoLab := 0; TotalParcial := 0;
-  for Mo := 1 to 12 do
-  begin
-    DaysInMo := DaysInMonth(EncodeDate(FYear, Mo, 1));
-    for D := 1 to DaysInMo do
-      case FDayTypes[Mo, D] of
-        dtLaborable: Inc(TotalLab);
-        dtNoLaborable: Inc(TotalNoLab);
-        dtParcial: Inc(TotalParcial);
+    // Modelos horarios del calendario (catalogo + flag Default)
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT sm.ShiftModelId, sm.Nombre, sm.EsDefault, ' +
+        '  (SELECT COUNT(*) FROM FS_PL_ShiftModelLine sl ' +
+        '   WHERE sl.CodigoEmpresa = sm.CodigoEmpresa ' +
+        '     AND sl.ShiftModelId = sm.ShiftModelId) AS NLineas ' +
+        'FROM FS_PL_ShiftModel sm ' +
+        'WHERE sm.CodigoEmpresa = ' + CE + ' AND sm.CalendarId = ' + IntToStr(CalId) +
+        ' ORDER BY sm.EsDefault DESC, sm.Nombre';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        NLineas := Q.FieldByName('NLineas').AsInteger;
+        EsDef := Q.FieldByName('EsDefault').AsBoolean;
+        S := Q.FieldByName('Nombre').AsString +
+             Format('  (%d l'#237'neas)', [NLineas]);
+        if EsDef then
+          S := S + '   *Default';
+        SetLength(FDetModelos, Length(FDetModelos) + 1);
+        FDetModelos[High(FDetModelos)] := S;
+        Q.Next;
       end;
+    finally
+      Q.Free;
+    end;
+
+    // Excepciones del año seleccionado, ordenadas
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT Fecha, EsLaborable, ' +
+        '  CONVERT(VARCHAR(5), HoraInicio, 108) AS HIni, ' +
+        '  CONVERT(VARCHAR(5), HoraFin, 108)    AS HFin, ' +
+        '  Descripcion ' +
+        'FROM FS_PL_CalendarException ' +
+        'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(CalId) +
+        '  AND YEAR(Fecha) = ' + IntToStr(FYear) +
+        ' ORDER BY Fecha';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        ADate := Q.FieldByName('Fecha').AsDateTime;
+        if Q.FieldByName('EsLaborable').AsBoolean then
+        begin
+          TipoTxt := 'Pausa ' + Q.FieldByName('HIni').AsString +
+                     '-' + Q.FieldByName('HFin').AsString;
+          SetLength(FDetExcTipos, Length(FDetExcTipos) + 1);
+          FDetExcTipos[High(FDetExcTipos)] := True;
+        end
+        else
+        begin
+          TipoTxt := 'Festivo';
+          SetLength(FDetExcTipos, Length(FDetExcTipos) + 1);
+          FDetExcTipos[High(FDetExcTipos)] := False;
+        end;
+        S := FormatDateTime('dd/mm/yyyy', ADate) + '  ' + TipoTxt;
+        if Q.FieldByName('Descripcion').AsString <> '' then
+          S := S + '  - ' + Q.FieldByName('Descripcion').AsString;
+        SetLength(FDetExcepciones, Length(FDetExcepciones) + 1);
+        FDetExcepciones[High(FDetExcepciones)] := S;
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    // KPIs anuales (dias)
+    TotalLab := 0; TotalNoLab := 0; TotalParcial := 0;
+    for Mo := 1 to 12 do
+    begin
+      DaysInMo := DaysInMonth(EncodeDate(FYear, Mo, 1));
+      for D := 1 to DaysInMo do
+        case FDayTypes[Mo, D] of
+          dtLaborable:   Inc(TotalLab);
+          dtNoLaborable: Inc(TotalNoLab);
+          dtParcial:     Inc(TotalParcial);
+        end;
+    end;
+    FDetTotalLab := TotalLab;
+    FDetTotalParcial := TotalParcial;
+    FDetTotalNoLab := TotalNoLab;
+
+    // Horas laborables totales del año (suma FWorkingMinutes)
+    TotMin := 0;
+    for Mo := 1 to 12 do
+    begin
+      DaysInMo := DaysInMonth(EncodeDate(FYear, Mo, 1));
+      for D := 1 to DaysInMo do
+        Inc(TotMin, FWorkingMinutes[Mo, D]);
+    end;
+    FDetHorasAnuales := TotMin div 60;
+  finally
+    if pbDetalle <> nil then
+      pbDetalle.Invalidate;
   end;
-  memoDetalle.Lines.Add('');
-  memoDetalle.Lines.Add(Format('--- Resumen %d ---', [FYear]));
-  memoDetalle.Lines.Add(Format('Laborables 24h:  %d', [TotalLab]));
-  memoDetalle.Lines.Add(Format('Parciales:       %d', [TotalParcial]));
-  memoDetalle.Lines.Add(Format('No laborables:   %d', [TotalNoLab]));
-  memoDetalle.Lines.Add(Format('Total dias:      %d', [TotalLab + TotalParcial + TotalNoLab]));
 end;
 
 { ========== Geometry ========== }
@@ -744,6 +897,10 @@ var
   TodayDate: TDateTime;
   S: string;
   Flags: Cardinal;
+  Cal: TCentreCalendar;
+  Exc: TDayException;
+  HasExc: Boolean;
+  Tri: array[0..2] of TPoint;
 begin
   C := pbCalendar.Canvas;
 
@@ -753,6 +910,12 @@ begin
 
   TodayDate := DateOf(Now);
   DayNamesH := 14;
+
+  // Calendari actiu (per consultar excepcions per data)
+  Cal := nil;
+  if (FSelectedCalIdx >= 0) and (FSelectedCalIdx <= High(FCalendarIds))
+     and (DMPlanner.CalendarsRepo <> nil) then
+    Cal := DMPlanner.CalendarsRepo.GetById(FCalendarIds[FSelectedCalIdx]);
 
   for Mo := 1 to 12 do
   begin
@@ -825,6 +988,22 @@ begin
       S := IntToStr(D);
       DrawText(C.Handle, PChar(S), Length(S), DR,
         DT_CENTER or DT_SINGLELINE or DT_VCENTER);
+
+      // Marca d'excepcio: triangle a la cantonada sup-dreta
+      // Vermell = festiu sencer / Taronja = pausa parcial
+      HasExc := False;
+      if Cal <> nil then
+        HasExc := Cal.TryGetException(EncodeDate(FYear, Mo, D), Exc);
+      if HasExc then
+      begin
+        Tri[0] := Point(DR.Right - 8, DR.Top + 1);
+        Tri[1] := Point(DR.Right - 1, DR.Top + 1);
+        Tri[2] := Point(DR.Right - 1, DR.Top + 8);
+        C.Brush.Color := $00B040D0; // fuchsia (BGR) RGB(208,64,176)
+        C.Brush.Style := bsSolid;
+        C.Pen.Color := C.Brush.Color;
+        C.Polygon(Tri);
+      end;
     end;
   end;
 end;
@@ -912,20 +1091,11 @@ begin
   while pnlLeyenda.ControlCount > 0 do
     pnlLeyenda.Controls[0].Free;
 
-  AddLeyendaItem(pnlLeyenda, 8, ColorLaborable, 'Laborable 24h');
-  AddLeyendaItem(pnlLeyenda, 148, ColorParcial, 'Parcial');
-  AddLeyendaItem(pnlLeyenda, 260, ColorNoLaborable, 'No laborable');
-  AddLeyendaItem(pnlLeyenda, 400, ColorSinCalendario, 'Sin calendario');
-end;
-
-{ ========== Dark Mode ========== }
-
-procedure TfrmGestionCalendarios.chkDarkModeClick(Sender: TObject);
-begin
-  FDark := chkDarkMode.Checked;
-  ApplyDarkMode(FDark);
-  PaintLeyenda;
-  pbCalendar.Invalidate;
+  AddLeyendaItem(pnlLeyenda, 8,   ColorLaborable,     'Laborable 24h');
+  AddLeyendaItem(pnlLeyenda, 120, ColorParcial,       'Parcial');
+  AddLeyendaItem(pnlLeyenda, 220, ColorNoLaborable,   'No laborable');
+  AddLeyendaItem(pnlLeyenda, 340, ColorSinCalendario, 'Sin calendario');
+  AddLeyendaItem(pnlLeyenda, 460, $00B040D0,          'Excepci'#243'n');
 end;
 
 { ========== Calendarios CRUD (SQL) ========== }
@@ -1000,7 +1170,7 @@ begin
 
   Nom := InputBox('Editar Calendario', 'Nombre:', Nom);
   if Nom = '' then Exit;
-  Desc := InputBox('Editar Calendario', 'Descripción:', Desc);
+  Desc := InputBox('Editar Calendario', 'Descripci'#243'n:', Desc);
 
   Cmd := TADOCommand.Create(nil);
   try
@@ -1035,8 +1205,8 @@ begin
   if FSelectedCalIdx < lbCalendarios.Items.Count then
     CalNom := lbCalendarios.Items[FSelectedCalIdx];
 
-  if MessageDlg('¿Eliminar calendario "' + CalNom + '"?' + sLineBreak +
-    'Se eliminarán también sus reglas y asignaciones a centros.',
+  if MessageDlg(#191'Eliminar calendario "' + CalNom + '"?' + sLineBreak +
+    'Se eliminar'#225'n tambi'#233'n sus reglas y asignaciones a centros.',
     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
 
   // Desasignar de centros
@@ -1065,6 +1235,369 @@ begin
   LoadCalendarioList;
 end;
 
+procedure TfrmGestionCalendarios.btnCalCloneClick(Sender: TObject);
+var
+  SrcCalId: Integer;
+  NewNombre, SrcNombre: string;
+  CE: string;
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  NewCalId: Integer;
+begin
+  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then
+  begin
+    ShowMessage('Selecciona un calendario primero.');
+    Exit;
+  end;
+  if not DMPlanner.IsConnected then Exit;
+
+  SrcCalId := FCalendarIds[FSelectedCalIdx];
+  SrcNombre := lbCalendarios.Items[FSelectedCalIdx];
+
+  NewNombre := InputBox('Clonar calendario',
+    'Nombre del nuevo calendario:', SrcNombre + ' (copia)');
+  if Trim(NewNombre) = '' then Exit;
+
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+  // 1) Crear calendario destino copiando descripcion
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText :=
+      'INSERT INTO FS_PL_Calendar (CodigoEmpresa, Nombre, Descripcion) ' +
+      'SELECT CodigoEmpresa, N''' +
+      StringReplace(NewNombre, '''', '''''', [rfReplaceAll]) +
+      ''', Descripcion FROM FS_PL_Calendar ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(SrcCalId);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  // 2) Obtener NewCalId
+  NewCalId := -1;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text := 'SELECT MAX(CalendarId) AS NewId FROM FS_PL_Calendar ' +
+      'WHERE CodigoEmpresa = ' + CE;
+    Q.Open;
+    if not Q.Eof then NewCalId := Q.FieldByName('NewId').AsInteger;
+  finally
+    Q.Free;
+  end;
+  if NewCalId <= 0 then
+  begin
+    ShowMessage('No se pudo obtener el ID del nuevo calendario.');
+    Exit;
+  end;
+
+  // 3) Clonar CalendarDayRule (regles setmanals)
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText :=
+      'INSERT INTO FS_PL_CalendarDayRule ' +
+      '  (CodigoEmpresa, CalendarId, DiaSemana, HoraInicioNoLab, HoraFinNoLab) ' +
+      'SELECT CodigoEmpresa, ' + IntToStr(NewCalId) +
+      ', DiaSemana, HoraInicioNoLab, HoraFinNoLab ' +
+      'FROM FS_PL_CalendarDayRule ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(SrcCalId);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  // 4) Clonar ShiftModel (+ ShiftModelLine via cursor)
+  // SQL Server: necesitamos mapear nuevos ShiftModelId. Iteramos cada modelo.
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT ShiftModelId, Nombre, Descripcion, EsDefault, Activo ' +
+      'FROM FS_PL_ShiftModel ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(SrcCalId);
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Cmd := TADOCommand.Create(nil);
+      try
+        Cmd.Connection := DMPlanner.ADOConnection;
+        Cmd.CommandText :=
+          'DECLARE @NewModelId INT; ' +
+          'INSERT INTO FS_PL_ShiftModel (CodigoEmpresa, CalendarId, Nombre, Descripcion, EsDefault, Activo) ' +
+          'VALUES (' + CE + ', ' + IntToStr(NewCalId) + ', :Nom, :Desc, :Def, :Act); ' +
+          'SET @NewModelId = SCOPE_IDENTITY(); ' +
+          'INSERT INTO FS_PL_ShiftModelLine (CodigoEmpresa, ShiftModelId, DiaSemana, HoraInicio, HoraFin) ' +
+          'SELECT CodigoEmpresa, @NewModelId, DiaSemana, HoraInicio, HoraFin ' +
+          'FROM FS_PL_ShiftModelLine ' +
+          'WHERE CodigoEmpresa = ' + CE +
+          ' AND ShiftModelId = ' + IntToStr(Q.FieldByName('ShiftModelId').AsInteger);
+        Cmd.Parameters.ParamByName('Nom').Value := Q.FieldByName('Nombre').AsString;
+        Cmd.Parameters.ParamByName('Desc').Value := Q.FieldByName('Descripcion').AsString;
+        Cmd.Parameters.ParamByName('Def').Value := Q.FieldByName('EsDefault').AsBoolean;
+        Cmd.Parameters.ParamByName('Act').Value := Q.FieldByName('Activo').AsBoolean;
+        Cmd.Execute;
+      finally
+        Cmd.Free;
+      end;
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // 5) Clonar excepciones
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText :=
+      'INSERT INTO FS_PL_CalendarException ' +
+      '  (CodigoEmpresa, CalendarId, Fecha, EsLaborable, HoraInicio, HoraFin, Descripcion) ' +
+      'SELECT CodigoEmpresa, ' + IntToStr(NewCalId) +
+      ', Fecha, EsLaborable, HoraInicio, HoraFin, Descripcion ' +
+      'FROM FS_PL_CalendarException ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND CalendarId = ' + IntToStr(SrcCalId);
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  // Refresh
+  LoadCalendarioList;
+  // Selecciona el nou
+  FSelectedCalIdx := lbCalendarios.Items.IndexOf(NewNombre);
+  if FSelectedCalIdx >= 0 then
+  begin
+    lbCalendarios.ItemIndex := FSelectedCalIdx;
+    SelectCalendario(FSelectedCalIdx);
+  end;
+
+  ShowMessage('Calendario clonado correctamente.');
+end;
+
+{ ========== Detalle calendario (paint) ========== }
+
+procedure TfrmGestionCalendarios.pbDetallePaint(Sender: TObject);
+const
+  CardW = 110;
+  CardH = 54;
+  CardGap = 8;
+  Margin = 8;
+  ColFestivo  = $00B040D0;  // fuchsia
+  ColParcial  = $000080FF;  // taronja
+var
+  C: TCanvas;
+  W, Y: Integer;
+  X1, X2: Integer;
+
+  procedure DrawSectionTitle(const ATitle: string);
+  begin
+    C.Brush.Style := bsClear;
+    C.Font.Name := 'Segoe UI Semibold';
+    C.Font.Size := 9;
+    C.Font.Color := 4474440;
+    C.Font.Style := [fsBold];
+    C.TextOut(Margin, Y, ATitle);
+    Inc(Y, 18);
+    // linia separadora
+    C.Pen.Color := $00E0E0E0;
+    C.MoveTo(Margin, Y);
+    C.LineTo(W - Margin, Y);
+    Inc(Y, 6);
+  end;
+
+  procedure DrawCard(const ALeft: Integer; const ANumber, ALabel: string;
+    const AColor: TColor);
+  var
+    R: TRect;
+    TR: TRect;
+    NumStr: string;
+  begin
+    R := Rect(ALeft, Y, ALeft + CardW, Y + CardH);
+    // fondo card
+    C.Brush.Color := $00FAFAFA;
+    C.Brush.Style := bsSolid;
+    C.Pen.Color := $00E0E0E0;
+    C.Rectangle(R);
+    // barra de color a l'esquerra
+    C.Brush.Color := AColor;
+    C.Pen.Color := AColor;
+    C.Rectangle(R.Left + 1, R.Top + 1, R.Left + 4, R.Bottom - 1);
+    // numero
+    C.Brush.Style := bsClear;
+    C.Font.Name := 'Segoe UI Semibold';
+    C.Font.Size := 14;
+    C.Font.Color := 3355443;
+    C.Font.Style := [fsBold];
+    NumStr := ANumber;
+    TR := Rect(R.Left + 8, R.Top + 4, R.Right - 4, R.Top + 28);
+    DrawText(C.Handle, PChar(NumStr), Length(NumStr), TR,
+      DT_LEFT or DT_SINGLELINE or DT_VCENTER);
+    // label
+    C.Font.Name := 'Segoe UI';
+    C.Font.Size := 7;
+    C.Font.Color := clGray;
+    C.Font.Style := [];
+    TR := Rect(R.Left + 8, R.Top + 28, R.Right - 4, R.Bottom - 4);
+    DrawText(C.Handle, PChar(ALabel), Length(ALabel), TR,
+      DT_LEFT or DT_WORDBREAK);
+  end;
+
+  procedure DrawLineItem(const ATxt: string; const ABulletColor: TColor);
+  begin
+    // bullet
+    C.Brush.Color := ABulletColor;
+    C.Pen.Color := ABulletColor;
+    C.Ellipse(Margin + 2, Y + 5, Margin + 9, Y + 12);
+    // text
+    C.Brush.Style := bsClear;
+    C.Font.Name := 'Segoe UI';
+    C.Font.Size := 8;
+    C.Font.Color := 3355443;
+    C.Font.Style := [];
+    C.TextOut(Margin + 16, Y + 2, ATxt);
+    Inc(Y, 17);
+  end;
+
+  procedure DrawPlainLine(const ATxt: string);
+  begin
+    C.Brush.Style := bsClear;
+    C.Font.Name := 'Segoe UI';
+    C.Font.Size := 8;
+    C.Font.Color := 3355443;
+    C.Font.Style := [];
+    C.TextOut(Margin + 4, Y, ATxt);
+    Inc(Y, 16);
+  end;
+
+var
+  I: Integer;
+  CardColor: TColor;
+begin
+  C := pbDetalle.Canvas;
+  W := pbDetalle.Width;
+
+  // Fons
+  C.Brush.Color := clWhite;
+  C.Brush.Style := bsSolid;
+  C.FillRect(pbDetalle.ClientRect);
+
+  Y := Margin;
+
+  if FDetCalName = '' then
+  begin
+    C.Brush.Style := bsClear;
+    C.Font.Name := 'Segoe UI';
+    C.Font.Size := 9;
+    C.Font.Color := clGray;
+    C.Font.Style := [fsItalic];
+    C.TextOut(Margin, Y, 'Sin calendario seleccionado');
+    Exit;
+  end;
+
+  // ===== Cabecera: nombre + descripcion =====
+  C.Brush.Style := bsClear;
+  C.Font.Name := 'Segoe UI Semibold';
+  C.Font.Size := 11;
+  C.Font.Color := 4474440;
+  C.Font.Style := [fsBold];
+  C.TextOut(Margin, Y, FDetCalName);
+  Inc(Y, 22);
+
+  if FDetCalDesc <> '' then
+  begin
+    C.Font.Name := 'Segoe UI';
+    C.Font.Size := 8;
+    C.Font.Color := clGray;
+    C.Font.Style := [fsItalic];
+    C.TextOut(Margin, Y, FDetCalDesc);
+    Inc(Y, 16);
+  end;
+
+  // Fin de semana
+  C.Font.Name := 'Segoe UI';
+  C.Font.Size := 8;
+  C.Font.Style := [];
+  C.Font.Color := clGray;
+  if FDetWeekendClosed then
+    C.TextOut(Margin, Y, 'Fin de semana: CERRADO')
+  else
+    C.TextOut(Margin, Y, 'Fin de semana: ABIERTO');
+  Inc(Y, 20);
+
+  // ===== KPIs (2 columnes x 3 files) =====
+  DrawSectionTitle('KPIs ' + IntToStr(FYear));
+
+  X1 := Margin;
+  X2 := Margin + CardW + CardGap;
+
+  DrawCard(X1, IntToStr(FDetTotalLab + FDetTotalParcial),
+    'D'#237'as laborables', $0028A745);
+  DrawCard(X2, IntToStr(FDetHorasAnuales) + ' h',
+    'Horas/a'#241'o', $00007BFF);
+  Inc(Y, CardH + CardGap);
+
+  DrawCard(X1, IntToStr(FDetTotalNoLab),
+    'D'#237'as no laborables', $00666666);
+  if (FDetTotalLab + FDetTotalParcial) > 0 then
+    DrawCard(X2,
+      Format('%.1f h', [FDetHorasAnuales / (FDetTotalLab + FDetTotalParcial)]),
+      'Media h/d'#237'a', $00FF8800)
+  else
+    DrawCard(X2, '0 h', 'Media h/d'#237'a', $00FF8800);
+  Inc(Y, CardH + CardGap);
+
+  // Conteo excepciones
+  X1 := 0;
+  X2 := 0;
+  for I := 0 to High(FDetExcTipos) do
+    if FDetExcTipos[I] then Inc(X2) else Inc(X1);
+  DrawCard(Margin, IntToStr(X1), 'Excepciones festivas', ColFestivo);
+  DrawCard(Margin + CardW + CardGap, IntToStr(X2),
+    'Excepciones parciales', ColParcial);
+  Inc(Y, CardH + CardGap + 4);
+
+  // ===== Modelos horarios =====
+  DrawSectionTitle('Modelos horarios');
+  if Length(FDetModelos) = 0 then
+    DrawPlainLine('(ninguno)')
+  else
+    for I := 0 to High(FDetModelos) do
+      DrawLineItem(FDetModelos[I], $00007BFF);
+  Inc(Y, 6);
+
+  // ===== Centros asignados =====
+  DrawSectionTitle('Centros asignados (' + IntToStr(Length(FDetCentros)) + ')');
+  if Length(FDetCentros) = 0 then
+    DrawPlainLine('(ninguno)')
+  else
+    for I := 0 to High(FDetCentros) do
+      DrawLineItem(FDetCentros[I], $0028A745);
+  Inc(Y, 6);
+
+  // ===== Excepciones =====
+  DrawSectionTitle('Excepciones ' + IntToStr(FYear));
+  if Length(FDetExcepciones) = 0 then
+    DrawPlainLine('(ninguna)')
+  else
+    for I := 0 to High(FDetExcepciones) do
+    begin
+      if FDetExcTipos[I] then
+        CardColor := ColParcial
+      else
+        CardColor := ColFestivo;
+      DrawLineItem(FDetExcepciones[I], CardColor);
+    end;
+  Inc(Y, 8);
+
+  // Ajustar altura del PaintBox al contingut (scroll). Nomes si difereix prou,
+  // per evitar re-paints encadenats.
+  if Abs(pbDetalle.Height - (Y + Margin)) > 2 then
+    pbDetalle.Height := Y + Margin;
+end;
+
 procedure TfrmGestionCalendarios.ApplyDarkMode(ADark: Boolean);
 const
   DARK_BG     = $00302C28;
@@ -1080,7 +1613,6 @@ begin
     lblTitle.Font.Color := DARK_TEXT;
     lblSubtitle.Font.Color := DARK_SUB;
     shpHeaderLine.Brush.Color := DARK_LINE;
-    chkDarkMode.Font.Color := DARK_TEXT;
     pnlBottom.Color := DARK_HEADER;
     pnlLeft.Color := DARK_BG;
     pnlDetalle.Color := DARK_BG;
@@ -1091,8 +1623,7 @@ begin
     lblAnioCaption.Font.Color := DARK_TEXT;
     lbCalendarios.Color := DARK_HEADER;
     lbCalendarios.Font.Color := DARK_TEXT;
-    memoDetalle.Color := DARK_HEADER;
-    memoDetalle.Font.Color := DARK_TEXT;
+    sbDetalle.Color := DARK_HEADER;
     Color := DARK_BG;
   end
   else
@@ -1102,7 +1633,6 @@ begin
     lblTitle.Font.Color := 4474440;
     lblSubtitle.Font.Color := clGray;
     shpHeaderLine.Brush.Color := 15061727;
-    chkDarkMode.Font.Color := clWindowText;
     pnlBottom.Color := clBtnFace;
     pnlLeft.Color := clBtnFace;
     pnlDetalle.Color := clBtnFace;
@@ -1113,8 +1643,7 @@ begin
     lblAnioCaption.Font.Color := 4474440;
     lbCalendarios.Color := clWindow;
     lbCalendarios.Font.Color := clWindowText;
-    memoDetalle.Color := clWindow;
-    memoDetalle.Font.Color := clWindowText;
+    sbDetalle.Color := clWindow;
     Color := clBtnFace;
   end;
 end;
