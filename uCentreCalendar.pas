@@ -21,10 +21,20 @@ type
     Periods: TArray<TNonWorkingPeriod>;
   end;
 
+  // Excepcio per data concreta. Override la regla del dia setmana.
+  // Si EsLaborable=False: dia complet no laborable.
+  // Si EsLaborable=True: nomes laborable entre HoraInicio i HoraFin.
+  TDayException = record
+    EsLaborable: Boolean;
+    HoraInicio: TTime;
+    HoraFin: TTime;
+  end;
+
   TCentreCalendar = class
   private
     FName: string;
     FRules: TDictionary<Integer, TArray<TNonWorkingPeriod>>;   // WeekDayISO -> periods
+    FExceptions: TDictionary<Integer, TDayException>;          // Trunc(Date) -> excepcio
     FDayIntervalsCache: TDictionary<Integer, TArray<TAbsInterval>>;      // Trunc(Date) -> intervals absoluts del dia
     FMergedAroundCache: TDictionary<Integer, TArray<TAbsInterval>>;      // Trunc(Date) -> intervals mergejats de [D-2 .. D+2]
 
@@ -47,6 +57,8 @@ type
     destructor Destroy; override;
 
     procedure SetDayNonWorkingPeriods(const WeekDayISO: Integer; const Periods: TArray<TNonWorkingPeriod>);
+    procedure SetDayException(const ADate: TDateTime; const AException: TDayException);
+    procedure ClearExceptions;
 
     function IsNonWorkingTime(const T: TDateTime): Boolean;
     function IsWorkingTime(const T: TDateTime): Boolean;
@@ -132,6 +144,7 @@ constructor TCentreCalendar.Create;
 begin
   inherited;
   FRules := TDictionary<Integer, TArray<TNonWorkingPeriod>>.Create;
+  FExceptions := TDictionary<Integer, TDayException>.Create;
   FDayIntervalsCache := TDictionary<Integer, TArray<TAbsInterval>>.Create;
   FMergedAroundCache := TDictionary<Integer, TArray<TAbsInterval>>.Create;
 end;
@@ -140,8 +153,22 @@ destructor TCentreCalendar.Destroy;
 begin
   FMergedAroundCache.Free;
   FDayIntervalsCache.Free;
+  FExceptions.Free;
   FRules.Free;
   inherited;
+end;
+
+procedure TCentreCalendar.SetDayException(const ADate: TDateTime;
+  const AException: TDayException);
+begin
+  FExceptions.AddOrSetValue(Trunc(ADate), AException);
+  InvalidateCaches;
+end;
+
+procedure TCentreCalendar.ClearExceptions;
+begin
+  FExceptions.Clear;
+  InvalidateCaches;
 end;
 
 procedure TCentreCalendar.InvalidateCaches;
@@ -270,6 +297,7 @@ var
   StartTOD, EndTOD: TDateTime;
   Tmp: TArray<TAbsInterval>;
   C: Integer;
+  Exc: TDayException;
 
   procedure AddInt(const S, E: TDateTime);
   begin
@@ -283,6 +311,29 @@ var
 
 begin
   D0 := DateOf(ADate);
+
+  // Excepcio per data concreta: te prioritat sobre la regla del dia setmana
+  if FExceptions.TryGetValue(Trunc(D0), Exc) then
+  begin
+    SetLength(Tmp, 0);
+    C := 0;
+    if not Exc.EsLaborable then
+    begin
+      // Festiu: tot el dia no laborable
+      AddInt(D0, D0 + 1 - COneMs);
+    end
+    else
+    begin
+      // Laborable parcial: no laborable abans HoraInicio i despres HoraFin
+      if Exc.HoraInicio > 0 then
+        AddInt(D0, D0 + Exc.HoraInicio);
+      if Exc.HoraFin < 1 - COneMs then
+        AddInt(D0 + Exc.HoraFin, D0 + 1 - COneMs);
+    end;
+    Result := Tmp;
+    Exit;
+  end;
+
   Periods := GetPeriodsForDate(D0);
 
   C := 0;

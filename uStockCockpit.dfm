@@ -114,7 +114,7 @@ object frmStockCockpit: TfrmStockCockpit
       object grdCritico: TcxGrid
         Left = 0
         Top = 0
-        Width = 1296
+        Width = 871
         Height = 576
         Align = alClient
         TabOrder = 0
@@ -137,6 +137,31 @@ object frmStockCockpit: TfrmStockCockpit
           GridView = grdCriticoView
         end
       end
+      object splitCritico: TSplitter
+        Left = 871
+        Top = 0
+        Width = 5
+        Height = 576
+        Align = alRight
+        ExplicitLeft = 868
+      end
+      object pnlCriticoChart: TPanel
+        Left = 876
+        Top = 0
+        Width = 420
+        Height = 576
+        Align = alRight
+        BevelOuter = bvNone
+        TabOrder = 1
+        object pbCritico: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 420
+          Height = 576
+          Align = alClient
+          OnPaint = pbCriticoPaint
+        end
+      end
     end
     object tabRupturas: TcxTabSheet
       Caption = 'Rupturas futuras'
@@ -148,7 +173,7 @@ object frmStockCockpit: TfrmStockCockpit
       object grdRupturas: TcxGrid
         Left = 0
         Top = 0
-        Width = 1296
+        Width = 871
         Height = 576
         Align = alClient
         TabOrder = 0
@@ -171,6 +196,31 @@ object frmStockCockpit: TfrmStockCockpit
           GridView = grdRupturasView
         end
       end
+      object splitRupturas: TSplitter
+        Left = 871
+        Top = 0
+        Width = 5
+        Height = 576
+        Align = alRight
+        ExplicitLeft = 868
+      end
+      object pnlRupturasChart: TPanel
+        Left = 876
+        Top = 0
+        Width = 420
+        Height = 576
+        Align = alRight
+        BevelOuter = bvNone
+        TabOrder = 1
+        object pbRupturas: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 420
+          Height = 576
+          Align = alClient
+          OnPaint = pbRupturasPaint
+        end
+      end
     end
     object tabObsoleto: TcxTabSheet
       Caption = 'Obsoleto'
@@ -182,7 +232,7 @@ object frmStockCockpit: TfrmStockCockpit
       object grdObsoleto: TcxGrid
         Left = 0
         Top = 0
-        Width = 1296
+        Width = 871
         Height = 576
         Align = alClient
         TabOrder = 0
@@ -204,6 +254,31 @@ object frmStockCockpit: TfrmStockCockpit
           GridView = grdObsoletoView
         end
       end
+      object splitObsoleto: TSplitter
+        Left = 871
+        Top = 0
+        Width = 5
+        Height = 576
+        Align = alRight
+        ExplicitLeft = 868
+      end
+      object pnlObsoletoChart: TPanel
+        Left = 876
+        Top = 0
+        Width = 420
+        Height = 576
+        Align = alRight
+        BevelOuter = bvNone
+        TabOrder = 1
+        object pbObsoleto: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 420
+          Height = 576
+          Align = alClient
+          OnPaint = pbObsoletoPaint
+        end
+      end
     end
     object tabCobertura: TcxTabSheet
       Caption = 'Cobertura (DoS)'
@@ -215,7 +290,7 @@ object frmStockCockpit: TfrmStockCockpit
       object grdCobertura: TcxGrid
         Left = 0
         Top = 0
-        Width = 1296
+        Width = 871
         Height = 576
         Align = alClient
         TabOrder = 0
@@ -238,6 +313,31 @@ object frmStockCockpit: TfrmStockCockpit
           GridView = grdCoberturaView
         end
       end
+      object splitCobertura: TSplitter
+        Left = 871
+        Top = 0
+        Width = 5
+        Height = 576
+        Align = alRight
+        ExplicitLeft = 868
+      end
+      object pnlCoberturaChart: TPanel
+        Left = 876
+        Top = 0
+        Width = 420
+        Height = 576
+        Align = alRight
+        BevelOuter = bvNone
+        TabOrder = 1
+        object pbCobertura: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 420
+          Height = 576
+          Align = alClient
+          OnPaint = pbCoberturaPaint
+        end
+      end
     end
     object tabABC: TcxTabSheet
       Caption = 'An'#225'lisis ABC'
@@ -249,7 +349,7 @@ object frmStockCockpit: TfrmStockCockpit
       object grdABC: TcxGrid
         Left = 0
         Top = 0
-        Width = 1296
+        Width = 1011
         Height = 576
         Align = alClient
         TabOrder = 0
@@ -270,6 +370,31 @@ object frmStockCockpit: TfrmStockCockpit
         end
         object grdABCLevel: TcxGridLevel
           GridView = grdABCView
+        end
+      end
+      object splitABC: TSplitter
+        Left = 1011
+        Top = 0
+        Width = 5
+        Height = 576
+        Align = alRight
+        ExplicitLeft = 1008
+      end
+      object pnlABCChart: TPanel
+        Left = 1016
+        Top = 0
+        Width = 280
+        Height = 576
+        Align = alRight
+        BevelOuter = bvNone
+        TabOrder = 1
+        object pbABC: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 280
+          Height = 576
+          Align = alClient
+          OnPaint = pbABCPaint
         end
       end
     end

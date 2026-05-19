@@ -63,6 +63,16 @@ type
     pnlLeyenda: TPanel;
     pbCalendar: TPaintBox;
     LookAndFeel: TcxLookAndFeelController;
+    splModels: TSplitter;
+    pnlModels: TPanel;
+    lblModelos: TLabel;
+    lblModelosHint: TLabel;
+    lbModelos: TListBox;
+    pnlModelosToolbar: TPanel;
+    btnModeloAdd: TButton;
+    btnModeloEdit: TButton;
+    btnModeloDel: TButton;
+    btnExcepciones: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnCerrarClick(Sender: TObject);
@@ -73,6 +83,12 @@ type
     procedure btnCalAddClick(Sender: TObject);
     procedure btnCalEditClick(Sender: TObject);
     procedure btnCalDelClick(Sender: TObject);
+    procedure lbModelosClick(Sender: TObject);
+    procedure lbModelosDblClick(Sender: TObject);
+    procedure btnModeloAddClick(Sender: TObject);
+    procedure btnModeloEditClick(Sender: TObject);
+    procedure btnModeloDelClick(Sender: TObject);
+    procedure btnExcepcionesClick(Sender: TObject);
   private
     FYear: Word;
     FDark: Boolean;
@@ -85,9 +101,14 @@ type
     FWorkingMinutes: array[1..12, 1..31] of Integer;
 
     FCalendarIds: TArray<Integer>;  // CalendarId per cada entrada al ListBox
+    FModelIds: TArray<Integer>;     // ShiftModelId per cada entrada de lbModelos
 
     procedure LoadCalendarioList;
+    procedure LoadModelosList;
     procedure SelectCalendario(AIdx: Integer);
+    function SelectedCalendarId: Integer;
+    function SelectedShiftModelId: Integer;
+    procedure RefreshAfterModelChange;
     procedure BuildDayCache;
     procedure BuildDetalleText;
     procedure PaintLeyenda;
@@ -122,7 +143,7 @@ var
 implementation
 
 uses
-  uDMPlanner;
+  uDMPlanner, uCalendarsRepo, uShiftModelEdit, uCalendarExceptionsEdit;
 
 {$R *.dfm}
 
@@ -239,6 +260,168 @@ begin
   BuildDayCache;
   BuildDetalleText;
   pbCalendar.Invalidate;
+  LoadModelosList;
+end;
+
+function TfrmGestionCalendarios.SelectedCalendarId: Integer;
+begin
+  if (FSelectedCalIdx < 0) or (FSelectedCalIdx > High(FCalendarIds)) then
+    Result := -1
+  else
+    Result := FCalendarIds[FSelectedCalIdx];
+end;
+
+function TfrmGestionCalendarios.SelectedShiftModelId: Integer;
+var
+  Idx: Integer;
+begin
+  Result := -1;
+  Idx := lbModelos.ItemIndex;
+  if (Idx < 0) or (Idx > High(FModelIds)) then Exit;
+  Result := FModelIds[Idx];
+end;
+
+procedure TfrmGestionCalendarios.LoadModelosList;
+var
+  CalId: Integer;
+  Models: TArray<TShiftModelRec>;
+  i: Integer;
+  S: string;
+begin
+  lbModelos.Items.Clear;
+  SetLength(FModelIds, 0);
+
+  CalId := SelectedCalendarId;
+  if CalId < 0 then Exit;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  Models := DMPlanner.CalendarsRepo.LoadShiftModels(
+    DMPlanner.CodigoEmpresa, CalId);
+
+  SetLength(FModelIds, Length(Models));
+  for i := 0 to High(Models) do
+  begin
+    S := Models[i].Nombre;
+    if Models[i].EsDefault then S := S + '  (Default)';
+    lbModelos.Items.Add(S);
+    FModelIds[i] := Models[i].ShiftModelId;
+  end;
+  if lbModelos.Items.Count > 0 then
+    lbModelos.ItemIndex := 0;
+end;
+
+procedure TfrmGestionCalendarios.RefreshAfterModelChange;
+var
+  CalId: Integer;
+begin
+  // Reload del repo de calendars (regles han canviat) i del cache visual
+  CalId := SelectedCalendarId;
+  if DMPlanner.CalendarsRepo <> nil then
+    DMPlanner.CalendarsRepo.LoadFromDB(DMPlanner.CodigoEmpresa);
+  LoadModelosList;
+  BuildDayCache;
+  BuildDetalleText;
+  pbCalendar.Invalidate;
+  // No cal usar CalId; restem al mateix calendari seleccionat
+  if CalId = 0 then ;  // suppress hint
+end;
+
+procedure TfrmGestionCalendarios.lbModelosClick(Sender: TObject);
+begin
+  // Selecció informativa; sense efecte secundari ara mateix
+end;
+
+procedure TfrmGestionCalendarios.lbModelosDblClick(Sender: TObject);
+begin
+  btnModeloEditClick(Sender);
+end;
+
+procedure TfrmGestionCalendarios.btnModeloAddClick(Sender: TObject);
+var
+  CalId: Integer;
+begin
+  CalId := SelectedCalendarId;
+  if CalId < 0 then
+  begin
+    ShowMessage('Selecciona un calendario primero.');
+    Exit;
+  end;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  if TfrmShiftModelEdit.Execute(DMPlanner.CalendarsRepo,
+       DMPlanner.CodigoEmpresa, CalId, -1) then
+    RefreshAfterModelChange;
+end;
+
+procedure TfrmGestionCalendarios.btnModeloEditClick(Sender: TObject);
+var
+  CalId, Mid: Integer;
+begin
+  CalId := SelectedCalendarId;
+  Mid := SelectedShiftModelId;
+  if (CalId < 0) or (Mid < 0) then
+  begin
+    ShowMessage('Selecciona un modelo primero.');
+    Exit;
+  end;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  if TfrmShiftModelEdit.Execute(DMPlanner.CalendarsRepo,
+       DMPlanner.CodigoEmpresa, CalId, Mid) then
+    RefreshAfterModelChange;
+end;
+
+procedure TfrmGestionCalendarios.btnModeloDelClick(Sender: TObject);
+var
+  Mid, Idx: Integer;
+  Nom: string;
+begin
+  Mid := SelectedShiftModelId;
+  if Mid < 0 then Exit;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  Idx := lbModelos.ItemIndex;
+  Nom := lbModelos.Items[Idx];
+
+  if Pos('(Default)', Nom) > 0 then
+  begin
+    ShowMessage('No se puede eliminar el modelo Default del calendario.');
+    Exit;
+  end;
+
+  if MessageDlg('Eliminar modelo "' + Nom + '"?',
+       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  try
+    DMPlanner.CalendarsRepo.DeleteShiftModel(DMPlanner.CodigoEmpresa, Mid);
+    RefreshAfterModelChange;
+  except
+    on E: Exception do
+      ShowMessage('Error al eliminar: ' + E.Message);
+  end;
+end;
+
+procedure TfrmGestionCalendarios.btnExcepcionesClick(Sender: TObject);
+var
+  CalId: Integer;
+  Nom: string;
+begin
+  CalId := SelectedCalendarId;
+  if CalId < 0 then
+  begin
+    ShowMessage('Selecciona un calendario primero.');
+    Exit;
+  end;
+  if DMPlanner.CalendarsRepo = nil then Exit;
+
+  if (FSelectedCalIdx >= 0) and (FSelectedCalIdx < lbCalendarios.Items.Count) then
+    Nom := lbCalendarios.Items[FSelectedCalIdx]
+  else
+    Nom := '';
+
+  if TfrmCalendarExceptionsEdit.Execute(DMPlanner.CalendarsRepo,
+       DMPlanner.CodigoEmpresa, CalId, Nom) then
+    RefreshAfterModelChange;  // recarrega motor + vista anual
 end;
 
 { ========== Build day cache ========== }
@@ -282,25 +465,15 @@ end;
 function TfrmGestionCalendarios.GetDayType(const ACal: TCentreCalendar;
   const ADate: TDateTime): TDayType;
 var
-  Periods: TArray<TNonWorkingPeriod>;
-  TotalNW: Double;
-  P: TNonWorkingPeriod;
+  WorkMins: Integer;
 begin
-  Periods := ACal.NonWorkingPeriodsForDate(ADate);
+  // Usem WorkingMinutesBetween perque te en compte excepcions per data
+  WorkMins := ACal.WorkingMinutesBetween(DateOf(ADate),
+    DateOf(ADate) + EncodeTime(23, 59, 59, 999));
 
-  if Length(Periods) = 0 then
-    Exit(dtLaborable);
-
-  // Calcular tiempo total no laborable
-  TotalNW := 0;
-  for P in Periods do
-    TotalNW := TotalNW + (P.EndTimeOfDay - P.StartTimeOfDay);
-
-  // Si cubre ~24h es no laborable completo
-  if TotalNW >= (23.5 / 24.0) then
-    Result := dtNoLaborable
-  else
-    Result := dtParcial;
+  if WorkMins >= (24 * 60 - 1) then Exit(dtLaborable);
+  if WorkMins <= 30 then Exit(dtNoLaborable);
+  Result := dtParcial;
 end;
 
 function TfrmGestionCalendarios.GetDayWorkingMinutes(const ACal: TCentreCalendar;

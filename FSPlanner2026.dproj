@@ -158,6 +158,15 @@
         <DCCReference Include="uGestionCalendarios.pas">
             <Form>frmGestionCalendarios</Form>
         </DCCReference>
+        <DCCReference Include="uShiftModelEdit.pas">
+            <Form>frmShiftModelEdit</Form>
+        </DCCReference>
+        <DCCReference Include="uCalendarExceptionsEdit.pas">
+            <Form>frmCalendarExceptionsEdit</Form>
+        </DCCReference>
+        <DCCReference Include="uCalendarExceptionEditDialog.pas">
+            <Form>frmCalendarExceptionEditDialog</Form>
+        </DCCReference>
         <DCCReference Include="uKanbanBoard.pas"/>
         <DCCReference Include="uDispatchList.pas">
             <Form>frmDispatchList</Form>

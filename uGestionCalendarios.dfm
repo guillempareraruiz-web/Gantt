@@ -23,6 +23,12 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     Width = 6
     Height = 600
   end
+  object splModels: TSplitter
+    Left = 526
+    Top = 60
+    Width = 6
+    Height = 600
+  end
   object pnlHeader: TPanel
     Left = 0
     Top = 0
@@ -216,10 +222,103 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       end
     end
   end
-  object pnlRight: TPanel
+  object pnlModels: TPanel
     Left = 266
     Top = 60
-    Width = 834
+    Width = 260
+    Height = 600
+    Align = alLeft
+    BevelOuter = bvNone
+    TabOrder = 4
+    object lblModelos: TLabel
+      Left = 8
+      Top = 4
+      Width = 130
+      Height = 17
+      Caption = 'Modelos horarios'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 4474440
+      Font.Height = -13
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
+      ParentFont = False
+    end
+    object lblModelosHint: TLabel
+      Left = 8
+      Top = 22
+      Width = 240
+      Height = 30
+      AutoSize = False
+      WordWrap = True
+      Caption = 'Plantillas horarias que definen las franjas laborables del calendario. Cada calendario puede tener varios modelos (jornada normal, nocturna, etc.).'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clGrayText
+      Font.Height = -10
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object lbModelos: TListBox
+      Left = 0
+      Top = 56
+      Width = 260
+      Height = 508
+      Align = alClient
+      ItemHeight = 15
+      TabOrder = 0
+      OnClick = lbModelosClick
+      OnDblClick = lbModelosDblClick
+    end
+    object pnlModelosToolbar: TPanel
+      Left = 0
+      Top = 528
+      Width = 260
+      Height = 72
+      Align = alBottom
+      BevelOuter = bvNone
+      TabOrder = 1
+      object btnModeloAdd: TButton
+        Left = 4
+        Top = 4
+        Width = 75
+        Height = 28
+        Caption = 'A'#241'adir'
+        TabOrder = 0
+        OnClick = btnModeloAddClick
+      end
+      object btnModeloEdit: TButton
+        Left = 83
+        Top = 4
+        Width = 75
+        Height = 28
+        Caption = 'Editar'
+        TabOrder = 1
+        OnClick = btnModeloEditClick
+      end
+      object btnModeloDel: TButton
+        Left = 162
+        Top = 4
+        Width = 75
+        Height = 28
+        Caption = 'Eliminar'
+        TabOrder = 2
+        OnClick = btnModeloDelClick
+      end
+      object btnExcepciones: TButton
+        Left = 4
+        Top = 40
+        Width = 250
+        Height = 28
+        Caption = 'Excepciones del calendario...'
+        TabOrder = 3
+        OnClick = btnExcepcionesClick
+      end
+    end
+  end
+  object pnlRight: TPanel
+    Left = 532
+    Top = 60
+    Width = 568
     Height = 600
     Align = alClient
     BevelOuter = bvNone
@@ -240,7 +339,7 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object pbCalendar: TPaintBox
       Left = 0
       Top = 0
-      Width = 834
+      Width = 568
       Height = 568
       Align = alClient
       OnMouseMove = pbCalendarMouseMove
@@ -251,7 +350,7 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     object pnlLeyenda: TPanel
       Left = 0
       Top = 568
-      Width = 834
+      Width = 568
       Height = 32
       Align = alBottom
       BevelOuter = bvNone

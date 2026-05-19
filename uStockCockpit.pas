@@ -20,7 +20,7 @@ interface
 
 uses
   System.SysUtils, System.StrUtils, System.Variants, System.Classes,
-  System.UITypes, System.DateUtils, System.Generics.Collections,
+  System.UITypes, System.DateUtils, System.Math, System.Generics.Collections,
   Winapi.Windows, Winapi.Messages,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls, Vcl.ComCtrls,
@@ -80,6 +80,21 @@ type
     grdABC: TcxGrid;
     grdABCView: TcxGridDBTableView;
     grdABCLevel: TcxGridLevel;
+    splitABC: TSplitter;
+    pnlABCChart: TPanel;
+    pbABC: TPaintBox;
+    splitObsoleto: TSplitter;
+    pnlObsoletoChart: TPanel;
+    pbObsoleto: TPaintBox;
+    splitCritico: TSplitter;
+    pnlCriticoChart: TPanel;
+    pbCritico: TPaintBox;
+    splitRupturas: TSplitter;
+    pnlRupturasChart: TPanel;
+    pbRupturas: TPaintBox;
+    splitCobertura: TSplitter;
+    pnlCoberturaChart: TPanel;
+    pbCobertura: TPaintBox;
     cdsCritico: TClientDataSet;
     dsCritico: TDataSource;
     cdsRupturas: TClientDataSet;
@@ -114,6 +129,11 @@ type
     procedure grdABCViewCustomDrawCell(Sender: TcxCustomGridTableView;
       ACanvas: TcxCanvas;
       AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
+    procedure pbABCPaint(Sender: TObject);
+    procedure pbObsoletoPaint(Sender: TObject);
+    procedure pbCriticoPaint(Sender: TObject);
+    procedure pbRupturasPaint(Sender: TObject);
+    procedure pbCoberturaPaint(Sender: TObject);
   private
     FReader: IErpReader;
     procedure CargarAlmacenes;
@@ -403,6 +423,7 @@ begin
     end;
     lblContador.Caption := Format('%d articulos cr'#237'ticos', [Length(Data)]);
     CrearColumnasSiCal(grdCriticoView);
+    pbCritico.Invalidate;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -458,6 +479,7 @@ begin
     lblContador.Caption := Format('%d articulos en ruptura en %d d'#237'as',
       [Length(Data), Integer(seParam.Value)]);
     CrearColumnasSiCal(grdRupturasView);
+    pbRupturas.Invalidate;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -516,6 +538,7 @@ begin
     lblContador.Caption := Format('%d articulos obsoletos. Valor parado: %s',
       [Length(Data), FormatFloat('#,##0.00', ValorTotal)]);
     CrearColumnasSiCal(grdObsoletoView);
+    pbObsoleto.Invalidate;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -567,6 +590,7 @@ begin
     end;
     lblContador.Caption := Format('%d articulos', [Length(Data)]);
     CrearColumnasSiCal(grdCoberturaView);
+    pbCobertura.Invalidate;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -621,9 +645,802 @@ begin
     lblContador.Caption := Format('A: %d  B: %d  C: %d  (total %d)',
       [NA, NB, NC, Length(Data)]);
     CrearColumnasSiCal(grdABCView);
+    pbABC.Invalidate;
   finally
     Screen.Cursor := crDefault;
   end;
+end;
+
+// ---------------------------------------------------------------------------
+// Pintura del Pie ABC (TPaintBox, sin DevExpress charts)
+// ---------------------------------------------------------------------------
+
+procedure TfrmStockCockpit.pbABCPaint(Sender: TObject);
+const
+  COL_A: TColor = $004040E0;  // rojo
+  COL_B: TColor = $0040A0E0;  // naranja
+  COL_C: TColor = $0080C040;  // verde
+  TIT_H = 28;
+  LEY_H = 78;
+  PAD   = 12;
+var
+  Cv: TCanvas;
+  W, H, CX, CY, R: Integer;
+  TotA, TotB, TotC, Tot: Double;
+  AngA, AngB, AngC: Double;
+  PctA, PctB, PctC: Double;
+  PieRect: TRect;
+  Bm: TBookmark;
+  Cat: string;
+  Imp: Double;
+
+  procedure PintarSector(StartDeg, SweepDeg: Double; AColor: TColor);
+  var
+    X1, Y1, X2, Y2, X3, Y3, X4, Y4: Integer;
+    Rad1, Rad2: Double;
+  begin
+    if SweepDeg <= 0.01 then Exit;
+    Rad1 := DegToRad(StartDeg);
+    Rad2 := DegToRad(StartDeg + SweepDeg);
+    X1 := PieRect.Left; Y1 := PieRect.Top;
+    X2 := PieRect.Right; Y2 := PieRect.Bottom;
+    X3 := CX + Round(R * Cos(Rad1));
+    Y3 := CY - Round(R * Sin(Rad1));
+    X4 := CX + Round(R * Cos(Rad2));
+    Y4 := CY - Round(R * Sin(Rad2));
+    Cv.Brush.Color := AColor;
+    Cv.Pen.Color   := clWhite;
+    Cv.Pen.Width   := 2;
+    Cv.Pie(X1, Y1, X2, Y2, X3, Y3, X4, Y4);
+  end;
+
+  procedure PintarLeyenda(ATop: Integer; AColor: TColor; const ACat: string;
+    APct: Double; ATot: Double);
+  var
+    BoxRect, TxtRect: TRect;
+  begin
+    BoxRect := Rect(PAD, ATop + 3, PAD + 14, ATop + 17);
+    Cv.Brush.Color := AColor;
+    Cv.Pen.Color := clBlack;
+    Cv.Pen.Width := 1;
+    Cv.Rectangle(BoxRect);
+    TxtRect := Rect(PAD + 22, ATop, W - PAD, ATop + 20);
+    Cv.Brush.Style := bsClear;
+    Cv.Font.Color := clBlack;
+    Cv.Font.Style := [fsBold];
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('%s   %5.1f%%   %s', [ACat, APct, FormatFloat('#,##0', ATot)]));
+    Cv.Font.Style := [];
+  end;
+
+begin
+  Cv := pbABC.Canvas;
+  W := pbABC.Width;
+  H := pbABC.Height;
+
+  // Fondo
+  Cv.Brush.Color := clWhite;
+  Cv.Brush.Style := bsSolid;
+  Cv.FillRect(Rect(0, 0, W, H));
+
+  // T'itulo
+  Cv.Font.Name := 'Segoe UI';
+  Cv.Font.Size := 10;
+  Cv.Font.Style := [fsBold];
+  Cv.Font.Color := clBlack;
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(0, 6, W, 6 + TIT_H), PAD, 8, 'Distribuci'#243'n ABC (importe)');
+
+  if (cdsABC = nil) or (not cdsABC.Active) or cdsABC.IsEmpty then
+  begin
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    Cv.TextRect(Rect(0, H div 2 - 10, W, H div 2 + 10), PAD, H div 2 - 8,
+      '(sin datos)');
+    Exit;
+  end;
+
+  // Agregar por categor'ia
+  TotA := 0; TotB := 0; TotC := 0;
+  cdsABC.DisableControls;
+  Bm := cdsABC.GetBookmark;
+  try
+    cdsABC.First;
+    while not cdsABC.Eof do
+    begin
+      Cat := cdsABC.FieldByName('Categoria').AsString;
+      Imp := cdsABC.FieldByName('ImporteConsumido').AsFloat;
+      if Cat = 'A' then TotA := TotA + Imp
+      else if Cat = 'B' then TotB := TotB + Imp
+      else TotC := TotC + Imp;
+      cdsABC.Next;
+    end;
+  finally
+    if Bm <> nil then
+    begin
+      cdsABC.GotoBookmark(Bm);
+      cdsABC.FreeBookmark(Bm);
+    end;
+    cdsABC.EnableControls;
+  end;
+
+  Tot := TotA + TotB + TotC;
+  if Tot <= 0 then Exit;
+
+  PctA := TotA * 100 / Tot;
+  PctB := TotB * 100 / Tot;
+  PctC := TotC * 100 / Tot;
+
+  AngA := PctA * 360 / 100;
+  AngB := PctB * 360 / 100;
+  AngC := 360 - AngA - AngB;
+
+  // Rect'angulo del pie (cuadrado centrado)
+  R := (Min(W, H - TIT_H - LEY_H - PAD * 2) div 2) - PAD;
+  if R < 30 then R := 30;
+  CX := W div 2;
+  CY := TIT_H + PAD + R;
+  PieRect := Rect(CX - R, CY - R, CX + R, CY + R);
+
+  // Sectores (sentido antihorario desde 90'o para que A empiece arriba)
+  PintarSector(90,                  -AngA, COL_A);
+  PintarSector(90 - AngA,           -AngB, COL_B);
+  PintarSector(90 - AngA - AngB,    -AngC, COL_C);
+
+  // Leyenda
+  PintarLeyenda(H - LEY_H + 4,  COL_A, 'A', PctA, TotA);
+  PintarLeyenda(H - LEY_H + 28, COL_B, 'B', PctB, TotB);
+  PintarLeyenda(H - LEY_H + 52, COL_C, 'C', PctC, TotC);
+end;
+
+// ---------------------------------------------------------------------------
+// Pintura Top-10 Obsoleto (barras horizontales por importe)
+// ---------------------------------------------------------------------------
+
+procedure TfrmStockCockpit.pbObsoletoPaint(Sender: TObject);
+const
+  TIT_H   = 30;
+  ROW_H   = 38;
+  PAD     = 10;
+  LBL_W   = 130;   // ancho zona texto izquierda (cod + dias)
+  VAL_W   = 90;    // ancho zona valor derecha
+  BAR_COL: TColor = $004060E0; // rojo-naranja
+type
+  TTopItem = record
+    Codigo: string;
+    Dias: Integer;
+    Importe: Double;
+  end;
+var
+  Cv: TCanvas;
+  W, H, i, N, BarsW, BarLeft, BarRight, Y: Integer;
+  Items: array[0..9] of TTopItem;
+  MaxImp, ValorTot: Double;
+  Bm: TBookmark;
+  Cod: string;
+  Imp: Double;
+  Dias: Integer;
+  Inserted: Boolean;
+  j, k: Integer;
+  BarW: Integer;
+  TxtRect: TRect;
+begin
+  Cv := pbObsoleto.Canvas;
+  W := pbObsoleto.Width;
+  H := pbObsoleto.Height;
+
+  Cv.Brush.Color := clWhite;
+  Cv.Brush.Style := bsSolid;
+  Cv.FillRect(Rect(0, 0, W, H));
+
+  Cv.Font.Name := 'Segoe UI';
+  Cv.Font.Size := 10;
+  Cv.Font.Style := [fsBold];
+  Cv.Font.Color := clBlack;
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(0, 6, W, 6 + TIT_H), PAD, 8,
+    'Top 10 obsoleto por importe');
+
+  if (cdsObsoleto = nil) or (not cdsObsoleto.Active) or cdsObsoleto.IsEmpty then
+  begin
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    Cv.TextRect(Rect(0, H div 2 - 10, W, H div 2 + 10), PAD, H div 2 - 8,
+      '(sin datos)');
+    Exit;
+  end;
+
+  // Construir top-10 ordenado desc por Importe usando insercion
+  N := 0;
+  ValorTot := 0;
+  cdsObsoleto.DisableControls;
+  Bm := cdsObsoleto.GetBookmark;
+  try
+    cdsObsoleto.First;
+    while not cdsObsoleto.Eof do
+    begin
+      Imp  := cdsObsoleto.FieldByName('ImporteSaldo').AsFloat;
+      Cod  := cdsObsoleto.FieldByName('CodigoArticulo').AsString;
+      Dias := cdsObsoleto.FieldByName('DiasSinMovimiento').AsInteger;
+      ValorTot := ValorTot + Imp;
+
+      Inserted := False;
+      for j := 0 to N - 1 do
+        if Imp > Items[j].Importe then
+        begin
+          // desplazar hacia abajo
+          for k := Min(N, 9) downto j + 1 do
+            Items[k] := Items[k - 1];
+          Items[j].Codigo  := Cod;
+          Items[j].Dias    := Dias;
+          Items[j].Importe := Imp;
+          if N < 10 then Inc(N);
+          Inserted := True;
+          Break;
+        end;
+      if (not Inserted) and (N < 10) then
+      begin
+        Items[N].Codigo  := Cod;
+        Items[N].Dias    := Dias;
+        Items[N].Importe := Imp;
+        Inc(N);
+      end;
+
+      cdsObsoleto.Next;
+    end;
+  finally
+    if Bm <> nil then
+    begin
+      cdsObsoleto.GotoBookmark(Bm);
+      cdsObsoleto.FreeBookmark(Bm);
+    end;
+    cdsObsoleto.EnableControls;
+  end;
+
+  if N = 0 then Exit;
+
+  MaxImp := Items[0].Importe;
+  if MaxImp <= 0 then Exit;
+
+  BarLeft  := PAD + LBL_W;
+  BarRight := W - PAD - VAL_W;
+  BarsW    := BarRight - BarLeft;
+  if BarsW < 40 then BarsW := 40;
+
+  Cv.Font.Style := [];
+  Cv.Font.Size := 8;
+
+  for i := 0 to N - 1 do
+  begin
+    Y := TIT_H + PAD + i * ROW_H;
+
+    // Etiqueta izquierda: codigo + dias
+    Cv.Font.Color := clBlack;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(PAD, Y, PAD + LBL_W - 4, Y + 16);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top, Items[i].Codigo);
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    TxtRect := Rect(PAD, Y + 16, PAD + LBL_W - 4, Y + 32);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('%d d', [Items[i].Dias]));
+
+    // Barra
+    BarW := Round(BarsW * (Items[i].Importe / MaxImp));
+    if BarW < 1 then BarW := 1;
+    Cv.Brush.Color := BAR_COL;
+    Cv.Pen.Color := BAR_COL;
+    Cv.Rectangle(BarLeft, Y + 6, BarLeft + BarW, Y + 26);
+
+    // Valor derecha
+    Cv.Brush.Style := bsClear;
+    Cv.Font.Color := clBlack;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(BarRight + 4, Y + 4, W - PAD, Y + 24);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      FormatFloat('#,##0', Items[i].Importe));
+    Cv.Font.Style := [];
+  end;
+
+  // Pie: valor total
+  Cv.Font.Size := 9;
+  Cv.Font.Color := clGrayText;
+  TxtRect := Rect(PAD, H - 22, W - PAD, H - 4);
+  Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+    Format('Valor total parado: %s', [FormatFloat('#,##0', ValorTot)]));
+end;
+
+// ---------------------------------------------------------------------------
+// Pintura Top-10 Stock Cr'itico (barras dobles: actual vs minimo)
+// ---------------------------------------------------------------------------
+
+procedure TfrmStockCockpit.pbCriticoPaint(Sender: TObject);
+const
+  TIT_H   = 30;
+  ROW_H   = 42;
+  PAD     = 10;
+  LBL_W   = 110;
+  VAL_W   = 90;
+  COL_ACTUAL: TColor = $002060E0; // rojo: stock actual (bajo)
+  COL_MIN:    TColor = $00A0A0A0; // gris claro: minimo (referencia)
+type
+  TTopItem = record
+    Codigo: string;
+    Stock, Minimo, Deficit: Double;
+  end;
+var
+  Cv: TCanvas;
+  W, H, i, N, BarsW, BarLeft, BarRight, Y: Integer;
+  Items: array[0..9] of TTopItem;
+  MaxScale: Double;
+  Bm: TBookmark;
+  Cod: string;
+  St, Mn, Df: Double;
+  Inserted: Boolean;
+  j, k: Integer;
+  BarW: Integer;
+  TxtRect: TRect;
+begin
+  Cv := pbCritico.Canvas;
+  W := pbCritico.Width;
+  H := pbCritico.Height;
+
+  Cv.Brush.Color := clWhite;
+  Cv.Brush.Style := bsSolid;
+  Cv.FillRect(Rect(0, 0, W, H));
+
+  Cv.Font.Name := 'Segoe UI';
+  Cv.Font.Size := 10;
+  Cv.Font.Style := [fsBold];
+  Cv.Font.Color := clBlack;
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(0, 6, W, 6 + TIT_H), PAD, 8,
+    'Top 10 cr'#237'tico (d'#233'ficit vs m'#237'nimo)');
+
+  if (cdsCritico = nil) or (not cdsCritico.Active) or cdsCritico.IsEmpty then
+  begin
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    Cv.TextRect(Rect(0, H div 2 - 10, W, H div 2 + 10), PAD, H div 2 - 8,
+      '(sin datos)');
+    Exit;
+  end;
+
+  // Top-10 por Deficit desc
+  N := 0;
+  cdsCritico.DisableControls;
+  Bm := cdsCritico.GetBookmark;
+  try
+    cdsCritico.First;
+    while not cdsCritico.Eof do
+    begin
+      Df  := cdsCritico.FieldByName('Deficit').AsFloat;
+      St  := cdsCritico.FieldByName('UnidadSaldo').AsFloat;
+      Mn  := cdsCritico.FieldByName('StockMinimo').AsFloat;
+      Cod := cdsCritico.FieldByName('CodigoArticulo').AsString;
+
+      Inserted := False;
+      for j := 0 to N - 1 do
+        if Df > Items[j].Deficit then
+        begin
+          for k := Min(N, 9) downto j + 1 do
+            Items[k] := Items[k - 1];
+          Items[j].Codigo  := Cod;
+          Items[j].Stock   := St;
+          Items[j].Minimo  := Mn;
+          Items[j].Deficit := Df;
+          if N < 10 then Inc(N);
+          Inserted := True;
+          Break;
+        end;
+      if (not Inserted) and (N < 10) then
+      begin
+        Items[N].Codigo  := Cod;
+        Items[N].Stock   := St;
+        Items[N].Minimo  := Mn;
+        Items[N].Deficit := Df;
+        Inc(N);
+      end;
+
+      cdsCritico.Next;
+    end;
+  finally
+    if Bm <> nil then
+    begin
+      cdsCritico.GotoBookmark(Bm);
+      cdsCritico.FreeBookmark(Bm);
+    end;
+    cdsCritico.EnableControls;
+  end;
+
+  if N = 0 then Exit;
+
+  // Escala = max minimo del top
+  MaxScale := 0;
+  for i := 0 to N - 1 do
+    if Items[i].Minimo > MaxScale then MaxScale := Items[i].Minimo;
+  if MaxScale <= 0 then MaxScale := 1;
+
+  BarLeft  := PAD + LBL_W;
+  BarRight := W - PAD - VAL_W;
+  BarsW    := BarRight - BarLeft;
+  if BarsW < 40 then BarsW := 40;
+
+  Cv.Font.Size := 8;
+
+  for i := 0 to N - 1 do
+  begin
+    Y := TIT_H + PAD + i * ROW_H;
+
+    // Etiqueta izquierda: codigo
+    Cv.Font.Color := clBlack;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(PAD, Y + 4, PAD + LBL_W - 4, Y + 22);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top, Items[i].Codigo);
+
+    // Barra MINIMO (gris, fina, fondo)
+    Cv.Brush.Color := COL_MIN;
+    Cv.Pen.Color := COL_MIN;
+    BarW := Round(BarsW * (Items[i].Minimo / MaxScale));
+    if BarW < 1 then BarW := 1;
+    Cv.Rectangle(BarLeft, Y + 22, BarLeft + BarW, Y + 30);
+
+    // Barra STOCK ACTUAL (rojo, gruesa, encima)
+    Cv.Brush.Color := COL_ACTUAL;
+    Cv.Pen.Color := COL_ACTUAL;
+    BarW := Round(BarsW * (Items[i].Stock / MaxScale));
+    if BarW < 1 then BarW := 1;
+    Cv.Rectangle(BarLeft, Y + 8, BarLeft + BarW, Y + 22);
+
+    // Valor derecha: deficit
+    Cv.Brush.Style := bsClear;
+    Cv.Font.Color := clRed;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(BarRight + 4, Y + 4, W - PAD, Y + 22);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('-%s', [FormatFloat('#,##0', Items[i].Deficit)]));
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    TxtRect := Rect(BarRight + 4, Y + 22, W - PAD, Y + 38);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('%s / %s', [FormatFloat('#,##0', Items[i].Stock),
+                         FormatFloat('#,##0', Items[i].Minimo)]));
+  end;
+
+  // Leyenda inferior
+  Cv.Brush.Color := COL_ACTUAL;
+  Cv.Pen.Color := clBlack;
+  Cv.Pen.Width := 1;
+  Cv.Rectangle(PAD, H - 18, PAD + 12, H - 8);
+  Cv.Brush.Style := bsClear;
+  Cv.Font.Color := clBlack;
+  Cv.Font.Style := [];
+  Cv.Font.Size := 8;
+  Cv.TextRect(Rect(PAD + 18, H - 20, PAD + 90, H - 4),
+    PAD + 18, H - 18, 'Stock actual');
+
+  Cv.Brush.Color := COL_MIN;
+  Cv.Rectangle(PAD + 100, H - 18, PAD + 112, H - 8);
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(PAD + 118, H - 20, W - PAD, H - 4),
+    PAD + 118, H - 18, 'M'#237'nimo');
+end;
+
+// ---------------------------------------------------------------------------
+// Pintura Top-10 Rupturas futuras (barras dobles: pendiente servir vs saldo+entradas)
+// ---------------------------------------------------------------------------
+
+procedure TfrmStockCockpit.pbRupturasPaint(Sender: TObject);
+const
+  TIT_H   = 30;
+  ROW_H   = 42;
+  PAD     = 10;
+  LBL_W   = 110;
+  VAL_W   = 90;
+  COL_DEMANDA: TColor = $002060E0; // rojo: demanda total
+  COL_SUMIN:   TColor = $0080B040; // verde: suministro disponible
+type
+  TTopItem = record
+    Codigo: string;
+    Demanda, Suministro, Deficit: Double;
+  end;
+var
+  Cv: TCanvas;
+  W, H, i, N, BarsW, BarLeft, BarRight, Y, BarW: Integer;
+  Items: array[0..9] of TTopItem;
+  MaxScale: Double;
+  Bm: TBookmark;
+  Cod: string;
+  Dm, Su, Df, Sa, Pr, Pp, Ps, Cp: Double;
+  Inserted: Boolean;
+  j, k: Integer;
+  TxtRect: TRect;
+begin
+  Cv := pbRupturas.Canvas;
+  W := pbRupturas.Width;
+  H := pbRupturas.Height;
+
+  Cv.Brush.Color := clWhite;
+  Cv.Brush.Style := bsSolid;
+  Cv.FillRect(Rect(0, 0, W, H));
+
+  Cv.Font.Name := 'Segoe UI';
+  Cv.Font.Size := 10;
+  Cv.Font.Style := [fsBold];
+  Cv.Font.Color := clBlack;
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(0, 6, W, 6 + TIT_H), PAD, 8,
+    'Top 10 rupturas futuras');
+
+  if (cdsRupturas = nil) or (not cdsRupturas.Active) or cdsRupturas.IsEmpty then
+  begin
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    Cv.TextRect(Rect(0, H div 2 - 10, W, H div 2 + 10), PAD, H div 2 - 8,
+      '(sin datos)');
+    Exit;
+  end;
+
+  N := 0;
+  cdsRupturas.DisableControls;
+  Bm := cdsRupturas.GetBookmark;
+  try
+    cdsRupturas.First;
+    while not cdsRupturas.Eof do
+    begin
+      Df := cdsRupturas.FieldByName('Deficit').AsFloat;
+      Sa := cdsRupturas.FieldByName('UnidadSaldo').AsFloat;
+      Pr := cdsRupturas.FieldByName('PendienteRecibir').AsFloat;
+      Pp := cdsRupturas.FieldByName('ProduccionPendiente').AsFloat;
+      Ps := cdsRupturas.FieldByName('PendienteServir').AsFloat;
+      Cp := cdsRupturas.FieldByName('ConsumoPendiente').AsFloat;
+      Cod := cdsRupturas.FieldByName('CodigoArticulo').AsString;
+
+      Su := Sa + Pr + Pp;
+      Dm := Ps + Cp;
+
+      Inserted := False;
+      for j := 0 to N - 1 do
+        if Df > Items[j].Deficit then
+        begin
+          for k := Min(N, 9) downto j + 1 do
+            Items[k] := Items[k - 1];
+          Items[j].Codigo     := Cod;
+          Items[j].Demanda    := Dm;
+          Items[j].Suministro := Su;
+          Items[j].Deficit    := Df;
+          if N < 10 then Inc(N);
+          Inserted := True;
+          Break;
+        end;
+      if (not Inserted) and (N < 10) then
+      begin
+        Items[N].Codigo     := Cod;
+        Items[N].Demanda    := Dm;
+        Items[N].Suministro := Su;
+        Items[N].Deficit    := Df;
+        Inc(N);
+      end;
+
+      cdsRupturas.Next;
+    end;
+  finally
+    if Bm <> nil then
+    begin
+      cdsRupturas.GotoBookmark(Bm);
+      cdsRupturas.FreeBookmark(Bm);
+    end;
+    cdsRupturas.EnableControls;
+  end;
+
+  if N = 0 then Exit;
+
+  MaxScale := 0;
+  for i := 0 to N - 1 do
+  begin
+    if Items[i].Demanda    > MaxScale then MaxScale := Items[i].Demanda;
+    if Items[i].Suministro > MaxScale then MaxScale := Items[i].Suministro;
+  end;
+  if MaxScale <= 0 then MaxScale := 1;
+
+  BarLeft  := PAD + LBL_W;
+  BarRight := W - PAD - VAL_W;
+  BarsW    := BarRight - BarLeft;
+  if BarsW < 40 then BarsW := 40;
+
+  Cv.Font.Size := 8;
+
+  for i := 0 to N - 1 do
+  begin
+    Y := TIT_H + PAD + i * ROW_H;
+
+    Cv.Font.Color := clBlack;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(PAD, Y + 4, PAD + LBL_W - 4, Y + 22);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top, Items[i].Codigo);
+
+    // Demanda (rojo, arriba)
+    Cv.Brush.Color := COL_DEMANDA;
+    Cv.Pen.Color := COL_DEMANDA;
+    BarW := Round(BarsW * (Items[i].Demanda / MaxScale));
+    if BarW < 1 then BarW := 1;
+    Cv.Rectangle(BarLeft, Y + 6, BarLeft + BarW, Y + 20);
+
+    // Suministro (verde, abajo)
+    Cv.Brush.Color := COL_SUMIN;
+    Cv.Pen.Color := COL_SUMIN;
+    BarW := Round(BarsW * (Items[i].Suministro / MaxScale));
+    if BarW < 1 then BarW := 1;
+    Cv.Rectangle(BarLeft, Y + 22, BarLeft + BarW, Y + 36);
+
+    Cv.Brush.Style := bsClear;
+    Cv.Font.Color := clRed;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(BarRight + 4, Y + 4, W - PAD, Y + 22);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('-%s', [FormatFloat('#,##0', Items[i].Deficit)]));
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    TxtRect := Rect(BarRight + 4, Y + 22, W - PAD, Y + 38);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('%s / %s', [FormatFloat('#,##0', Items[i].Suministro),
+                         FormatFloat('#,##0', Items[i].Demanda)]));
+  end;
+
+  // Leyenda
+  Cv.Brush.Color := COL_DEMANDA;
+  Cv.Pen.Color := clBlack;
+  Cv.Pen.Width := 1;
+  Cv.Rectangle(PAD, H - 18, PAD + 12, H - 8);
+  Cv.Brush.Style := bsClear;
+  Cv.Font.Color := clBlack;
+  Cv.Font.Style := [];
+  Cv.Font.Size := 8;
+  Cv.TextRect(Rect(PAD + 18, H - 20, PAD + 80, H - 4),
+    PAD + 18, H - 18, 'Demanda');
+
+  Cv.Brush.Color := COL_SUMIN;
+  Cv.Rectangle(PAD + 90, H - 18, PAD + 102, H - 8);
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(PAD + 108, H - 20, W - PAD, H - 4),
+    PAD + 108, H - 18, 'Suministro');
+end;
+
+// ---------------------------------------------------------------------------
+// Pintura Cobertura (DoS) — histograma por bandas de dias
+// ---------------------------------------------------------------------------
+
+procedure TfrmStockCockpit.pbCoberturaPaint(Sender: TObject);
+const
+  TIT_H   = 30;
+  PAD     = 12;
+  N_BANDS = 6;
+  BAND_LABELS: array[0..N_BANDS - 1] of string = (
+    '0', '1-7', '8-30', '31-90', '91-180', '>180');
+  BAND_LIMS: array[0..N_BANDS - 1] of Integer = (
+    0, 7, 30, 90, 180, MaxInt);
+  COL_BANDS: array[0..N_BANDS - 1] of TColor = (
+    $002020E0,   // 0     - rojo intenso (ruptura)
+    $004060E0,   // 1-7   - rojo-naranja
+    $0040A0E0,   // 8-30  - naranja
+    $0040C0F0,   // 31-90 - amarillo
+    $0080C040,   // 91-180- verde
+    $00A0A0A0    // >180  - gris (sobre-stock)
+  );
+var
+  Cv: TCanvas;
+  W, H, ChartTop, ChartBottom, BarsAreaH, MaxBar, BarW, BarGap, X, Y, i, Total: Integer;
+  Counts: array[0..N_BANDS - 1] of Integer;
+  Bm: TBookmark;
+  Dias: Double;
+  TxtRect: TRect;
+begin
+  Cv := pbCobertura.Canvas;
+  W := pbCobertura.Width;
+  H := pbCobertura.Height;
+
+  Cv.Brush.Color := clWhite;
+  Cv.Brush.Style := bsSolid;
+  Cv.FillRect(Rect(0, 0, W, H));
+
+  Cv.Font.Name := 'Segoe UI';
+  Cv.Font.Size := 10;
+  Cv.Font.Style := [fsBold];
+  Cv.Font.Color := clBlack;
+  Cv.Brush.Style := bsClear;
+  Cv.TextRect(Rect(0, 6, W, 6 + TIT_H), PAD, 8,
+    'Distribuci'#243'n d'#237'as de cobertura');
+
+  if (cdsCobertura = nil) or (not cdsCobertura.Active) or cdsCobertura.IsEmpty then
+  begin
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    Cv.TextRect(Rect(0, H div 2 - 10, W, H div 2 + 10), PAD, H div 2 - 8,
+      '(sin datos)');
+    Exit;
+  end;
+
+  for i := 0 to N_BANDS - 1 do Counts[i] := 0;
+  Total := 0;
+
+  cdsCobertura.DisableControls;
+  Bm := cdsCobertura.GetBookmark;
+  try
+    cdsCobertura.First;
+    while not cdsCobertura.Eof do
+    begin
+      Dias := cdsCobertura.FieldByName('DiasCobertura').AsFloat;
+      for i := 0 to N_BANDS - 1 do
+        if Dias <= BAND_LIMS[i] then
+        begin
+          Inc(Counts[i]);
+          Break;
+        end;
+      Inc(Total);
+      cdsCobertura.Next;
+    end;
+  finally
+    if Bm <> nil then
+    begin
+      cdsCobertura.GotoBookmark(Bm);
+      cdsCobertura.FreeBookmark(Bm);
+    end;
+    cdsCobertura.EnableControls;
+  end;
+
+  if Total = 0 then Exit;
+
+  MaxBar := 0;
+  for i := 0 to N_BANDS - 1 do
+    if Counts[i] > MaxBar then MaxBar := Counts[i];
+  if MaxBar = 0 then Exit;
+
+  ChartTop    := TIT_H + PAD;
+  ChartBottom := H - 60; // espacio para etiquetas X y leyenda total
+  BarsAreaH   := ChartBottom - ChartTop;
+  if BarsAreaH < 40 then BarsAreaH := 40;
+
+  BarGap := 8;
+  BarW := (W - PAD * 2 - BarGap * (N_BANDS - 1)) div N_BANDS;
+  if BarW < 10 then BarW := 10;
+
+  Cv.Font.Size := 8;
+
+  for i := 0 to N_BANDS - 1 do
+  begin
+    X := PAD + i * (BarW + BarGap);
+    Y := ChartBottom - Round(BarsAreaH * (Counts[i] / MaxBar));
+
+    Cv.Brush.Color := COL_BANDS[i];
+    Cv.Pen.Color := COL_BANDS[i];
+    Cv.Rectangle(X, Y, X + BarW, ChartBottom);
+
+    // Numero encima de la barra
+    Cv.Brush.Style := bsClear;
+    Cv.Font.Color := clBlack;
+    Cv.Font.Style := [fsBold];
+    TxtRect := Rect(X, Y - 16, X + BarW, Y - 2);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      IntToStr(Counts[i]));
+
+    // Etiqueta X
+    Cv.Font.Style := [];
+    Cv.Font.Color := clGrayText;
+    TxtRect := Rect(X, ChartBottom + 4, X + BarW, ChartBottom + 20);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top, BAND_LABELS[i]);
+    // % debajo
+    TxtRect := Rect(X, ChartBottom + 20, X + BarW, ChartBottom + 34);
+    Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+      Format('%d%%', [Round(Counts[i] * 100 / Total)]));
+  end;
+
+  // Total al pie
+  Cv.Font.Size := 9;
+  Cv.Font.Color := clGrayText;
+  Cv.Font.Style := [];
+  TxtRect := Rect(PAD, H - 18, W - PAD, H - 4);
+  Cv.TextRect(TxtRect, TxtRect.Left, TxtRect.Top,
+    Format('Total: %d art'#237'culos (d'#237'as)', [Total]));
 end;
 
 // ---------------------------------------------------------------------------
