@@ -3,6 +3,19 @@ unit uBacklogScheduler;
 {
   Motor de auto-planificacion a partir de una seleccion del Backlog.
 
+  ESTADO (2026-05-20):
+  - Este unit alberga la implementacion FCS push (forward/backward) y los
+    records de IO (TSchedInput/Output/Result/Params).
+  - A partir de hoy existe ademas IPlanningEngine en uPlanningEngine, con dos
+    implementaciones (TForward/TBackwardSchedulerEngine en uPlanningEngineFCS)
+    que envuelven RunAutoScheduling.
+  - Los consumidores nuevos deberian crear el engine via
+    CreatePlanningEngine(...) y llamar Engine.Schedule(...). RunAutoScheduling
+    permanece como API publica para no romper a uBacklog.btnPlanificarClick.
+  - Cuando aparezca una variante real distinta (bottleneck-based, DBR, etc.)
+    se promocionaran las clases del engine y RunAutoScheduling se reducira a
+    una llamada al engine pekForward por defecto.
+
   Estrategia:
   - 1 fila de Backlog -> 1 nodo.
   - Siempre se usa el CentroPreferente. Si esta saturado, el nodo se apila

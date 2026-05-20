@@ -2,8 +2,8 @@ object frmGestionMoldes: TfrmGestionMoldes
   Left = 0
   Top = 0
   Caption = 'Gesti'#243'n de Moldes y Utillajes'
-  ClientHeight = 520
-  ClientWidth = 1100
+  ClientHeight = 540
+  ClientWidth = 1320
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -17,7 +17,7 @@ object frmGestionMoldes: TfrmGestionMoldes
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 1100
+    Width = 1320
     Height = 60
     Align = alTop
     BevelOuter = bvNone
@@ -42,7 +42,7 @@ object frmGestionMoldes: TfrmGestionMoldes
       Top = 36
       Width = 500
       Height = 15
-      Caption = 'Cat'#225'logo de moldes con centros, art'#237'culos y operaciones compatibles'
+      Caption = 'Ficha t'#233'cnica, estado y relaciones (centros, art'#237'culos, operaciones, utillajes)'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -53,14 +53,14 @@ object frmGestionMoldes: TfrmGestionMoldes
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 480
-    Width = 1100
+    Top = 500
+    Width = 1320
     Height = 40
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
     object btnClose: TButton
-      Left = 992
+      Left = 1212
       Top = 6
       Width = 100
       Height = 28
@@ -73,7 +73,7 @@ object frmGestionMoldes: TfrmGestionMoldes
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
-    Width = 1100
+    Width = 1320
     Height = 40
     Align = alTop
     BevelOuter = bvNone
@@ -106,38 +106,47 @@ object frmGestionMoldes: TfrmGestionMoldes
       OnClick = btnSaveClick
     end
     object btnCentros: TButton
-      Left = 296
+      Left = 304
       Top = 6
-      Width = 140
+      Width = 120
       Height = 28
       Caption = 'Centros...'
       TabOrder = 3
       OnClick = btnCentrosClick
     end
     object btnArticulos: TButton
-      Left = 440
+      Left = 428
       Top = 6
-      Width = 140
+      Width = 120
       Height = 28
       Caption = 'Art'#237'culos...'
       TabOrder = 4
       OnClick = btnArticulosClick
     end
     object btnOperaciones: TButton
-      Left = 584
+      Left = 552
       Top = 6
-      Width = 140
+      Width = 120
       Height = 28
       Caption = 'Operaciones...'
       TabOrder = 5
       OnClick = btnOperacionesClick
     end
+    object btnUtillajes: TButton
+      Left = 676
+      Top = 6
+      Width = 120
+      Height = 28
+      Caption = 'Utillajes...'
+      TabOrder = 6
+      OnClick = btnUtillajesClick
+    end
   end
   object gridMoldes: TcxGrid
     Left = 0
     Top = 100
-    Width = 1100
-    Height = 380
+    Width = 1320
+    Height = 400
     Align = alClient
     TabOrder = 3
     object tvMoldes: TcxGridTableView
@@ -160,7 +169,39 @@ object frmGestionMoldes: TfrmGestionMoldes
       end
       object colDescripcion: TcxGridColumn
         Caption = 'Descripci'#243'n'
-        Width = 200
+        Width = 180
+      end
+      object colTipo: TcxGridColumn
+        Caption = 'Tipo'
+        PropertiesClassName = 'TcxComboBoxProperties'
+        Properties.DropDownListStyle = lsFixedList
+        Properties.Items.Strings = (
+          'Inyeccion'
+          'Soplado'
+          'Compresion'
+          'Extrusion'
+          'Otro')
+        Width = 100
+      end
+      object colEstado: TcxGridColumn
+        Caption = 'Estado'
+        PropertiesClassName = 'TcxComboBoxProperties'
+        Properties.DropDownListStyle = lsFixedList
+        Properties.Items.Strings = (
+          'Disponible'
+          'Montado'
+          'Reservado'
+          'Mantenimiento'
+          'Averiado'
+          'Bloqueado'
+          'Baja')
+        Width = 110
+      end
+      object colCentroActual: TcxGridColumn
+        Caption = 'Centro actual'
+        PropertiesClassName = 'TcxComboBoxProperties'
+        Properties.DropDownListStyle = lsFixedList
+        Width = 130
       end
       object colCavidades: TcxGridColumn
         Caption = 'Cavidades'
@@ -197,14 +238,23 @@ object frmGestionMoldes: TfrmGestionMoldes
         Properties.MaxValue = 999999999.000000000000000000
         Width = 80
       end
+      object colFechaProxMant: TcxGridColumn
+        Caption = 'Pr'#243'x. mant.'
+        PropertiesClassName = 'TcxDateEditProperties'
+        Width = 100
+      end
       object colUbicacion: TcxGridColumn
         Caption = 'Ubicaci'#243'n'
-        Width = 140
+        Width = 130
       end
       object colDisponible: TcxGridColumn
-        Caption = 'Disponible'
+        Caption = 'Disp. planif.'
         PropertiesClassName = 'TcxCheckBoxProperties'
-        Width = 70
+        Width = 80
+      end
+      object colObservaciones: TcxGridColumn
+        Caption = 'Observaciones'
+        Width = 200
       end
     end
     object lvMoldes: TcxGridLevel
@@ -213,7 +263,7 @@ object frmGestionMoldes: TfrmGestionMoldes
   end
   object LookAndFeel: TcxLookAndFeelController
     SkinName = 'Office2019Colorful'
-    Left = 1040
+    Left = 1240
     Top = 12
   end
 end

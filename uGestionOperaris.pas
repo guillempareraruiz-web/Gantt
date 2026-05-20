@@ -43,6 +43,7 @@ type
     btnSave: TButton;
     btnDepartamentos: TButton;
     btnPolivalencia: TButton;
+    btnMatriz: TButton;
     btnConfigurarColumnas: TButton;
     gridOperaris: TcxGrid;
     tvOperaris: TcxGridTableView;
@@ -61,6 +62,7 @@ type
     procedure btnSaveClick(Sender: TObject);
     procedure btnDepartamentosClick(Sender: TObject);
     procedure btnPolivalenciaClick(Sender: TObject);
+    procedure btnMatrizClick(Sender: TObject);
     procedure btnConfigurarColumnasClick(Sender: TObject);
   private
     type
@@ -106,7 +108,7 @@ implementation
 {$R *.dfm}
 uses
   uDMPlanner, uAsignarDepartamentos,
-  uOperarioPolivalencia, uOperariosCustomCols, uLogin, Main;
+  uOperarioPolivalencia, uMatrizPolivalencia, uOperariosCustomCols, uLogin, Main;
 
 const
   OPERARIOS_GRID_ID = 'OPERARIOS';
@@ -699,5 +701,12 @@ begin
   if not Assigned(Form1) then Exit;
   TfrmOperarioPolivalencia.Execute(Form1.GetOperariosRepo,
     Form1.GetHabilidadRepo, OpId, Nombre);
+end;
+
+procedure TfrmGestionOperaris.btnMatrizClick(Sender: TObject);
+begin
+  if not Assigned(Form1) then Exit;
+  TfrmMatrizPolivalencia.Execute(Form1.GetOperariosRepo,
+    Form1.GetHabilidadRepo);
 end;
 end.

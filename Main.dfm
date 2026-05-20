@@ -93,11 +93,12 @@ object Form1: TForm1
         OnClick = Turnos1Click
       end
       object Moldes1: TMenuItem
-        Caption = 'Moldes y utillajes'
+        Caption = 'Moldes'
         OnClick = Moldes1Click
       end
       object Utillajes1: TMenuItem
-        Caption = 'Marcadores'
+        Caption = 'Utillajes'
+        OnClick = Utillajes1Click
       end
       object Links1: TMenuItem
         Caption = 'Links'
@@ -133,6 +134,10 @@ object Form1: TForm1
       object FiniteCapacityOperaris1: TMenuItem
         Caption = 'Planificador Capacidad por Operario'
         OnClick = FiniteCapacityOperaris1Click
+      end
+      object HeatmapCargaCentro1: TMenuItem
+        Caption = 'Heatmap carga por centro'
+        OnClick = HeatmapCargaCentro1Click
       end
       object AutoPlanificacion1: TMenuItem
         Caption = 'Auto-planificaci'#243'n (scoring)...'

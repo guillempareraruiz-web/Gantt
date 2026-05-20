@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FS Planner — Mètodes de Planificació (Document Intern)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --ink: #1a1f24;
+    --ink-soft: #4a525c;
+    --paper: #f5f1e8;
+    --paper-card: #fffdf8;
+    --line: #d9d2c2;
+    --accent: #b8412e;      /* terracota industrial */
+    --accent-2: #2c5f6f;    /* blau pissarra */
+    --accent-3: #c9962f;    /* ocre */
+    --green: #4a7c44;
+    --shadow: rgba(40,30,20,0.10);
+    --mono: 'IBM Plex Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(40,30,20,0.04) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 60px 40px 120px; }
+
+  /* ---- Capçalera ---- */
+  header.doc-head {
+    border-bottom: 3px double var(--ink);
+    padding-bottom: 28px;
+    margin-bottom: 50px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: 52px;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+  .subtitle {
+    font-size: 18px;
+    color: var(--ink-soft);
+    max-width: 620px;
+  }
+  .meta {
+    margin-top: 22px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .meta span b { color: var(--ink); }
+
+  /* ---- Índex ---- */
+  nav.toc {
+    background: var(--paper-card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent-2);
+    padding: 24px 28px;
+    margin-bottom: 56px;
+    box-shadow: 4px 4px 0 var(--shadow);
+  }
+  nav.toc h3 {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin-bottom: 14px;
+  }
+  nav.toc ol { list-style: none; counter-reset: toc; }
+  nav.toc li {
+    counter-increment: toc;
+    padding: 5px 0;
+    border-bottom: 1px dotted var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  nav.toc li:last-child { border-bottom: none; }
+  nav.toc li::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  nav.toc a { color: var(--ink); text-decoration: none; font-weight: 500; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .tag {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+  .tag.push { background: #f3e0db; color: var(--accent); }
+  .tag.pull { background: #dde9ec; color: var(--accent-2); }
+  .tag.viz  { background: #f3ead0; color: #8a6a1a; }
+  .tag.opt  { background: #e0ebde; color: var(--green); }
+
+  /* ---- Seccions ---- */
+  section { margin-bottom: 64px; scroll-margin-top: 20px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 32px;
+    letter-spacing: -0.01em;
+  }
+  .sec-sub {
+    color: var(--ink-soft);
+    font-size: 15px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  h3.block {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-2);
+    margin: 28px 0 12px;
+  }
+  p { margin-bottom: 14px; }
+  .lead { font-size: 17px; }
+
+  /* ---- Figura / esquema ---- */
+  figure {
+    background: var(--paper-card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 26px 24px 18px;
+    margin: 26px 0;
+    box-shadow: 4px 4px 0 var(--shadow);
+  }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dotted var(--line);
+    letter-spacing: 0.02em;
+  }
+  figcaption b { color: var(--ink); }
+
+  /* ---- Caixes ---- */
+  .box {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 18px 22px;
+    margin: 20px 0;
+    background: var(--paper-card);
+  }
+  .box.when { border-left: 4px solid var(--green); }
+  .box.warn { border-left: 4px solid var(--accent); }
+  .box h4 {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .box.when h4 { color: var(--green); }
+  .box.warn h4 { color: var(--accent); }
+
+  ul.clean { list-style: none; margin: 8px 0; }
+  ul.clean li {
+    padding: 4px 0 4px 22px;
+    position: relative;
+  }
+  ul.clean li::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+  }
+
+  /* ---- Taula ---- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 22px 0;
+    font-size: 14px;
+    background: var(--paper-card);
+    box-shadow: 4px 4px 0 var(--shadow);
+  }
+  th {
+    background: var(--ink);
+    color: var(--paper);
+    text-align: left;
+    padding: 11px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code, p code, li code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: #ece5d5;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 9px;
+    border-radius: 99px;
+    margin-right: 6px;
+  }
+  .pill.push { background: #f3e0db; color: var(--accent); }
+  .pill.pull { background: #dde9ec; color: var(--accent-2); }
+  .pill.viz  { background: #f3ead0; color: #8a6a1a; }
+  .pill.opt  { background: #e0ebde; color: var(--green); }
+
+  /* SVG text helpers */
+  svg text { font-family: 'IBM Plex Sans', sans-serif; }
+  .svg-mono { font-family: 'IBM Plex Mono', monospace; }
+
+  hr.div {
+    border: none;
+    border-top: 2px solid var(--ink);
+    margin: 56px 0;
+    position: relative;
+  }
+  hr.div::after {
+    content: '◆';
+    position: absolute;
+    top: -11px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--paper);
+    padding: 0 14px;
+    color: var(--accent);
+    font-size: 13px;
+  }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 3px double var(--ink);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc-head">
+  <div class="kicker">Document intern de treball · No entregable</div>
+  <h1>Mètodes de planificació de la producció</h1>
+  <p class="subtitle">Catàleg de fluxos i algorismes per dissenyar el FS Planner com a eina universal multi-mètode. Cada empresa n'escollirà un; nosaltres els hem d'oferir tots.</p>
+  <div class="meta">
+    <span><b>Projecte:</b> FS Planner</span>
+    <span><b>Stack objectiu:</b> SQL Server + Delphi</span>
+    <span><b>Referència de mercat:</b> ASProva (APS)</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h3>Contingut</h3>
+  <ol>
+    <li><a href="#concept">Els dos eixos: Push vs Pull · Capacitat finita vs infinita</a></li>
+    <li><a href="#mrp">MRP / MRP II</a><span class="tag push">Push</span></li>
+    <li><a href="#fcs">Capacitat finita (FCS)</a><span class="tag push">Push</span></li>
+    <li><a href="#prio">Regles de prioritat (dispatching)</a><span class="tag push">Push</span></li>
+    <li><a href="#gantt">Gantt manual / interactiu</a><span class="tag viz">Visual</span></li>
+    <li><a href="#dbr">Theory of Constraints — DBR</a><span class="tag pull">Híbrid</span></li>
+    <li><a href="#kanban">Kanban (pull lean)</a><span class="tag pull">Pull</span></li>
+    <li><a href="#conwip">CONWIP</a><span class="tag pull">Pull</span></li>
+    <li><a href="#opt">Optimització matemàtica / metaheurístiques</a><span class="tag opt">Optim.</span></li>
+    <li><a href="#matrix">Matriu de decisió: quin oferir a qui</a></li>
+    <li><a href="#arch">Proposta d'arquitectura per al FS Planner</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 1. CONCEPTE ============ -->
+<section id="concept">
+  <div class="sec-head"><span class="sec-num">01</span><h2>Els dos eixos que ho ordenen tot</h2></div>
+  <p class="sec-sub">Abans d'entrar mètode per mètode, val la pena situar-los en dos eixos. Gairebé tota la confusió desapareix quan els classifiques així.</p>
+
+  <p class="lead">Tots els mètodes es poden situar segons dues preguntes: <b>(A) qui dispara la producció?</b> i <b>(B) es respecta la capacitat real dels recursos?</b></p>
+
+  <figure>
+    <svg viewBox="0 0 760 440" xmlns="http://www.w3.org/2000/svg">
+      <!-- axes -->
+      <line x1="100" y1="40" x2="100" y2="380" stroke="#1a1f24" stroke-width="2"/>
+      <line x1="100" y1="380" x2="700" y2="380" stroke="#1a1f24" stroke-width="2"/>
+      <!-- arrow heads -->
+      <path d="M100,40 l-5,10 l10,0 z" fill="#1a1f24"/>
+      <path d="M700,380 l-10,-5 l0,10 z" fill="#1a1f24"/>
+      <!-- axis labels -->
+      <text x="92" y="34" text-anchor="end" font-size="12" font-weight="600" fill="#1a1f24">+ Capacitat</text>
+      <text x="92" y="48" text-anchor="end" font-size="12" font-weight="600" fill="#1a1f24">finita / realista</text>
+      <text x="92" y="372" text-anchor="end" font-size="11" fill="#4a525c">infinita</text>
+      <text x="700" y="404" text-anchor="end" font-size="12" font-weight="600" fill="#1a1f24">PULL (reactiu) →</text>
+      <text x="110" y="404" text-anchor="start" font-size="12" font-weight="600" fill="#1a1f24">← PUSH (predictiu)</text>
+
+      <!-- quadrant guides -->
+      <line x1="400" y1="40" x2="400" y2="380" stroke="#d9d2c2" stroke-width="1" stroke-dasharray="4 4"/>
+      <line x1="100" y1="210" x2="700" y2="210" stroke="#d9d2c2" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <!-- points -->
+      <!-- MRP : push, infinite (low) -->
+      <circle cx="190" cy="320" r="7" fill="#b8412e"/>
+      <text x="190" y="345" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1f24">MRP / MRP II</text>
+      <!-- FCS : push, finite (high) -->
+      <circle cx="210" cy="110" r="7" fill="#b8412e"/>
+      <text x="210" y="95" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1f24">Capacitat finita</text>
+      <!-- Prioritats : push, mid-finite -->
+      <circle cx="300" cy="180" r="7" fill="#b8412e"/>
+      <text x="300" y="165" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1f24">Regles prioritat</text>
+      <!-- Optim : push, very finite -->
+      <circle cx="160" cy="70" r="7" fill="#4a7c44"/>
+      <text x="160" y="55" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1f24">Optimització</text>
+      <!-- DBR : center -->
+      <circle cx="430" cy="150" r="7" fill="#2c5f6f"/>
+      <text x="445" y="145" text-anchor="start" font-size="13" font-weight="600" fill="#1a1f24">DBR (TOC)</text>
+      <!-- Kanban : pull, finite-ish -->
+      <circle cx="600" cy="200" r="7" fill="#2c5f6f"/>
+      <text x="600" y="185" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1f24">Kanban</text>
+      <!-- CONWIP : pull -->
+      <circle cx="640" cy="270" r="7" fill="#2c5f6f"/>
+      <text x="640" y="292" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1f24">CONWIP</text>
+      <!-- ASProva annotation -->
+      <rect x="135" y="120" width="200" height="36" rx="4" fill="none" stroke="#b8412e" stroke-width="1.5" stroke-dasharray="5 3"/>
+      <text x="235" y="178" text-anchor="middle" font-size="11" font-style="italic" fill="#b8412e" class="svg-mono">zona ASProva (APS)</text>
+    </svg>
+    <figcaption><b>Mapa conceptual.</b> Els mètodes <span style="color:#b8412e">vermells</span> són PUSH (calcules el pla abans), els <span style="color:#2c5f6f">blaus</span> són PULL/híbrids (el flux real regula). Com més amunt, més realista la capacitat. ASProva ocupa la cantonada superior esquerra: push + capacitat finita + optimització.</figcaption>
+  </figure>
+
+  <div class="box">
+    <h4>Per què importa per al FS Planner</h4>
+    <p style="margin-bottom:0">Una empresa de fabricació per comanda contra terminis voldrà <b>push + capacitat finita</b>. Una de producció repetitiva i estable voldrà <b>pull (Kanban)</b>. No hi ha un guanyador universal: per això l'eina ha de cobrir els dos costats del mapa.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 2. MRP ============ -->
+<section id="mrp">
+  <div class="sec-head"><span class="sec-num">02</span><h2>MRP / MRP II</h2></div>
+  <p class="sec-sub"><span class="pill push">Push</span> <span class="pill viz">Capacitat infinita</span> L'enfocament clàssic d'ERP — el que ja fa SAP Business One per sota.</p>
+
+  <p>L'MRP parteix del <b>pla mestre de producció</b> (què s'ha de fabricar i quan), explota la <b>llista de materials (BOM)</b> i, restant l'estoc disponible, calcula <b>què comprar/fabricar i quan llançar-ho</b> usant <i>lead times</i> fixos. L'MRP II hi afegeix una capa de planificació de capacitat (CRP).</p>
+
+  <figure>
+    <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg">
+      <!-- flow boxes -->
+      <g font-size="12.5">
+        <rect x="20"  y="40" width="130" height="58" rx="4" fill="#fffdf8" stroke="#1a1f24" stroke-width="1.5"/>
+        <text x="85" y="64" text-anchor="middle" font-weight="600">Pla mestre</text>
+        <text x="85" y="82" text-anchor="middle" fill="#4a525c" font-size="11">(MPS)</text>
+
+        <rect x="190" y="40" width="130" height="58" rx="4" fill="#fffdf8" stroke="#1a1f24" stroke-width="1.5"/>
+        <text x="255" y="64" text-anchor="middle" font-weight="600">Explosió BOM</text>
+        <text x="255" y="82" text-anchor="middle" fill="#4a525c" font-size="11">+ estoc actual</text>
+
+        <rect x="360" y="40" width="140" height="58" rx="4" fill="#fffdf8" stroke="#1a1f24" stroke-width="1.5"/>
+        <text x="430" y="64" text-anchor="middle" font-weight="600">Necessitats</text>
+        <text x="430" y="82" text-anchor="middle" fill="#4a525c" font-size="11">netes per nivell</text>
+
+        <rect x="540" y="40" width="200" height="58" rx="4" fill="#f3e0db" stroke="#b8412e" stroke-width="1.5"/>
+        <text x="640" y="64" text-anchor="middle" font-weight="600" fill="#b8412e">Ordres planificades</text>
+        <text x="640" y="82" text-anchor="middle" fill="#b8412e" font-size="11">compra + fabricació</text>
+      </g>
+      <!-- arrows -->
+      <g stroke="#1a1f24" stroke-width="1.5" fill="none">
+        <path d="M150,69 L188,69" marker-end="url(#ah)"/>
+        <path d="M320,69 L358,69" marker-end="url(#ah)"/>
+        <path d="M500,69 L538,69" marker-end="url(#ah)"/>
+      </g>
+      <!-- CRP loop (MRP II) -->
+      <rect x="360" y="170" width="140" height="50" rx="4" fill="#dde9ec" stroke="#2c5f6f" stroke-width="1.5"/>
+      <text x="430" y="190" text-anchor="middle" font-size="12.5" font-weight="600" fill="#2c5f6f">CRP (MRP II)</text>
+      <text x="430" y="207" text-anchor="middle" font-size="11" fill="#2c5f6f">test de capacitat</text>
+      <path d="M640,98 L640,195 L502,195" stroke="#2c5f6f" stroke-width="1.5" fill="none" marker-end="url(#ah2)" stroke-dasharray="5 3"/>
+      <path d="M360,195 L255,195 L255,100" stroke="#2c5f6f" stroke-width="1.5" fill="none" marker-end="url(#ah2)" stroke-dasharray="5 3"/>
+      <text x="300" y="250" text-anchor="middle" font-size="11" font-style="italic" fill="#2c5f6f">si no hi cap → replanifica (iteratiu, manual)</text>
+
+      <defs>
+        <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a1f24"/></marker>
+        <marker id="ah2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2c5f6f"/></marker>
+      </defs>
+    </svg>
+    <figcaption><b>Flux MRP.</b> El càlcul és determinista i ràpid. La debilitat fonamental: assumeix <b>capacitat infinita</b> — pot generar ordres que no caben a la planta. L'MRP II hi afegeix el test CRP, però la conciliació sol ser manual i iterativa.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <ul class="clean">
+      <li>Empreses amb BOM complexes i molts nivells de muntatge.</li>
+      <li>Demanda relativament predictible o per previsió.</li>
+      <li>Ja tenen ERP i volen aprofitar les dades de materials.</li>
+    </ul>
+  </div>
+  <div class="box warn"><h4>Limitació clau</h4>
+    <p style="margin-bottom:0">No t'assegura que el pla sigui factible al taller. És la raó d'existir dels APS com ASProva. Per al FS Planner, l'MRP és el <b>punt de partida de dades</b> (necessitats), no el motor de seqüenciació.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 3. FCS ============ -->
+<section id="fcs">
+  <div class="sec-head"><span class="sec-num">03</span><h2>Planificació a capacitat finita (FCS)</h2></div>
+  <p class="sec-sub"><span class="pill push">Push</span> <span class="pill opt">Capacitat finita</span> El cor d'un APS. És el que fa ASProva i el que més empreses de fabricació per comanda esperaran.</p>
+
+  <p>A diferència de l'MRP, l'FCS <b>respecta la capacitat real de cada recurs</b>: una màquina només pot fer una cosa alhora. Col·loca les operacions a la línia temporal sense solapaments impossibles. Té dues direccions bàsiques:</p>
+
+  <figure>
+    <svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg">
+      <!-- FORWARD -->
+      <text x="20" y="30" font-size="13" font-weight="700" fill="#b8412e">FORWARD — des d'avui cap endavant (maximitza ocupació)</text>
+      <line x1="20" y1="120" x2="740" y2="120" stroke="#1a1f24" stroke-width="1.5"/>
+      <text x="20" y="138" font-size="10" fill="#4a525c" class="svg-mono">avui</text>
+      <text x="700" y="138" font-size="10" fill="#4a525c" class="svg-mono">entrega</text>
+      <!-- forward blocks left-packed -->
+      <rect x="22"  y="55" width="120" height="26" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="82"  y="72" text-anchor="middle" font-size="11">Op A</text>
+      <rect x="146" y="55" width="90"  height="26" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="191" y="72" text-anchor="middle" font-size="11">Op B</text>
+      <rect x="240" y="55" width="140" height="26" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="310" y="72" text-anchor="middle" font-size="11">Op C</text>
+      <rect x="22"  y="88" width="80"  height="26" rx="3" fill="#fbeee9" stroke="#b8412e" stroke-dasharray="3 2"/><text x="62" y="105" text-anchor="middle" font-size="11">Op D</text>
+      <line x1="700" y1="45" x2="700" y2="125" stroke="#1a1f24" stroke-width="1" stroke-dasharray="3 3"/>
+      <path d="M390,68 L420,68" stroke="#4a7c44" stroke-width="1.5" marker-end="url(#g)"/>
+      <text x="500" y="72" font-size="10.5" fill="#4a7c44" font-style="italic">marge fins entrega (folgança)</text>
+
+      <!-- BACKWARD -->
+      <text x="20" y="195" font-size="13" font-weight="700" fill="#2c5f6f">BACKWARD — des de l'entrega cap enrere (minimitza estoc/WIP)</text>
+      <line x1="20" y1="285" x2="740" y2="285" stroke="#1a1f24" stroke-width="1.5"/>
+      <text x="20" y="303" font-size="10" fill="#4a525c" class="svg-mono">avui</text>
+      <text x="700" y="303" font-size="10" fill="#4a525c" class="svg-mono">entrega</text>
+      <!-- backward blocks right-packed -->
+      <rect x="430" y="220" width="120" height="26" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="490" y="237" text-anchor="middle" font-size="11">Op A</text>
+      <rect x="554" y="220" width="90"  height="26" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="599" y="237" text-anchor="middle" font-size="11">Op B</text>
+      <rect x="510" y="253" width="140" height="26" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="580" y="270" text-anchor="middle" font-size="11">Op C</text>
+      <line x1="700" y1="210" x2="700" y2="290" stroke="#1a1f24" stroke-width="1" stroke-dasharray="3 3"/>
+      <path d="M400,233 L370,233" stroke="#b8412e" stroke-width="1.5" marker-end="url(#r)"/>
+      <text x="200" y="237" font-size="10.5" fill="#b8412e" font-style="italic">si això passa d'"avui" → comanda en retard</text>
+
+      <defs>
+        <marker id="g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4a7c44"/></marker>
+        <marker id="r" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#b8412e"/></marker>
+      </defs>
+    </svg>
+    <figcaption><b>Forward vs Backward.</b> Forward empaqueta des d'avui (saps com d'aviat acabaràs). Backward empaqueta des de la data d'entrega cap enrere (saps quan has de començar com a molt tard). Una tercera variant, <b>bottleneck-based</b>, planifica primer el coll d'ampolla i la resta al seu voltant.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <ul class="clean">
+      <li>Fabricació contra comanda amb terminis ferms.</li>
+      <li>Recursos compartits que es disputen (màquines, operaris, motlles).</li>
+      <li>L'empresa vol veure dates de lliurament realistes i fiables.</li>
+    </ul>
+  </div>
+  <p>Aquest és el mètode que ha de ser el <b>buc insígnia</b> del FS Planner per competir amb ASProva. La resta de mètodes es poden veure com a variants o simplificacions.</p>
+</section>
+
+<hr class="div">
+
+<!-- ============ 4. PRIORITATS ============ -->
+<section id="prio">
+  <div class="sec-head"><span class="sec-num">04</span><h2>Regles de prioritat (dispatching rules)</h2></div>
+  <p class="sec-sub"><span class="pill push">Push</span> El "motor barat" que decideix quina ordre va primer quan un recurs queda lliure. És la peça interna de qualsevol FCS.</p>
+
+  <p>No és un mètode "complet" en si, sinó la <b>regla de desempat</b>: quan una màquina s'allibera i hi ha N ordres esperant, quina entra? Les regles més habituals:</p>
+
+  <table>
+    <thead><tr><th style="width:120px">Regla</th><th>Criteri</th><th>Optimitza</th></tr></thead>
+    <tbody>
+      <tr><td><code>FIFO</code></td><td>Primera entrada, primera servida</td><td>Equitat, simplicitat</td></tr>
+      <tr><td><code>EDD</code></td><td>Data d'entrega més propera primer</td><td>Compliment de terminis</td></tr>
+      <tr><td><code>SPT</code></td><td>Operació més curta primer</td><td>Reducció de WIP i temps mitjà</td></tr>
+      <tr><td><code>LPT</code></td><td>Operació més llarga primer</td><td>Equilibri de càrrega en paral·lel</td></tr>
+      <tr><td><code>CR</code></td><td>Ratio crític = temps restant / procés restant</td><td>Equilibri urgència/durada</td></tr>
+      <tr><td><code>Slack</code></td><td>Menys folgança primer</td><td>Evitar retards en cascada</td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg">
+      <!-- queue -->
+      <text x="20" y="30" font-size="12.5" font-weight="700">Cua davant d'un recurs lliure → la regla decideix l'ordre de sortida</text>
+      <!-- incoming jobs -->
+      <g font-size="11">
+        <rect x="40" y="60" width="70" height="40" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="75" y="78" text-anchor="middle" font-weight="600">J1</text><text x="75" y="92" text-anchor="middle" fill="#4a525c">due 5d</text>
+        <rect x="120" y="60" width="70" height="40" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="155" y="78" text-anchor="middle" font-weight="600">J2</text><text x="155" y="92" text-anchor="middle" fill="#4a525c">due 2d</text>
+        <rect x="200" y="60" width="70" height="40" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="235" y="78" text-anchor="middle" font-weight="600">J3</text><text x="235" y="92" text-anchor="middle" fill="#4a525c">due 9d</text>
+      </g>
+      <!-- machine -->
+      <path d="M285,80 L325,80" stroke="#1a1f24" stroke-width="1.5" marker-end="url(#ah3)"/>
+      <rect x="330" y="55" width="90" height="50" rx="4" fill="#f3ead0" stroke="#c9962f" stroke-width="1.5"/>
+      <text x="375" y="84" text-anchor="middle" font-size="12" font-weight="600" fill="#8a6a1a">Recurs</text>
+      <!-- outputs by rule -->
+      <text x="460" y="50" font-size="11" font-weight="700" fill="#b8412e">EDD →</text>
+      <g font-size="11">
+        <rect x="510" y="35" width="50" height="26" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="535" y="52" text-anchor="middle">J2</text>
+        <rect x="565" y="35" width="50" height="26" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="590" y="52" text-anchor="middle">J1</text>
+        <rect x="620" y="35" width="50" height="26" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="645" y="52" text-anchor="middle">J3</text>
+      </g>
+      <text x="460" y="95" font-size="11" font-weight="700" fill="#2c5f6f">FIFO →</text>
+      <g font-size="11">
+        <rect x="510" y="80" width="50" height="26" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="535" y="97" text-anchor="middle">J1</text>
+        <rect x="565" y="80" width="50" height="26" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="590" y="97" text-anchor="middle">J2</text>
+        <rect x="620" y="80" width="50" height="26" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="645" y="97" text-anchor="middle">J3</text>
+      </g>
+      <text x="375" y="150" text-anchor="middle" font-size="11.5" font-style="italic" fill="#4a525c">Mateixes ordres, mateix recurs — la regla canvia el resultat i quins terminis es compleixen.</text>
+      <defs><marker id="ah3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a1f24"/></marker></defs>
+    </svg>
+    <figcaption><b>La mateixa cua, diferents regles.</b> Amb EDD la urgent (J2) passa davant; amb FIFO es manté l'ordre d'arribada. Per al FS Planner, oferir <b>regla seleccionable per recurs o global</b> dona molta flexibilitat amb molt poc cost de càlcul (es resol en SQL).</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <p style="margin-bottom:0">Empreses que volen alguna cosa millor que "el que arribi primer" però sense la complexitat d'un APS complet. <b>EDD</b> o <b>Critical Ratio</b> donen el 80% del valor amb el 20% de l'esforç. És el camí d'entrada més pragmàtic.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 5. GANTT ============ -->
+<section id="gantt">
+  <div class="sec-head"><span class="sec-num">05</span><h2>Gantt manual / interactiu</h2></div>
+  <p class="sec-sub"><span class="pill viz">Visualització + edició</span> Més una eina que un algorisme. El planificador arrossega i el sistema valida.</p>
+
+  <p>El Gantt mostra ordres com a barres sobre una línia temporal, una fila per recurs. És alhora la <b>sortida visual</b> de qualsevol altre mètode i un <b>mètode de planificació manual</b>: el planificador arrossega barres i el sistema avisa de conflictes (solapaments, dependències trencades, sobrecàrrega).</p>
+
+  <figure>
+    <svg viewBox="0 0 760 280" xmlns="http://www.w3.org/2000/svg">
+      <!-- time header -->
+      <line x1="140" y1="40" x2="740" y2="40" stroke="#1a1f24" stroke-width="1.5"/>
+      <g font-size="10" fill="#4a525c" class="svg-mono" text-anchor="middle">
+        <text x="200" y="32">Dl</text><text x="290" y="32">Dt</text><text x="380" y="32">Dc</text>
+        <text x="470" y="32">Dj</text><text x="560" y="32">Dv</text><text x="650" y="32">Ds</text>
+      </g>
+      <g stroke="#d9d2c2" stroke-width="1" stroke-dasharray="3 3">
+        <line x1="245" y1="40" x2="245" y2="250"/><line x1="335" y1="40" x2="335" y2="250"/>
+        <line x1="425" y1="40" x2="425" y2="250"/><line x1="515" y1="40" x2="515" y2="250"/>
+        <line x1="605" y1="40" x2="605" y2="250"/>
+      </g>
+      <!-- resource rows -->
+      <g font-size="12" font-weight="600">
+        <text x="20" y="75">Torn CNC-1</text>
+        <text x="20" y="130">Fresa M-2</text>
+        <text x="20" y="185">Muntatge</text>
+        <text x="20" y="240">Pintura</text>
+      </g>
+      <g stroke="#ece5d5"><line x1="140" y1="90" x2="740" y2="90"/><line x1="140" y1="145" x2="740" y2="145"/><line x1="140" y1="200" x2="740" y2="200"/></g>
+      <!-- bars -->
+      <rect x="155" y="58" width="170" height="24" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="240" y="74" text-anchor="middle" font-size="11">OF-104</text>
+      <rect x="335" y="58" width="120" height="24" rx="3" fill="#f3e0db" stroke="#b8412e"/><text x="395" y="74" text-anchor="middle" font-size="11">OF-107</text>
+      <rect x="245" y="113" width="140" height="24" rx="3" fill="#dde9ec" stroke="#2c5f6f"/><text x="315" y="129" text-anchor="middle" font-size="11">OF-104</text>
+      <rect x="425" y="168" width="180" height="24" rx="3" fill="#f3ead0" stroke="#c9962f"/><text x="515" y="184" text-anchor="middle" font-size="11">OF-104</text>
+      <rect x="605" y="223" width="110" height="24" rx="3" fill="#e0ebde" stroke="#4a7c44"/><text x="660" y="239" text-anchor="middle" font-size="11">OF-104</text>
+      <!-- dependency arrows -->
+      <path d="M325,70 L335,70 M385,125 L425,125 L425,168" stroke="#1a1f24" stroke-width="1" fill="none" stroke-dasharray="2 2"/>
+      <path d="M605,180 L605,223" stroke="#1a1f24" stroke-width="1" fill="none" stroke-dasharray="2 2"/>
+      <!-- conflict marker -->
+      <rect x="335" y="58" width="120" height="24" rx="3" fill="none" stroke="#b8412e" stroke-width="2"/>
+      <circle cx="455" cy="58" r="9" fill="#b8412e"/><text x="455" y="62" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">!</text>
+      <text x="465" y="50" font-size="10" fill="#b8412e" font-style="italic">conflicte detectat</text>
+    </svg>
+    <figcaption><b>Gantt de recursos amb dependències.</b> La traça d'OF-104 recorre CNC → Fresa → Muntatge → Pintura respectant precedències. El sistema marca conflictes en temps real. Ideal com a <b>capa de visualització compartida</b> per a tots els altres mètodes del FS Planner.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <p style="margin-bottom:0">Tallers petits/mitjans on un planificador expert vol <b>control manual</b> amb xarxa de seguretat. També com a vista per defecte de qualsevol pla generat automàticament, perquè l'humà el pugui retocar.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 6. DBR ============ -->
+<section id="dbr">
+  <div class="sec-head"><span class="sec-num">06</span><h2>Theory of Constraints — Drum-Buffer-Rope</h2></div>
+  <p class="sec-sub"><span class="pill pull">Híbrid</span> De Goldratt. Subordina tota la planta al ritme del coll d'ampolla. Sovint guanya en simplicitat a l'optimització global.</p>
+
+  <p>La idea central: <b>el sistema només va tan ràpid com el seu coll d'ampolla</b>. En comptes d'optimitzar-ho tot, identifiques la restricció i ho subordines tot a ella. Tres elements:</p>
+
+  <ul class="clean">
+    <li><b>Drum (tambor):</b> el coll d'ampolla marca el ritme de tota la planta.</li>
+    <li><b>Buffer (amortidor):</b> estoc/temps de protecció <i>davant</i> del coll d'ampolla perquè mai s'aturi per falta de feina.</li>
+    <li><b>Rope (corda):</b> "lliga" l'entrada de material nou al ritme del tambor — no s'introdueix res abans que el coll d'ampolla ho pugui pair.</li>
+  </ul>
+
+  <figure>
+    <svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg">
+      <!-- flow line -->
+      <line x1="40" y1="120" x2="720" y2="120" stroke="#d9d2c2" stroke-width="2"/>
+      <!-- stations -->
+      <g font-size="11" text-anchor="middle">
+        <rect x="50"  y="100" width="80" height="40" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="90" y="124">Estació 1</text>
+        <rect x="200" y="100" width="80" height="40" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="240" y="124">Estació 2</text>
+        <!-- bottleneck = drum -->
+        <rect x="360" y="92" width="90" height="56" rx="4" fill="#f3e0db" stroke="#b8412e" stroke-width="2.5"/><text x="405" y="116" font-weight="700" fill="#b8412e">COLL</text><text x="405" y="132" font-size="10" fill="#b8412e">DRUM 🥁</text>
+        <rect x="540" y="100" width="80" height="40" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="580" y="124">Estació 4</text>
+        <rect x="660" y="100" width="60" height="40" rx="4" fill="#e0ebde" stroke="#4a7c44"/><text x="690" y="124" font-size="10">Sortida</text>
+      </g>
+      <!-- buffer before drum -->
+      <g>
+        <rect x="305" y="104" width="14" height="32" fill="#c9962f"/><rect x="322" y="104" width="14" height="32" fill="#c9962f"/><rect x="339" y="104" width="14" height="32" fill="#c9962f" opacity="0.5"/>
+        <text x="328" y="170" text-anchor="middle" font-size="10" fill="#8a6a1a" font-weight="600">BUFFER</text>
+      </g>
+      <!-- rope -->
+      <path d="M405,92 C405,40 90,40 90,98" stroke="#2c5f6f" stroke-width="2" fill="none" stroke-dasharray="6 4" marker-end="url(#rope)"/>
+      <text x="240" y="34" text-anchor="middle" font-size="11" fill="#2c5f6f" font-weight="600">ROPE — l'entrada s'ajusta al ritme del DRUM</text>
+      <!-- flow arrows -->
+      <g stroke="#1a1f24" stroke-width="1.2" fill="none">
+        <path d="M130,120 L198,120" marker-end="url(#ah4)"/>
+        <path d="M280,120 L303,120" marker-end="url(#ah4)"/>
+        <path d="M450,120 L538,120" marker-end="url(#ah4)"/>
+        <path d="M620,120 L658,120" marker-end="url(#ah4)"/>
+      </g>
+      <defs>
+        <marker id="ah4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a1f24"/></marker>
+        <marker id="rope" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#2c5f6f"/></marker>
+      </defs>
+    </svg>
+    <figcaption><b>Drum-Buffer-Rope.</b> Només cal planificar amb detall el coll d'ampolla; la resta el segueix. El buffer el protegeix de quedar-se sense feina; la corda evita acumular WIP innecessari aigües amunt.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <p style="margin-bottom:0">Plantes amb un <b>coll d'ampolla clar i estable</b>. Molt més senzill de mantenir que un APS complet, i sovint dona millors resultats reals perquè concentra l'esforç on importa.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 7. KANBAN ============ -->
+<section id="kanban">
+  <div class="sec-head"><span class="sec-num">07</span><h2>Kanban (pull lean)</h2></div>
+  <p class="sec-sub"><span class="pill pull">Pull</span> La producció la dispara el consum aigües avall, no un pla central. Atenció a no confondre'l amb taulers tipus Trello.</p>
+
+  <p>Cal distingir <b>dos significats</b> que sovint es barregen:</p>
+  <ul class="clean">
+    <li><b>Kanban de producció (Toyota/lean):</b> sistema <i>pull</i> físic. Quan una estació consumeix material, una targeta autoritza reposar-lo. No planifiques el futur: regules el flux i limites el WIP.</li>
+    <li><b>Kanban visual (taulers/cards):</b> gestió de l'estat de les tasques (Per fer → En curs → Fet). És seguiment, no planificació predictiva.</li>
+  </ul>
+
+  <figure>
+    <svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg">
+      <text x="20" y="28" font-size="13" font-weight="700">Kanban pull: el consum tira de la reposició (sentit contrari al material)</text>
+      <!-- stations -->
+      <g font-size="11" text-anchor="middle">
+        <rect x="60"  y="90" width="100" height="50" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="110" y="112">Proveïdor</text><text x="110" y="128" font-size="10" fill="#4a525c">/ estació A</text>
+        <rect x="330" y="90" width="100" height="50" rx="4" fill="#fffdf8" stroke="#1a1f24"/><text x="380" y="112">Estació B</text>
+        <rect x="600" y="90" width="100" height="50" rx="4" fill="#e0ebde" stroke="#4a7c44"/><text x="650" y="112">Client</text><text x="650" y="128" font-size="10" fill="#4a525c">/ estació C</text>
+      </g>
+      <!-- material flow (forward) -->
+      <path d="M160,105 L328,105" stroke="#1a1f24" stroke-width="2" fill="none" marker-end="url(#mat)"/>
+      <path d="M430,105 L598,105" stroke="#1a1f24" stroke-width="2" fill="none" marker-end="url(#mat)"/>
+      <text x="244" y="96" text-anchor="middle" font-size="10" fill="#1a1f24">material →</text>
+      <text x="514" y="96" text-anchor="middle" font-size="10" fill="#1a1f24">material →</text>
+      <!-- kanban cards (backward) -->
+      <path d="M598,130 L432,130" stroke="#b8412e" stroke-width="2" fill="none" marker-end="url(#card)" stroke-dasharray="6 3"/>
+      <path d="M328,130 L162,130" stroke="#b8412e" stroke-width="2" fill="none" marker-end="url(#card)" stroke-dasharray="6 3"/>
+      <text x="244" y="152" text-anchor="middle" font-size="10" fill="#b8412e">← targeta kanban (autoritza reposar)</text>
+      <text x="514" y="152" text-anchor="middle" font-size="10" fill="#b8412e">← targeta kanban</text>
+      <!-- WIP limit note -->
+      <rect x="250" y="190" width="260" height="40" rx="4" fill="#dde9ec" stroke="#2c5f6f"/>
+      <text x="380" y="206" text-anchor="middle" font-size="11" fill="#2c5f6f" font-weight="600">Límit de WIP fix entre estacions</text>
+      <text x="380" y="222" text-anchor="middle" font-size="10" fill="#2c5f6f">no es produeix res sense targeta lliure</text>
+      <defs>
+        <marker id="mat" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#1a1f24"/></marker>
+        <marker id="card" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#b8412e"/></marker>
+      </defs>
+    </svg>
+    <figcaption><b>Senyal pull.</b> El material avança cap al client, però <b>l'autorització per produir va en sentit contrari</b> via targetes. Si no hi ha targeta lliure, l'estació para — això limita el WIP de manera automàtica.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <p style="margin-bottom:0">Producció <b>repetitiva i estable</b>, demanda relativament constant, pocs canvis de producte. Si la demanda és molt variable o per comanda única, Kanban funciona malament.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 8. CONWIP ============ -->
+<section id="conwip">
+  <div class="sec-head"><span class="sec-num">08</span><h2>CONWIP (Constant Work In Progress)</h2></div>
+  <p class="sec-sub"><span class="pill pull">Pull</span> Una simplificació del Kanban: en comptes de targetes per estació, limites el WIP <b>total</b> de la línia.</p>
+
+  <p>En comptes de gestionar targetes entre cada parell d'estacions (com Kanban), CONWIP posa un únic límit global: només pots tenir <b>N treballs dins del sistema alhora</b>. Quan un surt pel final, s'autoritza que n'entri un de nou pel principi.</p>
+
+  <figure>
+    <svg viewBox="0 0 760 220" xmlns="http://www.w3.org/2000/svg">
+      <!-- system box -->
+      <rect x="120" y="60" width="500" height="80" rx="6" fill="none" stroke="#2c5f6f" stroke-width="2" stroke-dasharray="8 4"/>
+      <text x="370" y="52" text-anchor="middle" font-size="11" fill="#2c5f6f" font-weight="600">SISTEMA — límit global de WIP = N treballs</text>
+      <!-- inner stations -->
+      <g font-size="10" text-anchor="middle">
+        <rect x="150" y="85" width="80" height="32" rx="3" fill="#fffdf8" stroke="#1a1f24"/><text x="190" y="105">Estació 1</text>
+        <rect x="270" y="85" width="80" height="32" rx="3" fill="#fffdf8" stroke="#1a1f24"/><text x="310" y="105">Estació 2</text>
+        <rect x="390" y="85" width="80" height="32" rx="3" fill="#fffdf8" stroke="#1a1f24"/><text x="430" y="105">Estació 3</text>
+        <rect x="510" y="85" width="80" height="32" rx="3" fill="#fffdf8" stroke="#1a1f24"/><text x="550" y="105">Estació 4</text>
+      </g>
+      <!-- entry / exit -->
+      <path d="M50,100 L118,100" stroke="#1a1f24" stroke-width="2" marker-end="url(#in)"/>
+      <text x="50" y="90" font-size="10">entrada</text>
+      <path d="M622,100 L700,100" stroke="#4a7c44" stroke-width="2" marker-end="url(#out)"/>
+      <text x="690" y="90" font-size="10" fill="#4a7c44">sortida</text>
+      <!-- signal loop -->
+      <path d="M660,100 C720,160 90,170 70,108" stroke="#b8412e" stroke-width="2" fill="none" stroke-dasharray="6 3" marker-end="url(#sig)"/>
+      <text x="370" y="190" text-anchor="middle" font-size="10.5" fill="#b8412e">cada sortida autoritza UNA entrada nova (manté WIP constant)</text>
+      <defs>
+        <marker id="in" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a1f24"/></marker>
+        <marker id="out" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4a7c44"/></marker>
+        <marker id="sig" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#b8412e"/></marker>
+      </defs>
+    </svg>
+    <figcaption><b>CONWIP.</b> Un sol llaç de control per a tota la línia, no un per estació. Més senzill d'implementar i ajustar que Kanban pur, i sovint igual d'efectiu per controlar el WIP i el temps de cicle.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <p style="margin-bottom:0">Línies on Kanban seria massa feixuc de gestionar (moltes referències, rutes variables) però es vol el control del WIP del pull. Bon compromís entre simplicitat i control.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 9. OPTIMITZACIÓ ============ -->
+<section id="opt">
+  <div class="sec-head"><span class="sec-num">09</span><h2>Optimització matemàtica i metaheurístiques</h2></div>
+  <p class="sec-sub"><span class="pill opt">Optimització</span> El que hi ha "sota el capó" dels APS més avançats. Cara de modelar, però imbatible en qualitat de solució.</p>
+
+  <p>Es modela la planta com un <b>Job-Shop Scheduling Problem</b> i es resol amb un motor matemàtic. Dos grans famílies:</p>
+
+  <table>
+    <thead><tr><th style="width:170px">Enfocament</th><th>Eines</th><th>Compromís</th></tr></thead>
+    <tbody>
+      <tr><td><b>Exacte</b><br>(MILP, Constraint Programming)</td><td>OR-Tools CP-SAT (gratuït), Gurobi, CPLEX</td><td>Solució òptima o quasi; lent si el problema és gros</td></tr>
+      <tr><td><b>Metaheurístiques</b></td><td>Algorismes genètics, simulated annealing, tabu search, ant colony</td><td>Bones solucions ràpides; sense garantia d'optimalitat</td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 760 240" xmlns="http://www.w3.org/2000/svg">
+      <!-- search landscape -->
+      <text x="380" y="28" text-anchor="middle" font-size="12.5" font-weight="700">Espai de solucions — buscar el mínim (p. ex. menys retard total)</text>
+      <path d="M40,180 Q120,80 180,150 T320,120 Q400,60 460,160 T600,90 Q660,40 720,140"
+            fill="none" stroke="#1a1f24" stroke-width="2"/>
+      <line x1="40" y1="200" x2="720" y2="200" stroke="#d9d2c2"/>
+      <!-- local minima -->
+      <circle cx="180" cy="150" r="6" fill="#c9962f"/><text x="180" y="172" text-anchor="middle" font-size="10" fill="#8a6a1a">mín. local</text>
+      <circle cx="460" cy="160" r="6" fill="#c9962f"/><text x="460" y="182" text-anchor="middle" font-size="10" fill="#8a6a1a">mín. local</text>
+      <!-- global -->
+      <circle cx="640" cy="118" r="7" fill="#4a7c44"/><text x="640" y="106" text-anchor="middle" font-size="10" fill="#4a7c44" font-weight="700">mín. GLOBAL</text>
+      <!-- metaheuristic jumps -->
+      <path d="M180,140 C260,90 380,90 460,150" stroke="#b8412e" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#jmp)"/>
+      <path d="M460,150 C540,100 600,100 640,128" stroke="#b8412e" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#jmp)"/>
+      <text x="370" y="222" text-anchor="middle" font-size="10.5" font-style="italic" fill="#b8412e">Les metaheurístiques "salten" mínims locals; un solver exacte garanteix trobar el global (si té temps).</text>
+      <defs><marker id="jmp" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#b8412e"/></marker></defs>
+    </svg>
+    <figcaption><b>Per què és difícil.</b> El paisatge de solucions té molts mínims locals. Una regla de prioritat es queda al primer que troba; un optimitzador busca el global. Aquesta és la diferència de qualitat entre un FCS bàsic i un APS premium com ASProva.</figcaption>
+  </figure>
+
+  <div class="box when"><h4>Quan és la bona opció</h4>
+    <p style="margin-bottom:0">Empreses grans on un 2-3% de millora en ocupació val molts diners, i estan disposades a pagar la complexitat. <b>OR-Tools CP-SAT</b> és gratuït i seria la peça que permetria al FS Planner competir de tu a tu amb ASProva en qualitat.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ============ 10. MATRIU ============ -->
+<section id="matrix">
+  <div class="sec-head"><span class="sec-num">10</span><h2>Matriu de decisió: quin mètode per a quina empresa</h2></div>
+  <p class="sec-sub">Com que cada client n'escollirà un de sol, val la pena tenir clar a qui correspon cada un. Aquesta taula és la guia de venda/configuració.</p>
+
+  <table>
+    <thead><tr><th>Perfil d'empresa</th><th>Mètode recomanat</th><th>Per què</th></tr></thead>
+    <tbody>
+      <tr><td>Fabricació per comanda, terminis ferms</td><td><b>Capacitat finita</b> (backward)</td><td>Dates de lliurament fiables</td></tr>
+      <tr><td>Taller petit, planificador expert</td><td><b>Gantt manual</b> + regla EDD</td><td>Control humà amb validació</td></tr>
+      <tr><td>Vol millorar sense complexitat</td><td><b>Regles de prioritat</b> (EDD/CR)</td><td>80% del valor, baix cost</td></tr>
+      <tr><td>Coll d'ampolla clar i estable</td><td><b>DBR (TOC)</b></td><td>Simple, concentra l'esforç</td></tr>
+      <tr><td>Producció repetitiva, demanda estable</td><td><b>Kanban</b> o <b>CONWIP</b></td><td>Pull, mínima planificació</td></tr>
+      <tr><td>Multinivell, dades de materials a l'ERP</td><td><b>MRP</b> com a base + FCS</td><td>Aprofita BOM existent</td></tr>
+      <tr><td>Gran, optimització crítica</td><td><b>Optimització</b> (CP-SAT)</td><td>Qualitat màxima de solució</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="div">
+
+<!-- ============ 11. ARQUITECTURA ============ -->
+<section id="arch">
+  <div class="sec-head"><span class="sec-num">11</span><h2>Proposta d'arquitectura per al FS Planner</h2></div>
+  <p class="sec-sub">Com encaixar tot això en una eina universal sense que cada mètode sigui un sistema separat.</p>
+
+  <p>La clau per fer-ho mantenible: <b>una sola base de dades de model</b> (ordres, operacions, recursos, calendaris, dependències) i <b>motors de planificació intercanviables</b> que llegeixen el mateix model i escriuen el mateix resultat. El Gantt és la vista comuna de sortida.</p>
+
+  <figure>
+    <svg viewBox="0 0 760 400" xmlns="http://www.w3.org/2000/svg">
+      <!-- data layer -->
+      <rect x="230" y="30" width="300" height="60" rx="6" fill="#1a1f24"/>
+      <text x="380" y="55" text-anchor="middle" font-size="13" font-weight="700" fill="#f5f1e8">MODEL DE DADES (SQL Server)</text>
+      <text x="380" y="74" text-anchor="middle" font-size="10.5" fill="#d9d2c2">Ordres · Operacions · Recursos · Calendaris · BOM · Dependències</text>
+
+      <!-- engines -->
+      <text x="380" y="125" text-anchor="middle" font-size="11" font-weight="600" fill="#4a525c" class="svg-mono">MOTORS INTERCANVIABLES (config per client)</text>
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="30"  y="145" width="125" height="54" rx="4" fill="#f3e0db" stroke="#b8412e"/><text x="92" y="167" font-weight="600">Capacitat finita</text><text x="92" y="183" fill="#4a525c">fwd/bwd</text>
+        <rect x="170" y="145" width="115" height="54" rx="4" fill="#f3e0db" stroke="#b8412e"/><text x="227" y="167" font-weight="600">Regles prioritat</text><text x="227" y="183" fill="#4a525c">EDD/CR/SPT</text>
+        <rect x="300" y="145" width="100" height="54" rx="4" fill="#dde9ec" stroke="#2c5f6f"/><text x="350" y="167" font-weight="600">DBR</text><text x="350" y="183" fill="#4a525c">TOC</text>
+        <rect x="415" y="145" width="120" height="54" rx="4" fill="#dde9ec" stroke="#2c5f6f"/><text x="475" y="167" font-weight="600">Kanban/CONWIP</text><text x="475" y="183" fill="#4a525c">pull</text>
+        <rect x="550" y="145" width="100" height="54" rx="4" fill="#e0ebde" stroke="#4a7c44"/><text x="600" y="167" font-weight="600">Optimitz.</text><text x="600" y="183" fill="#4a525c">CP-SAT</text>
+        <rect x="665" y="145" width="75" height="54" rx="4" fill="#f3ead0" stroke="#c9962f"/><text x="702" y="167" font-weight="600">Manual</text><text x="702" y="183" fill="#4a525c">Gantt</text>
+      </g>
+      <!-- arrows from data to engines -->
+      <g stroke="#4a525c" stroke-width="1" fill="none" stroke-dasharray="3 3">
+        <path d="M280,90 L92,143"/><path d="M320,90 L227,143"/><path d="M360,90 L350,143"/>
+        <path d="M420,90 L475,143"/><path d="M470,90 L600,143"/><path d="M510,90 L702,143"/>
+      </g>
+      <!-- result layer -->
+      <rect x="230" y="250" width="300" height="55" rx="6" fill="#fffdf8" stroke="#1a1f24" stroke-width="1.5"/>
+      <text x="380" y="273" text-anchor="middle" font-size="12.5" font-weight="700">RESULTAT NORMALITZAT</text>
+      <text x="380" y="291" text-anchor="middle" font-size="10.5" fill="#4a525c">assignacions: operació → recurs → interval temporal</text>
+      <!-- arrows engines to result -->
+      <g stroke="#4a525c" stroke-width="1" fill="none">
+        <path d="M92,199 L300,250" stroke-dasharray="3 3"/><path d="M600,199 L460,250" stroke-dasharray="3 3"/>
+        <path d="M380,199 L380,248" marker-end="url(# a)"/>
+      </g>
+      <!-- views -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="150" y="340" width="140" height="44" rx="4" fill="#fffdf8" stroke="#c9962f" stroke-width="1.5"/><text x="220" y="367" font-weight="600" fill="#8a6a1a">Vista Gantt</text>
+        <rect x="320" y="340" width="120" height="44" rx="4" fill="#fffdf8" stroke="#c9962f" stroke-width="1.5"/><text x="380" y="367" font-weight="600" fill="#8a6a1a">Càrrega recursos</text>
+        <rect x="470" y="340" width="140" height="44" rx="4" fill="#fffdf8" stroke="#c9962f" stroke-width="1.5"/><text x="540" y="367" font-weight="600" fill="#8a6a1a">Llista ordres / KPIs</text>
+      </g>
+      <g stroke="#c9962f" stroke-width="1" fill="none">
+        <path d="M340,305 L220,338"/><path d="M380,305 L380,338"/><path d="M420,305 L540,338"/>
+      </g>
+    </svg>
+    <figcaption><b>Arquitectura plug-in.</b> El model i el resultat són sempre iguals; el que canvia és el motor (configurable per client). Així afegir un mètode nou no toca la resta, i totes les vistes (Gantt, càrrega, KPIs) funcionen amb qualsevol motor. <b>Recomanació de roadmap:</b> començar per Regles de Prioritat + Capacitat Finita (cobreixen la majoria), després Gantt manual, i deixar Optimització/CP-SAT com a mòdul premium.</figcaption>
+  </figure>
+
+  <div class="box"><h4>Ordre de construcció suggerit</h4>
+    <ul class="clean">
+      <li><b>Fase 1 —</b> Model de dades + vista Gantt + regles de prioritat (EDD, CR). Ja és venible.</li>
+      <li><b>Fase 2 —</b> Capacitat finita forward/backward. Aquí ja competeixes amb el gruix d'ASProva.</li>
+      <li><b>Fase 3 —</b> DBR i Kanban/CONWIP per cobrir els perfils pull i TOC.</li>
+      <li><b>Fase 4 —</b> Mòdul d'optimització (CP-SAT) com a premium per a clients grans.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  FS Planner · Document intern de treball · No entregable a client<br>
+  Referència de disseny per a l'estratègia multi-mètode de planificació · Revisar abans de qualsevol ús extern.
+</footer>
+
+</div>
+</body>
+</html>

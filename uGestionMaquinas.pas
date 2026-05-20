@@ -10,6 +10,7 @@ uses
   cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
   cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
   cxSpinEdit, cxCalc, cxCalendar, cxContainer, cxClasses, cxFilter,
+  cxDropDownEdit,
   dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
@@ -34,6 +35,21 @@ type
     colMaquinaId: TcxGridColumn;
     colMaquinaCodigo: TcxGridColumn;
     colMaquinaNombre: TcxGridColumn;
+    colMaquinaTipo: TcxGridColumn;
+    colMaquinaModelo: TcxGridColumn;
+    colMaquinaFabricante: TcxGridColumn;
+    colMaquinaNumeroSerie: TcxGridColumn;
+    colMaquinaDescripcion: TcxGridColumn;
+    colMaquinaFechaPM: TcxGridColumn;
+    colMaquinaEfficiency: TcxGridColumn;
+    colMaquinaMaxLoad: TcxGridColumn;
+    colMaquinaCoste: TcxGridColumn;
+    colMaquinaPlanificable: TcxGridColumn;
+    colMaquinaCuelloBotella: TcxGridColumn;
+    colMaquinaPrioridad: TcxGridColumn;
+    colMaquinaEstado: TcxGridColumn;
+    colMaquinaHoras: TcxGridColumn;
+    colMaquinaFechaProxRev: TcxGridColumn;
     colMaquinaOrden: TcxGridColumn;
     colMaquinaActivo: TcxGridColumn;
     lvMaquinas: TcxGridLevel;
@@ -72,6 +88,7 @@ type
     procedure SaveCustomFieldValue(AMaquinaId: Integer; const FieldKey: string;
       ADataType: Char; const Value: Variant);
     procedure SaveCustomFieldsForRow(AMaquinaId: Integer; ARecIdx: Integer);
+    procedure DefaultMaquina(out AMaq: TMaquina);
   public
     class procedure Execute;
   end;
@@ -109,12 +126,42 @@ begin
   if Result = '' then Result := '(anon)';
 end;
 
+procedure TfrmGestionMaquinas.DefaultMaquina(out AMaq: TMaquina);
+begin
+  AMaq := Default(TMaquina);
+  AMaq.Id := 0;
+  AMaq.Codigo := '';
+  AMaq.Nombre := '';
+  AMaq.Activo := True;
+  AMaq.Orden := 0;
+  AMaq.Descripcion := '';
+  AMaq.Modelo := '';
+  AMaq.NumeroSerie := '';
+  AMaq.Fabricante := '';
+  AMaq.TipoMaquina := '';
+  AMaq.FechaPuestaEnMarcha := 0;
+  AMaq.FechaPuestaEnMarchaNull := True;
+  AMaq.EfficiencyFactor := 1.0;
+  AMaq.MaxLoadPercent := 100;
+  AMaq.CostPerHour := 0;
+  AMaq.EsPlanificable := True;
+  AMaq.EsCuelloBotella := False;
+  AMaq.PrioridadAsignacion := 100;
+  AMaq.EstadoOperativo := MAQ_ESTADO_DISPONIBLE;
+  AMaq.HorasFuncionamiento := 0;
+  AMaq.FechaProxRevision := 0;
+  AMaq.FechaProxRevisionNull := True;
+end;
+
 procedure TfrmGestionMaquinas.FormCreate(Sender: TObject);
 begin
   FRepo := TMaquinasRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
   FDeleted := TList<Integer>.Create;
   FColKeyByTag := TDictionary<Integer, string>.Create;
   btnConfigurarColumnas.Visible := uLogin.IsAdmin;
+
+  tvMaquinas.OptionsData.Editing := True;
+  tvMaquinas.OptionsSelection.CellSelect := True;
 
   LoadCustomColumnDefs;
   BuildCustomColumns;
@@ -214,8 +261,6 @@ begin
 
     if Length(FCustomCols) > 0 then
     begin
-      tvMaquinas.OptionsData.Editing := True;
-      tvMaquinas.OptionsSelection.CellSelect := True;
       tvMaquinas.OptionsBehavior.CellHints := True;
       tvMaquinas.OptionsBehavior.ColumnHeaderHints := True;
     end;
@@ -236,6 +281,7 @@ var
   MaqId: Integer;
   Sel, Joins, Alias, FldName: string;
   V: Variant;
+  F: TField;
 begin
   FDeleted.Clear;
 
@@ -261,7 +307,11 @@ begin
     try
       Q.Connection := DMPlanner.ADOConnection;
       Q.SQL.Text :=
-        'SELECT m.MaquinaId, m.Codigo, m.Nombre, m.Activo, m.Orden' + Sel +
+        'SELECT m.MaquinaId, m.Codigo, m.Nombre, m.Activo, m.Orden, ' +
+        '  m.Descripcion, m.Modelo, m.NumeroSerie, m.Fabricante, m.TipoMaquina, ' +
+        '  m.FechaPuestaEnMarcha, m.EfficiencyFactor, m.MaxLoadPercent, m.CostPerHour, ' +
+        '  m.EsPlanificable, m.EsCuelloBotella, m.PrioridadAsignacion, m.EstadoOperativo, ' +
+        '  m.HorasFuncionamiento, m.FechaProxRevision' + Sel +
         ' FROM FS_PL_Maquina m' + Joins +
         ' WHERE m.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
         ' ORDER BY m.Orden, m.Codigo';
@@ -273,9 +323,36 @@ begin
       begin
         MaqId := Q.FieldByName('MaquinaId').AsInteger;
         tvMaquinas.DataController.RecordCount := I + 1;
-        tvMaquinas.DataController.Values[I, colMaquinaId.Index]     := MaqId;
-        tvMaquinas.DataController.Values[I, colMaquinaCodigo.Index] := Q.FieldByName('Codigo').AsString;
-        tvMaquinas.DataController.Values[I, colMaquinaNombre.Index] := Q.FieldByName('Nombre').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaId.Index]          := MaqId;
+        tvMaquinas.DataController.Values[I, colMaquinaCodigo.Index]      := Q.FieldByName('Codigo').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaNombre.Index]      := Q.FieldByName('Nombre').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaTipo.Index]        := Q.FieldByName('TipoMaquina').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaModelo.Index]      := Q.FieldByName('Modelo').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaFabricante.Index]  := Q.FieldByName('Fabricante').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaNumeroSerie.Index] := Q.FieldByName('NumeroSerie').AsString;
+        tvMaquinas.DataController.Values[I, colMaquinaDescripcion.Index] := Q.FieldByName('Descripcion').AsString;
+
+        F := Q.FieldByName('FechaPuestaEnMarcha');
+        if F.IsNull then
+          tvMaquinas.DataController.Values[I, colMaquinaFechaPM.Index] := Null
+        else
+          tvMaquinas.DataController.Values[I, colMaquinaFechaPM.Index] := F.AsDateTime;
+
+        tvMaquinas.DataController.Values[I, colMaquinaEfficiency.Index]  := Q.FieldByName('EfficiencyFactor').AsFloat;
+        tvMaquinas.DataController.Values[I, colMaquinaMaxLoad.Index]     := Q.FieldByName('MaxLoadPercent').AsInteger;
+        tvMaquinas.DataController.Values[I, colMaquinaCoste.Index]       := Q.FieldByName('CostPerHour').AsFloat;
+        tvMaquinas.DataController.Values[I, colMaquinaPlanificable.Index]   := Q.FieldByName('EsPlanificable').AsBoolean;
+        tvMaquinas.DataController.Values[I, colMaquinaCuelloBotella.Index]  := Q.FieldByName('EsCuelloBotella').AsBoolean;
+        tvMaquinas.DataController.Values[I, colMaquinaPrioridad.Index]   := Q.FieldByName('PrioridadAsignacion').AsInteger;
+        tvMaquinas.DataController.Values[I, colMaquinaEstado.Index]      := EstadoOperativoText(Q.FieldByName('EstadoOperativo').AsInteger);
+        tvMaquinas.DataController.Values[I, colMaquinaHoras.Index]       := Q.FieldByName('HorasFuncionamiento').AsFloat;
+
+        F := Q.FieldByName('FechaProxRevision');
+        if F.IsNull then
+          tvMaquinas.DataController.Values[I, colMaquinaFechaProxRev.Index] := Null
+        else
+          tvMaquinas.DataController.Values[I, colMaquinaFechaProxRev.Index] := F.AsDateTime;
+
         tvMaquinas.DataController.Values[I, colMaquinaOrden.Index]  := Q.FieldByName('Orden').AsInteger;
         tvMaquinas.DataController.Values[I, colMaquinaActivo.Index] := Q.FieldByName('Activo').AsBoolean;
         FIds[I] := MaqId;
@@ -313,23 +390,75 @@ function TfrmGestionMaquinas.GetRowMaquina(ARecIdx: Integer;
   out AMaq: TMaquina): Boolean;
 var
   V: Variant;
+  function AsStr(AV: Variant): string;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := '' else Result := VarToStr(AV);
+  end;
+  function AsInt(AV: Variant; ADefault: Integer = 0): Integer;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADefault else Result := Integer(AV);
+  end;
+  function AsFloat(AV: Variant; ADefault: Double = 0): Double;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADefault else Result := Double(AV);
+  end;
+  function AsBool(AV: Variant; ADefault: Boolean = False): Boolean;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADefault else Result := Boolean(AV);
+  end;
+  procedure AsDate(AV: Variant; out ADt: TDateTime; out AIsNull: Boolean);
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then
+    begin
+      ADt := 0;
+      AIsNull := True;
+    end
+    else
+    begin
+      ADt := VarToDateTime(AV);
+      AIsNull := (ADt = 0);
+    end;
+  end;
 begin
   Result := False;
   if (ARecIdx < 0) or (ARecIdx >= tvMaquinas.DataController.RecordCount) then Exit;
+
+  DefaultMaquina(AMaq);
 
   if ARecIdx < Length(FIds) then
     AMaq.Id := FIds[ARecIdx]
   else
     AMaq.Id := 0;
 
-  V := tvMaquinas.DataController.Values[ARecIdx, colMaquinaCodigo.Index];
-  AMaq.Codigo := VarToStr(V);
-  V := tvMaquinas.DataController.Values[ARecIdx, colMaquinaNombre.Index];
-  AMaq.Nombre := VarToStr(V);
-  V := tvMaquinas.DataController.Values[ARecIdx, colMaquinaOrden.Index];
-  if VarIsNull(V) or VarIsEmpty(V) then AMaq.Orden := 0 else AMaq.Orden := V;
-  V := tvMaquinas.DataController.Values[ARecIdx, colMaquinaActivo.Index];
-  if VarIsNull(V) or VarIsEmpty(V) then AMaq.Activo := True else AMaq.Activo := V;
+  AMaq.Codigo := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaCodigo.Index]);
+  AMaq.Nombre := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaNombre.Index]);
+  AMaq.TipoMaquina := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaTipo.Index]);
+  AMaq.Modelo := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaModelo.Index]);
+  AMaq.Fabricante := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaFabricante.Index]);
+  AMaq.NumeroSerie := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaNumeroSerie.Index]);
+  AMaq.Descripcion := AsStr(tvMaquinas.DataController.Values[ARecIdx, colMaquinaDescripcion.Index]);
+
+  AsDate(tvMaquinas.DataController.Values[ARecIdx, colMaquinaFechaPM.Index],
+         AMaq.FechaPuestaEnMarcha, AMaq.FechaPuestaEnMarchaNull);
+
+  AMaq.EfficiencyFactor := AsFloat(tvMaquinas.DataController.Values[ARecIdx, colMaquinaEfficiency.Index], 1.0);
+  AMaq.MaxLoadPercent := AsInt(tvMaquinas.DataController.Values[ARecIdx, colMaquinaMaxLoad.Index], 100);
+  AMaq.CostPerHour := AsFloat(tvMaquinas.DataController.Values[ARecIdx, colMaquinaCoste.Index], 0);
+
+  AMaq.EsPlanificable := AsBool(tvMaquinas.DataController.Values[ARecIdx, colMaquinaPlanificable.Index], True);
+  AMaq.EsCuelloBotella := AsBool(tvMaquinas.DataController.Values[ARecIdx, colMaquinaCuelloBotella.Index], False);
+  AMaq.PrioridadAsignacion := AsInt(tvMaquinas.DataController.Values[ARecIdx, colMaquinaPrioridad.Index], 100);
+
+  V := tvMaquinas.DataController.Values[ARecIdx, colMaquinaEstado.Index];
+  AMaq.EstadoOperativo := TextToEstadoOperativo(AsStr(V));
+
+  AMaq.HorasFuncionamiento := AsFloat(tvMaquinas.DataController.Values[ARecIdx, colMaquinaHoras.Index], 0);
+
+  AsDate(tvMaquinas.DataController.Values[ARecIdx, colMaquinaFechaProxRev.Index],
+         AMaq.FechaProxRevision, AMaq.FechaProxRevisionNull);
+
+  AMaq.Orden := AsInt(tvMaquinas.DataController.Values[ARecIdx, colMaquinaOrden.Index], 0);
+  AMaq.Activo := AsBool(tvMaquinas.DataController.Values[ARecIdx, colMaquinaActivo.Index], True);
 
   Result := True;
 end;
@@ -341,11 +470,28 @@ begin
   Idx := tvMaquinas.DataController.AppendRecord;
   SetLength(FIds, Length(FIds) + 1);
   FIds[High(FIds)] := 0;
-  tvMaquinas.DataController.Values[Idx, colMaquinaId.Index]     := 0;
-  tvMaquinas.DataController.Values[Idx, colMaquinaCodigo.Index] := '';
-  tvMaquinas.DataController.Values[Idx, colMaquinaNombre.Index] := '';
-  tvMaquinas.DataController.Values[Idx, colMaquinaOrden.Index]  := 0;
-  tvMaquinas.DataController.Values[Idx, colMaquinaActivo.Index] := True;
+
+  tvMaquinas.DataController.Values[Idx, colMaquinaId.Index]          := 0;
+  tvMaquinas.DataController.Values[Idx, colMaquinaCodigo.Index]      := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaNombre.Index]      := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaTipo.Index]        := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaModelo.Index]      := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaFabricante.Index]  := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaNumeroSerie.Index] := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaDescripcion.Index] := '';
+  tvMaquinas.DataController.Values[Idx, colMaquinaFechaPM.Index]     := Null;
+  tvMaquinas.DataController.Values[Idx, colMaquinaEfficiency.Index]  := 1.0;
+  tvMaquinas.DataController.Values[Idx, colMaquinaMaxLoad.Index]     := 100;
+  tvMaquinas.DataController.Values[Idx, colMaquinaCoste.Index]       := 0;
+  tvMaquinas.DataController.Values[Idx, colMaquinaPlanificable.Index]  := True;
+  tvMaquinas.DataController.Values[Idx, colMaquinaCuelloBotella.Index] := False;
+  tvMaquinas.DataController.Values[Idx, colMaquinaPrioridad.Index]   := 100;
+  tvMaquinas.DataController.Values[Idx, colMaquinaEstado.Index]      := EstadoOperativoText(MAQ_ESTADO_DISPONIBLE);
+  tvMaquinas.DataController.Values[Idx, colMaquinaHoras.Index]       := 0;
+  tvMaquinas.DataController.Values[Idx, colMaquinaFechaProxRev.Index]:= Null;
+  tvMaquinas.DataController.Values[Idx, colMaquinaOrden.Index]       := 0;
+  tvMaquinas.DataController.Values[Idx, colMaquinaActivo.Index]      := True;
+
   for J := 0 to High(FCustomColumns) do
     tvMaquinas.DataController.Values[Idx, FCustomColumns[J].Index] := Null;
   tvMaquinas.DataController.FocusedRecordIndex := Idx;

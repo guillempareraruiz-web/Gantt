@@ -50,10 +50,16 @@ type
     colCentroCodigo: TcxGridColumn;
     colCentroTitulo: TcxGridColumn;
     colCentroSubtitulo: TcxGridColumn;
+    colCentroTipo: TcxGridColumn;
+    colCentroUbicacion: TcxGridColumn;
     colCentroArea: TcxGridColumn;
     colCentroCalendario: TcxGridColumn;
     colCentroSecuencial: TcxGridColumn;
     colCentroMaxLanes: TcxGridColumn;
+    colCentroEfficiency: TcxGridColumn;
+    colCentroCoste: TcxGridColumn;
+    colCentroSetup: TcxGridColumn;
+    colCentroHorizon: TcxGridColumn;
     colCentroOrden: TcxGridColumn;
     colCentroVisible: TcxGridColumn;
     colCentroHabilitado: TcxGridColumn;
@@ -311,6 +317,8 @@ begin
       '  ISNULL(c.AreaId, 0) AS AreaId, ' +
       '  c.EsSecuencial, c.MaxLanes, c.Orden, c.Visible, c.Habilitado, ' +
       '  ISNULL(c.ColorFondo, 0) AS ColorFondo, ' +
+      '  c.TipoCentro, c.Ubicacion, c.EfficiencyFactor, c.CostPerHour, ' +
+      '  c.SetupTimeDefault, c.PlanningHorizonDays, ' +
       '  ISNULL((SELECT MIN(cc.CalendarId) FROM FS_PL_CenterCalendar cc ' +
       '    WHERE cc.CodigoEmpresa = c.CodigoEmpresa AND cc.CenterId = c.CenterId), 0) AS CalendarId' +
       Sel + ' ' +
@@ -334,6 +342,12 @@ begin
         tvCentros.DataController.Values[I, colCentroCalendario.Index] := CalendarNameFromId(CalId);
         tvCentros.DataController.Values[I, colCentroSecuencial.Index] := Q.FieldByName('EsSecuencial').AsBoolean;
         tvCentros.DataController.Values[I, colCentroMaxLanes.Index] := Q.FieldByName('MaxLanes').AsInteger;
+        tvCentros.DataController.Values[I, colCentroTipo.Index] := Q.FieldByName('TipoCentro').AsString;
+        tvCentros.DataController.Values[I, colCentroUbicacion.Index] := Q.FieldByName('Ubicacion').AsString;
+        tvCentros.DataController.Values[I, colCentroEfficiency.Index] := Q.FieldByName('EfficiencyFactor').AsFloat;
+        tvCentros.DataController.Values[I, colCentroCoste.Index] := Q.FieldByName('CostPerHour').AsFloat;
+        tvCentros.DataController.Values[I, colCentroSetup.Index] := Q.FieldByName('SetupTimeDefault').AsInteger;
+        tvCentros.DataController.Values[I, colCentroHorizon.Index] := Q.FieldByName('PlanningHorizonDays').AsInteger;
         tvCentros.DataController.Values[I, colCentroOrden.Index] := Q.FieldByName('Orden').AsInteger;
         tvCentros.DataController.Values[I, colCentroVisible.Index] := Q.FieldByName('Visible').AsBoolean;
         tvCentros.DataController.Values[I, colCentroHabilitado.Index] := Q.FieldByName('Habilitado').AsBoolean;
@@ -413,6 +427,12 @@ begin
   tvCentros.DataController.Values[Cnt, colCentroCalendario.Index] := FCalendarNames[0];
   tvCentros.DataController.Values[Cnt, colCentroSecuencial.Index] := False;
   tvCentros.DataController.Values[Cnt, colCentroMaxLanes.Index] := 0;
+  tvCentros.DataController.Values[Cnt, colCentroTipo.Index] := '';
+  tvCentros.DataController.Values[Cnt, colCentroUbicacion.Index] := '';
+  tvCentros.DataController.Values[Cnt, colCentroEfficiency.Index] := 1.0;
+  tvCentros.DataController.Values[Cnt, colCentroCoste.Index] := 0.0;
+  tvCentros.DataController.Values[Cnt, colCentroSetup.Index] := 0;
+  tvCentros.DataController.Values[Cnt, colCentroHorizon.Index] := 90;
   tvCentros.DataController.Values[Cnt, colCentroOrden.Index] := 0;
   tvCentros.DataController.Values[Cnt, colCentroVisible.Index] := True;
   tvCentros.DataController.Values[Cnt, colCentroHabilitado.Index] := True;
@@ -442,9 +462,10 @@ begin
 end;
 procedure TfrmGestionCentres.btnSaveClick(Sender: TObject);
 var
-  I, CenterId, AreaId, CalId, MaxLanes, Orden: Integer;
-  Codigo, Titulo, Subtitulo, AreaName, CalName: string;
+  I, CenterId, AreaId, CalId, MaxLanes, Orden, SetupDef, Horizon: Integer;
+  Codigo, Titulo, Subtitulo, AreaName, CalName, Tipo, Ubicacion: string;
   EsSeq, Visible, Habilitado: Boolean;
+  Eff, Coste: Double;
   CE: string;
   V: Variant;
   function AsBool(AV: Variant): Boolean;
@@ -454,6 +475,23 @@ var
   function AsInt(AV: Variant): Integer;
   begin
     if VarIsNull(AV) or VarIsEmpty(AV) then Result := 0 else Result := Integer(AV);
+  end;
+  function AsFloat(AV: Variant; ADef: Double): Double;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADef else Result := Double(AV);
+  end;
+  function AsStr(AV: Variant): string;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := '' else Result := VarToStr(AV);
+  end;
+  function QStrNullableStr(const S: string): string;
+  begin
+    if Trim(S) = '' then Result := 'NULL'
+    else Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
+  end;
+  function QDecimal(D: Double): string;
+  begin
+    Result := FloatToStr(D, TFormatSettings.Invariant);
   end;
 begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
@@ -469,6 +507,13 @@ begin
     V := tvCentros.DataController.Values[I, colCentroSecuencial.Index];
     EsSeq := AsBool(V);
     MaxLanes := AsInt(tvCentros.DataController.Values[I, colCentroMaxLanes.Index]);
+    Tipo := AsStr(tvCentros.DataController.Values[I, colCentroTipo.Index]);
+    Ubicacion := AsStr(tvCentros.DataController.Values[I, colCentroUbicacion.Index]);
+    Eff := AsFloat(tvCentros.DataController.Values[I, colCentroEfficiency.Index], 1.0);
+    Coste := AsFloat(tvCentros.DataController.Values[I, colCentroCoste.Index], 0);
+    SetupDef := AsInt(tvCentros.DataController.Values[I, colCentroSetup.Index]);
+    Horizon := AsInt(tvCentros.DataController.Values[I, colCentroHorizon.Index]);
+    if Horizon <= 0 then Horizon := 90;
     Orden := AsInt(tvCentros.DataController.Values[I, colCentroOrden.Index]);
     Visible := AsBool(tvCentros.DataController.Values[I, colCentroVisible.Index]);
     Habilitado := AsBool(tvCentros.DataController.Values[I, colCentroHabilitado.Index]);
@@ -482,6 +527,12 @@ begin
       'AreaId = ' + QStrNullable(AreaId) + ', ' +
       'EsSecuencial = ' + IntToStr(Ord(EsSeq)) + ', ' +
       'MaxLanes = ' + IntToStr(MaxLanes) + ', ' +
+      'TipoCentro = ' + QStrNullableStr(Tipo) + ', ' +
+      'Ubicacion = ' + QStrNullableStr(Ubicacion) + ', ' +
+      'EfficiencyFactor = ' + QDecimal(Eff) + ', ' +
+      'CostPerHour = ' + QDecimal(Coste) + ', ' +
+      'SetupTimeDefault = ' + IntToStr(SetupDef) + ', ' +
+      'PlanningHorizonDays = ' + IntToStr(Horizon) + ', ' +
       'Orden = ' + IntToStr(Orden) + ', ' +
       'Visible = ' + IntToStr(Ord(Visible)) + ', ' +
       'Habilitado = ' + IntToStr(Ord(Habilitado)) + ', ' +

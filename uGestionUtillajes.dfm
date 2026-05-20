@@ -1,9 +1,9 @@
-object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
+object frmGestionUtillajes: TfrmGestionUtillajes
   Left = 0
   Top = 0
-  Caption = 'Asignar m'#225'quinas al centro'
-  ClientHeight = 500
-  ClientWidth = 760
+  Caption = 'Gesti'#243'n de Utillajes'
+  ClientHeight = 540
+  ClientWidth = 1100
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -13,13 +13,12 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
   Position = poScreenCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 760
+    Width = 1100
     Height = 60
     Align = alTop
     BevelOuter = bvNone
@@ -29,9 +28,9 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 153
+      Width = 150
       Height = 25
-      Caption = 'Asignar m'#225'quinas'
+      Caption = 'Utillajes'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWhite
       Font.Height = -19
@@ -42,9 +41,9 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
     object lblSubtitle: TLabel
       Left = 16
       Top = 36
-      Width = 182
+      Width = 400
       Height = 15
-      Caption = 'Marca m'#225'quinas y ajusta principal / prioridad'
+      Caption = 'Cat'#225'logo de utillajes asociables a moldes'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -55,43 +54,68 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 460
-    Width = 760
+    Top = 500
+    Width = 1100
     Height = 40
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
-    object btnOk: TButton
-      Left = 540
-      Top = 6
-      Width = 100
-      Height = 28
-      Caption = 'Aceptar'
-      Default = True
-      TabOrder = 0
-      OnClick = btnOkClick
-    end
-    object btnCancel: TButton
-      Left = 648
+    object btnClose: TButton
+      Left = 992
       Top = 6
       Width = 100
       Height = 28
       Cancel = True
-      Caption = 'Cancelar'
-      TabOrder = 1
-      OnClick = btnCancelClick
+      Caption = 'Cerrar'
+      TabOrder = 0
+      OnClick = btnCloseClick
     end
   end
-  object gridMaquinas: TcxGrid
+  object pnlToolbar: TPanel
     Left = 0
     Top = 60
-    Width = 760
+    Width = 1100
+    Height = 40
+    Align = alTop
+    BevelOuter = bvNone
+    TabOrder = 2
+    object btnAdd: TButton
+      Left = 4
+      Top = 6
+      Width = 80
+      Height = 28
+      Caption = 'Nuevo'
+      TabOrder = 0
+      OnClick = btnAddClick
+    end
+    object btnDel: TButton
+      Left = 88
+      Top = 6
+      Width = 80
+      Height = 28
+      Caption = 'Eliminar'
+      TabOrder = 1
+      OnClick = btnDelClick
+    end
+    object btnSave: TButton
+      Left = 172
+      Top = 6
+      Width = 120
+      Height = 28
+      Caption = 'Guardar cambios'
+      TabOrder = 2
+      OnClick = btnSaveClick
+    end
+  end
+  object gridUtil: TcxGrid
+    Left = 0
+    Top = 100
+    Width = 1100
     Height = 400
     Align = alClient
-    TabOrder = 2
-    object tvMaquinas: TcxGridTableView
+    TabOrder = 3
+    object tvUtil: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
-      ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
       DataController.Summary.SummaryGroups = <>
@@ -99,42 +123,56 @@ object frmAsignarMaquinasCentro: TfrmAsignarMaquinasCentro
       OptionsData.Inserting = False
       OptionsView.GroupByBox = False
       OptionsView.Indicator = True
-      object colSel: TcxGridColumn
-        Caption = 'Asig.'
-        PropertiesClassName = 'TcxCheckBoxProperties'
-        Width = 60
+      object colId: TcxGridColumn
+        Caption = 'ID'
+        Options.Editing = False
+        Width = 50
       end
       object colCodigo: TcxGridColumn
         Caption = 'C'#243'digo'
-        Options.Editing = False
-        Width = 110
+        Width = 130
       end
-      object colNombre: TcxGridColumn
-        Caption = 'Nombre'
-        Options.Editing = False
-        Width = 280
+      object colDescripcion: TcxGridColumn
+        Caption = 'Descripci'#243'n'
+        Width = 240
       end
-      object colPrincipal: TcxGridColumn
-        Caption = 'Principal'
+      object colTipo: TcxGridColumn
+        Caption = 'Tipo'
+        Width = 120
+      end
+      object colUbicacion: TcxGridColumn
+        Caption = 'Ubicaci'#243'n'
+        Width = 150
+      end
+      object colDisponible: TcxGridColumn
+        Caption = 'Disponible'
         PropertiesClassName = 'TcxCheckBoxProperties'
         Width = 80
       end
-      object colPrioridad: TcxGridColumn
-        Caption = 'Prioridad'
+      object colObservaciones: TcxGridColumn
+        Caption = 'Observaciones'
+        Width = 200
+      end
+      object colOrden: TcxGridColumn
+        Caption = 'Orden'
         PropertiesClassName = 'TcxSpinEditProperties'
         Properties.AssignedValues.MinValue = True
         Properties.MaxValue = 9999.000000000000000000
-        Width = 90
+        Width = 70
+      end
+      object colActivo: TcxGridColumn
+        Caption = 'Activo'
+        PropertiesClassName = 'TcxCheckBoxProperties'
+        Width = 60
       end
     end
-    object lvMaquinas: TcxGridLevel
-      GridView = tvMaquinas
+    object lvUtil: TcxGridLevel
+      GridView = tvUtil
     end
   end
   object LookAndFeel: TcxLookAndFeelController
-    NativeStyle = False
     SkinName = 'Office2019Colorful'
-    Left = 540
+    Left = 1040
     Top = 12
   end
 end

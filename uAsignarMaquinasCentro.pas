@@ -10,7 +10,7 @@ uses
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
   cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
   cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
-  cxContainer, cxClasses, cxFilter,
+  cxSpinEdit, cxContainer, cxClasses, cxFilter,
   dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
@@ -45,6 +45,8 @@ type
     colSel: TcxGridColumn;
     colCodigo: TcxGridColumn;
     colNombre: TcxGridColumn;
+    colPrincipal: TcxGridColumn;
+    colPrioridad: TcxGridColumn;
     lvMaquinas: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
@@ -59,6 +61,7 @@ type
     FIds: TArray<Integer>; // MaquinaId por fila
     procedure LoadGrid;
     function CollectSelected: TArray<Integer>;
+    procedure SaveLinkAttributes(const ASelectedIds: TArray<Integer>);
   public
     class function Execute(ACenterId: Integer;
       const ACenterCaption: string): Boolean;
@@ -109,8 +112,9 @@ end;
 procedure TfrmAsignarMaquinasCentro.LoadGrid;
 var
   Items: TArray<TMaquina>;
-  AssignedIds: TArray<Integer>;
-  Lookup: TDictionary<Integer, Boolean>;
+  Links: TArray<TCentroMaquinaLink>;
+  PrincipalMap: TDictionary<Integer, Boolean>;
+  PrioridadMap: TDictionary<Integer, Integer>;
   I: Integer;
 begin
   if FCenterCaption <> '' then
@@ -118,12 +122,16 @@ begin
 
   FRepo.LoadFromDB;
   Items := FRepo.GetAll;
-  AssignedIds := FRepo.GetMaquinaIdsForCentro(FCenterId);
+  Links := FRepo.GetLinksForCentro(FCenterId);
 
-  Lookup := TDictionary<Integer, Boolean>.Create;
+  PrincipalMap := TDictionary<Integer, Boolean>.Create;
+  PrioridadMap := TDictionary<Integer, Integer>.Create;
   try
-    for I := 0 to High(AssignedIds) do
-      Lookup.AddOrSetValue(AssignedIds[I], True);
+    for I := 0 to High(Links) do
+    begin
+      PrincipalMap.AddOrSetValue(Links[I].MaquinaId, Links[I].EsPrincipal);
+      PrioridadMap.AddOrSetValue(Links[I].MaquinaId, Links[I].Prioridad);
+    end;
 
     SetLength(FIds, Length(Items));
     tvMaquinas.BeginUpdate;
@@ -133,15 +141,22 @@ begin
       for I := 0 to High(Items) do
       begin
         FIds[I] := Items[I].Id;
-        tvMaquinas.DataController.Values[I, colSel.Index]    := Lookup.ContainsKey(Items[I].Id);
+        tvMaquinas.DataController.Values[I, colSel.Index]    := PrincipalMap.ContainsKey(Items[I].Id);
         tvMaquinas.DataController.Values[I, colCodigo.Index] := Items[I].Codigo;
         tvMaquinas.DataController.Values[I, colNombre.Index] := Items[I].Nombre;
+        tvMaquinas.DataController.Values[I, colPrincipal.Index] :=
+          PrincipalMap.ContainsKey(Items[I].Id) and PrincipalMap[Items[I].Id];
+        if PrioridadMap.ContainsKey(Items[I].Id) then
+          tvMaquinas.DataController.Values[I, colPrioridad.Index] := PrioridadMap[Items[I].Id]
+        else
+          tvMaquinas.DataController.Values[I, colPrioridad.Index] := 100;
       end;
     finally
       tvMaquinas.EndUpdate;
     end;
   finally
-    Lookup.Free;
+    PrincipalMap.Free;
+    PrioridadMap.Free;
   end;
 end;
 
@@ -172,15 +187,61 @@ begin
   end;
 end;
 
+procedure TfrmAsignarMaquinasCentro.SaveLinkAttributes(
+  const ASelectedIds: TArray<Integer>);
+var
+  Idx, I, MaquinaId, Prio: Integer;
+  IsPrincipal: Boolean;
+  V: Variant;
+  RowByMaqId: TDictionary<Integer, Integer>;
+begin
+  // Construir mapeo MaquinaId -> indice de fila para localizar valores
+  RowByMaqId := TDictionary<Integer, Integer>.Create;
+  try
+    for I := 0 to High(FIds) do
+      RowByMaqId.AddOrSetValue(FIds[I], I);
+
+    for I := 0 to High(ASelectedIds) do
+    begin
+      MaquinaId := ASelectedIds[I];
+      if not RowByMaqId.TryGetValue(MaquinaId, Idx) then Continue;
+
+      V := tvMaquinas.DataController.Values[Idx, colPrincipal.Index];
+      if VarIsNull(V) or VarIsEmpty(V) then IsPrincipal := False
+      else
+        try
+          IsPrincipal := Boolean(V);
+        except
+          IsPrincipal := False;
+        end;
+
+      V := tvMaquinas.DataController.Values[Idx, colPrioridad.Index];
+      if VarIsNull(V) or VarIsEmpty(V) then Prio := 100 else Prio := Integer(V);
+      if Prio <= 0 then Prio := 100;
+
+      FRepo.SetMaquinaLink(FCenterId, MaquinaId, IsPrincipal, Prio);
+    end;
+  finally
+    RowByMaqId.Free;
+  end;
+end;
+
 procedure TfrmAsignarMaquinasCentro.btnOkClick(Sender: TObject);
+var
+  SelectedIds: TArray<Integer>;
 begin
   // Forzar commit de la celda en edicion (el ultimo check puede estar in-flight)
   if tvMaquinas.Controller.EditingController.IsEditing then
     tvMaquinas.Controller.EditingController.HideEdit(True);
   tvMaquinas.DataController.Post(False);
 
+  SelectedIds := CollectSelected;
+
   try
-    FRepo.SetMaquinasForCentro(FCenterId, CollectSelected);
+    // 1) Sincronizar pertenencia N:M (borra y reinserta marcadas)
+    FRepo.SetMaquinasForCentro(FCenterId, SelectedIds);
+    // 2) Actualizar atributos de relacion (Principal, Prioridad) para las marcadas
+    SaveLinkAttributes(SelectedIds);
   except
     on E: Exception do
     begin

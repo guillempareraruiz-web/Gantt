@@ -94,6 +94,7 @@ type
 function EstadoMoldeToStr(AEstado: TEstadoMolde): string;
 function StrToEstadoMolde(const AStr: string): TEstadoMolde;
 function TipoMoldeToStr(ATipo: TTipoMolde): string;
+function StrToTipoMolde(const AStr: string): TTipoMolde;
 
 implementation
 
@@ -138,6 +139,18 @@ begin
   else
     Result := 'Otro';
   end;
+end;
+
+function StrToTipoMolde(const AStr: string): TTipoMolde;
+var
+  S: string;
+begin
+  S := LowerCase(Trim(AStr));
+  if S = 'inyeccion' then Result := tmInyeccion
+  else if S = 'soplado' then Result := tmSoplado
+  else if S = 'compresion' then Result := tmCompresion
+  else if S = 'extrusion' then Result := tmExtrusion
+  else Result := tmOtro;
 end;
 
 end.

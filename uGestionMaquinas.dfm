@@ -2,8 +2,8 @@ object frmGestionMaquinas: TfrmGestionMaquinas
   Left = 0
   Top = 0
   Caption = 'Gesti'#243'n de M'#225'quinas'
-  ClientHeight = 520
-  ClientWidth = 800
+  ClientHeight = 560
+  ClientWidth = 1180
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -18,7 +18,7 @@ object frmGestionMaquinas: TfrmGestionMaquinas
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 800
+    Width = 1180
     Height = 60
     Align = alTop
     BevelOuter = bvNone
@@ -43,7 +43,7 @@ object frmGestionMaquinas: TfrmGestionMaquinas
       Top = 36
       Width = 260
       Height = 15
-      Caption = 'M'#225'quinas asignables a uno o varios centros'
+      Caption = 'Ficha t'#233'cnica, capacidad y estado operativo'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -54,14 +54,14 @@ object frmGestionMaquinas: TfrmGestionMaquinas
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 480
-    Width = 800
+    Top = 520
+    Width = 1180
     Height = 40
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
     object btnClose: TButton
-      Left = 692
+      Left = 1072
       Top = 6
       Width = 100
       Height = 28
@@ -74,7 +74,7 @@ object frmGestionMaquinas: TfrmGestionMaquinas
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
-    Width = 800
+    Width = 1180
     Height = 40
     Align = alTop
     BevelOuter = bvNone
@@ -120,8 +120,8 @@ object frmGestionMaquinas: TfrmGestionMaquinas
   object gridMaquinas: TcxGrid
     Left = 0
     Top = 100
-    Width = 800
-    Height = 380
+    Width = 1180
+    Height = 420
     Align = alClient
     TabOrder = 3
     object tvMaquinas: TcxGridTableView
@@ -141,23 +141,106 @@ object frmGestionMaquinas: TfrmGestionMaquinas
       end
       object colMaquinaCodigo: TcxGridColumn
         Caption = 'C'#243'digo'
-        Width = 140
+        Width = 110
       end
       object colMaquinaNombre: TcxGridColumn
         Caption = 'Nombre'
-        Width = 320
+        Width = 220
+      end
+      object colMaquinaTipo: TcxGridColumn
+        Caption = 'Tipo'
+        Width = 110
+      end
+      object colMaquinaModelo: TcxGridColumn
+        Caption = 'Modelo'
+        Width = 130
+      end
+      object colMaquinaFabricante: TcxGridColumn
+        Caption = 'Fabricante'
+        Width = 130
+      end
+      object colMaquinaNumeroSerie: TcxGridColumn
+        Caption = 'N'#186' Serie'
+        Width = 120
+      end
+      object colMaquinaDescripcion: TcxGridColumn
+        Caption = 'Descripci'#243'n'
+        Width = 200
+      end
+      object colMaquinaFechaPM: TcxGridColumn
+        Caption = 'Puesta marcha'
+        PropertiesClassName = 'TcxDateEditProperties'
+        Width = 110
+      end
+      object colMaquinaEfficiency: TcxGridColumn
+        Caption = 'Eficiencia'
+        PropertiesClassName = 'TcxCalcEditProperties'
+        Properties.DisplayFormat = '0.00'
+        Width = 80
+      end
+      object colMaquinaMaxLoad: TcxGridColumn
+        Caption = '% Carga m'#225'x'
+        PropertiesClassName = 'TcxSpinEditProperties'
+        Properties.AssignedValues.MinValue = True
+        Properties.MaxValue = 100.000000000000000000
+        Width = 90
+      end
+      object colMaquinaCoste: TcxGridColumn
+        Caption = 'Coste/h'
+        PropertiesClassName = 'TcxCalcEditProperties'
+        Properties.DisplayFormat = '0.00'
+        Width = 80
+      end
+      object colMaquinaPlanificable: TcxGridColumn
+        Caption = 'Planificable'
+        PropertiesClassName = 'TcxCheckBoxProperties'
+        Width = 90
+      end
+      object colMaquinaCuelloBotella: TcxGridColumn
+        Caption = 'Cuello botella'
+        PropertiesClassName = 'TcxCheckBoxProperties'
+        Width = 100
+      end
+      object colMaquinaPrioridad: TcxGridColumn
+        Caption = 'Prioridad asig.'
+        PropertiesClassName = 'TcxSpinEditProperties'
+        Properties.AssignedValues.MinValue = True
+        Properties.MaxValue = 9999.000000000000000000
+        Width = 110
+      end
+      object colMaquinaEstado: TcxGridColumn
+        Caption = 'Estado'
+        PropertiesClassName = 'TcxComboBoxProperties'
+        Properties.DropDownListStyle = lsFixedList
+        Properties.Items.Strings = (
+          'Disponible'
+          'Mantenimiento'
+          'Averiada'
+          'Baja')
+        Width = 110
+      end
+      object colMaquinaHoras: TcxGridColumn
+        Caption = 'Horas func.'
+        PropertiesClassName = 'TcxCalcEditProperties'
+        Properties.DisplayFormat = '0.00'
+        Width = 90
+      end
+      object colMaquinaFechaProxRev: TcxGridColumn
+        Caption = 'Pr'#243'x. revisi'#243'n'
+        PropertiesClassName = 'TcxDateEditProperties'
+        Width = 110
       end
       object colMaquinaOrden: TcxGridColumn
         Caption = 'Orden'
         PropertiesClassName = 'TcxSpinEditProperties'
         Properties.AssignedValues.MinValue = True
         Properties.MaxValue = 9999.000000000000000000
-        Width = 80
+        Width = 70
       end
       object colMaquinaActivo: TcxGridColumn
         Caption = 'Activo'
         PropertiesClassName = 'TcxCheckBoxProperties'
-        Width = 70
+        Width = 60
       end
     end
     object lvMaquinas: TcxGridLevel
@@ -167,7 +250,7 @@ object frmGestionMaquinas: TfrmGestionMaquinas
   object LookAndFeel: TcxLookAndFeelController
     NativeStyle = False
     SkinName = 'Office2019Colorful'
-    Left = 740
+    Left = 1120
     Top = 12
   end
 end

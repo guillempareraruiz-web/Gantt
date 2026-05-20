@@ -12,7 +12,8 @@ uses
   uOperariosTypes, uOperariosRepo, uGestionOperaris, uOperatorAbsencesRepo,
   uHabilidadRepo, uPlanProdTypes, uPlanProdEngine, uOperationTypesRepo,
   uPesosScoringRepo, uSQLServerConnector,
-  uMoldeRepo, uGestionMoldes, uGestionCalendarios,
+  uMoldeRepo, uGestionMoldes, uGestionUtillajes, uGestionCalendarios,
+  uHeatmapCargaCentro,
   uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor,
   uDashBoard, uVistaGantt;
 
@@ -55,6 +56,7 @@ type
     GenerarBacklogDemo1: TMenuItem;
     FiniteCapacity1: TMenuItem;
     FiniteCapacityOperaris1: TMenuItem;
+    HeatmapCargaCentro1: TMenuItem;
     AutoPlanificacion1: TMenuItem;
     PesosScoring1: TMenuItem;
     CuadroPlanificacionDia1: TMenuItem;
@@ -118,6 +120,7 @@ type
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure tmr1SecTimer(Sender: TObject);
     procedure Moldes1Click(Sender: TObject);
+    procedure Utillajes1Click(Sender: TObject);
     procedure Calendarios1Click(Sender: TObject);
     procedure Turnos1Click(Sender: TObject);
     procedure Operarios1Click(Sender: TObject);
@@ -131,6 +134,7 @@ type
     procedure GenerarBacklogDemo1Click(Sender: TObject);
     procedure FiniteCapacity1Click(Sender: TObject);
     procedure FiniteCapacityOperaris1Click(Sender: TObject);
+    procedure HeatmapCargaCentro1Click(Sender: TObject);
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
     procedure MnGanttClick(Sender: TObject);
@@ -397,6 +401,11 @@ begin
     FVistaGantt.GanttControl.Invalidate;
 end;
 
+procedure TForm1.HeatmapCargaCentro1Click(Sender: TObject);
+begin
+  TfrmHeatmapCargaCentro.Execute;
+end;
+
 procedure TForm1.CuadroPlanificacionDia1Click(Sender: TObject);
 begin
   TfrmCuadroPlanificacionDelDia.Execute(
@@ -460,6 +469,11 @@ begin
   finally
     Frm.Free;
   end;
+end;
+
+procedure TForm1.Utillajes1Click(Sender: TObject);
+begin
+  TfrmGestionUtillajes.Execute;
 end;
 
 procedure TForm1.CamposPersonalizados1Click(Sender: TObject);

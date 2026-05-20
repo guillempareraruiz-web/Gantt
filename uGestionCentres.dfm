@@ -2,8 +2,8 @@ object frmGestionCentres: TfrmGestionCentres
   Left = 0
   Top = 0
   Caption = 'Gesti'#243'n de Centros'
-  ClientHeight = 520
-  ClientWidth = 1000
+  ClientHeight = 540
+  ClientWidth = 1320
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -18,7 +18,7 @@ object frmGestionCentres: TfrmGestionCentres
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 1000
+    Width = 1320
     Height = 60
     Align = alTop
     BevelOuter = bvNone
@@ -54,14 +54,14 @@ object frmGestionCentres: TfrmGestionCentres
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 480
-    Width = 1000
+    Top = 500
+    Width = 1320
     Height = 40
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
     object btnClose: TButton
-      Left = 892
+      Left = 1212
       Top = 6
       Width = 100
       Height = 28
@@ -74,7 +74,7 @@ object frmGestionCentres: TfrmGestionCentres
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
-    Width = 1000
+    Width = 1320
     Height = 40
     Align = alTop
     BevelOuter = bvNone
@@ -129,8 +129,8 @@ object frmGestionCentres: TfrmGestionCentres
   object gridCentros: TcxGrid
     Left = 0
     Top = 100
-    Width = 1000
-    Height = 380
+    Width = 1320
+    Height = 400
     Align = alClient
     TabOrder = 3
     object tvCentros: TcxGridTableView
@@ -158,7 +158,15 @@ object frmGestionCentres: TfrmGestionCentres
       end
       object colCentroSubtitulo: TcxGridColumn
         Caption = 'Subt'#237'tulo'
-        Width = 150
+        Width = 130
+      end
+      object colCentroTipo: TcxGridColumn
+        Caption = 'Tipo'
+        Width = 100
+      end
+      object colCentroUbicacion: TcxGridColumn
+        Caption = 'Ubicaci'#243'n'
+        Width = 120
       end
       object colCentroArea: TcxGridColumn
         Caption = #193'rea'
@@ -181,6 +189,32 @@ object frmGestionCentres: TfrmGestionCentres
         Properties.AssignedValues.MinValue = True
         Properties.MaxValue = 999.000000000000000000
         Width = 80
+      end
+      object colCentroEfficiency: TcxGridColumn
+        Caption = 'Eficiencia'
+        PropertiesClassName = 'TcxCalcEditProperties'
+        Properties.DisplayFormat = '0.00'
+        Width = 80
+      end
+      object colCentroCoste: TcxGridColumn
+        Caption = 'Coste/h'
+        PropertiesClassName = 'TcxCalcEditProperties'
+        Properties.DisplayFormat = '0.00'
+        Width = 80
+      end
+      object colCentroSetup: TcxGridColumn
+        Caption = 'Setup def. (min)'
+        PropertiesClassName = 'TcxSpinEditProperties'
+        Properties.AssignedValues.MinValue = True
+        Properties.MaxValue = 99999.000000000000000000
+        Width = 110
+      end
+      object colCentroHorizon: TcxGridColumn
+        Caption = 'Horiz. plan. (d)'
+        PropertiesClassName = 'TcxSpinEditProperties'
+        Properties.AssignedValues.MinValue = True
+        Properties.MaxValue = 9999.000000000000000000
+        Width = 100
       end
       object colCentroOrden: TcxGridColumn
         Caption = 'Orden'

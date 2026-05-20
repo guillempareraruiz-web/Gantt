@@ -1,18 +1,30 @@
 unit uEditarListaMolde;
 
-// Diálogo genérico para editar una lista de strings asociada a un molde.
-// Usado para FS_PL_MoldArticle (artículos) y FS_PL_MoldOperation (operaciones).
+// Dialogo generico para editar la lista de relaciones de un molde con atributos.
+// Tres modos:
+//   elkArticulos:   codigo + CavidadesActivas + Observaciones
+//   elkOperaciones: codigo + CiclosPorUnidad   + Observaciones
+//   elkUtillajes:   codigo + Obligatorio       + Observaciones
 
 interface
 
 uses
-  Winapi.Windows, System.SysUtils, System.Classes,
+  Winapi.Windows, System.SysUtils, System.Classes, System.Variants,
+  System.Generics.Collections,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls,
-  Data.Win.ADODB, Data.DB;
+  cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
+  cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
+  cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
+  cxSpinEdit, cxButtonEdit, cxContainer, cxClasses, cxFilter,
+  dxSkinsCore, dxSkinOffice2019Colorful,
+  dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
+  dxDateRanges, dxScrollbarAnnotations,
+  Data.Win.ADODB, Data.DB,
+  uMoldeRepoSQL;
 
 type
-  TEditarListaMoldeKind = (elkArticulos, elkOperaciones);
+  TEditarListaMoldeKind = (elkArticulos, elkOperaciones, elkUtillajes);
 
   TfrmEditarListaMolde = class(TForm)
     pnlHeader: TPanel;
@@ -22,22 +34,31 @@ type
     btnOK: TButton;
     btnCancel: TButton;
     pnlToolbar: TPanel;
-    edtNuevo: TEdit;
     btnAdd: TButton;
     btnDel: TButton;
-    lbItems: TListBox;
+    gridItems: TcxGrid;
+    tvItems: TcxGridTableView;
+    colCodigo: TcxGridColumn;
+    colNumero: TcxGridColumn;
+    colCheck: TcxGridColumn;
+    colObs: TcxGridColumn;
+    lvItems: TcxGridLevel;
+    LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
+    procedure FormShow(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnOKClick(Sender: TObject);
+    procedure colCodigoButtonClick(Sender: TObject; AButtonIndex: Integer);
   private
+    FRepo: TMoldeRepoSQL;
     FMoldId: Integer;
     FMoldCodigo: string;
     FKind: TEditarListaMoldeKind;
+    procedure ConfigureColumns;
     procedure LoadItems;
-    procedure Guardar;
-    function TableName: string;
-    function ColumnName: string;
+    procedure SaveItems;
   public
     class function Execute(AMoldId: Integer; const AMoldCodigo: string;
       AKind: TEditarListaMoldeKind): Boolean;
@@ -48,7 +69,8 @@ implementation
 {$R *.dfm}
 
 uses
-  uDMPlanner;
+  uDMPlanner, uErpReaderFactory, uErpReader,
+  uArticuloPicker, uOperacionPicker, uUtillajePicker;
 
 class function TfrmEditarListaMolde.Execute(AMoldId: Integer;
   const AMoldCodigo: string; AKind: TEditarListaMoldeKind): Boolean;
@@ -66,137 +88,280 @@ begin
   end;
 end;
 
-function TfrmEditarListaMolde.TableName: string;
-begin
-  case FKind of
-    elkArticulos:   Result := 'FS_PL_MoldArticle';
-    elkOperaciones: Result := 'FS_PL_MoldOperation';
-  end;
-end;
-
-function TfrmEditarListaMolde.ColumnName: string;
-begin
-  case FKind of
-    elkArticulos:   Result := 'CodigoArticulo';
-    elkOperaciones: Result := 'Operacion';
-  end;
-end;
-
 procedure TfrmEditarListaMolde.FormCreate(Sender: TObject);
 begin
-  case FKind of
-    elkArticulos:
-      begin
-        Caption := 'Artículos del molde';
-        lblTitle.Caption := 'Artículos fabricables con este molde';
-      end;
-    elkOperaciones:
-      begin
-        Caption := 'Operaciones del molde';
-        lblTitle.Caption := 'Operaciones compatibles con este molde';
-      end;
-  end;
+  FRepo := TMoldeRepoSQL.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  tvItems.OptionsData.Editing := True;
+  tvItems.OptionsSelection.CellSelect := True;
+  // ConfigureColumns / LoadItems van a FormShow: FKind aun no esta asignado en
+  // FormCreate (Execute lo pone entre Create y ShowModal).
+end;
+
+procedure TfrmEditarListaMolde.FormShow(Sender: TObject);
+begin
+  ConfigureColumns;
   lblSubtitle.Caption := 'Molde: ' + FMoldCodigo;
   LoadItems;
 end;
 
+procedure TfrmEditarListaMolde.FormDestroy(Sender: TObject);
+begin
+  FRepo.Free;
+end;
+
+procedure TfrmEditarListaMolde.ConfigureColumns;
+begin
+  case FKind of
+    elkArticulos:
+      begin
+        Caption := 'Art'#237'culos del molde';
+        lblTitle.Caption := 'Art'#237'culos fabricables';
+        colCodigo.Caption := 'C'#243'digo art'#237'culo';
+        colNumero.Caption := 'Cavidades activas';
+        colNumero.Visible := True;
+        colCheck.Visible := False;
+        colObs.Visible := True;
+      end;
+    elkOperaciones:
+      begin
+        Caption := 'Operaciones del molde';
+        lblTitle.Caption := 'Operaciones compatibles';
+        colCodigo.Caption := 'Operaci'#243'n';
+        colNumero.Caption := 'Ciclos / unidad';
+        colNumero.Visible := True;
+        colCheck.Visible := False;
+        colObs.Visible := True;
+      end;
+    elkUtillajes:
+      begin
+        Caption := 'Utillajes del molde';
+        lblTitle.Caption := 'Utillajes asociados';
+        colCodigo.Caption := 'C'#243'digo utillaje';
+        colNumero.Visible := False;
+        colCheck.Caption := 'Obligatorio';
+        colCheck.Visible := True;
+        colObs.Visible := True;
+      end;
+  end;
+end;
+
 procedure TfrmEditarListaMolde.LoadItems;
 var
-  Q: TADOQuery;
+  Art: TArray<TMoldeArticleRow>;
+  Op: TArray<TMoldeOperationRow>;
+  Ut: TArray<TMoldeUtillajeRow>;
+  I: Integer;
 begin
-  lbItems.Items.Clear;
-  Q := TADOQuery.Create(nil);
+  tvItems.BeginUpdate;
   try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text :=
-      'SELECT ' + ColumnName + ' FROM ' + TableName +
-      ' WHERE CodigoEmpresa = :CodigoEmpresa AND MoldId = :MoldId ' +
-      'ORDER BY ' + ColumnName;
-    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
-    Q.Parameters.ParamByName('MoldId').Value := FMoldId;
-    Q.Open;
-    while not Q.Eof do
-    begin
-      lbItems.Items.Add(Q.FieldByName(ColumnName).AsString);
-      Q.Next;
+    tvItems.DataController.RecordCount := 0;
+    case FKind of
+      elkArticulos:
+        begin
+          Art := FRepo.GetArticulos(FMoldId);
+          tvItems.DataController.RecordCount := Length(Art);
+          for I := 0 to High(Art) do
+          begin
+            tvItems.DataController.Values[I, colCodigo.Index] := Art[I].CodigoArticulo;
+            tvItems.DataController.Values[I, colNumero.Index] := Art[I].CavidadesActivas;
+            tvItems.DataController.Values[I, colObs.Index]    := Art[I].Observaciones;
+          end;
+        end;
+      elkOperaciones:
+        begin
+          Op := FRepo.GetOperaciones(FMoldId);
+          tvItems.DataController.RecordCount := Length(Op);
+          for I := 0 to High(Op) do
+          begin
+            tvItems.DataController.Values[I, colCodigo.Index] := Op[I].Operacion;
+            tvItems.DataController.Values[I, colNumero.Index] := Op[I].CiclosPorUnidad;
+            tvItems.DataController.Values[I, colObs.Index]    := Op[I].Observaciones;
+          end;
+        end;
+      elkUtillajes:
+        begin
+          Ut := FRepo.GetUtillajes(FMoldId);
+          tvItems.DataController.RecordCount := Length(Ut);
+          for I := 0 to High(Ut) do
+          begin
+            tvItems.DataController.Values[I, colCodigo.Index] := Ut[I].CodigoUtillaje;
+            tvItems.DataController.Values[I, colCheck.Index]  := Ut[I].Obligatorio;
+            tvItems.DataController.Values[I, colObs.Index]    := Ut[I].Observaciones;
+          end;
+        end;
     end;
   finally
-    Q.Free;
+    tvItems.EndUpdate;
   end;
 end;
 
 procedure TfrmEditarListaMolde.btnAddClick(Sender: TObject);
 var
-  S: string;
+  Idx: Integer;
 begin
-  S := Trim(edtNuevo.Text);
-  if S = '' then Exit;
-  if lbItems.Items.IndexOf(S) >= 0 then
-  begin
-    ShowMessage('Ya está en la lista.');
-    Exit;
+  Idx := tvItems.DataController.AppendRecord;
+  tvItems.DataController.Values[Idx, colCodigo.Index] := '';
+  case FKind of
+    elkArticulos:   tvItems.DataController.Values[Idx, colNumero.Index] := 1;
+    elkOperaciones: tvItems.DataController.Values[Idx, colNumero.Index] := 1;
+    elkUtillajes:   tvItems.DataController.Values[Idx, colCheck.Index]  := True;
   end;
-  lbItems.Items.Add(S);
-  edtNuevo.Text := '';
-  edtNuevo.SetFocus;
+  tvItems.DataController.Values[Idx, colObs.Index] := '';
+  tvItems.Controller.FocusedRecordIndex := Idx;
 end;
 
 procedure TfrmEditarListaMolde.btnDelClick(Sender: TObject);
+var
+  Idx: Integer;
 begin
-  if lbItems.ItemIndex < 0 then Exit;
-  lbItems.Items.Delete(lbItems.ItemIndex);
+  Idx := tvItems.Controller.FocusedRecordIndex;
+  if Idx < 0 then Exit;
+  tvItems.DataController.DeleteRecord(Idx);
 end;
 
-procedure TfrmEditarListaMolde.Guardar;
+procedure TfrmEditarListaMolde.SaveItems;
 var
-  Cmd: TADOCommand;
-  J: Integer;
-  CE: string;
-
-  function QStr(const S: string): string;
+  Art: TArray<TMoldeArticleRow>;
+  Op: TArray<TMoldeOperationRow>;
+  Ut: TArray<TMoldeUtillajeRow>;
+  I: Integer;
+  Codigo, Obs: string;
+  NumF: Double;
+  Obl: Boolean;
+  function AsStr(AV: Variant): string;
   begin
-    Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := '' else Result := VarToStr(AV);
+  end;
+  function AsInt(AV: Variant; ADef: Integer): Integer;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADef else Result := Integer(AV);
+  end;
+  function AsFloat(AV: Variant; ADef: Double): Double;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADef else Result := Double(AV);
+  end;
+  function AsBool(AV: Variant; ADef: Boolean): Boolean;
+  begin
+    if VarIsNull(AV) or VarIsEmpty(AV) then Result := ADef else Result := Boolean(AV);
+  end;
+begin
+  case FKind of
+    elkArticulos:
+      begin
+        SetLength(Art, 0);
+        for I := 0 to tvItems.DataController.RecordCount - 1 do
+        begin
+          Codigo := Trim(AsStr(tvItems.DataController.Values[I, colCodigo.Index]));
+          if Codigo = '' then Continue;
+          SetLength(Art, Length(Art) + 1);
+          Art[High(Art)].CodigoArticulo := Codigo;
+          Art[High(Art)].CavidadesActivas := AsInt(tvItems.DataController.Values[I, colNumero.Index], 0);
+          Art[High(Art)].Observaciones := AsStr(tvItems.DataController.Values[I, colObs.Index]);
+        end;
+        FRepo.SaveArticulos(FMoldId, Art);
+      end;
+    elkOperaciones:
+      begin
+        SetLength(Op, 0);
+        for I := 0 to tvItems.DataController.RecordCount - 1 do
+        begin
+          Codigo := Trim(AsStr(tvItems.DataController.Values[I, colCodigo.Index]));
+          if Codigo = '' then Continue;
+          NumF := AsFloat(tvItems.DataController.Values[I, colNumero.Index], 1);
+          if NumF <= 0 then NumF := 1;
+          Obs := AsStr(tvItems.DataController.Values[I, colObs.Index]);
+          SetLength(Op, Length(Op) + 1);
+          Op[High(Op)].Operacion := Codigo;
+          Op[High(Op)].CiclosPorUnidad := NumF;
+          Op[High(Op)].Observaciones := Obs;
+        end;
+        FRepo.SaveOperaciones(FMoldId, Op);
+      end;
+    elkUtillajes:
+      begin
+        SetLength(Ut, 0);
+        for I := 0 to tvItems.DataController.RecordCount - 1 do
+        begin
+          Codigo := Trim(AsStr(tvItems.DataController.Values[I, colCodigo.Index]));
+          if Codigo = '' then Continue;
+          Obl := AsBool(tvItems.DataController.Values[I, colCheck.Index], True);
+          Obs := AsStr(tvItems.DataController.Values[I, colObs.Index]);
+          SetLength(Ut, Length(Ut) + 1);
+          Ut[High(Ut)].CodigoUtillaje := Codigo;
+          Ut[High(Ut)].Obligatorio := Obl;
+          Ut[High(Ut)].Observaciones := Obs;
+        end;
+        FRepo.SaveUtillajes(FMoldId, Ut);
+      end;
+  end;
+end;
+
+procedure TfrmEditarListaMolde.colCodigoButtonClick(Sender: TObject;
+  AButtonIndex: Integer);
+var
+  Idx: Integer;
+  Cod, Desc: string;
+  Reader: IErpReader;
+  Picked: Boolean;
+begin
+  Idx := tvItems.Controller.FocusedRecordIndex;
+  if Idx < 0 then Exit;
+
+  Picked := False;
+  Cod := '';
+  Desc := '';
+
+  case FKind of
+    elkArticulos:
+      begin
+        Reader := GetActiveErpReader;
+        if Reader = nil then
+        begin
+          ShowMessage('No hay conector ERP activo: no se puede listar art'#237'culos.');
+          Exit;
+        end;
+        Picked := TfrmArticuloPicker.Execute(Reader, Cod, Desc);
+      end;
+    elkOperaciones:
+      begin
+        Picked := TfrmOperacionPicker.Execute(Cod, Desc);
+      end;
+    elkUtillajes:
+      begin
+        Picked := TfrmUtillajePicker.Execute(Cod, Desc);
+      end;
   end;
 
-begin
-  CE := IntToStr(DMPlanner.CodigoEmpresa);
-  Cmd := TADOCommand.Create(nil);
-  try
-    Cmd.Connection := DMPlanner.ADOConnection;
-    DMPlanner.ADOConnection.BeginTrans;
-    try
-      Cmd.CommandText := 'DELETE FROM ' + TableName + ' WHERE CodigoEmpresa = ' +
-        CE + ' AND MoldId = ' + IntToStr(FMoldId);
-      Cmd.Execute;
-      for J := 0 to lbItems.Items.Count - 1 do
-      begin
-        Cmd.CommandText := 'INSERT INTO ' + TableName + ' (CodigoEmpresa, MoldId, ' +
-          ColumnName + ') VALUES (' + CE + ', ' + IntToStr(FMoldId) + ', ' +
-          QStr(lbItems.Items[J]) + ')';
-        Cmd.Execute;
-      end;
-      DMPlanner.ADOConnection.CommitTrans;
-    except
-      DMPlanner.ADOConnection.RollbackTrans;
-      raise;
-    end;
-  finally
-    Cmd.Free;
-  end;
+  if not Picked then Exit;
+  if Trim(Cod) = '' then Exit;
+
+  // Forzar cierre del editor en curso y escribir el valor en la celda
+  if tvItems.Controller.EditingController.IsEditing then
+    tvItems.Controller.EditingController.HideEdit(True);
+  tvItems.DataController.Values[Idx, colCodigo.Index] := Cod;
+  // Si la fila no lleva todavia observaciones y el picker da descripcion, la prefijamos
+  if (Desc <> '') and
+     (Trim(VarToStr(tvItems.DataController.Values[Idx, colObs.Index])) = '') then
+    tvItems.DataController.Values[Idx, colObs.Index] := Desc;
 end;
 
 procedure TfrmEditarListaMolde.btnOKClick(Sender: TObject);
 begin
+  if tvItems.Controller.EditingController.IsEditing then
+    tvItems.Controller.EditingController.HideEdit(True);
+  tvItems.DataController.Post(False);
+
   try
-    Guardar;
-    ModalResult := mrOk;
+    SaveItems;
   except
     on E: Exception do
     begin
       ShowMessage('Error: ' + E.Message);
       ModalResult := mrNone;
+      Exit;
     end;
   end;
+  ModalResult := mrOk;
 end;
 
 end.

@@ -123,13 +123,22 @@ object frmGestionOperaris: TfrmGestionOperaris
       TabOrder = 4
       OnClick = btnPolivalenciaClick
     end
-    object btnConfigurarColumnas: TButton
+    object btnMatriz: TButton
       Left = 664
+      Top = 6
+      Width = 160
+      Height = 28
+      Caption = 'Matriz polivalencia'
+      TabOrder = 5
+      OnClick = btnMatrizClick
+    end
+    object btnConfigurarColumnas: TButton
+      Left = 828
       Top = 6
       Width = 180
       Height = 28
       Caption = 'Configurar columnas...'
-      TabOrder = 5
+      TabOrder = 6
       Visible = False
       OnClick = btnConfigurarColumnasClick
     end
