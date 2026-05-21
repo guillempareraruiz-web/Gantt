@@ -139,6 +139,18 @@ object Form1: TForm1
         Caption = 'Heatmap carga por centro'
         OnClick = HeatmapCargaCentro1Click
       end
+      object HeatmapCargaOperario1: TMenuItem
+        Caption = 'Heatmap carga por operario'
+        OnClick = HeatmapCargaOperario1Click
+      end
+      object HeatmapEntregasVsCarga1: TMenuItem
+        Caption = 'Heatmap entregas vs capacidad'
+        OnClick = HeatmapEntregasVsCarga1Click
+      end
+      object HistogramasOperarios1: TMenuItem
+        Caption = 'Histogramas de operarios'
+        OnClick = HistogramasOperarios1Click
+      end
       object AutoPlanificacion1: TMenuItem
         Caption = 'Auto-planificaci'#243'n (scoring)...'
         OnClick = AutoPlanificacion1Click

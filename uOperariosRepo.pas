@@ -6,6 +6,13 @@ uses
   System.SysUtils, System.Generics.Collections, uOperariosTypes;
 
 type
+  // Callbacks per a persistencia. El repo nomes guarda en memoria; quan
+  // canvia una asignacio, dispara el callback corresponent perque el codi
+  // cridador (Main) escrigui a FS_PL_OperatorAssignment.
+  TAsignacionPersistEvent = procedure(const A: TAsignacionOperario) of object;
+  TAsignacionRemovePersistEvent = procedure(OperarioId, DataId: Integer) of object;
+  TAsignacionNodeClearPersistEvent = procedure(DataId: Integer) of object;
+
   TOperariosRepo = class
   private
     FOperarios: TList<TOperario>;
@@ -15,9 +22,26 @@ type
     FAsignacions: TList<TAsignacionOperario>;
     FNextOperarioId: Integer;
     FNextDeptId: Integer;
+    FBulkLoadMode: Boolean;
+    FOnAsignacionAdded: TAsignacionPersistEvent;
+    FOnAsignacionUpdated: TAsignacionPersistEvent;
+    FOnAsignacionRemoved: TAsignacionRemovePersistEvent;
+    FOnAsignacionsNodeCleared: TAsignacionNodeClearPersistEvent;
   public
     constructor Create;
     destructor Destroy; override;
+
+    // True durant la carrega inicial des de SQL: cap callback de persist
+    // s'ha de disparar (evitem inserts en bucle).
+    property BulkLoadMode: Boolean read FBulkLoadMode write FBulkLoadMode;
+    property OnAsignacionAdded: TAsignacionPersistEvent
+      read FOnAsignacionAdded write FOnAsignacionAdded;
+    property OnAsignacionUpdated: TAsignacionPersistEvent
+      read FOnAsignacionUpdated write FOnAsignacionUpdated;
+    property OnAsignacionRemoved: TAsignacionRemovePersistEvent
+      read FOnAsignacionRemoved write FOnAsignacionRemoved;
+    property OnAsignacionsNodeCleared: TAsignacionNodeClearPersistEvent
+      read FOnAsignacionsNodeCleared write FOnAsignacionsNodeCleared;
 
     // --- Operaris ---
     procedure AddOperario(const A: TOperario);
@@ -87,6 +111,7 @@ begin
   FAsignacions := TList<TAsignacionOperario>.Create;
   FNextOperarioId := 1;
   FNextDeptId := 1;
+  FBulkLoadMode := False;
 end;
 
 destructor TOperariosRepo.Destroy;
@@ -388,6 +413,8 @@ end;
 procedure TOperariosRepo.AddAsignacion(const A: TAsignacionOperario);
 begin
   FAsignacions.Add(A);
+  if (not FBulkLoadMode) and Assigned(FOnAsignacionAdded) then
+    FOnAsignacionAdded(A);
 end;
 
 procedure TOperariosRepo.RemoveAsignacion(OperarioId, DataId: Integer);
@@ -399,6 +426,8 @@ begin
        (FAsignacions[I].DataId = DataId) then
     begin
       FAsignacions.Delete(I);
+      if (not FBulkLoadMode) and Assigned(FOnAsignacionRemoved) then
+        FOnAsignacionRemoved(OperarioId, DataId);
       Exit;
     end;
 end;
@@ -415,6 +444,8 @@ begin
       A := FAsignacions[I];
       A.Horas := Horas;
       FAsignacions[I] := A;
+      if (not FBulkLoadMode) and Assigned(FOnAsignacionUpdated) then
+        FOnAsignacionUpdated(A);
       Exit;
     end;
 end;
@@ -458,6 +489,8 @@ begin
   for I := FAsignacions.Count - 1 downto 0 do
     if FAsignacions[I].DataId = DataId then
       FAsignacions.Delete(I);
+  if (not FBulkLoadMode) and Assigned(FOnAsignacionsNodeCleared) then
+    FOnAsignacionsNodeCleared(DataId);
 end;
 
 { --- Consultes --- }

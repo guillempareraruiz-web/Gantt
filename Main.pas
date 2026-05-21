@@ -14,6 +14,9 @@ uses
   uPesosScoringRepo, uSQLServerConnector,
   uMoldeRepo, uGestionMoldes, uGestionUtillajes, uGestionCalendarios,
   uHeatmapCargaCentro,
+  uHeatmapCargaOperario,
+  uHeatmapEntregasVsCarga,
+  uHistogramasOperarios,
   uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor,
   uDashBoard, uVistaGantt;
 
@@ -57,6 +60,9 @@ type
     FiniteCapacity1: TMenuItem;
     FiniteCapacityOperaris1: TMenuItem;
     HeatmapCargaCentro1: TMenuItem;
+    HeatmapCargaOperario1: TMenuItem;
+    HeatmapEntregasVsCarga1: TMenuItem;
+    HistogramasOperarios1: TMenuItem;
     AutoPlanificacion1: TMenuItem;
     PesosScoring1: TMenuItem;
     CuadroPlanificacionDia1: TMenuItem;
@@ -115,6 +121,11 @@ type
     procedure AutoSaverSaveCompleted(Sender: TObject; ANodeCount: Integer);
     procedure AutoSaverSaveFailed(Sender: TObject; const AError: string);
     procedure UpdateAutoSaveLabel;
+    // Persistencia automatica de asignaciones operario<->nodo a FS_PL_OperatorAssignment
+    procedure OperariosRepoAsignacionAdded(const A: TAsignacionOperario);
+    procedure OperariosRepoAsignacionUpdated(const A: TAsignacionOperario);
+    procedure OperariosRepoAsignacionRemoved(OperarioId, DataId: Integer);
+    procedure OperariosRepoAsignacionsNodeCleared(DataId: Integer);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -135,6 +146,9 @@ type
     procedure FiniteCapacity1Click(Sender: TObject);
     procedure FiniteCapacityOperaris1Click(Sender: TObject);
     procedure HeatmapCargaCentro1Click(Sender: TObject);
+    procedure HeatmapCargaOperario1Click(Sender: TObject);
+    procedure HeatmapEntregasVsCarga1Click(Sender: TObject);
+    procedure HistogramasOperarios1Click(Sender: TObject);
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
     procedure MnGanttClick(Sender: TObject);
@@ -401,9 +415,128 @@ begin
     FVistaGantt.GanttControl.Invalidate;
 end;
 
+procedure TForm1.OperariosRepoAsignacionAdded(const A: TAsignacionOperario);
+var
+  Cmd: TADOCommand;
+  CE: SmallInt;
+begin
+  if not Assigned(DMPlanner) or not DMPlanner.IsConnected then Exit;
+  CE := DMPlanner.CodigoEmpresa;
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    try
+      // Borra previa (si existeix la mateixa parella op+node) i inserta neta.
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_OperatorAssignment ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(CE) +
+        '  AND OperatorId = ' + IntToStr(A.OperarioId) +
+        '  AND NodeId = ' + IntToStr(A.DataId);
+      Cmd.Execute;
+      Cmd.CommandText :=
+        'INSERT INTO FS_PL_OperatorAssignment (CodigoEmpresa, OperatorId, NodeId, Horas) ' +
+        'VALUES (' + IntToStr(CE) + ', ' + IntToStr(A.OperarioId) + ', ' +
+        IntToStr(A.DataId) + ', ' +
+        FloatToStr(A.Horas, TFormatSettings.Invariant) + ')';
+      Cmd.Execute;
+    except
+      // Si la tabla no existe (V019 no aplicada), ignorar silenciosamente.
+    end;
+  finally
+    Cmd.Free;
+  end;
+end;
+
+procedure TForm1.OperariosRepoAsignacionUpdated(const A: TAsignacionOperario);
+var
+  Cmd: TADOCommand;
+  CE: SmallInt;
+begin
+  if not Assigned(DMPlanner) or not DMPlanner.IsConnected then Exit;
+  CE := DMPlanner.CodigoEmpresa;
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    try
+      Cmd.CommandText :=
+        'UPDATE FS_PL_OperatorAssignment SET Horas = ' +
+        FloatToStr(A.Horas, TFormatSettings.Invariant) +
+        ' WHERE CodigoEmpresa = ' + IntToStr(CE) +
+        '   AND OperatorId = ' + IntToStr(A.OperarioId) +
+        '   AND NodeId = ' + IntToStr(A.DataId);
+      Cmd.Execute;
+    except
+    end;
+  finally
+    Cmd.Free;
+  end;
+end;
+
+procedure TForm1.OperariosRepoAsignacionRemoved(OperarioId, DataId: Integer);
+var
+  Cmd: TADOCommand;
+  CE: SmallInt;
+begin
+  if not Assigned(DMPlanner) or not DMPlanner.IsConnected then Exit;
+  CE := DMPlanner.CodigoEmpresa;
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    try
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_OperatorAssignment ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(CE) +
+        '  AND OperatorId = ' + IntToStr(OperarioId) +
+        '  AND NodeId = ' + IntToStr(DataId);
+      Cmd.Execute;
+    except
+    end;
+  finally
+    Cmd.Free;
+  end;
+end;
+
+procedure TForm1.OperariosRepoAsignacionsNodeCleared(DataId: Integer);
+var
+  Cmd: TADOCommand;
+  CE: SmallInt;
+begin
+  if not Assigned(DMPlanner) or not DMPlanner.IsConnected then Exit;
+  CE := DMPlanner.CodigoEmpresa;
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    try
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_OperatorAssignment ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(CE) +
+        '  AND NodeId = ' + IntToStr(DataId);
+      Cmd.Execute;
+    except
+    end;
+  finally
+    Cmd.Free;
+  end;
+end;
+
 procedure TForm1.HeatmapCargaCentro1Click(Sender: TObject);
 begin
   TfrmHeatmapCargaCentro.Execute;
+end;
+
+procedure TForm1.HeatmapCargaOperario1Click(Sender: TObject);
+begin
+  TfrmHeatmapCargaOperario.Execute;
+end;
+
+procedure TForm1.HeatmapEntregasVsCarga1Click(Sender: TObject);
+begin
+  TfrmHeatmapEntregasVsCarga.Execute;
+end;
+
+procedure TForm1.HistogramasOperarios1Click(Sender: TObject);
+begin
+  TfrmHistogramasOperarios.Execute;
 end;
 
 procedure TForm1.CuadroPlanificacionDia1Click(Sender: TObject);
@@ -613,6 +746,10 @@ begin
   // TODO v2: extender con Departamentos + Capacitaciones + Asignaciones via
   // uSQLServerConnector (ya tiene los metodos LoadXxx).
   FOperariosRepo := TOperariosRepo.Create;
+  FOperariosRepo.OnAsignacionAdded := OperariosRepoAsignacionAdded;
+  FOperariosRepo.OnAsignacionUpdated := OperariosRepoAsignacionUpdated;
+  FOperariosRepo.OnAsignacionRemoved := OperariosRepoAsignacionRemoved;
+  FOperariosRepo.OnAsignacionsNodeCleared := OperariosRepoAsignacionsNodeCleared;
   if Assigned(DMPlanner) and DMPlanner.IsConnected then
   begin
     var QOps := TADOQuery.Create(nil);
@@ -978,6 +1115,7 @@ begin
   // Cargar asignaciones de operarios del proyecto activo
   if Assigned(FOperariosRepo) then
   begin
+    FOperariosRepo.BulkLoadMode := True;
     var QAsig := TADOQuery.Create(nil);
     try
       QAsig.Connection := DMPlanner.ADOConnection;
@@ -1013,6 +1151,7 @@ begin
       end;
     finally
       QAsig.Free;
+      FOperariosRepo.BulkLoadMode := False;
     end;
   end;
 

@@ -467,6 +467,8 @@ end;
 
 procedure TfrmAssignOperaris.btnOKClick(Sender: TObject);
 begin
+  // Persistencia: cada Add/Remove/Update sobre FRepo ya dispara el callback
+  // del Main que escribe a FS_PL_OperatorAssignment (ver Main.OperariosRepo*).
   FResultAssignats := FRepo.CountAssignatsAlNode(FDataId);
   ModalResult := mrOk;
 end;

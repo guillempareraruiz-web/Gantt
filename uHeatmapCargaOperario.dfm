@@ -1,7 +1,7 @@
-object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
+object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
   Left = 0
   Top = 0
-  Caption = 'Heatmap de carga por centro'
+  Caption = 'Heatmap de carga por operario'
   ClientHeight = 620
   ClientWidth = 1320
   Color = 16317660
@@ -29,9 +29,9 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 251
+      Width = 268
       Height = 25
-      Caption = 'Heatmap de carga por centro'
+      Caption = 'Heatmap de carga por operario'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWhite
       Font.Height = -19
@@ -42,11 +42,11 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
     object lblSubtitle: TLabel
       Left = 16
       Top = 38
-      Width = 426
+      Width = 460
       Height = 15
-      Caption = 
-        '% de ocupaci'#243'n por centro y periodo. Datos del plan activo (nodo' +
-        's planificados).'
+      Caption =
+        '% de ocupaci'#243'n por operario y periodo. Datos del plan activo (as' +
+        'ignaciones).'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -89,12 +89,12 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
       Height = 15
       Caption = 'Desde:'
     end
-    object lblCentros: TLabel
+    object lblOperarios: TLabel
       Left = 520
       Top = 14
-      Width = 44
+      Width = 53
       Height = 15
-      Caption = 'Centros:'
+      Caption = 'Operarios:'
     end
     object cmbGranularidad: TComboBox
       Left = 16
@@ -140,13 +140,13 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
       TabOrder = 3
       OnClick = btnRecalcularClick
     end
-    object cbCentros: TcxCheckComboBox
+    object cbOperarios: TcxCheckComboBox
       Left = 520
       Top = 30
       AutoSize = False
-      Properties.EmptySelectionText = 'Todos los centros'
+      Properties.EmptySelectionText = 'Todos los operarios'
       Properties.Items = <>
-      Properties.OnEditValueChanged = cbCentrosChange
+      Properties.OnEditValueChanged = cbOperariosChange
       TabOrder = 4
       Height = 25
       Width = 217
@@ -162,7 +162,6 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
     Color = 16317660
     ParentBackground = False
     TabOrder = 2
-    ExplicitTop = 108
     object pbLegend: TPaintBox
       Left = 16
       Top = 6
@@ -201,19 +200,16 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
     Top = 169
     Width = 1320
     Height = 411
-    VertScrollBar.Position = 38
     Align = alClient
     BorderStyle = bsNone
     Color = 16317660
     ParentColor = False
     TabOrder = 4
-    ExplicitTop = 148
-    ExplicitHeight = 432
     object pbMatrix: TPaintBox
       Left = 0
-      Top = -38
+      Top = 0
       Width = 1320
-      Height = 432
+      Height = 411
       OnPaint = pbMatrixPaint
     end
   end

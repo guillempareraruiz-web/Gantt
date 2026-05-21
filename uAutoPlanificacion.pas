@@ -376,8 +376,23 @@ var
   N: Integer;
   Node: TNodeData;
   Pair: TPair<Integer, Integer>;
+  NodosAfectados: TDictionary<Integer, Boolean>;
+  NodeIdAfectado: Integer;
 begin
-  // Persistir asignaciones (1 fila por (operario, nodo))
+  // 1) Limpiar asignaciones previas de los nodos que reciben asignacion nueva,
+  //    para que el plan nuevo sustituya al anterior (no se mezclen operarios
+  //    viejos con nuevos). El callback del repo borra tambien en SQL.
+  NodosAfectados := TDictionary<Integer, Boolean>.Create;
+  try
+    for I := 0 to High(FResultado.Asignaciones) do
+      NodosAfectados.AddOrSetValue(FResultado.Asignaciones[I].NodeDataId, True);
+    for NodeIdAfectado in NodosAfectados.Keys do
+      FOpRepo.ClearAsignacionsByNode(NodeIdAfectado);
+  finally
+    NodosAfectados.Free;
+  end;
+
+  // 2) Persistir asignaciones nuevas (1 fila por (operario, nodo))
   CountByNode := TDictionary<Integer, Integer>.Create;
   try
     for I := 0 to High(FResultado.Asignaciones) do

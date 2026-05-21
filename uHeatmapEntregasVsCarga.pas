@@ -1,27 +1,24 @@
-unit uHeatmapCargaCentro;
+unit uHeatmapEntregasVsCarga;
 
 {
-  Heatmap de carga por centro y periodo (estilo skills-matrix de gesti'on
-  visual industrial).
+  Heatmap de entregas comprometidas vs capacidad por centro y periodo.
 
-  Eje horizontal: periodos (d'ias / semanas / meses, configurable).
+  Eje horizontal: periodos (dias / semanas / meses, configurable).
   Eje vertical:   centros de trabajo activos.
-  Celda:          % de ocupaci'on = horas_planificadas / horas_capacidad.
+  Celda:          % compromiso = horas_entrega / horas_capacidad.
 
-  Codificaci'on de color (gradiente fino):
-       0%        Vac'io          (gris muy claro)
-     1..10%      Verde muy claro
-    11..25%      Verde claro
-    26..50%      Verde
-    51..75%      Verde-Amarillo
-    76..90%      Amarillo
-    91..100%     Naranja
-   101..120%     Rojo claro
-     >120%      Rojo intenso (sobrecarga grave)
+  Diferencia clave respecto a uHeatmapCargaCentro:
+    - El de carga reparte la duracion del nodo entre los periodos en los que
+      cae fisicamente la barra del Gantt (FechaInicio..FechaFin).
+    - Este reparte la duracion del nodo en el periodo en el que cae su
+      FechaEntrega (el compromiso comercial), independientemente de cuando
+      este planificado. Sirve para responder "?podemos aceptar mas pedidos
+      para la semana X?" antes de planificar.
 
-  Fuente de datos: nodos del proyecto activo (DMPlanner.CurrentProjectId)
-  intersecados con la ventana del periodo. La capacidad se obtiene del
-  calendario asignado al centro (WorkingMinutesBetween).
+  Fuente de datos:
+    - Nodos del proyecto activo (DMPlanner.CurrentProjectId).
+    - FechaEntrega del nodo en FS_PL_NodeData.
+    - Capacidad del centro: calendario asignado via WorkingMinutesBetween.
 }
 
 interface
@@ -53,15 +50,15 @@ uses
   dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue;
 
 type
-  TGranularidad = (gDias, gSemanas, gMeses);
+  TGranularidadEnt = (geDias, geSemanas, geMeses);
 
-  TPeriodo = record
+  TPeriodoEnt = record
     Inicio: TDateTime;
     Fin:    TDateTime;
     Label_: string;
   end;
 
-  TfrmHeatmapCargaCentro = class(TForm)
+  TfrmHeatmapEntregasVsCarga = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
@@ -93,7 +90,7 @@ type
   private
     FAllCentres: TArray<TCentreTreball>;
     FCentres: TArray<TCentreTreball>;
-    FPeriodos: TArray<TPeriodo>;
+    FPeriodos: TArray<TPeriodoEnt>;
     // [centroIdx, periodoIdx] -> %  (-1 si sin capacidad)
     FMatrix: array of array of Double;
     FUpdatingCentros: Boolean;
@@ -119,7 +116,6 @@ uses
   uDMPlanner, uHelpViewer, System.JSON;
 
 const
-  // Dimensiones
   MTX_CELL_W       = 90;
   MTX_CELL_H       = 38;
   MTX_ROW_LABEL_W  = 180;
@@ -127,17 +123,16 @@ const
   MTX_PADDING      = 12;
 
 const
-  // Paleta gradiente (BGR). 9 rangos: 0, 1-10, 11-25, 26-50, 51-75, 76-90, 91-100, 101-120, >120
-  CLR_VACIO:     TColor = $00F0F0F0;  // gris muy claro (0%)
-  CLR_R1_10:     TColor = $00D9F5D9;  // verde muy claro
-  CLR_R11_25:    TColor = $00B5E5B5;  // verde claro
-  CLR_R26_50:    TColor = $0085C285;  // verde
-  CLR_R51_75:    TColor = $0066D9B3;  // verde-amarillo
-  CLR_R76_90:    TColor = $005CD0F5;  // amarillo
-  CLR_R91_100:   TColor = $002E8FE8;  // naranja
-  CLR_R101_120:  TColor = $004D6FD7;  // rojo claro
-  CLR_R_SOBRE:   TColor = $002F2FC4;  // rojo intenso (>120%)
-  CLR_NO_CAP:    TColor = $00E8E8E8;  // gris (sin calendario)
+  CLR_VACIO:     TColor = $00F0F0F0;
+  CLR_R1_10:     TColor = $00D9F5D9;
+  CLR_R11_25:    TColor = $00B5E5B5;
+  CLR_R26_50:    TColor = $0085C285;
+  CLR_R51_75:    TColor = $0066D9B3;
+  CLR_R76_90:    TColor = $005CD0F5;
+  CLR_R91_100:   TColor = $002E8FE8;
+  CLR_R101_120:  TColor = $004D6FD7;
+  CLR_R_SOBRE:   TColor = $002F2FC4;
+  CLR_NO_CAP:    TColor = $00E8E8E8;
 
   CLR_TXT_LIGHT: TColor = $00404040;
   CLR_TXT_DARK:  TColor = $00FFFFFF;
@@ -147,11 +142,11 @@ const
   CLR_HEADER_TX: TColor = $00404040;
   CLR_PAPER:     TColor = $00FCFAF4;
 
-class procedure TfrmHeatmapCargaCentro.Execute;
+class procedure TfrmHeatmapEntregasVsCarga.Execute;
 var
-  F: TfrmHeatmapCargaCentro;
+  F: TfrmHeatmapEntregasVsCarga;
 begin
-  F := TfrmHeatmapCargaCentro.Create(nil);
+  F := TfrmHeatmapEntregasVsCarga.Create(nil);
   try
     F.ShowModal;
   finally
@@ -159,26 +154,26 @@ begin
   end;
 end;
 
-procedure TfrmHeatmapCargaCentro.FormCreate(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.FormCreate(Sender: TObject);
 begin
   DoubleBuffered := True;
   sbMatrix.DoubleBuffered := True;
   FLoadingPrefs := True;
   try
-    cmbGranularidad.ItemIndex := 1; // Semanas por defecto
+    cmbGranularidad.ItemIndex := 1; // Semanas
     dtDesde.Date := Trunc(Now);
     spNumPeriodos.Value := 6;
     CargarCentrosCombo;
-    LoadPrefs; // sobreescribe los defaults con la ultima config del usuario
+    LoadPrefs;
   finally
     FLoadingPrefs := False;
   end;
   RecalcularDatos;
-  THelpViewer.InstallHelp(Self, 'uHeatmapCargaCentro',
-    'Heatmap de carga por centro');
+  THelpViewer.InstallHelp(Self, 'uHeatmapEntregasVsCarga',
+    'Heatmap de entregas vs capacidad');
 end;
 
-procedure TfrmHeatmapCargaCentro.LoadPrefs;
+procedure TfrmHeatmapEntregasVsCarga.LoadPrefs;
 var
   Js: string;
   Root: TJSONObject;
@@ -189,7 +184,7 @@ var
   TodosSel: Boolean;
 begin
   if (DMPlanner = nil) or (DMPlanner.UserPrefs = nil) then Exit;
-  Js := DMPlanner.UserPrefs.Load('HeatmapCargaCentro');
+  Js := DMPlanner.UserPrefs.Load('HeatmapEntregasVsCarga');
   if Js = '' then Exit;
 
   Root := TJSONObject.ParseJSONValue(Js) as TJSONObject;
@@ -203,8 +198,6 @@ begin
     if V <> nil then
       try dtDesde.Date := StrToDateTime((V as TJSONString).Value); except end;
 
-    // Centros: null/ausente => Todos seleccionados (estado especial).
-    //          array => lista explicita de IDs.
     V := Root.GetValue('centros');
     TodosSel := (V = nil) or (V is TJSONNull);
     FUpdatingCentros := True;
@@ -221,7 +214,7 @@ begin
         try
           for I := 0 to Arr.Count - 1 do
             IdsSet.AddOrSetValue((Arr.Items[I] as TJSONNumber).AsInt, True);
-          cbCentros.States[0] := cbsUnchecked; // sera ajustado segun coincidencia
+          cbCentros.States[0] := cbsUnchecked;
           for I := 0 to High(FAllCentres) do
           begin
             Cid := FAllCentres[I].Id;
@@ -230,7 +223,6 @@ begin
             else
               cbCentros.States[I + 1] := cbsUnchecked;
           end;
-          // Sincronizar el "(Todos)" segun estado real
           if IdsSet.Count = Length(FAllCentres) then
             cbCentros.States[0] := cbsChecked
           else
@@ -247,7 +239,7 @@ begin
   end;
 end;
 
-procedure TfrmHeatmapCargaCentro.SavePrefs;
+procedure TfrmHeatmapEntregasVsCarga.SavePrefs;
 var
   Root: TJSONObject;
   Arr: TJSONArray;
@@ -263,8 +255,6 @@ begin
     Root.AddPair('numPeriodos', TJSONNumber.Create(spNumPeriodos.Value));
     Root.AddPair('desde', FormatDateTime('yyyy-mm-dd', dtDesde.Date));
 
-    // Si "(Todos)" esta marcado, persistimos null para que centros nuevos
-    // aparezcan automaticamente la proxima vez.
     TodosSel := (cbCentros.Properties.Items.Count > 0) and
                 (cbCentros.States[0] = cbsChecked);
     if TodosSel then
@@ -279,13 +269,13 @@ begin
       Root.AddPair('centros', Arr);
     end;
 
-    DMPlanner.UserPrefs.Save('HeatmapCargaCentro', Root.ToJSON);
+    DMPlanner.UserPrefs.Save('HeatmapEntregasVsCarga', Root.ToJSON);
   finally
     Root.Free;
   end;
 end;
 
-procedure TfrmHeatmapCargaCentro.CargarCentrosCombo;
+procedure TfrmHeatmapEntregasVsCarga.CargarCentrosCombo;
 var
   I: Integer;
   Lbl: string;
@@ -298,7 +288,6 @@ begin
       SetLength(FAllCentres, 0);
 
     cbCentros.Properties.Items.Clear;
-    // Item 0: pseudo "Todos" - marca/desmarca el resto
     cbCentros.Properties.Items.AddCheckItem('(Todos)');
     cbCentros.States[0] := cbsChecked;
     for I := 0 to High(FAllCentres) do
@@ -317,14 +306,13 @@ begin
   end;
 end;
 
-procedure TfrmHeatmapCargaCentro.AplicarFiltroCentros;
+procedure TfrmHeatmapEntregasVsCarga.AplicarFiltroCentros;
 var
   I, K: Integer;
 begin
   SetLength(FCentres, 0);
   K := 0;
   SetLength(FCentres, Length(FAllCentres));
-  // Indices 1..N corresponden a centros (0 es "(Todos)")
   for I := 0 to High(FAllCentres) do
     if (I + 1 < cbCentros.Properties.Items.Count) and
        (cbCentros.States[I + 1] = cbsChecked) then
@@ -335,7 +323,7 @@ begin
   SetLength(FCentres, K);
 end;
 
-procedure TfrmHeatmapCargaCentro.cbCentrosChange(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.cbCentrosChange(Sender: TObject);
 var
   I: Integer;
   TodosChecked, AllReal: Boolean;
@@ -361,14 +349,12 @@ begin
 
     if TodosChecked <> AllReal then
     begin
-      // El usuario clico "(Todos)": propagar al resto
       if TodosChecked then NewState := cbsChecked else NewState := cbsUnchecked;
       for I := 1 to cbCentros.Properties.Items.Count - 1 do
         cbCentros.States[I] := NewState;
     end
     else
     begin
-      // El usuario clico un centro: sincronizar "(Todos)" segun estado real
       if AllReal then
         cbCentros.States[0] := cbsChecked
       else
@@ -382,12 +368,11 @@ begin
   SavePrefs;
 end;
 
-procedure TfrmHeatmapCargaCentro.FormDestroy(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.FormDestroy(Sender: TObject);
 begin
-  // Nada que liberar
 end;
 
-procedure TfrmHeatmapCargaCentro.FormResize(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.FormResize(Sender: TObject);
 var
   W, H: Integer;
 begin
@@ -395,44 +380,41 @@ begin
   pbMatrix.SetBounds(0, 0, W, H);
 end;
 
-procedure TfrmHeatmapCargaCentro.btnCloseClick(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.btnCloseClick(Sender: TObject);
 begin
   Close;
 end;
 
-procedure TfrmHeatmapCargaCentro.btnRecalcularClick(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.btnRecalcularClick(Sender: TObject);
 begin
   RecalcularDatos;
 end;
 
-procedure TfrmHeatmapCargaCentro.ParametrosChange(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.ParametrosChange(Sender: TObject);
 begin
-  // Recalcular automaticament al canviar parametres
   RecalcularDatos;
   SavePrefs;
 end;
 
-procedure TfrmHeatmapCargaCentro.BuildPeriodos;
+procedure TfrmHeatmapEntregasVsCarga.BuildPeriodos;
 var
-  Gran: TGranularidad;
+  Gran: TGranularidadEnt;
   NumPer, I: Integer;
   Cursor: TDateTime;
-  P: TPeriodo;
+  P: TPeriodoEnt;
   YYYY, MM, DD: Word;
 begin
-  Gran := TGranularidad(cmbGranularidad.ItemIndex);
+  Gran := TGranularidadEnt(cmbGranularidad.ItemIndex);
   NumPer := spNumPeriodos.Value;
   if NumPer < 1 then NumPer := 1;
 
   SetLength(FPeriodos, NumPer);
   Cursor := Trunc(dtDesde.Date);
 
-  // Para semanas, snap al lunes mas cercano (ISO)
-  if Gran = gSemanas then
-    Cursor := Cursor - ((DayOfTheWeek(Cursor) + 6) mod 7); // mou a dilluns
+  if Gran = geSemanas then
+    Cursor := Cursor - ((DayOfTheWeek(Cursor) + 6) mod 7);
 
-  // Para meses, snap al dia 1
-  if Gran = gMeses then
+  if Gran = geMeses then
   begin
     DecodeDate(Cursor, YYYY, MM, DD);
     Cursor := EncodeDate(YYYY, MM, 1);
@@ -442,17 +424,17 @@ begin
   begin
     P.Inicio := Cursor;
     case Gran of
-      gDias:
+      geDias:
         begin
           P.Fin := IncDay(Cursor, 1);
           P.Label_ := FormatDateTime('dd/mm', Cursor);
         end;
-      gSemanas:
+      geSemanas:
         begin
           P.Fin := IncDay(Cursor, 7);
           P.Label_ := 'S' + IntToStr(WeekOf(Cursor));
         end;
-      gMeses:
+      geMeses:
         begin
           P.Fin := IncMonth(Cursor, 1);
           P.Label_ := FormatDateTime('mmm yy', Cursor);
@@ -463,7 +445,7 @@ begin
   end;
 end;
 
-procedure TfrmHeatmapCargaCentro.RecalcularDatos;
+procedure TfrmHeatmapEntregasVsCarga.RecalcularDatos;
 var
   Q: TADOQuery;
   ProjectId: Integer;
@@ -471,14 +453,12 @@ var
   CenterIdxById: TDictionary<Integer, Integer>;
   I, J, CIdx: Integer;
   CenterId: Integer;
-  NodeInicio, NodeFin: TDateTime;
+  FechaEntrega: TDateTime;
   DurMin: Double;
-  PI, PF, OvStart, OvEnd: TDateTime;
-  OverlapMin, NodeDuracionMin, MinutsNode: Double;
   Cal: TCentreCalendar;
   CapacityMin: Integer;
-  HorasPlan, HorasCap, Pct: Double;
-  // Mapa [centroIdx, periodoIdx] -> horas planificadas acumuladas
+  HorasEntrega, HorasCap, Pct: Double;
+  // [centroIdx, periodoIdx] -> horas entrega acumuladas
   HorasMat: array of array of Double;
 begin
   BuildPeriodos;
@@ -489,13 +469,12 @@ begin
     Exit;
   end;
 
-  // Aplicar filtro del CheckComboBox sobre los centros cargados
   AplicarFiltroCentros;
 
   SetLength(HorasMat, Length(FCentres), Length(FPeriodos));
   SetLength(FMatrix, Length(FCentres), Length(FPeriodos));
 
-  if (Length(FCentres) = 0) then
+  if Length(FCentres) = 0 then
   begin
     pbMatrix.Invalidate;
     Exit;
@@ -515,13 +494,17 @@ begin
       Q := TADOQuery.Create(nil);
       try
         Q.Connection := DMPlanner.ADOConnection;
+        // Asignamos cada nodo al periodo en el que cae su FechaEntrega.
+        // Si FechaEntrega es NULL o cae fuera del horizonte, lo ignoramos.
         Q.SQL.Text :=
-          'SELECT CenterId, FechaInicio, FechaFin, DuracionMin ' +
-          'FROM FS_PL_Node ' +
-          'WHERE CodigoEmpresa = :CE AND ProjectId = :PID ' +
-          '  AND CenterId IS NOT NULL ' +
-          '  AND FechaInicio IS NOT NULL AND FechaFin IS NOT NULL ' +
-          '  AND FechaFin >= :HInicio AND FechaInicio < :HFin';
+          'SELECT n.CenterId, nd.FechaEntrega, nd.DuracionMin ' +
+          'FROM FS_PL_Node n ' +
+          'INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
+          '                            AND nd.NodeId = n.NodeId ' +
+          'WHERE n.CodigoEmpresa = :CE AND n.ProjectId = :PID ' +
+          '  AND n.CenterId IS NOT NULL ' +
+          '  AND nd.FechaEntrega IS NOT NULL ' +
+          '  AND nd.FechaEntrega >= :HInicio AND nd.FechaEntrega < :HFin';
         Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
         Q.Parameters.ParamByName('PID').Value := ProjectId;
         Q.Parameters.ParamByName('HInicio').Value := HorizonteInicio;
@@ -532,34 +515,18 @@ begin
           CenterId := Q.FieldByName('CenterId').AsInteger;
           if CenterIdxById.TryGetValue(CenterId, CIdx) then
           begin
-            NodeInicio := Q.FieldByName('FechaInicio').AsDateTime;
-            NodeFin    := Q.FieldByName('FechaFin').AsDateTime;
-            DurMin     := Q.FieldByName('DuracionMin').AsFloat;
-            // Si DuracionMin es 0 o falta, calcular per diferencia
-            if DurMin <= 0 then
-              DurMin := MinutesBetween(NodeFin, NodeInicio);
-            NodeDuracionMin := MinutesBetween(NodeFin, NodeInicio);
-            if NodeDuracionMin <= 0 then
+            FechaEntrega := Q.FieldByName('FechaEntrega').AsDateTime;
+            DurMin := Q.FieldByName('DuracionMin').AsFloat;
+            if DurMin > 0 then
             begin
-              Q.Next;
-              Continue;
-            end;
-
-            // Repartir DuracionMin proporcionalment al solapament amb cada periodo.
-            // Premissa: la durada efectiva s'escampa linealment entre inicio i fin.
-            for J := 0 to High(FPeriodos) do
-            begin
-              PI := FPeriodos[J].Inicio;
-              PF := FPeriodos[J].Fin;
-              OvStart := PI;
-              if NodeInicio > OvStart then OvStart := NodeInicio;
-              OvEnd := PF;
-              if NodeFin < OvEnd then OvEnd := NodeFin;
-              if OvEnd <= OvStart then Continue;
-
-              OverlapMin := MinutesBetween(OvEnd, OvStart);
-              MinutsNode := DurMin * (OverlapMin / NodeDuracionMin);
-              HorasMat[CIdx, J] := HorasMat[CIdx, J] + (MinutsNode / 60.0);
+              // Localizar el periodo en el que cae FechaEntrega
+              for J := 0 to High(FPeriodos) do
+                if (FechaEntrega >= FPeriodos[J].Inicio) and
+                   (FechaEntrega < FPeriodos[J].Fin) then
+                begin
+                  HorasMat[CIdx, J] := HorasMat[CIdx, J] + (DurMin / 60.0);
+                  Break;
+                end;
             end;
           end;
           Q.Next;
@@ -569,7 +536,7 @@ begin
       end;
     end;
 
-    // Calcular % per cada (centre, periode) usant capacitat del calendari
+    // Calcular % compromiso = horas_entrega / horas_capacidad
     for I := 0 to High(FCentres) do
     begin
       Cal := nil;
@@ -577,10 +544,10 @@ begin
         Cal := DMPlanner.CentresRepo.GetCalendarFor(FCentres[I].Id);
       for J := 0 to High(FPeriodos) do
       begin
-        HorasPlan := HorasMat[I, J];
+        HorasEntrega := HorasMat[I, J];
         if Cal = nil then
         begin
-          FMatrix[I, J] := -1; // sense capacitat
+          FMatrix[I, J] := -1;
           Continue;
         end;
         CapacityMin := Cal.WorkingMinutesBetween(FPeriodos[J].Inicio, FPeriodos[J].Fin);
@@ -590,7 +557,7 @@ begin
           Continue;
         end;
         HorasCap := CapacityMin / 60.0;
-        Pct := (HorasPlan / HorasCap) * 100.0;
+        Pct := (HorasEntrega / HorasCap) * 100.0;
         FMatrix[I, J] := Pct;
       end;
     end;
@@ -603,7 +570,7 @@ begin
   pbLegend.Invalidate;
 end;
 
-function TfrmHeatmapCargaCentro.ColorPorPct(P: Double; out TextDark: Boolean): TColor;
+function TfrmHeatmapEntregasVsCarga.ColorPorPct(P: Double; out TextDark: Boolean): TColor;
 begin
   TextDark := True;
   if P < 0 then
@@ -640,31 +607,27 @@ begin
   end;
 end;
 
-function TfrmHeatmapCargaCentro.FormatPct(P: Double): string;
+function TfrmHeatmapEntregasVsCarga.FormatPct(P: Double): string;
 begin
   if P < 0 then Exit('---');
   Result := FormatFloat('0', P) + '%';
 end;
 
-procedure TfrmHeatmapCargaCentro.ComputeMatrixSize(out AWidth, AHeight: Integer);
+procedure TfrmHeatmapEntregasVsCarga.ComputeMatrixSize(out AWidth, AHeight: Integer);
 var
   NumCen, NumPer, TempW, TempH: Integer;
 begin
   NumCen := Length(FCentres);
   NumPer := Length(FPeriodos);
-  TempW := NumPer * MTX_CELL_W;
-  TempW := TempW + MTX_ROW_LABEL_W;
-  TempW := TempW + MTX_PADDING;
-  TempH := NumCen * MTX_CELL_H;
-  TempH := TempH + MTX_COL_HEADER_H;
-  TempH := TempH + MTX_PADDING;
+  TempW := NumPer * MTX_CELL_W + MTX_ROW_LABEL_W + MTX_PADDING;
+  TempH := NumCen * MTX_CELL_H + MTX_COL_HEADER_H + MTX_PADDING;
   AWidth := TempW;
   AHeight := TempH;
   if AWidth < sbMatrix.ClientWidth then AWidth := sbMatrix.ClientWidth;
   if AHeight < sbMatrix.ClientHeight then AHeight := sbMatrix.ClientHeight;
 end;
 
-procedure TfrmHeatmapCargaCentro.pbLegendPaint(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.pbLegendPaint(Sender: TObject);
 var
   C: TCanvas;
   X, Y, BoxW, BoxH, Gap: Integer;
@@ -709,7 +672,7 @@ begin
   Chip(CLR_R_SOBRE,  '>120%',      False);
 end;
 
-procedure TfrmHeatmapCargaCentro.pbMatrixPaint(Sender: TObject);
+procedure TfrmHeatmapEntregasVsCarga.pbMatrixPaint(Sender: TObject);
 var
   C: TCanvas;
   I, J, X, Y, NumCen, NumPer: Integer;
@@ -741,7 +704,7 @@ begin
     Exit;
   end;
 
-  // ----- Cabecera de periodos -----
+  // Cabecera de periodos
   C.Font.Size := 9;
   C.Font.Style := [fsBold];
   C.Brush.Color := CLR_HEADER_BG;
@@ -759,7 +722,7 @@ begin
     C.Brush.Style := bsSolid;
   end;
 
-  // ----- Columna de centros (nombres) -----
+  // Columna de centros
   C.Brush.Color := CLR_HEADER_BG;
   R := Rect(0, MTX_COL_HEADER_H, MTX_ROW_LABEL_W, MTX_COL_HEADER_H + NumCen * MTX_CELL_H);
   C.FillRect(R);
@@ -778,11 +741,10 @@ begin
     C.Brush.Style := bsSolid;
   end;
 
-  // Esquina superior izquierda
   C.Brush.Color := CLR_HEADER_BG;
   C.FillRect(Rect(0, 0, MTX_ROW_LABEL_W, MTX_COL_HEADER_H));
 
-  // ----- Celdas -----
+  // Celdas
   C.Font.Style := [fsBold];
   C.Font.Size := 10;
   for I := 0 to NumCen - 1 do
@@ -806,7 +768,7 @@ begin
       C.Brush.Style := bsSolid;
     end;
 
-  // ----- Lineas de grid -----
+  // Grid
   C.Pen.Color := CLR_GRID_LINE;
   C.Pen.Style := psSolid;
   for J := 0 to NumPer do

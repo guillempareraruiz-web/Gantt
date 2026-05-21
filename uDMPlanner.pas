@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, Data.DB, Data.Win.ADODB,
-  uDataConnector, uSQLServerConnector, uDBMigrations,
+  uDataConnector, uSQLServerConnector, uDBMigrations, uUserPreferencesRepo,
   uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo;
 
 function UserCanAccessProject(AUserId, AProjectId: Integer): Boolean;
@@ -40,6 +40,7 @@ type
     FCentresRepo: TCentresRepo;
     FNodesRepo: TNodesRepo;
     FNodeDataRepo: TNodeDataRepo;
+    FUserPrefs: TUserPreferencesRepo;
     procedure BuildConnectionString;
     procedure SetCodigoEmpresa(AValue: SmallInt);
   public
@@ -67,6 +68,7 @@ type
     property CentresRepo: TCentresRepo read FCentresRepo;
     property NodesRepo: TNodesRepo read FNodesRepo;
     property NodeDataRepo: TNodeDataRepo read FNodeDataRepo;
+    property UserPrefs: TUserPreferencesRepo read FUserPrefs;
 
     // Acceso al conector
     property Connector: IGanttDataConnector read FConnector;
@@ -134,6 +136,7 @@ begin
   FCentresRepo := TCentresRepo.Create(ADOConnection, FCalendarsRepo);
   FNodesRepo := TNodesRepo.Create(ADOConnection);
   FNodeDataRepo := TNodeDataRepo.Create;
+  FUserPrefs := TUserPreferencesRepo.Create(ADOConnection, FCodigoEmpresa);
 end;
 
 procedure TDMPlanner.SetCodigoEmpresa(AValue: SmallInt);
@@ -143,10 +146,13 @@ begin
   // la columna CodigoEmpresa de las tablas FS_PL_*.
   if Assigned(FConnectorObj) and (FConnectorObj is TSQLServerConnector) then
     TSQLServerConnector(FConnectorObj).CodigoEmpresa := AValue;
+  if Assigned(FUserPrefs) then
+    FUserPrefs.CodigoEmpresa := AValue;
 end;
 
 destructor TDMPlanner.Destroy;
 begin
+  FUserPrefs.Free;
   FNodeDataRepo.Free;
   FNodesRepo.Free;
   FCentresRepo.Free;
