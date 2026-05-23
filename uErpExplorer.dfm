@@ -24,7 +24,7 @@ object frmErpExplorer: TfrmErpExplorer
     Height = 645
     Align = alClient
     TabOrder = 0
-    Properties.ActivePage = tabExplorador
+    Properties.ActivePage = tabConfiguracion
     Properties.CustomButtons.Buttons = <>
     ClientRectBottom = 643
     ClientRectLeft = 2
@@ -32,10 +32,6 @@ object frmErpExplorer: TfrmErpExplorer
     ClientRectTop = 25
     object tabConfiguracion: TcxTabSheet
       Caption = 'Configuraci'#243'n'
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object pnlErpActivo: TPanel
         Left = 0
         Top = 0
@@ -44,7 +40,6 @@ object frmErpExplorer: TfrmErpExplorer
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
-        ExplicitWidth = 1092
         object lblErpActivo: TLabel
           Left = 12
           Top = 10
@@ -68,8 +63,6 @@ object frmErpExplorer: TfrmErpExplorer
         Align = alBottom
         BevelOuter = bvNone
         TabOrder = 1
-        ExplicitTop = 565
-        ExplicitWidth = 1092
         object lblResultadoConexion: TLabel
           Left = 196
           Top = 16
@@ -97,8 +90,6 @@ object frmErpExplorer: TfrmErpExplorer
         Properties.ActivePage = tabSage200
         Properties.CustomButtons.Buttons = <>
         Properties.HideTabs = True
-        ExplicitWidth = 1092
-        ExplicitHeight = 529
         ClientRectBottom = 531
         ClientRectLeft = 1
         ClientRectRight = 1095
@@ -229,15 +220,11 @@ object frmErpExplorer: TfrmErpExplorer
         object tabErpProximamente: TcxTabSheet
           Caption = 'Pr'#243'ximamente'
           ImageIndex = 1
-          ExplicitLeft = 0
-          ExplicitTop = 0
-          ExplicitWidth = 0
-          ExplicitHeight = 0
           object lblProximamente: TLabel
             Left = 0
             Top = 0
-            Width = 359
-            Height = 21
+            Width = 1094
+            Height = 530
             Align = alClient
             Alignment = taCenter
             Caption = 'Configuraci'#243'n para este ERP a'#250'n no implementada.'
@@ -248,6 +235,8 @@ object frmErpExplorer: TfrmErpExplorer
             Font.Style = [fsItalic]
             ParentFont = False
             Layout = tlCenter
+            ExplicitWidth = 359
+            ExplicitHeight = 21
           end
         end
       end
@@ -255,10 +244,6 @@ object frmErpExplorer: TfrmErpExplorer
     object tabExplorador: TcxTabSheet
       Caption = 'Explorador'
       ImageIndex = 1
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       object splitVertical: TSplitter
         Left = 220
         Top = 0
@@ -355,18 +340,10 @@ object frmErpExplorer: TfrmErpExplorer
             ClientRectTop = 1
             object tabParamNinguno: TcxTabSheet
               Caption = 'Ninguno'
-              ExplicitLeft = 0
-              ExplicitTop = 0
-              ExplicitWidth = 0
-              ExplicitHeight = 0
             end
             object tabParamSerieNumEj: TcxTabSheet
               Caption = 'SerieNumEj'
               ImageIndex = 1
-              ExplicitLeft = 0
-              ExplicitTop = 0
-              ExplicitWidth = 0
-              ExplicitHeight = 0
               object lblSerie: TLabel
                 Left = 8
                 Top = 8
@@ -415,10 +392,6 @@ object frmErpExplorer: TfrmErpExplorer
             object tabParamArtVer: TcxTabSheet
               Caption = 'ArtVer'
               ImageIndex = 2
-              ExplicitLeft = 0
-              ExplicitTop = 0
-              ExplicitWidth = 0
-              ExplicitHeight = 0
               object lblArticulo: TLabel
                 Left = 8
                 Top = 8
@@ -469,10 +442,6 @@ object frmErpExplorer: TfrmErpExplorer
             object tabParamFiltro: TcxTabSheet
               Caption = 'Filtro'
               ImageIndex = 3
-              ExplicitLeft = 0
-              ExplicitTop = 0
-              ExplicitWidth = 0
-              ExplicitHeight = 0
               object lblFiltro: TLabel
                 Left = 8
                 Top = 8
@@ -492,10 +461,6 @@ object frmErpExplorer: TfrmErpExplorer
             object tabParamIdNum: TcxTabSheet
               Caption = 'IdNum'
               ImageIndex = 4
-              ExplicitLeft = 0
-              ExplicitTop = 0
-              ExplicitWidth = 0
-              ExplicitHeight = 0
               object lblIdNum: TLabel
                 Left = 8
                 Top = 8
@@ -515,10 +480,6 @@ object frmErpExplorer: TfrmErpExplorer
             object tabParamFiltroFechas: TcxTabSheet
               Caption = 'FiltroFechas'
               ImageIndex = 5
-              ExplicitLeft = 0
-              ExplicitTop = 0
-              ExplicitWidth = 0
-              ExplicitHeight = 0
               object lblFiltro2: TLabel
                 Left = 8
                 Top = 8

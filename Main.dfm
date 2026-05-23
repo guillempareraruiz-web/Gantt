@@ -192,6 +192,10 @@ object Form1: TForm1
         Caption = 'Selector de ERP...'
         OnClick = SelectorErp1Click
       end
+      object SincronizarERP1: TMenuItem
+        Caption = 'Sincronizar con ERP...'
+        OnClick = SincronizarERP1Click
+      end
       object AsistenteInstalacion1: TMenuItem
         Caption = 'Asistente de instalaci'#243'n...'
         OnClick = AsistenteInstalacion1Click

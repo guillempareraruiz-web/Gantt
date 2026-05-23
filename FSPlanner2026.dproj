@@ -130,6 +130,21 @@
         <DCCReference Include="uGestionOperaris.pas">
             <Form>frmGestionOperaris</Form>
         </DCCReference>
+        <DCCReference Include="uMatrizPolivalencia.pas">
+            <Form>frmMatrizPolivalencia</Form>
+        </DCCReference>
+        <DCCReference Include="uHeatmapCargaCentro.pas">
+            <Form>frmHeatmapCargaCentro</Form>
+        </DCCReference>
+        <DCCReference Include="uHeatmapCargaOperario.pas">
+            <Form>frmHeatmapCargaOperario</Form>
+        </DCCReference>
+        <DCCReference Include="uHeatmapEntregasVsCarga.pas">
+            <Form>frmHeatmapEntregasVsCarga</Form>
+        </DCCReference>
+        <DCCReference Include="uHistogramasOperarios.pas">
+            <Form>frmHistogramasOperarios</Form>
+        </DCCReference>
         <DCCReference Include="uOperarioFilterPopup.pas"/>
         <DCCReference Include="uLinkEditor.pas">
             <Form>frmLinkEditor</Form>
@@ -143,6 +158,25 @@
         <DCCReference Include="uGestionCentres.pas">
             <Form>frmGestionCentres</Form>
         </DCCReference>
+        <DCCReference Include="uMaquinasRepo.pas"/>
+        <DCCReference Include="uGestionMaquinas.pas">
+            <Form>frmGestionMaquinas</Form>
+        </DCCReference>
+        <DCCReference Include="uAsignarMaquinasCentro.pas">
+            <Form>frmAsignarMaquinasCentro</Form>
+        </DCCReference>
+        <DCCReference Include="uMaquinasCustomCols.pas">
+            <Form>frmMaquinasCustomCols</Form>
+        </DCCReference>
+        <DCCReference Include="uMaquinasCustomColEdit.pas">
+            <Form>frmMaquinasCustomColEdit</Form>
+        </DCCReference>
+        <DCCReference Include="uOperariosCustomCols.pas">
+            <Form>frmOperariosCustomCols</Form>
+        </DCCReference>
+        <DCCReference Include="uOperariosCustomColEdit.pas">
+            <Form>frmOperariosCustomColEdit</Form>
+        </DCCReference>
         <DCCReference Include="uMarkerEditor.pas">
             <Form>frmMarkerEditor</Form>
         </DCCReference>
@@ -153,6 +187,17 @@
         <DCCReference Include="uMoldeRepo.pas"/>
         <DCCReference Include="uGestionMoldes.pas">
             <Form>frmGestionMoldes</Form>
+        </DCCReference>
+        <DCCReference Include="uMoldeRepoSQL.pas"/>
+        <DCCReference Include="uUtillajesRepo.pas"/>
+        <DCCReference Include="uGestionUtillajes.pas">
+            <Form>frmGestionUtillajes</Form>
+        </DCCReference>
+        <DCCReference Include="uUtillajePicker.pas">
+            <Form>frmUtillajePicker</Form>
+        </DCCReference>
+        <DCCReference Include="uOperacionPicker.pas">
+            <Form>frmOperacionPicker</Form>
         </DCCReference>
         <DCCReference Include="uSampleDataGenerator.pas"/>
         <DCCReference Include="uGestionCalendarios.pas">
@@ -167,7 +212,20 @@
         <DCCReference Include="uCalendarExceptionEditDialog.pas">
             <Form>frmCalendarExceptionEditDialog</Form>
         </DCCReference>
+        <DCCReference Include="uFestivosImportDialog.pas">
+            <Form>frmFestivosImport</Form>
+        </DCCReference>
+        <DCCReference Include="uExcepcionRecurrenteDialog.pas">
+            <Form>frmExcepcionRecurrente</Form>
+        </DCCReference>
+        <DCCReference Include="uHelpViewer.pas">
+            <Form>frmHelpViewer</Form>
+        </DCCReference>
         <DCCReference Include="uKanbanBoard.pas"/>
+        <DCCReference Include="uVistaKanban.pas">
+            <Form>VistaKanbanForm</Form>
+        </DCCReference>
+        <DCCReference Include="uPlanAutoSaver.pas"/>
         <DCCReference Include="uDispatchList.pas">
             <Form>frmDispatchList</Form>
         </DCCReference>
@@ -182,6 +240,9 @@
         </DCCReference>
         <DCCReference Include="uUserPrefs.pas"/>
         <DCCReference Include="uBacklogScheduler.pas"/>
+        <DCCReference Include="uPlanningEngineTypes.pas"/>
+        <DCCReference Include="uPlanningEngineFCS.pas"/>
+        <DCCReference Include="uPlanningEngine.pas"/>
         <DCCReference Include="uBacklogSchedParams.pas">
             <Form>frmBacklogSchedParams</Form>
             <FormType>dfm</FormType>
@@ -223,6 +284,15 @@
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="uOperatorAbsencesRepo.pas"/>
+        <DCCReference Include="uAusenciaEdit.pas">
+            <Form>frmAusenciaEdit</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperarioAusencias.pas">
+            <Form>frmOperarioAusencias</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uOperationTypesRepo.pas"/>
         <DCCReference Include="uPlanProdTypes.pas"/>
         <DCCReference Include="uHabilidadRepo.pas"/>
         <DCCReference Include="uPlanProdEngine.pas"/>
@@ -267,15 +337,6 @@
             <Form>frmScoreBreakdown</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uAusenciaEdit.pas">
-            <Form>frmAusenciaEdit</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uOperarioAusencias.pas">
-            <Form>frmOperarioAusencias</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uOperationTypesRepo.pas"/>
         <DCCReference Include="uPlanningRulesEditor.pas">
             <Form>frmPlanningRulesEditor</Form>
             <FormType>dfm</FormType>
@@ -292,6 +353,7 @@
             <Form>DMPlanner</Form>
             <DesignClass>TDataModule</DesignClass>
         </DCCReference>
+        <DCCReference Include="uUserPreferencesRepo.pas"/>
         <DCCReference Include="uLogin.pas">
             <Form>frmLogin</Form>
         </DCCReference>
@@ -365,6 +427,15 @@
         <DCCReference Include="uOFInspector.pas">
             <Form>frmOFInspector</Form>
         </DCCReference>
+        <DCCReference Include="uErpReader.pas"/>
+        <DCCReference Include="uErpReaderFactory.pas"/>
+        <DCCReference Include="uSage200Reader.pas"/>
+        <DCCReference Include="uPedidoDetalle.pas">
+            <Form>frmPedidoDetalle</Form>
+        </DCCReference>
+        <DCCReference Include="uFormulaArticuloViewer.pas">
+            <Form>frmFormulaArticuloViewer</Form>
+        </DCCReference>
         <DCCReference Include="uInstallWizard.pas">
             <Form>frmInstallWizard</Form>
         </DCCReference>
@@ -382,6 +453,24 @@
         <DCCReference Include="uDBConfig.pas">
             <Form>frmDBConfig</Form>
         </DCCReference>
+        <DCCReference Include="uSincronizarERP.pas">
+            <Form>frmSincronizarERP</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uErpSyncTypes.pas"/>
+        <DCCReference Include="uErpSyncRepo.pas"/>
+        <DCCReference Include="uCardLayout.pas"/>
+        <DCCReference Include="uCardLayoutEditor.pas">
+            <Form>frmCardLayoutEditor</Form>
+        </DCCReference>
+        <DCCReference Include="uCustomFieldDefs.pas"/>
+        <DCCReference Include="uCustomFieldEditor.pas">
+            <Form>frmCustomFieldEditor</Form>
+        </DCCReference>
+        <DCCReference Include="uPlanningPreview.pas">
+            <Form>frmPlanningPreview</Form>
+        </DCCReference>
+        <DCCReference Include="uPlanningRules.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -404,6 +493,12 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                    <Platform Name="Win32">
+                        <RemoteName>FSPlanner2026.exe</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
                 <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>

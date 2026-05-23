@@ -35,6 +35,7 @@ type
     // IErpReader
     function GetSistemaNombre: string;
     procedure EnsureConnected;
+    procedure EnsureConnectedCore(ARequireEmpresa: Boolean);
     function ReadPedidoCabecera(const ASerie: string; ANumero: Integer;
       AEjercicio: SmallInt): TPedidoCabecera;
     function ReadPedidoLineas(const ASerie: string; ANumero: Integer;
@@ -77,8 +78,8 @@ type
     function ReadGruposHorarios: TArray<TGrupoHorarioErp>;
     function ReadModelosHorarios: TArray<TModeloHorarioErp>;
     function ReadLineasModeloHorario(AModeloHorario: Integer): TArray<TLineaModeloHorarioErp>;
-    function ReadCalendarioCentro(const ACentroTrabajo: string;
-      AFechaDesde, AFechaHasta: TDateTime): TArray<TCalendarioCentroErp>;
+    function ReadCalendarioLaboral(const AGrupoHorario: string;
+      AFechaDesde, AFechaHasta: TDateTime): TArray<TCalendarioLaboralErp>;
     function ReadStockArticulo(const ACodigoArticulo, ACodigoAlmacen,
       APartida: string; AEjercicio: SmallInt;
       APeriodo: SmallInt): TArray<TStockArticuloErp>;
@@ -201,9 +202,14 @@ end;
 
 procedure TSage200Reader.EnsureConnected;
 begin
+  EnsureConnectedCore(True);
+end;
+
+procedure TSage200Reader.EnsureConnectedCore(ARequireEmpresa: Boolean);
+begin
   if not FCfg.IsValid then
     raise Exception.Create('Configuraci'#243'n Sage 200 no v'#225'lida.');
-  if FCodigoEmpresa = 0 then
+  if ARequireEmpresa and (FCodigoEmpresa = 0) then
     raise Exception.Create('C'#243'digo de empresa Sage no v'#225'lido en la configuraci'#243'n.');
 
   if FConn = nil then
@@ -885,7 +891,9 @@ var
   Idx: Integer;
 begin
   SetLength(Result, 0);
-  EnsureConnected;
+  // ReadEmpresas se llama ANTES de que el usuario seleccione una empresa,
+  // por tanto no exigimos FCodigoEmpresa.
+  EnsureConnectedCore(False);
 
   Q := TADOQuery.Create(nil);
   try
@@ -2005,45 +2013,45 @@ begin
   end;
 end;
 
-function TSage200Reader.ReadCalendarioCentro(const ACentroTrabajo: string;
-  AFechaDesde, AFechaHasta: TDateTime): TArray<TCalendarioCentroErp>;
+function TSage200Reader.ReadCalendarioLaboral(const AGrupoHorario: string;
+  AFechaDesde, AFechaHasta: TDateTime): TArray<TCalendarioLaboralErp>;
 var
   Q: TADOQuery;
-  C: TCalendarioCentroErp;
+  C: TCalendarioLaboralErp;
   Idx: Integer;
-  Centro: string;
+  Grupo: string;
   SQL: string;
 begin
   SetLength(Result, 0);
   EnsureConnected;
 
-  Centro := Trim(ACentroTrabajo);
+  Grupo := Trim(AGrupoHorario);
 
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := FConn;
     SQL :=
-      'SELECT CentroTrabajo, Fecha, ModeloHorario, Duracion, DuracionDescanso ' +
-      'FROM dbo.CalendarioCentroTrabajo ' +
+      'SELECT GrupoHorario, Fecha, ModeloHorario, Duracion, DuracionDescanso ' +
+      'FROM dbo.CalendarioLaboral ' +
       'WHERE CodigoEmpresa = :CE ' +
       '  AND Fecha BETWEEN :FD AND :FH ';
-    if Centro <> '' then
-      SQL := SQL + 'AND CentroTrabajo = :CT ';
-    SQL := SQL + 'ORDER BY CentroTrabajo, Fecha';
+    if Grupo <> '' then
+      SQL := SQL + 'AND GrupoHorario = :GH ';
+    SQL := SQL + 'ORDER BY GrupoHorario, Fecha';
     Q.SQL.Text := SQL;
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
     Q.Parameters.ParamByName('FD').Value := AFechaDesde;
     Q.Parameters.ParamByName('FH').Value := AFechaHasta;
-    if Centro <> '' then
-      Q.Parameters.ParamByName('CT').Value := Centro;
+    if Grupo <> '' then
+      Q.Parameters.ParamByName('GH').Value := Grupo;
     Q.Open;
 
     SetLength(Result, Q.RecordCount);
     Idx := 0;
     while not Q.Eof do
     begin
-      C := Default(TCalendarioCentroErp);
-      C.CentroTrabajo    := Q.FieldByName('CentroTrabajo').AsString;
+      C := Default(TCalendarioLaboralErp);
+      C.GrupoHorario     := Q.FieldByName('GrupoHorario').AsString;
       C.Fecha            := Q.FieldByName('Fecha').AsDateTime;
       C.ModeloHorario    := Q.FieldByName('ModeloHorario').AsInteger;
       C.Duracion         := Q.FieldByName('Duracion').AsFloat;

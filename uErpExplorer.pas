@@ -59,7 +59,7 @@ type
     eeGruposHorarios,
     eeModelosHorarios,
     eeLineasModeloHorario,
-    eeCalendarioCentro,
+    eeCalendarioLaboral,
     eeOrdenesFabricacion,
     eeOrdenesTrabajo,
     eeOperacionesOT,
@@ -208,7 +208,7 @@ type
     procedure LeerGruposHorarios(AReader: IErpReader);
     procedure LeerModelosHorarios(AReader: IErpReader);
     procedure LeerLineasModeloHorario(AReader: IErpReader);
-    procedure LeerCalendarioCentro(AReader: IErpReader);
+    procedure LeerCalendarioLaboral(AReader: IErpReader);
     procedure LeerFamilias(AReader: IErpReader);
     procedure LeerClientes(AReader: IErpReader);
     procedure LeerAlmacenes(AReader: IErpReader);
@@ -257,7 +257,7 @@ const
     (Caption: 'Grupos horarios';           Parametros: []),
     (Caption: 'Modelos horarios';          Parametros: []),
     (Caption: 'L'#237'neas modelo horario';      Parametros: [pnIdNumerico]),
-    (Caption: 'Calendario centro';         Parametros: [pnFiltroCodigo, pnRangoFechas]),
+    (Caption: 'Calendario laboral';        Parametros: [pnFiltroCodigo, pnRangoFechas]),
     (Caption: 'OFs (cabecera)';            Parametros: [pnSerieNumeroEjercicio]),
     (Caption: 'OTs';                       Parametros: [pnSerieNumeroEjercicio]),
     (Caption: 'Operaciones OT';            Parametros: [pnSerieNumeroEjercicio]),
@@ -721,7 +721,7 @@ begin
         eeGruposHorarios:       LeerGruposHorarios(Reader);
         eeModelosHorarios:      LeerModelosHorarios(Reader);
         eeLineasModeloHorario:  LeerLineasModeloHorario(Reader);
-        eeCalendarioCentro:     LeerCalendarioCentro(Reader);
+        eeCalendarioLaboral:    LeerCalendarioLaboral(Reader);
         eeFamilias:             LeerFamilias(Reader);
         eeClientes:             LeerClientes(Reader);
         eeAlmacenes:            LeerAlmacenes(Reader);
@@ -867,14 +867,14 @@ begin
   LogResultado('L'#237'neas modelo horario', Length(Data), SW.ElapsedMilliseconds);
 end;
 
-procedure TfrmErpExplorer.LeerCalendarioCentro(AReader: IErpReader);
+procedure TfrmErpExplorer.LeerCalendarioLaboral(AReader: IErpReader);
 var
   SW: TStopwatch;
-  Data: TArray<TCalendarioCentroErp>;
-  Centro: string;
+  Data: TArray<TCalendarioLaboralErp>;
+  Grupo: string;
   FD, FH: TDateTime;
 begin
-  Centro := Trim(edFiltro2.Text);
+  Grupo := Trim(edFiltro2.Text);
   FD := dtFechaDesde.Date;
   FH := dtFechaHasta.Date;
   if (FD = 0) or (FH = 0) then
@@ -888,10 +888,10 @@ begin
     Exit;
   end;
   SW := TStopwatch.StartNew;
-  Data := AReader.ReadCalendarioCentro(Centro, FD, FH);
+  Data := AReader.ReadCalendarioLaboral(Grupo, FD, FH);
   SW.Stop;
-  TRttiGridFiller.Fill<TCalendarioCentroErp>(cdsResultados, grdResultadosView, Data, MAX_COLUMN_WIDTH);
-  LogResultado('Calendario centro', Length(Data), SW.ElapsedMilliseconds);
+  TRttiGridFiller.Fill<TCalendarioLaboralErp>(cdsResultados, grdResultadosView, Data, MAX_COLUMN_WIDTH);
+  LogResultado('Calendario laboral', Length(Data), SW.ElapsedMilliseconds);
 end;
 
 procedure TfrmErpExplorer.LeerFamilias(AReader: IErpReader);

@@ -30,6 +30,7 @@ type
     Proyectos1: TMenuItem;
     ConfigEmpresa1: TMenuItem;
     SelectorErp1: TMenuItem;
+    SincronizarERP1: TMenuItem;
     AsistenteInstalacion1: TMenuItem;
     GenerarNodosDemo1: TMenuItem;
     Salir1: TMenuItem;
@@ -88,6 +89,7 @@ type
     procedure Proyectos1Click(Sender: TObject);
     procedure ConfigEmpresa1Click(Sender: TObject);
     procedure SelectorErp1Click(Sender: TObject);
+    procedure SincronizarERP1Click(Sender: TObject);
     procedure StockCockpit1Click(Sender: TObject);
     procedure ArticleDetail1Click(Sender: TObject);
     procedure DashboardOperativo1Click(Sender: TObject);
@@ -206,7 +208,7 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uCuadroPlanificacionDelDia, uGestionTurnos,
   uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
   uGestionProyectos, uGestionAreas, uGestionDepartamentos,
-  uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uInstallWizard,
+  uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uSincronizarERP, uInstallWizard,
   uDataConnector, uUserPrefs,
   uErpReader, uErpReaderFactory, uArticleDetail, uStockCockpit,
   uDashboardOperativo;
@@ -1402,6 +1404,18 @@ begin
     Exit;
   end;
   TfrmErpSelector.Execute;
+end;
+
+procedure TForm1.SincronizarERP1Click(Sender: TObject);
+var
+  F: TfrmSincronizarERP;
+begin
+  F := TfrmSincronizarERP.Create(Self);
+  try
+    F.ShowModal;
+  finally
+    F.Free;
+  end;
 end;
 
 procedure TForm1.StockCockpit1Click(Sender: TObject);

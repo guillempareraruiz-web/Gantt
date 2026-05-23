@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"ReadEmpresas\\\\|ReadCentrosTrabajo\\\\|ReadMaquinas\\\\|ReadOperarios\\\\|ReadGruposHorarios\" \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\uFestivosImportDialog.pas\" 2>nul | head -10)"
+    ],
+    "additionalDirectories": [
+      "d:\\PROJECTES\\GANTT\\GANTT"
+    ]
+  }
+}

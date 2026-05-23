@@ -625,8 +625,14 @@ type
   // fecha) indica el modelo horario que aplica + duracion real de jornada
   // y descanso.
   // ==========================================================================
-  TCalendarioCentroErp = record
-    CentroTrabajo: string;
+  // ==========================================================================
+  // Una fila del calendario laboral del ERP. A Sage 200 la taula es
+  // `CalendarioLaboral` amb clau (CodigoEmpresa, GrupoHorario, Fecha).
+  // Per cada (grup, dia): quin model horari aplica i durada efectiva.
+  // Duracion = 0 indica dia no laborable (festiu o cap de setmana).
+  // ==========================================================================
+  TCalendarioLaboralErp = record
+    GrupoHorario: string;
     Fecha: TDateTime;
     ModeloHorario: Integer;
     Duracion: Double;

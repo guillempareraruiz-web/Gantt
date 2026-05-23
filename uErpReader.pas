@@ -138,11 +138,12 @@ type
     // Linees del model indicat. Si AModeloHorario<=0 retorna totes les linees
     // de tots els models (util per inspeccio rapida).
     function ReadLineasModeloHorario(AModeloHorario: Integer): TArray<TLineaModeloHorarioErp>;
-    // Calendari diari d'un centre entre dues dates inclosivament. Si
-    // ACentroTrabajo es buit, retorna totes les files dels centres dins el
-    // rang.
-    function ReadCalendarioCentro(const ACentroTrabajo: string;
-      AFechaDesde, AFechaHasta: TDateTime): TArray<TCalendarioCentroErp>;
+    // Calendari laboral del ERP per grup horari entre dues dates inclosivament.
+    // Si AGrupoHorario es buit, retorna totes les files de tots els grups
+    // dins el rang. Una fila per (Grupo, Fecha): quin model toca aquell dia
+    // amb la durada efectiva (Duracion=0 = dia no laborable).
+    function ReadCalendarioLaboral(const AGrupoHorario: string;
+      AFechaDesde, AFechaHasta: TDateTime): TArray<TCalendarioLaboralErp>;
 
     // -- STOCK ------------------------------------------------------------
     // Detall per partida/lot (AcumuladoStock). Si AEjercicio/APeriodo <= 0,

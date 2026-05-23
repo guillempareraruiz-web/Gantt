@@ -122,12 +122,14 @@ object frmGanttDatesDialog: TfrmGanttDatesDialog
     object dtFechaInicio: TcxDateEdit
       Left = 160
       Top = 20
+      Properties.ShowTime = False
       TabOrder = 0
       Width = 150
     end
     object dtFechaFin: TcxDateEdit
       Left = 160
       Top = 60
+      Properties.ShowTime = False
       TabOrder = 1
       Width = 150
     end

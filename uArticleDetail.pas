@@ -1,5 +1,4 @@
 ﻿unit uArticleDetail;
-
 // ============================================================================
 // Article Detail — vista profunda de UN art'iculo con multiples pesta'nas.
 //
@@ -11,9 +10,7 @@
 // Filtros comunes (art'iculo + almacenes) en cabecera.
 // El form NO hace queries SQL directamente: todo va v'ia IErpReader.
 // ============================================================================
-
 interface
-
 uses
   System.SysUtils, System.StrUtils, System.Classes, System.UITypes,
   System.DateUtils, System.Math, System.Variants, System.Generics.Collections,
@@ -45,7 +42,6 @@ uses
   dxSkinTheBezier, dxSkinValentine, dxSkinVisualStudio2013Blue,
   dxSkinVisualStudio2013Dark, dxSkinVisualStudio2013Light, dxSkinVS2010,
   dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, dxBarBuiltInMenu;
-
 type
   TfrmArticleDetail = class(TForm)
     pgcTabs: TcxPageControl;
@@ -278,19 +274,14 @@ type
     class procedure Execute(const AReader: IErpReader;
       const ACodigoArticulo: string); overload;
   end;
-
 implementation
-
 uses
   uArticuloPicker;
-
 {$R *.dfm}
-
 class procedure TfrmArticleDetail.Execute(const AReader: IErpReader);
 begin
   Execute(AReader, '');
 end;
-
 class procedure TfrmArticleDetail.Execute(const AReader: IErpReader;
   const ACodigoArticulo: string);
 var
@@ -312,7 +303,6 @@ begin
     Frm.Free;
   end;
 end;
-
 procedure TfrmArticleDetail.FormCreate(Sender: TObject);
 begin
   dtFecha.Date := IncMonth(Date, 1);
@@ -337,7 +327,6 @@ begin
   SetLength(FHistorico, 0);
   LimpiarResultados;
 end;
-
 procedure TfrmArticleDetail.CargarAlmacenes;
 var
   Almacenes: TArray<TAlmacenErp>;
@@ -363,7 +352,6 @@ begin
     Item.ShortDescription := Almacenes[i].Codigo;
   end;
 end;
-
 function TfrmArticleDetail.AlmacenesSeleccionados: TArray<string>;
 var
   i, n: Integer;
@@ -378,7 +366,6 @@ begin
     end;
   SetLength(Result, n);
 end;
-
 procedure TfrmArticleDetail.LimpiarResultados;
 begin
   lblDescripcion.Caption := '';
@@ -417,7 +404,6 @@ begin
   lblCliResumen.Caption := '';
   if Assigned(pbHistorico) then pbHistorico.Invalidate;
 end;
-
 procedure TfrmArticleDetail.btnBuscarArticuloClick(Sender: TObject);
 var
   Cod, Desc: string;
@@ -435,7 +421,6 @@ begin
     lblDescripcion.Caption := Desc;
   end;
 end;
-
 procedure TfrmArticleDetail.CrearColumnasMovs;
 begin
   cdsMovs.FieldDefs.Clear;
@@ -450,7 +435,6 @@ begin
   cdsMovs.FieldDefs.Add('BajoMinimo', ftBoolean);
   cdsMovs.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.RellenarMovs(const AMovs: TArray<TMovStock>);
 var
   i: Integer;
@@ -493,7 +477,6 @@ begin
   end;
   grdMovsView.ApplyBestFit(nil, True);
 end;
-
 function TfrmArticleDetail.TipoToStr(ATipo: TTipoMovStock): string;
 begin
   case ATipo of
@@ -506,7 +489,6 @@ begin
     Result := '';
   end;
 end;
-
 procedure TfrmArticleDetail.PintarResumen(const AResumen: TResumenProyeccion);
 begin
   lblValStockInicial.Caption  := FormatFloat('#,##0.##', AResumen.StockInicial);
@@ -514,7 +496,6 @@ begin
   lblValTotalSalidas.Caption  := FormatFloat('-#,##0.##;+#,##0.##;0', AResumen.TotalSalidas);
   lblValStockFinal.Caption    := FormatFloat('#,##0.##', AResumen.StockFinal);
   lblValStockMinimo.Caption   := FormatFloat('#,##0.##', FStockMinimo);
-
   if AResumen.AlgunaVezBajoMinimo then
   begin
     lblAviso.Caption := Format(
@@ -533,7 +514,6 @@ begin
   end
   else
     lblAviso.Visible := False;
-
   if AResumen.StockFinal < 0 then
     lblValStockFinal.Font.Color := clRed
   else if (FStockMinimo > 0) and (AResumen.StockFinal < FStockMinimo) then
@@ -541,7 +521,6 @@ begin
   else
     lblValStockFinal.Font.Color := clWindowText;
 end;
-
 procedure TfrmArticleDetail.btnCalcularClick(Sender: TObject);
 var
   Almacenes: TArray<string>;
@@ -568,7 +547,6 @@ begin
     ShowMessage('Selecciona un art'#237'culo.');
     Exit;
   end;
-
   Almacenes := AlmacenesSeleccionados;
   FechaCorte := dtFecha.Date;
   mmoLog.Lines.Clear;
@@ -579,7 +557,6 @@ begin
   FDondeUsaCargado := False;
   FHistoricoCargado := False;
   lblDescripcion.Caption := FDescripcionArticulo;
-
   Screen.Cursor := crHourGlass;
   try
     try
@@ -598,7 +575,6 @@ begin
       LogInfo(Format('Art'#237'culo %s - %s (m'#237'nimo: %s)',
         [FCodigoArticulo, FDescripcionArticulo,
          FormatFloat('#,##0.##', FStockMinimo)]));
-
       // 2) Stock inicial: agregat de AcumuladoStock_Neco
       //    base = Saldo - Reservado, filtrant per almacenes si n'hi ha.
       StockBase := FReader.ReadStockDisponible(FCodigoArticulo, '');
@@ -614,7 +590,6 @@ begin
       end;
       LogInfo(Format('Stock inicial (Saldo - Reservado): %s',
         [FormatFloat('#,##0.##', StockInicial)]));
-
       // 3) Compras pendents (entrades futures)
       Compras := FReader.ReadEntradasFuturasFiltered(
         FCodigoArticulo, Almacenes, 0, FechaCorte);
@@ -622,7 +597,6 @@ begin
       for i := 0 to High(Compras) do
         PendRecibir := PendRecibir + Compras[i].UnidadesPendientes;
       LogInfo(Format('Pedidos compra pendientes: %d l'#237'neas', [Length(Compras)]));
-
       // 4) Ventas pendents (sortides futures)
       Ventas := FReader.ReadSalidasFuturasVenta(
         FCodigoArticulo, Almacenes, 0, FechaCorte);
@@ -630,7 +604,6 @@ begin
       for i := 0 to High(Ventas) do
         PendServir := PendServir + Ventas[i].UnidadesPendientes;
       LogInfo(Format('Pedidos venta pendientes: %d l'#237'neas', [Length(Ventas)]));
-
       // 5) OFs pendents (producci'o + consums)
       MovsOF := FReader.ReadMovimientosOFsPendientes(
         FCodigoArticulo, Almacenes, FechaCorte);
@@ -642,7 +615,6 @@ begin
         Exit;
       end;
     end;
-
     // 6) Projecta
     Proy := TStockProjector.Create;
     try
@@ -651,12 +623,10 @@ begin
       Proy.SetEntradasCompra(Compras);
       Proy.SetSalidasVenta(Ventas);
       Proy.SetMovimientosOF(MovsOF);
-
       RellenarMovs(Proy.MovimientosOrdenados);
       Resumen := Proy.Resumen(FechaCorte);
       PintarResumen(Resumen);
       ActualizarKPIs(StockTotal, StockInicial, PendRecibir, PendServir);
-
       LogInfo(Format('Stock proyectado a %s: %s',
         [FormatDateTime('dd/mm/yyyy', FechaCorte),
          FormatFloat('#,##0.##', Resumen.StockFinal)]));
@@ -667,7 +637,6 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 procedure TfrmArticleDetail.grdMovsViewCustomDrawCell(
   Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
   AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
@@ -685,28 +654,23 @@ begin
     ACanvas.Font.Color := clMaroon;
   end;
 end;
-
 procedure TfrmArticleDetail.LogInfo(const AMsg: string);
 begin
   mmoLog.Lines.Add(Format('[%s] %s',
     [FormatDateTime('hh:nn:ss', Now), AMsg]));
 end;
-
 procedure TfrmArticleDetail.LogError(const AMsg: string);
 begin
   mmoLog.Lines.Add(Format('[%s] ERROR: %s',
     [FormatDateTime('hh:nn:ss', Now), AMsg]));
 end;
-
 procedure TfrmArticleDetail.btnCerrarClick(Sender: TObject);
 begin
   Close;
 end;
-
 // ============================================================================
 // TAB "Stock por partida / lote"
 // ============================================================================
-
 procedure TfrmArticleDetail.CrearColumnasPartidas;
 begin
   cdsPartidas.FieldDefs.Clear;
@@ -723,7 +687,6 @@ begin
   cdsPartidas.FieldDefs.Add('UltimaSalida', ftDateTime);
   cdsPartidas.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.pgcTabsChange(Sender: TObject);
 begin
   if Trim(edArticulo.Text) = '' then Exit;
@@ -744,17 +707,14 @@ begin
   else if (pgcTabs.ActivePage = tabClientes) and (not FCliCargados) then
     CargarClientes;
 end;
-
 procedure TfrmArticleDetail.btnRecargarPartidasClick(Sender: TObject);
 begin
   CargarPartidas;
 end;
-
 procedure TfrmArticleDetail.chkSoloConSaldoClick(Sender: TObject);
 begin
   AplicarFiltroPartidas;
 end;
-
 procedure TfrmArticleDetail.CargarPartidas;
 var
   Almacenes: TArray<string>;
@@ -770,9 +730,7 @@ begin
   end;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
-
   Almacenes := AlmacenesSeleccionados;
-
   Screen.Cursor := crHourGlass;
   cdsPartidas.DisableControls;
   try
@@ -788,7 +746,6 @@ begin
         Exit;
       end;
     end;
-
     NFilas := 0;
     TotalSaldo := 0;
     TotalImporte := 0;
@@ -803,7 +760,6 @@ begin
       // Filtre exacte per article (ReadStockArticulo fa LIKE).
       if not SameText(Trim(Data[i].CodigoArticulo), FCodigoArticulo) then
         Continue;
-
       cdsPartidas.Append;
       cdsPartidas.FieldByName('Almacen').AsString    := Data[i].CodigoAlmacen;
       cdsPartidas.FieldByName('Partida').AsString    := Data[i].Partida;
@@ -831,7 +787,6 @@ begin
       TotalImporte := TotalImporte + Data[i].ImporteSaldo;
     end;
     cdsPartidas.First;
-
     if Length(Almacenes) > 0 then
       AlmFiltro := ' (' + IntToStr(Length(Almacenes)) + ' almac' + #233 + 'n/es)'
     else
@@ -841,7 +796,6 @@ begin
       [NFilas, AlmFiltro,
        FormatFloat('#,##0.##', TotalSaldo),
        FormatFloat('#,##0.##', TotalImporte)]);
-
     if grdPartidasView.ColumnCount = 0 then
     begin
       grdPartidasView.BeginUpdate;
@@ -856,7 +810,6 @@ begin
         grdPartidasView.EndUpdate;
       end;
     end;
-
     AplicarFiltroPartidas;
     FPartidasCargadas := True;
   finally
@@ -867,7 +820,6 @@ begin
   // dades reals ja al data controller.
   grdPartidasView.ApplyBestFit(nil, True);
 end;
-
 procedure TfrmArticleDetail.AplicarFiltroPartidas;
 begin
   if not cdsPartidas.Active then Exit;
@@ -880,7 +832,6 @@ begin
   else
     cdsPartidas.Filter := '';
 end;
-
 procedure TfrmArticleDetail.grdPartidasViewCustomDrawCell(
   Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
   AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
@@ -907,11 +858,9 @@ begin
     ACanvas.Brush.Color := $00CCFFFF;
   end;
 end;
-
 // ============================================================================
 // TAB "Movimientos futuros"
 // ============================================================================
-
 procedure TfrmArticleDetail.CrearColumnasMovsFut;
 begin
   cdsMovsFut.FieldDefs.Clear;
@@ -928,17 +877,14 @@ begin
   cdsMovsFut.FieldDefs.Add('Estado', ftInteger);
   cdsMovsFut.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.btnRecargarMovsFutClick(Sender: TObject);
 begin
   CargarMovsFut;
 end;
-
 procedure TfrmArticleDetail.MovFutTipoChange(Sender: TObject);
 begin
   AplicarFiltroMovsFut;
 end;
-
 procedure TfrmArticleDetail.CargarMovsFut;
 var
   Almacenes: TArray<string>;
@@ -956,11 +902,9 @@ begin
   end;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
-
   Almacenes := AlmacenesSeleccionados;
   Desde := dtMovsFutDesde.Date;
   Hasta := dtMovsFutHasta.Date;
-
   Screen.Cursor := crHourGlass;
   cdsMovsFut.DisableControls;
   try
@@ -979,11 +923,9 @@ begin
         Exit;
       end;
     end;
-
     NTot := 0;
     TotEntradas := 0;
     TotSalidas := 0;
-
     // Compras
     for i := 0 to High(Compras) do
     begin
@@ -1008,7 +950,6 @@ begin
       Inc(NTot);
       TotEntradas := TotEntradas + Compras[i].UnidadesPendientes;
     end;
-
     // Ventas
     for i := 0 to High(Ventas) do
     begin
@@ -1034,13 +975,11 @@ begin
       Inc(NTot);
       TotSalidas := TotSalidas + Ventas[i].UnidadesPendientes;
     end;
-
     // OFs (producci'o = entrada; consum = sortida)
     for i := 0 to High(MovsOF) do
     begin
       // Filtre per data inicial: el reader nomes filtra per FechaHasta
       if MovsOF[i].Fecha < Desde then Continue;
-
       cdsMovsFut.Append;
       cdsMovsFut.FieldByName('Fecha').AsDateTime := MovsOF[i].Fecha;
       if MovsOF[i].EsProduccion then
@@ -1069,18 +1008,15 @@ begin
       cdsMovsFut.Post;
       Inc(NTot);
     end;
-
     // Ordena per fecha
     cdsMovsFut.IndexFieldNames := 'Fecha';
     cdsMovsFut.First;
-
     lblMovsFutResumen.Caption := Format(
       '%d movimientos   Entradas: +%s   Salidas: -%s   Neto: %s',
       [NTot,
        FormatFloat('#,##0.##', TotEntradas),
        FormatFloat('#,##0.##', TotSalidas),
        FormatFloat('+#,##0.##;-#,##0.##;0', TotEntradas - TotSalidas)]);
-
     if grdMovsFutView.ColumnCount = 0 then
     begin
       grdMovsFutView.BeginUpdate;
@@ -1095,7 +1031,6 @@ begin
         grdMovsFutView.EndUpdate;
       end;
     end;
-
     AplicarFiltroMovsFut;
     FMovsFutCargados := True;
   finally
@@ -1104,7 +1039,6 @@ begin
   end;
   grdMovsFutView.ApplyBestFit(nil, True);
 end;
-
 procedure TfrmArticleDetail.AplicarFiltroMovsFut;
 var
   Parts: TArray<string>;
@@ -1141,7 +1075,6 @@ begin
   cdsMovsFut.Filter := Filtro;
   cdsMovsFut.Filtered := True;
 end;
-
 procedure TfrmArticleDetail.grdMovsFutViewCustomDrawCell(
   Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
   AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
@@ -1161,7 +1094,6 @@ begin
   else if Unidades < 0 then
     ACanvas.Font.Color := clMaroon;
 end;
-
 // ============================================================================
 // TAB "Disponibilidad fabricacion" (BOM availability check)
 // ============================================================================
@@ -1178,12 +1110,10 @@ end;
 //   - Cache de stock por articulo para evitar N queries.
 //   - Veredicto global: OK si todas las MP/Semis tienen stock proyectado
 //     >= necesario; FALTA si alguna falla.
-
 procedure TfrmArticleDetail.btnRecargarDispClick(Sender: TObject);
 begin
   CalcularDisponibilidad;
 end;
-
 procedure TfrmArticleDetail.CalcularDisponibilidad;
 type
   TStockArtCache = record
@@ -1195,7 +1125,6 @@ var
   FechaObjetivo: TDateTime;
   QtyObjetivo: Double;
   FaltaGlobalActual, FaltaGlobalProy: Integer;
-
   function GetStockArt(const ACodArt: string): TStockArtCache;
   var
     Base: TArray<TStockDisponibleErp>;
@@ -1217,14 +1146,12 @@ var
       for i := 0 to High(Base) do
         StockIni := StockIni + Base[i].Disponible;
       SC.Actual := StockIni;
-
       Compras := FReader.ReadEntradasFuturasFiltered(
         ACodArt, [], 0, FechaObjetivo);
       Ventas := FReader.ReadSalidasFuturasVenta(
         ACodArt, [], 0, FechaObjetivo);
       MovsOF := FReader.ReadMovimientosOFsPendientes(
         ACodArt, [], FechaObjetivo);
-
       Proy := TStockProjector.Create;
       try
         Proy.StockInicial := StockIni;
@@ -1244,7 +1171,6 @@ var
     CacheStock.Add(ACodArt, SC);
     Result := SC;
   end;
-
   procedure SetEstadoYColor(ANode: TcxTreeListNode;
     ANecesario, AStockActual, AStockProy: Double);
   var
@@ -1255,7 +1181,6 @@ var
     FaltaP := ANecesario - AStockProy;
     if FaltaA < 0 then FaltaA := 0;
     if FaltaP < 0 then FaltaP := 0;
-
     ANode.Values[colDispNecesario.ItemIndex]   := FormatFloat('#,##0.##', ANecesario);
     ANode.Values[colDispStockActual.ItemIndex] := FormatFloat('#,##0.##', AStockActual);
     ANode.Values[colDispStockProy.ItemIndex]   := FormatFloat('#,##0.##', AStockProy);
@@ -1267,7 +1192,6 @@ var
       ANode.Values[colDispFaltaProy.ItemIndex] := FormatFloat('#,##0.##', FaltaP)
     else
       ANode.Values[colDispFaltaProy.ItemIndex] := '';
-
     if FaltaP > 0 then
     begin
       Estado := 'CRITICO';
@@ -1283,7 +1207,6 @@ var
       Estado := 'OK';
     ANode.Values[colDispEstado.ItemIndex] := Estado;
   end;
-
   procedure ExplosionarBOM(AParent: TcxTreeListNode; const ACodArt: string;
     AVersion: SmallInt; AMultiplicador: Double; ANivel: Integer);
   var
@@ -1304,7 +1227,6 @@ var
         Exit;
       end;
     end;
-
     for i := 0 to High(Comps) do
     begin
       Mermas := Comps[i].Mermas;
@@ -1313,7 +1235,6 @@ var
                    (1 + Mermas / 100.0);
       Stk := GetStockArt(Comps[i].CodigoArticuloComponente);
       EsSemiConBOM := Comps[i].EsSemielaborado and (Comps[i].VersionFormulaComp > 0);
-
       Child := tlDisp.AddChild(AParent);
       Child.Values[colDispArticulo.ItemIndex]    := Comps[i].CodigoArticuloComponente;
       Child.Values[colDispDescripcion.ItemIndex] := Comps[i].DescripcionArticulo;
@@ -1321,9 +1242,7 @@ var
         Child.Values[colDispTipo.ItemIndex] := 'S'
       else
         Child.Values[colDispTipo.ItemIndex] := 'M';
-
       SetEstadoYColor(Child, Necesario, Stk.Actual, Stk.Proyectado);
-
       if EsSemiConBOM then
       begin
         // Cuanto cubrimos con stock proyectado del semi
@@ -1338,7 +1257,6 @@ var
       end;
     end;
   end;
-
 var
   RootNode: TcxTreeListNode;
   Cab: TFormulaCabecera;
@@ -1355,19 +1273,16 @@ begin
     ShowMessage('Selecciona un art'#237'culo.');
     Exit;
   end;
-
   QtyObjetivo := seDispCantidad.Value;
   if QtyObjetivo <= 0 then QtyObjetivo := 1;
   FechaObjetivo := dtDispFecha.Date;
   FaltaGlobalActual := 0;
   FaltaGlobalProy := 0;
-
   Screen.Cursor := crHourGlass;
   tlDisp.BeginUpdate;
   CacheStock := TDictionary<string, TStockArtCache>.Create;
   try
     tlDisp.Clear;
-
     // 1) Cabecera de formula del articulo raiz
     Cab := FReader.ReadFormulaCabecera(FCodigoArticulo);
     if not Cab.Encontrada then
@@ -1378,7 +1293,6 @@ begin
       FDispCalculada := True;
       Exit;
     end;
-
     // 2) Nodo raiz: el propio articulo objetivo
     StkRoot := GetStockArt(FCodigoArticulo);
     RootNode := tlDisp.Add;
@@ -1389,11 +1303,9 @@ begin
     // El nodo raiz no cuenta como "falta" si tiene formula: se va a fabricar
     if FaltaGlobalActual > 0 then Dec(FaltaGlobalActual);
     if FaltaGlobalProy > 0 then Dec(FaltaGlobalProy);
-
     // 3) Explosi'o recursiva
     ExplosionarBOM(RootNode, FCodigoArticulo, Cab.Version, QtyObjetivo, 1);
     RootNode.Expanded := True;
-
     // 4) Veredicto global
     if FaltaGlobalProy = 0 then
     begin
@@ -1411,7 +1323,6 @@ begin
          FaltaGlobalActual]);
       lblDispVeredicto.Font.Color := clMaroon;
     end;
-
     FDispCalculada := True;
   finally
     CacheStock.Free;
@@ -1419,7 +1330,6 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 procedure TfrmArticleDetail.tlDispCustomDrawDataCell(
   Sender: TcxCustomTreeList; ACanvas: TcxCanvas;
   AViewInfo: TcxTreeListEditCellViewInfo; var ADone: Boolean);
@@ -1445,11 +1355,9 @@ begin
       ACanvas.Font.Color := clGreen;
   end;
 end;
-
 // ============================================================================
 // TAB "Donde se usa" (where-used / pegging invers)
 // ============================================================================
-
 procedure TfrmArticleDetail.CrearColumnasDondeUsa;
 begin
   cdsDondeUsa.FieldDefs.Clear;
@@ -1464,12 +1372,10 @@ begin
   cdsDondeUsa.FieldDefs.Add('Operacion', ftString, 30);
   cdsDondeUsa.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.btnRecargarDondeUsaClick(Sender: TObject);
 begin
   CargarDondeUsa;
 end;
-
 procedure TfrmArticleDetail.CargarDondeUsa;
 var
   Data: TArray<TDondeSeUsaErp>;
@@ -1479,7 +1385,6 @@ begin
   if FReader = nil then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
-
   Screen.Cursor := crHourGlass;
   try
     cdsDondeUsa.DisableControls;
@@ -1509,7 +1414,6 @@ begin
         cdsDondeUsa.Post;
       end;
       cdsDondeUsa.First;
-
       Padres := TDictionary<string, Boolean>.Create;
       try
         for i := 0 to High(Data) do
@@ -1531,28 +1435,24 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 // ============================================================================
 // KPI cards (cabecera)
 // ============================================================================
 // 6 targes de salut a la cabecera: Stock, Disponible, Minimo, Pte. recibir,
 // Pte. servir, Estado. Es repinten en cada Calcular. Cada tarja te color de
 // fons segons salut (verd/ambar/vermell/blau-info/gris-neutre).
-
 const
   KPI_COLOR_NEUTRE  = TColor($00404040); // gris fosc (placeholder)
   KPI_COLOR_OK      = TColor($00377D22); // verd
   KPI_COLOR_INFO    = TColor($00A6651C); // blau-info (taronja-blau corp)
   KPI_COLOR_WARN    = TColor($000098D8); // ambar/groc
   KPI_COLOR_CRIT    = TColor($003C3CC8); // vermell
-
 procedure TfrmArticleDetail.SetKPI(APanel: TPanel; AValLbl: TLabel;
   const AValor: string; AColorFondo: TColor);
 begin
   APanel.Color := AColorFondo;
   AValLbl.Caption := AValor;
 end;
-
 procedure TfrmArticleDetail.ResetKPIs;
 begin
   SetKPI(pnlKPI1, lblKPI1Val, '-', KPI_COLOR_NEUTRE);
@@ -1562,7 +1462,6 @@ begin
   SetKPI(pnlKPI5, lblKPI5Val, '-', KPI_COLOR_NEUTRE);
   SetKPI(pnlKPI6, lblKPI6Val, '-', KPI_COLOR_NEUTRE);
 end;
-
 procedure TfrmArticleDetail.ActualizarKPIs(AStockTotal, ADisponible,
   APendRecibir, APendServir: Double);
 var
@@ -1577,7 +1476,6 @@ begin
   else
     ColorStock := KPI_COLOR_NEUTRE;
   SetKPI(pnlKPI1, lblKPI1Val, FormatFloat('#,##0.##', AStockTotal), ColorStock);
-
   // 2) Disponible: verd si >= minim, ambar si > 0 pero < minim, vermell si <= 0
   if ADisponible <= 0 then
     ColorDisp := KPI_COLOR_CRIT
@@ -1586,7 +1484,6 @@ begin
   else
     ColorDisp := KPI_COLOR_OK;
   SetKPI(pnlKPI2, lblKPI2Val, FormatFloat('#,##0.##', ADisponible), ColorDisp);
-
   // 3) Dias cobertura: verd >30d, ambar 7-30d, vermell <7d, gris N/A
   try
     Cob := FReader.ReadCoberturaArticulo(FCodigoArticulo, AlmacenesSeleccionados);
@@ -1624,13 +1521,11 @@ begin
     ColorCob := KPI_COLOR_OK;
   end;
   SetKPI(pnlKPI3, lblKPI3Val, CobTxt, ColorCob);
-
   // 4) Pendiente recibir: info (blau) si > 0, neutre si 0
   if APendRecibir > 0 then
     SetKPI(pnlKPI4, lblKPI4Val, '+' + FormatFloat('#,##0.##', APendRecibir), KPI_COLOR_INFO)
   else
     SetKPI(pnlKPI4, lblKPI4Val, '0', KPI_COLOR_NEUTRE);
-
   // 5) Pendiente servir: info si <= disponible+pendRecibir, warn si supera
   if APendServir <= 0 then
     SetKPI(pnlKPI5, lblKPI5Val, '0', KPI_COLOR_NEUTRE)
@@ -1638,7 +1533,6 @@ begin
     SetKPI(pnlKPI5, lblKPI5Val, '-' + FormatFloat('#,##0.##', APendServir), KPI_COLOR_WARN)
   else
     SetKPI(pnlKPI5, lblKPI5Val, '-' + FormatFloat('#,##0.##', APendServir), KPI_COLOR_INFO);
-
   // 6) Clasificacion ABC: A=vermell-info (top valor), B=ambar, C=gris-neutre
   try
     ABC := FReader.ReadCategoriaABCArticulo(FCodigoArticulo);
@@ -1671,7 +1565,6 @@ begin
   end;
   SetKPI(pnlKPI6, lblKPI6Val, ABCTxt, ColorABC);
 end;
-
 // ============================================================================
 // TAB "Historico" - grafic mensual entradas/sortides 12-24 mesos
 // ============================================================================
@@ -1679,7 +1572,6 @@ end;
 // dibuixa amb GDI sobre un TPaintBox. Sense dependencies de chart.
 // Dues series de barres costat a costat per mes: Entradas (verd) i Salidas
 // (roig fosc). Eix Y autoescalat al pic, eix X amb etiqueta MM/AA per mes.
-
 const
   HIST_COLOR_ENT  = TColor($00377D22); // verd
   HIST_COLOR_SAL  = TColor($003C3CC8); // vermell
@@ -1691,12 +1583,10 @@ const
   HIST_MARGIN_T   = 30;
   HIST_MARGIN_B   = 50;
   HIST_LEGEND_H   = 18;
-
 procedure TfrmArticleDetail.btnRecargarHistClick(Sender: TObject);
 begin
   CargarHistorico;
 end;
-
 procedure TfrmArticleDetail.CargarHistorico;
 var
   Almacenes: TArray<string>;
@@ -1707,11 +1597,9 @@ begin
   if FReader = nil then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
-
   Almacenes := AlmacenesSeleccionados;
   Meses := Trunc(seHistMeses.Value);
   if Meses <= 0 then Meses := 12;
-
   Screen.Cursor := crHourGlass;
   try
     try
@@ -1743,7 +1631,6 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 procedure TfrmArticleDetail.pbHistoricoPaint(Sender: TObject);
 var
   C: TCanvas;
@@ -1757,7 +1644,6 @@ var
   Lbl: string;
   TxtW: Integer;
   LegX, LegY: Integer;
-
   function NiceCeil(AVal: Double): Double;
   var
     Exp, Frac, Nice: Double;
@@ -1771,7 +1657,6 @@ var
     else Nice := 10;
     Result := Nice * Exp;
   end;
-
 begin
   C := pbHistorico.Canvas;
   W := pbHistorico.Width;
@@ -1779,7 +1664,6 @@ begin
   // Fons
   C.Brush.Color := HIST_COLOR_BG;
   C.FillRect(Rect(0, 0, W, H));
-
   N := Length(FHistorico);
   if N = 0 then
   begin
@@ -1791,7 +1675,6 @@ begin
     C.TextOut((W - TxtW) div 2, H div 2 - 10, Lbl);
     Exit;
   end;
-
   // Plot area
   PlotL := HIST_MARGIN_L;
   PlotR := W - HIST_MARGIN_R;
@@ -1800,7 +1683,6 @@ begin
   PlotW := PlotR - PlotL;
   PlotH := PlotB - PlotT;
   if (PlotW <= 50) or (PlotH <= 50) then Exit;
-
   // Max
   MaxVal := 0;
   for i := 0 to N - 1 do
@@ -1810,7 +1692,6 @@ begin
   end;
   if MaxVal <= 0 then MaxVal := 1;
   NiceMax := NiceCeil(MaxVal);
-
   // Grid horitzontal i etiquetes Y
   NumYTicks := 5;
   StepY := NiceMax / NumYTicks;
@@ -1827,19 +1708,16 @@ begin
     TxtW := C.TextWidth(Lbl);
     C.TextOut(PlotL - TxtW - 6, Y - 7, Lbl);
   end;
-
   // Eixos
   C.Pen.Color := HIST_COLOR_AXIS;
   C.MoveTo(PlotL, PlotT);
   C.LineTo(PlotL, PlotB);
   C.LineTo(PlotR, PlotB);
-
   // Barres: per cada mes 2 barres (ent, sal) costat a costat dins el GroupW
   GroupW := PlotW div N;
   if GroupW < 6 then GroupW := 6;
   BarW := (GroupW - 6) div 2;  // 3px gap entre grup, gap intern petit
   if BarW < 2 then BarW := 2;
-
   C.Pen.Color := clBlack;
   for i := 0 to N - 1 do
   begin
@@ -1858,14 +1736,12 @@ begin
       C.Brush.Color := HIST_COLOR_SAL;
       C.FillRect(Rect(X + BarW + 2, PlotB - BarHSal, X + 2 * BarW + 2, PlotB));
     end;
-
     // Etiqueta X: MM/AA, rotada nomes si caben pocs caracters
     Lbl := Format('%.2d/%.2d', [FHistorico[i].Periodo, FHistorico[i].Ejercicio mod 100]);
     C.Font.Color := HIST_COLOR_AXIS;
     TxtW := C.TextWidth(Lbl);
     C.TextOut(X + BarW - TxtW div 2, PlotB + 6, Lbl);
   end;
-
   // Llegenda a sota
   LegY := H - HIST_LEGEND_H;
   LegX := PlotL;
@@ -1880,11 +1756,9 @@ begin
   C.Brush.Color := HIST_COLOR_BG;
   C.TextOut(LegX + 20, LegY + 1, 'Salidas (consumos + ventas)');
 end;
-
 // ============================================================================
 // TAB "OFs activas"
 // ============================================================================
-
 procedure TfrmArticleDetail.CrearColumnasOFs;
 begin
   cdsOFs.FieldDefs.Clear;
@@ -1901,12 +1775,10 @@ begin
   cdsOFs.FieldDefs.Add('Proyecto', ftString, 30);
   cdsOFs.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.btnRecargarOFsClick(Sender: TObject);
 begin
   CargarOFs;
 end;
-
 procedure TfrmArticleDetail.CargarOFs;
 var
   Data: TArray<TOFActivaArticuloErp>;
@@ -1916,7 +1788,6 @@ begin
   if FReader = nil then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
-
   Screen.Cursor := crHourGlass;
   try
     cdsOFs.DisableControls;
@@ -1972,11 +1843,9 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 // ============================================================================
 // TAB "Proveedores"
 // ============================================================================
-
 procedure TfrmArticleDetail.CrearColumnasProv;
 begin
   cdsProv.FieldDefs.Clear;
@@ -1989,12 +1858,10 @@ begin
   cdsProv.FieldDefs.Add('Pedidos', ftInteger);
   cdsProv.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.btnRecargarProvClick(Sender: TObject);
 begin
   CargarProveedores;
 end;
-
 procedure TfrmArticleDetail.CargarProveedores;
 var
   Data: TArray<TProveedorArticuloErp>;
@@ -2004,7 +1871,6 @@ begin
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Meses := Trunc(seProvMeses.Value);
-
   Screen.Cursor := crHourGlass;
   try
     cdsProv.DisableControls;
@@ -2050,11 +1916,9 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 // ============================================================================
 // TAB "Clientes"
 // ============================================================================
-
 procedure TfrmArticleDetail.CrearColumnasCli;
 begin
   cdsCli.FieldDefs.Clear;
@@ -2067,12 +1931,10 @@ begin
   cdsCli.FieldDefs.Add('Pedidos', ftInteger);
   cdsCli.CreateDataSet;
 end;
-
 procedure TfrmArticleDetail.btnRecargarCliClick(Sender: TObject);
 begin
   CargarClientes;
 end;
-
 procedure TfrmArticleDetail.CargarClientes;
 var
   Data: TArray<TClienteArticuloErp>;
@@ -2083,7 +1945,6 @@ begin
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Meses := Trunc(seCliMeses.Value);
-
   Screen.Cursor := crHourGlass;
   try
     cdsCli.DisableControls;
@@ -2136,5 +1997,4 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
-
 end.

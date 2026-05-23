@@ -144,7 +144,8 @@ uses
   uCentresKPI in 'uCentresKPI.pas' {frmCentresKPI},
   uGanttDatesDialog in 'uGanttDatesDialog.pas' {frmGanttDatesDialog},
   uAppConfig in 'uAppConfig.pas',
-  uDBConfig in 'uDBConfig.pas' {frmDBConfig};
+  uDBConfig in 'uDBConfig.pas' {frmDBConfig},
+  uSincronizarERP in 'uSincronizarERP.pas' {frmSincronizarERP};
 
 {$R *.res}
 
@@ -154,7 +155,6 @@ begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TDMPlanner, DMPlanner);
-
   // Primera instalación: si no hay configuración de BBDD válida, lanzar el wizard.
   if NeedsInstallWizard then
   begin

@@ -325,7 +325,11 @@ type
     FPlanningRuleEngine: TPlanningRuleEngine;
 
     FUpdatingViewport: Boolean;
+    FLoadingPrefs: Boolean;
     FLoadingFechaBloqueo: Boolean;
+    FPendingPxPerMin: Double;
+    FPendingScrollX: Double;
+    FHasPendingViewport: Boolean;
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
 
@@ -364,6 +368,8 @@ type
     procedure Inicializar(const AFechaInicio, AFechaFin: TDateTime); overload;
     procedure Inicializar; overload;
     procedure SaveViewportPrefs;
+    procedure RestoreViewportPrefs;
+    procedure ApplyPendingViewport;
     procedure CargarCentros;
     procedure CargarDependencias;
     procedure CargarMarcadores;
@@ -376,7 +382,7 @@ uses
   uDMPlanner, Vcl.Dialogs, Data.Win.ADODB, Data.DB,
   uGestionMarkers, uCentreInspector, uSampleDataGenerator,
   uCentresKPI, uGestionCentres, uNodeInspector, uMarkerEditor,
-  uGanttDatesDialog, uUserPrefs,
+  uGanttDatesDialog, uUserPrefs, System.JSON,
   uAssignOperaris, uGestionOperaris, uLinkEditor,  Main;
 
 
@@ -557,6 +563,7 @@ begin
   dtFechaInicioGantt.Date := FIni;
   dtFechaFinGantt.Date := FFin;
   Inicializar(FIni, FFin);
+  SaveViewportPrefs;
 end;
 
 procedure TfrmVistaGantt.Desactivarfechabloqueo1Click(Sender: TObject);
@@ -816,39 +823,153 @@ begin
   IrAFecha(Now);
 end;
 
-procedure TfrmVistaGantt.Inicializar;
 const
-  PREF_MODULE = 'VistaGantt';
-  KEY_VIEWPORT_START = 'ViewportStart';
-  KEY_VIEWPORT_END = 'ViewportEnd';
-var
-  StartStr, EndStr: string;
-  StartDate, EndDate: TDateTime;
+  SCREEN_KEY_VISTA_GANTT = 'VistaGantt';
+  PREFS_VERSION = 1;
+  ISO_DATE = 'yyyy-mm-dd';
+
+function IsoFormatSettings: TFormatSettings;
 begin
-  // Resolver viewport: UserPrefs si existe, sino Now +- 4 d'ias.
-  StartStr := uUserPrefs.GetPref(PREF_MODULE, KEY_VIEWPORT_START, '');
-  EndStr := uUserPrefs.GetPref(PREF_MODULE, KEY_VIEWPORT_END, '');
-  if (StartStr <> '') and (EndStr <> '') and
-     TryStrToDateTime(StartStr, StartDate) and
-     TryStrToDateTime(EndStr, EndDate) and
-     (EndDate > StartDate) then
-  begin
-    Inicializar(StartDate, EndDate);
-  end
-  else
-    Inicializar(Now - 4, Now + 4);
+  Result := TFormatSettings.Create;
+  Result.DateSeparator := '-';
+  Result.ShortDateFormat := ISO_DATE;
+end;
+
+procedure TfrmVistaGantt.Inicializar;
+var
+  Js, S: string;
+  Root: TJSONObject;
+  GanttStart, GanttEnd: TDateTime;
+  PxPerMin, ScrollX: Double;
+  VistaIndex: Integer;
+  HasGanttRange, HasViewport, HasVista: Boolean;
+begin
+  FLoadingPrefs := True;
+  try
+    HasGanttRange := False;
+    HasViewport := False;
+    HasVista := False;
+    GanttStart := 0;
+    GanttEnd := 0;
+    PxPerMin := 0;
+    ScrollX := 0;
+    VistaIndex := 0;
+
+    Js := DMPlanner.UserPrefs.Load(SCREEN_KEY_VISTA_GANTT);
+    if Js <> '' then
+    begin
+      Root := TJSONObject.ParseJSONValue(Js) as TJSONObject;
+      if Assigned(Root) then
+      try
+        if Root.TryGetValue<string>('ganttStart', S) then
+          TryStrToDate(S, GanttStart, IsoFormatSettings);
+        if Root.TryGetValue<string>('ganttEnd', S) then
+          TryStrToDate(S, GanttEnd, IsoFormatSettings);
+        HasGanttRange := (GanttStart > 0) and (GanttEnd > GanttStart);
+
+        if Root.TryGetValue<Double>('pxPerMinute', PxPerMin) and
+           (PxPerMin > 0) and (PxPerMin <= 100) then
+        begin
+          if not Root.TryGetValue<Double>('scrollX', ScrollX) then
+            ScrollX := 0;
+          HasViewport := True;
+        end;
+
+        if Root.TryGetValue<Integer>('vistaIndex', VistaIndex) and
+           (VistaIndex >= 0) and (VistaIndex < cbVistas.Properties.Items.Count) then
+          HasVista := True;
+      finally
+        Root.Free;
+      end;
+    end;
+
+    if HasGanttRange then
+      Inicializar(GanttStart, GanttEnd)
+    else
+      Inicializar(Now - 4, Now + 4);
+
+    // Inicializar(...) deja IrAFecha(Now) como default. Si tenemos viewport
+    // guardado (zoom + scroll), lo aplicamos diferido vía TThread.ForceQueue
+    // porque en este punto el form aún no es visible y los controles no tienen
+    // ClientWidth definitivo (ClampScrollX recortaría el scroll a 0).
+    if HasViewport and Assigned(FGanttControl) then
+    begin
+      FPendingPxPerMin := PxPerMin;
+      FPendingScrollX := Max(0, ScrollX);
+      FHasPendingViewport := True;
+      TThread.ForceQueue(nil, ApplyPendingViewport);
+    end;
+
+    // Restaurar Vista activa (gvmNormal por defecto = índice 0).
+    if HasVista then
+    begin
+      cbVistas.Properties.OnChange := nil;
+      try
+        cbVistas.ItemIndex := VistaIndex;
+      finally
+        cbVistas.Properties.OnChange := cbVistasPropertiesChange;
+      end;
+      cbVistasPropertiesChange(cbVistas);
+    end;
+  finally
+    // Si hay viewport pendiente, mantener FLoadingPrefs = True hasta que
+    // ApplyPendingViewport lo libere. Si no, liberar ahora.
+    if not FHasPendingViewport then
+      FLoadingPrefs := False;
+  end;
+end;
+
+procedure TfrmVistaGantt.RestoreViewportPrefs;
+begin
+  // Mantenido por compatibilidad; la restauración real se hace dentro de
+  // Inicializar (sin parámetros) para aplicarse tras la creación del control.
+end;
+
+procedure TfrmVistaGantt.ApplyPendingViewport;
+begin
+  if not FHasPendingViewport then Exit;
+  if FGanttControl = nil then Exit;
+  FHasPendingViewport := False;
+
+  FUpdatingViewport := True;
+  FLoadingPrefs := True;
+  try
+    // Usamos SetViewport (no el setter PxPerMinute) porque SetPxPerMinute
+    // tiene un EnsureRange(0.2, 40.0) hard-coded que descartaría valores
+    // legítimos (ej. 0.04 px/min cuando el usuario zoomea a mes completo).
+    // SetViewport asigna directamente sin ese clamp.
+    FGanttControl.SetViewport(FGanttControl.StartTime, FPendingPxPerMin, FPendingScrollX);
+    if Assigned(FTimelineControl) then
+      FTimelineControl.SetViewport(FTimelineControl.StartTime, FPendingPxPerMin, FPendingScrollX);
+  finally
+    FLoadingPrefs := False;
+    FUpdatingViewport := False;
+  end;
 end;
 
 procedure TfrmVistaGantt.SaveViewportPrefs;
-const
-  PREF_MODULE = 'VistaGantt';
-  KEY_VIEWPORT_START = 'ViewportStart';
-  KEY_VIEWPORT_END = 'ViewportEnd';
+var
+  Root: TJSONObject;
+  GanttIni, GanttFin: TDateTime;
 begin
+  if FLoadingPrefs then Exit;
   if FGanttControl = nil then Exit;
-  if (FGanttControl.StartTime = 0) or (FGanttControl.EndTime = 0) then Exit;
-  uUserPrefs.SetPref(PREF_MODULE, KEY_VIEWPORT_START, DateTimeToStr(FGanttControl.StartTime));
-  uUserPrefs.SetPref(PREF_MODULE, KEY_VIEWPORT_END, DateTimeToStr(FGanttControl.EndTime));
+
+  GanttIni := dtFechaInicioGantt.Date;
+  GanttFin := dtFechaFinGantt.Date;
+
+  Root := TJSONObject.Create;
+  try
+    Root.AddPair('version', TJSONNumber.Create(PREFS_VERSION));
+    Root.AddPair('ganttStart', FormatDateTime(ISO_DATE, GanttIni));
+    Root.AddPair('ganttEnd', FormatDateTime(ISO_DATE, GanttFin));
+    Root.AddPair('pxPerMinute', TJSONNumber.Create(FGanttControl.PxPerMinute));
+    Root.AddPair('scrollX', TJSONNumber.Create(FGanttControl.ScrollX));
+    Root.AddPair('vistaIndex', TJSONNumber.Create(cbVistas.ItemIndex));
+    DMPlanner.UserPrefs.Save(SCREEN_KEY_VISTA_GANTT, Root.ToJSON);
+  finally
+    Root.Free;
+  end;
 end;
 
 procedure TfrmVistaGantt.SearchBox1InvokeSearch(Sender: TObject);
@@ -1222,7 +1343,9 @@ begin
     end;
 
     FGanttControl.Vista := vm;
-    btnFocus.SetFocus;
+    if btnFocus.CanFocus then
+      btnFocus.SetFocus;
+    SaveViewportPrefs;
 end;
 
 procedure TfrmVistaGantt.IrAFecha(const ADate: TDateTime);
@@ -1465,6 +1588,7 @@ begin
   finally
     FUpdatingViewport := False;
   end;
+  SaveViewportPrefs;
 end;
 procedure TfrmVistaGantt.TimelineInteraction(Sender: TObject;
   const Interacting: Boolean);
@@ -1483,6 +1607,7 @@ begin
   finally
     FUpdatingViewport := False;
   end;
+  SaveViewportPrefs;
 end;
 procedure TfrmVistaGantt.GanttScrollYChanged(Sender: TObject;
   const ScrollY: Single);
