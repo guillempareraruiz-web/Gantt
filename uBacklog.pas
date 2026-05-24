@@ -169,6 +169,8 @@ type
     lblCountRegs: TLabel;
     btnSelectAll: TButton;
     btnDeselectAll: TButton;
+    btnSyncErp: TcxButton;
+    procedure btnSyncErpClick(Sender: TObject);
     procedure RegenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarBacklogDemo1Click(Sender: TObject);
     procedure btnSelectAllClick(Sender: TObject);
@@ -254,7 +256,8 @@ uses
   uBusyDialog,
   uBacklogSchedParams, uBacklogSchedPreview, uUserPrefs, uGenerarNodosDemo,
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
-  uFormulaArticuloViewer, Main;
+  uFormulaArticuloViewer, Main,
+  uErpReader, uErpReaderFactory, uSyncBacklogPreview;
 
 const
   BACKLOG_MOD = 'BACKLOG';
@@ -685,6 +688,37 @@ end;
 procedure TfrmBacklog.btnRecargarClick(Sender: TObject);
 begin
   LoadData;
+end;
+
+procedure TfrmBacklog.btnSyncErpClick(Sender: TObject);
+var
+  Reader: IErpReader;
+  Ejercicio: SmallInt;
+begin
+  Reader := GetActiveErpReader;
+  if Reader = nil then
+  begin
+    ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
+      + ' Configuraci'#243'n > Selector de ERP.');
+    Exit;
+  end;
+  try
+    Reader.EnsureConnected;
+  except
+    on E: Exception do
+    begin
+      MessageDlg('No se pudo conectar al ERP:'#13#10 + E.Message,
+        mtWarning, [mbOK], 0);
+      Exit;
+    end;
+  end;
+
+  // Ejercicio=0 -> el reader descobreix tots els exercicis amb OFs vives
+  Ejercicio := 0;
+  if TfrmSyncBacklogPreview.Execute(
+       Self, DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa,
+       Reader.GetSistemaNombre, Reader, Ejercicio) then
+    LoadData;
 end;
 
 procedure TfrmBacklog.RegenerarNodosDemo1Click(Sender: TObject);

@@ -459,6 +459,10 @@
         </DCCReference>
         <DCCReference Include="uErpSyncTypes.pas"/>
         <DCCReference Include="uErpSyncRepo.pas"/>
+        <DCCReference Include="uSyncBacklogPreview.pas">
+            <Form>frmSyncBacklogPreview</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uCardLayout.pas"/>
         <DCCReference Include="uCardLayoutEditor.pas">
             <Form>frmCardLayoutEditor</Form>

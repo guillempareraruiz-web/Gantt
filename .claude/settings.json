@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -n \"ReadEmpresas\\\\|ReadCentrosTrabajo\\\\|ReadMaquinas\\\\|ReadOperarios\\\\|ReadGruposHorarios\" \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\uFestivosImportDialog.pas\" 2>nul | head -10)"
+      "Bash(grep -n \"ReadEmpresas\\\\|ReadCentrosTrabajo\\\\|ReadMaquinas\\\\|ReadOperarios\\\\|ReadGruposHorarios\" \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\uFestivosImportDialog.pas\" 2>nul | head -10)",
+      "Bash(powershell -Command \"Select-String -Path uBacklog.pas -Pattern 'function BuildSQL|procedure LoadData' -Context 0,30 | head -100\")",
+      "Bash(powershell -Command \"Select-String -Path uBacklog.pas -Pattern 'function TfrmBacklog.BuildSQL' -Context 0,120 | tail -80\")"
     ],
     "additionalDirectories": [
       "d:\\PROJECTES\\GANTT\\GANTT"

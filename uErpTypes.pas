@@ -921,6 +921,62 @@ type
     UnidadMedida: string;
   end;
 
+  // ==========================================================================
+  // Item neutro para sincronizacion ERP -> FS_PL_Raw_Item (Backlog).
+  //
+  // Unifica las 3 familias (OF/PED/PRJ) x 3 niveles (1=cabecera, 2=sub, 3=op)
+  // en un solo record. El connector ERP construye un array jerarquico de
+  // estos registros (padres antes que hijos) y uErpSyncRepo los persiste en
+  // FS_PL_Raw_Item.
+  //
+  // ClaveERP debe ser unica dentro de (CodigoEmpresa, TipoOrigen). Convencion:
+  //   OF nivel 1: 'OF|<Ej>|<Serie>|<Num>'
+  //   OF nivel 2: 'OT|<Ej>|<NumeroTrabajo>'
+  //   OF nivel 3: 'OP|<Ej>|<NumeroTrabajo>|<Orden>'
+  //   PED nivel 1: 'PED|<Ej>|<Serie>|<Num>'
+  //   PED nivel 2: 'LN|<Ej>|<Serie>|<Num>|<Orden>'
+  //   PED nivel 3: 'OP|<Ej>|<Serie>|<Num>|<Orden>'
+  //   PRJ nivel 1: 'PRJ|<CodigoProyecto>'
+  //   PRJ nivel 2: 'TR|<CodigoProyecto>|<IdTarea>'
+  //   PRJ nivel 3: 'OP|<CodigoProyecto>|<IdTarea>'
+  // ==========================================================================
+  TRawItemErp = record
+    TipoOrigen: string;          // 'OF ', 'PED', 'PRJ' (char(3) en BD)
+    Nivel: Byte;                 // 1, 2 o 3
+    ClaveERP: string;
+    ClaveERPPadre: string;       // vacio en Nivel=1
+
+    NumeroDoc: Integer;          // NumeroOF / NumeroPedido / -
+    SerieDoc: string;
+    LineaDoc: Integer;           // LineaPedido / NumeroTrabajo / Orden tarea
+    CodigoProyecto: string;
+
+    Codigo: string;              // codigo interno (OT/Tarea/OP)
+    Nombre: string;
+    Descripcion: string;
+
+    CodigoArticulo: string;
+    DescripcionArticulo: string;
+    Cantidad: Double;
+    UnidadMedida: string;
+
+    CodigoCliente: string;
+    NombreCliente: string;
+
+    FechaCompromiso: TDateTime;
+    FechaNecesaria: TDateTime;
+    FechaInicioPrev: TDateTime;
+    FechaFinPrev: TDateTime;
+    FechaLanzamiento: TDateTime;
+    FechaPedido: TDateTime;
+    Prioridad: Integer;
+    Orden: Integer;
+    CentroPreferente: string;    // auto-asignado desde Sage (CentroTrabajo de la OP)
+    HorasEstimadas: Double;      // Nivel 3 = horas planificables
+    EstadoERP: string;
+    Observaciones: string;
+  end;
+
 implementation
 
 end.

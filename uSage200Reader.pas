@@ -73,6 +73,7 @@ type
       ANumeroTrabajo: Integer): TArray<TConsumoOTErp>;
     function ReadRelacionOTOF(AEjercicioFabricacion: SmallInt;
       const ASerieFabricacion: string; ANumeroFabricacion: Integer): TArray<TRelacionOTOFErp>;
+    function ReadBacklogOF(AEjercicio: SmallInt): TArray<TRawItemErp>;
     function ReadProyectos(const AFiltroCodigo: string): TArray<TProyectoErp>;
     function ReadTareasProyecto(const ACodigoProyecto: string): TArray<TTareaProyectoErp>;
     function ReadGruposHorarios: TArray<TGrupoHorarioErp>;
@@ -1418,6 +1419,9 @@ begin
       SQL := SQL + 'AND SerieFabricacion = :Ser ';
     if ANumero > 0 then
       SQL := SQL + 'AND NumeroFabricacion = :Num ';
+    // Filtro v1: solo OFs en estado abierto (0) o pendiente (1). Las cerradas
+    // ya no deben aparecer en el backlog. Aplicado siempre, sin parametro UI.
+    SQL := SQL + 'AND EstadoOF IN (0, 1) ';
     SQL := SQL + 'ORDER BY SerieFabricacion, NumeroFabricacion';
     Q.SQL.Text := SQL;
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
@@ -1735,6 +1739,179 @@ begin
     SetLength(Result, Idx);
   finally
     Q.Free;
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// BACKLOG: OF -> OT -> OP (jerarquia neutra para FS_PL_Raw_Item)
+// ---------------------------------------------------------------------------
+
+function TSage200Reader.ReadBacklogOF(AEjercicio: SmallInt): TArray<TRawItemErp>;
+var
+  OFs, OFsTotales: TArray<TOrdenFabricacionErp>;
+  Rel: TArray<TRelacionOTOFErp>;
+  OTs: TArray<TOrdenTrabajoErp>;
+  Ops: TArray<TOperacionOTErp>;
+  Items: TList<TRawItemErp>;
+  Item: TRawItemErp;
+  OFErp: TOrdenFabricacionErp;
+  OTErp: TOrdenTrabajoErp;
+  OpErp: TOperacionOTErp;
+  R: TRelacionOTOFErp;
+  ClaveOF, ClaveOT: string;
+  Ejercicios: TArray<SmallInt>;
+  Q: TADOQuery;
+  Ej: SmallInt;
+  I, J, Idx: Integer;
+begin
+  SetLength(Result, 0);
+  EnsureConnected;
+
+  // Si AEjercicio<=0, descobrim quins exercicis tenen OFs vives i les
+  // llegim totes. Aix'i no depenem de l'any actual del PC.
+  if AEjercicio <= 0 then
+  begin
+    SetLength(Ejercicios, 0);
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := FConn;
+      Q.SQL.Text :=
+        'SELECT DISTINCT EjercicioFabricacion FROM dbo.OrdenesFabricacion ' +
+        'WHERE CodigoEmpresa = :CE AND EstadoOF IN (0, 1) ' +
+        'ORDER BY EjercicioFabricacion';
+      Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
+      Q.Open;
+      SetLength(Ejercicios, Q.RecordCount);
+      Idx := 0;
+      while not Q.Eof do
+      begin
+        Ejercicios[Idx] := Q.FieldByName('EjercicioFabricacion').AsInteger;
+        Inc(Idx);
+        Q.Next;
+      end;
+      SetLength(Ejercicios, Idx);
+    finally
+      Q.Free;
+    end;
+
+    SetLength(OFsTotales, 0);
+    for I := 0 to High(Ejercicios) do
+    begin
+      Ej := Ejercicios[I];
+      OFs := ReadOrdenesFabricacion(Ej, '', 0);
+      Idx := Length(OFsTotales);
+      SetLength(OFsTotales, Idx + Length(OFs));
+      for J := 0 to High(OFs) do
+        OFsTotales[Idx + J] := OFs[J];
+    end;
+    OFs := OFsTotales;
+  end
+  else
+    OFs := ReadOrdenesFabricacion(AEjercicio, '', 0);
+
+  if Length(OFs) = 0 then Exit;
+
+  Items := TList<TRawItemErp>.Create;
+  try
+    for OFErp in OFs do
+    begin
+      ClaveOF := Format('OF|%d|%s|%d',
+        [OFErp.EjercicioFabricacion, Trim(OFErp.SerieFabricacion), OFErp.NumeroFabricacion]);
+
+      Item := Default(TRawItemErp);
+      Item.TipoOrigen          := 'OF ';
+      Item.Nivel               := 1;
+      Item.ClaveERP            := ClaveOF;
+      Item.ClaveERPPadre       := '';
+      Item.NumeroDoc           := OFErp.NumeroFabricacion;
+      Item.SerieDoc            := OFErp.SerieFabricacion;
+      Item.CodigoProyecto      := OFErp.CodigoProyecto;
+      Item.Nombre              := OFErp.DescripcionArticulo;
+      Item.Descripcion         := OFErp.Observaciones;
+      Item.CodigoArticulo      := OFErp.CodigoArticulo;
+      Item.DescripcionArticulo := OFErp.DescripcionArticulo;
+      Item.Cantidad            := OFErp.UnidadesAFabricar;
+      Item.FechaCompromiso     := OFErp.FechaEntrega;
+      Item.FechaInicioPrev     := OFErp.FechaInicioPrevista;
+      Item.FechaFinPrev        := OFErp.FechaFinalPrevista;
+      Item.FechaLanzamiento    := OFErp.FechaLanzamiento;
+      Item.EstadoERP           := IntToStr(OFErp.EstadoOF);
+      Item.Observaciones       := OFErp.Observaciones;
+      Items.Add(Item);
+
+      // OTs lligades a aquesta OF
+      Rel := ReadRelacionOTOF(OFErp.EjercicioFabricacion,
+                              OFErp.SerieFabricacion,
+                              OFErp.NumeroFabricacion);
+      for R in Rel do
+      begin
+        OTs := ReadOrdenesTrabajo(R.EjercicioTrabajo, R.NumeroTrabajo);
+        if Length(OTs) = 0 then Continue;
+        OTErp := OTs[0];
+
+        // Filtro de OT: descartar OTs cerradas. EstadoOT > 1 = finalitzada
+        // (mateix criteri que OFs).
+        if OTErp.EstadoOT > 1 then Continue;
+
+        ClaveOT := Format('OT|%d|%d',
+          [OTErp.EjercicioTrabajo, OTErp.NumeroTrabajo]);
+
+        Item := Default(TRawItemErp);
+        Item.TipoOrigen          := 'OF ';
+        Item.Nivel               := 2;
+        Item.ClaveERP            := ClaveOT;
+        Item.ClaveERPPadre       := ClaveOF;
+        Item.LineaDoc            := OTErp.NumeroTrabajo;
+        Item.Codigo              := IntToStr(OTErp.NumeroTrabajo);
+        Item.Nombre              := OTErp.DescripcionArticulo;
+        Item.CodigoArticulo      := OTErp.CodigoArticulo;
+        Item.DescripcionArticulo := OTErp.DescripcionArticulo;
+        Item.Cantidad            := OTErp.UnidadesAFabricar;
+        Item.FechaInicioPrev     := OTErp.FechaInicioPrevista;
+        Item.FechaFinPrev        := OTErp.FechaFinalPrevista;
+        Item.HorasEstimadas      := OTErp.TiempoTotal / 60.0; // min -> h
+        Item.EstadoERP           := IntToStr(OTErp.EstadoOT);
+        Items.Add(Item);
+
+        // Operacions (Nivel 3) - les planificables
+        Ops := ReadOperacionesOT(OTErp.EjercicioTrabajo, OTErp.NumeroTrabajo);
+        for OpErp in Ops do
+        begin
+          if OpErp.EstadoOperacion > 1 then Continue;
+
+          Item := Default(TRawItemErp);
+          Item.TipoOrigen          := 'OF ';
+          Item.Nivel               := 3;
+          Item.ClaveERP            := Format('OP|%d|%d|%d',
+            [OpErp.EjercicioTrabajo, OpErp.NumeroTrabajo, OpErp.Orden]);
+          Item.ClaveERPPadre       := ClaveOT;
+          Item.LineaDoc            := OpErp.Orden;
+          Item.Orden               := OpErp.Orden;
+          Item.Codigo              := OpErp.Operacion;
+          Item.Nombre              := OpErp.DescripcionOperacion;
+          Item.Descripcion         := OpErp.DescripcionOperacion;
+          Item.Cantidad            := OpErp.UnidadesAFabricar;
+          Item.FechaInicioPrev     := OpErp.FechaInicioPrevista;
+          Item.FechaFinPrev        := OpErp.FechaFinalPrevista;
+          Item.HorasEstimadas      := OpErp.TiempoTotal / 60.0; // min -> h
+          // Auto-asignacion del Centro: usem CentroTrabajo de la OP; si esta
+          // buit, caiem al CentroTrabajoDefecto. Aquest valor s'escriura a
+          // FS_PL_Raw_Item.CentroPreferente i quedara linkable amb FS_PL_Center
+          // per CodigoErp. Al planificar una OF, el motor redistribueix segons
+          // aquest centre per operacio.
+          if Trim(OpErp.CentroTrabajo) <> '' then
+            Item.CentroPreferente := OpErp.CentroTrabajo
+          else
+            Item.CentroPreferente := OpErp.CentroTrabajoDefecto;
+          Item.EstadoERP           := IntToStr(OpErp.EstadoOperacion);
+          Items.Add(Item);
+        end;
+      end;
+    end;
+
+    Result := Items.ToArray;
+  finally
+    Items.Free;
   end;
 end;
 

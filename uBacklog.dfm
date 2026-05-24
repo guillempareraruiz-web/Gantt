@@ -277,6 +277,15 @@ object frmBacklog: TfrmBacklog
       TabOrder = 7
       OnClick = btnVaciarPlanClick
     end
+    object btnSyncErp: TcxButton
+      Left = 220
+      Top = 6
+      Width = 140
+      Height = 28
+      Caption = 'Sincronizar ERP...'
+      TabOrder = 8
+      OnClick = btnSyncErpClick
+    end
     object btnClose: TButton
       Left = 1168
       Top = 6

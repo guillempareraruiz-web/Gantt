@@ -1,4 +1,4 @@
-unit uDashboard;
+﻿unit uDashboard;
 
 interface
 
@@ -13,6 +13,8 @@ type
     lblTitulo: TLabel;
     lblSubtitulo: TLabel;
     lblFechaHora: TLabel;
+    lblPendingSync: TLabel;
+
     pnlCards: TPanel;
     pnlEmpresa: TPanel;
     lblEmpresaCap: TLabel;
@@ -69,6 +71,7 @@ type
     lblValDependencias: TLabel;
     lblCapMarcadores: TLabel;
     lblValMarcadores: TLabel;
+    procedure lblPendingSyncClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure TimerRelojTimer(Sender: TObject);
     procedure btnAbrirGanttClick(Sender: TObject);
@@ -83,6 +86,7 @@ type
     FOnAbrirGantt: TNotifyEvent;
     procedure ActualizarReloj;
     procedure RefrescarProyectoActivo;
+    procedure RefrescarPendingSync;
   public
     procedure Refrescar;
     property OnAbrirGantt: TNotifyEvent read FOnAbrirGantt write FOnAbrirGantt;
@@ -96,7 +100,8 @@ uses
   Vcl.Dialogs, System.DateUtils,
   Data.Win.ADODB, Data.DB,
   uDMPlanner, uLogin, uGestionAreas, uGestionDepartamentos, uGestionCalendarios,
-  uGestionCentres, uGestionTurnos, uGestionCapacitaciones, uGestionOperaris;
+  uGestionCentres, uGestionTurnos, uGestionCapacitaciones, uGestionOperaris,
+  uBacklog;
 
 procedure TfrmDashboard.FormShow(Sender: TObject);
 begin
@@ -150,6 +155,7 @@ begin
   lblValOperarios.Caption := IntToStr(NumOp);
 
   RefrescarProyectoActivo;
+  RefrescarPendingSync;
 
   // Proyecto
   if DMPlanner.CurrentProjectId > 0 then
@@ -349,6 +355,64 @@ begin
   lblValDuracionTotal.Caption := FmtDuracion(DuracionTotal);
   lblValDependencias.Caption := IntToStr(Dependencias);
   lblValMarcadores.Caption := IntToStr(Marcadores);
+end;
+
+procedure TfrmDashboard.RefrescarPendingSync;
+var
+  Q: TADOQuery;
+  NumOFs, NumOTs: Integer;
+begin
+  lblPendingSync.Visible := True;
+  lblPendingSync.Caption := '(comprobando pendientes ERP...)';
+  if not DMPlanner.IsConnected then
+  begin
+    lblPendingSync.Caption := '(sin conexion BD)';
+    Exit;
+  end;
+  NumOFs := 0;
+  NumOTs := 0;
+  try
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT NumOFsNuevas, NumOTsNuevas ' +
+        'FROM dbo.FS_PL_fn_PendingErpOFs(:Emp)';
+      Q.Parameters.ParamByName('Emp').Value := DMPlanner.CodigoEmpresa;
+      Q.Open;
+      if not Q.Eof then
+      begin
+        NumOFs := Q.FieldByName('NumOFsNuevas').AsInteger;
+        NumOTs := Q.FieldByName('NumOTsNuevas').AsInteger;
+      end;
+    finally
+      Q.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      lblPendingSync.Caption := '(TVF ERP no disponible: ' + Copy(E.Message, 1, 60) + ')';
+      Exit;
+    end;
+  end;
+
+  if (NumOFs > 0) or (NumOTs > 0) then
+  begin
+    lblPendingSync.Caption := Format(
+      'Existen %d OF y %d OT pendientes de sincronizar', [NumOFs, NumOTs]);
+    lblPendingSync.Font.Color := clYellow;
+  end
+  else
+  begin
+    lblPendingSync.Caption := 'Sin pendientes de sincronizar';
+    lblPendingSync.Font.Color := clWhite;
+  end;
+end;
+
+procedure TfrmDashboard.lblPendingSyncClick(Sender: TObject);
+begin
+  ShowBacklog;
+  Refrescar;
 end;
 
 procedure TfrmDashboard.btnAbrirGanttClick(Sender: TObject);

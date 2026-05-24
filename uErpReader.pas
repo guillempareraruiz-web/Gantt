@@ -127,6 +127,19 @@ type
     function ReadRelacionOTOF(AEjercicioFabricacion: SmallInt;
       const ASerieFabricacion: string; ANumeroFabricacion: Integer): TArray<TRelacionOTOFErp>;
 
+    // -- BACKLOG: jerarquia OF -> OT -> OP --------------------------------
+    // Retorna un array jerarquic (pares abans que fills) llest per persistir
+    // a FS_PL_Raw_Item. Filtra OFs amb Estado IN (0=abierta, 1=pendiente);
+    // tancades (Estado>=2) no apareixen. Per cada OF baixa les OTs lligades
+    // via RelacionOTOF i les operacions de cada OT. El CentroPreferente de
+    // cada OP es l'auto-assignat des de CentroTrabajo de Sage (servira com
+    // a hint de planificacio, no com a constraint).
+    // Aquesta crida NO escriu res; nomes llegeix. La persistencia la fa
+    // uErpSyncRepo.ApplyRawItems amb les seleccions de l'usuari.
+    // Si AEjercicio<=0, llegeix automaticament tots els exercicis amb OFs
+    // vives (Estado IN 0,1) sense filtrar per any concret.
+    function ReadBacklogOF(AEjercicio: SmallInt): TArray<TRawItemErp>;
+
     // -- PROYECTOS / TAREAS -----------------------------------------------
     function ReadProyectos(const AFiltroCodigo: string): TArray<TProyectoErp>;
     // Tareas d'un projecte (ACodigoProyecto obligatori).

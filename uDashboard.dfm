@@ -24,10 +24,13 @@ object frmDashboard: TfrmDashboard
     Color = 3553567
     ParentBackground = False
     TabOrder = 0
+    DesignSize = (
+      900
+      80)
     object lblTitulo: TLabel
       Left = 24
       Top = 16
-      Width = 200
+      Width = 177
       Height = 32
       Caption = 'Panel de control'
       Font.Charset = DEFAULT_CHARSET
@@ -40,7 +43,7 @@ object frmDashboard: TfrmDashboard
     object lblSubtitulo: TLabel
       Left = 24
       Top = 52
-      Width = 200
+      Width = 148
       Height = 15
       Caption = 'Resumen de la sesi'#243'n actual'
       Font.Charset = DEFAULT_CHARSET
@@ -64,8 +67,28 @@ object frmDashboard: TfrmDashboard
       Font.Height = -19
       Font.Name = 'Segoe UI'
       Font.Style = []
-      Layout = tlCenter
       ParentFont = False
+      Layout = tlCenter
+    end
+    object lblPendingSync: TLabel
+      Left = 440
+      Top = 4
+      Width = 440
+      Height = 20
+      Cursor = crHandPoint
+      Alignment = taRightJustify
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = ''
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWhite
+      Font.Height = -13
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = [fsUnderline]
+      ParentFont = False
+      Transparent = True
+      Layout = tlCenter
+      OnClick = lblPendingSyncClick
     end
   end
   object pnlCards: TPanel
@@ -90,8 +113,8 @@ object frmDashboard: TfrmDashboard
       object lblEmpresaCap: TLabel
         Left = 16
         Top = 14
-        Width = 56
-        Height = 15
+        Width = 48
+        Height = 13
         Caption = 'EMPRESA'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clGray
@@ -142,8 +165,8 @@ object frmDashboard: TfrmDashboard
       object lblProyectoCap: TLabel
         Left = 16
         Top = 14
-        Width = 100
-        Height = 15
+        Width = 95
+        Height = 13
         Caption = 'PROYECTO ACTIVO'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clGray
@@ -194,8 +217,8 @@ object frmDashboard: TfrmDashboard
       object lblUsuarioCap: TLabel
         Left = 16
         Top = 14
-        Width = 48
-        Height = 15
+        Width = 47
+        Height = 13
         Caption = 'USUARIO'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clGray
@@ -246,8 +269,8 @@ object frmDashboard: TfrmDashboard
       object lblMetricasCap: TLabel
         Left = 16
         Top = 14
-        Width = 60
-        Height = 15
+        Width = 70
+        Height = 13
         Caption = 'CONTADORES'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clGray
@@ -275,9 +298,9 @@ object frmDashboard: TfrmDashboard
         Top = 44
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -305,9 +328,9 @@ object frmDashboard: TfrmDashboard
         Top = 68
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -335,9 +358,9 @@ object frmDashboard: TfrmDashboard
         Top = 92
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -365,9 +388,9 @@ object frmDashboard: TfrmDashboard
         Top = 44
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -395,9 +418,9 @@ object frmDashboard: TfrmDashboard
         Top = 68
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -425,9 +448,9 @@ object frmDashboard: TfrmDashboard
         Top = 92
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -455,9 +478,9 @@ object frmDashboard: TfrmDashboard
         Top = 116
         Width = 80
         Height = 17
+        Cursor = crHandPoint
         AutoSize = False
         Caption = '0'
-        Cursor = crHandPoint
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 3553567
         Font.Height = -13
@@ -479,8 +502,8 @@ object frmDashboard: TfrmDashboard
       object lblProyectoActivoCap: TLabel
         Left = 16
         Top = 14
-        Width = 200
-        Height = 15
+        Width = 166
+        Height = 13
         Caption = 'PROYECTO ACTIVO PLANIFICADO'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clGray
@@ -753,7 +776,6 @@ object frmDashboard: TfrmDashboard
     end
   end
   object TimerReloj: TTimer
-    Interval = 1000
     OnTimer = TimerRelojTimer
     Left = 840
     Top = 96

@@ -66,6 +66,15 @@ type
       out AByErp: TDictionary<string, TSyncRowAlmacen>);
     procedure LoadLocalFamiliasByErpCodigo(
       out AByErp: TDictionary<string, TSyncRowFamilia>);
+
+    function HashRawItem(const Item: TRawItemErp): string;
+    procedure LoadLocalRawItemsByClave(const ATipoOrigen: string;
+      out AByClave: TDictionary<string, TSyncRowRawItem>);
+    procedure LoadLocalRawItemsFull(const ATipoOrigen: string;
+      out AByClave: TDictionary<string, TRawItemErp>);
+    procedure ApplyRawItem(const ARow: TSyncRowRawItem;
+      const AParentLocalIds: TDictionary<string, Int64>);
+    procedure MarkRawItemObsoleto(ALocalRawItemId: Int64);
   public
     constructor Create(AConnection: TADOConnection; ACodigoEmpresa: SmallInt;
       const AErpSistema: string);
@@ -90,6 +99,17 @@ type
     function ApplyCalendarios(const ARows: TArray<TSyncRowCalendario>;
       AFechaDesde, AFechaHasta: TDateTime;
       AReader: IErpReader): TSyncSummary;
+
+    // -- BACKLOG (Raw_Item) ----------------------------------------------
+    // PreviewBacklogOF: llegeix OF->OT->OP del ERP, calcula estat respecte
+    // a FS_PL_Raw_Item local. Retorna l'array jerarquic (pares abans).
+    function PreviewBacklogOF(AReader: IErpReader;
+      AEjercicio: SmallInt): TArray<TSyncRowRawItem>;
+
+    // ApplyRawItems: persisteix els ARows on Aplicar=True a FS_PL_Raw_Item.
+    // Marca Activo=0 (obsolet) els Raw_Items existents amb ssEliminadoErp
+    // que no tinguin FS_PL_NodeData associat.
+    function ApplyRawItems(const ARows: TArray<TSyncRowRawItem>): TSyncSummary;
 
     // Post-pass: vincula Operator.CalendarId i FS_PL_CenterCalendar segons
     // GrupoHorarioCodigo. Retorna nombre d'operaris i centres vinculats.
@@ -2442,6 +2462,450 @@ begin
     ACentrosVinculados := Q.RowsAffected;
   finally
     Q.Free;
+  end;
+end;
+
+{ ---------- Backlog (Raw_Item) ---------- }
+
+function TErpSyncRepo.HashRawItem(const Item: TRawItemErp): string;
+var
+  Buf: string;
+  FS: TFormatSettings;
+begin
+  FS := TFormatSettings.Invariant;
+  Buf :=
+    Item.TipoOrigen + '|' + IntToStr(Item.Nivel) + '|' +
+    Item.ClaveERP + '|' + Item.ClaveERPPadre + '|' +
+    IntToStr(Item.NumeroDoc) + '|' + Item.SerieDoc + '|' +
+    IntToStr(Item.LineaDoc) + '|' + Item.CodigoProyecto + '|' +
+    Item.Codigo + '|' + Item.Nombre + '|' + Item.Descripcion + '|' +
+    Item.CodigoArticulo + '|' + Item.DescripcionArticulo + '|' +
+    FloatToStr(Item.Cantidad, FS) + '|' + Item.UnidadMedida + '|' +
+    Item.CodigoCliente + '|' + Item.NombreCliente + '|' +
+    FormatDateTime('yyyymmddhhnnss', Item.FechaCompromiso, FS) + '|' +
+    FormatDateTime('yyyymmddhhnnss', Item.FechaNecesaria, FS) + '|' +
+    FormatDateTime('yyyymmddhhnnss', Item.FechaInicioPrev, FS) + '|' +
+    FormatDateTime('yyyymmddhhnnss', Item.FechaFinPrev, FS) + '|' +
+    IntToStr(Item.Prioridad) + '|' + IntToStr(Item.Orden) + '|' +
+    Item.CentroPreferente + '|' +
+    FloatToStr(Item.HorasEstimadas, FS) + '|' +
+    Item.EstadoERP;
+  Result := THashSHA1.GetHashString(Buf);
+end;
+
+procedure TErpSyncRepo.LoadLocalRawItemsByClave(const ATipoOrigen: string;
+  out AByClave: TDictionary<string, TSyncRowRawItem>);
+var
+  Q: TADOQuery;
+  Row: TSyncRowRawItem;
+  Clave: string;
+begin
+  AByClave := TDictionary<string, TSyncRowRawItem>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    Q.SQL.Text :=
+      'SELECT ri.RawItemId, ri.ClaveERP, ' +
+      '       ISNULL(ri.LastErpHash, '''') AS LastErpHash, ' +
+      '       CASE WHEN EXISTS (SELECT 1 FROM FS_PL_NodeData nd ' +
+      '                          WHERE nd.CodigoEmpresa = ri.CodigoEmpresa ' +
+      '                            AND nd.RawItemTipoOrigen = ri.TipoOrigen ' +
+      '                            AND nd.RawItemClaveERP = ri.ClaveERP) ' +
+      '            THEN 1 ELSE 0 END AS HasNode ' +
+      'FROM FS_PL_Raw_Item ri ' +
+      'WHERE ri.CodigoEmpresa = :Emp AND ri.TipoOrigen = :Tipo';
+    Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
+    Q.Parameters.ParamByName('Tipo').Value := ATipoOrigen;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FillChar(Row, SizeOf(Row), 0);
+      Row.LocalRawItemId    := Q.FieldByName('RawItemId').AsLargeInt;
+      Row.LocalLastErpHash  := Q.FieldByName('LastErpHash').AsString;
+      Row.HasPlannedNode    := Q.FieldByName('HasNode').AsInteger = 1;
+      Clave := Q.FieldByName('ClaveERP').AsString;
+      AByClave.AddOrSetValue(Clave, Row);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TErpSyncRepo.LoadLocalRawItemsFull(const ATipoOrigen: string;
+  out AByClave: TDictionary<string, TRawItemErp>);
+var
+  Q: TADOQuery;
+  Item: TRawItemErp;
+begin
+  AByClave := TDictionary<string, TRawItemErp>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    Q.SQL.Text :=
+      'SELECT ClaveERP, ClaveERPPadre, Nivel, NumeroDoc, SerieDoc, LineaDoc, ' +
+      '       CodigoProyecto, Codigo, Nombre, Descripcion, ' +
+      '       CodigoArticulo, DescripcionArticulo, Cantidad, UnidadMedida, ' +
+      '       CodigoCliente, NombreCliente, ' +
+      '       FechaCompromiso, FechaNecesaria, FechaInicioPrev, FechaFinPrev, ' +
+      '       FechaLanzamiento, FechaPedido, Prioridad, Orden, ' +
+      '       CentroPreferente, HorasEstimadas, EstadoERP, Observaciones ' +
+      'FROM FS_PL_Raw_Item ' +
+      'WHERE CodigoEmpresa = :Emp AND TipoOrigen = :Tipo';
+    Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
+    Q.Parameters.ParamByName('Tipo').Value := ATipoOrigen;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Item := Default(TRawItemErp);
+      Item.TipoOrigen          := ATipoOrigen;
+      Item.ClaveERP            := Q.FieldByName('ClaveERP').AsString;
+      Item.ClaveERPPadre       := Q.FieldByName('ClaveERPPadre').AsString;
+      Item.Nivel               := Q.FieldByName('Nivel').AsInteger;
+      Item.NumeroDoc           := Q.FieldByName('NumeroDoc').AsInteger;
+      Item.SerieDoc            := Q.FieldByName('SerieDoc').AsString;
+      Item.LineaDoc            := Q.FieldByName('LineaDoc').AsInteger;
+      Item.CodigoProyecto      := Q.FieldByName('CodigoProyecto').AsString;
+      Item.Codigo              := Q.FieldByName('Codigo').AsString;
+      Item.Nombre              := Q.FieldByName('Nombre').AsString;
+      Item.Descripcion         := Q.FieldByName('Descripcion').AsString;
+      Item.CodigoArticulo      := Q.FieldByName('CodigoArticulo').AsString;
+      Item.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
+      Item.Cantidad            := Q.FieldByName('Cantidad').AsFloat;
+      Item.UnidadMedida        := Q.FieldByName('UnidadMedida').AsString;
+      Item.CodigoCliente       := Q.FieldByName('CodigoCliente').AsString;
+      Item.NombreCliente       := Q.FieldByName('NombreCliente').AsString;
+      if not Q.FieldByName('FechaCompromiso').IsNull then
+        Item.FechaCompromiso   := Q.FieldByName('FechaCompromiso').AsDateTime;
+      if not Q.FieldByName('FechaNecesaria').IsNull then
+        Item.FechaNecesaria    := Q.FieldByName('FechaNecesaria').AsDateTime;
+      if not Q.FieldByName('FechaInicioPrev').IsNull then
+        Item.FechaInicioPrev   := Q.FieldByName('FechaInicioPrev').AsDateTime;
+      if not Q.FieldByName('FechaFinPrev').IsNull then
+        Item.FechaFinPrev      := Q.FieldByName('FechaFinPrev').AsDateTime;
+      if not Q.FieldByName('FechaLanzamiento').IsNull then
+        Item.FechaLanzamiento  := Q.FieldByName('FechaLanzamiento').AsDateTime;
+      if not Q.FieldByName('FechaPedido').IsNull then
+        Item.FechaPedido       := Q.FieldByName('FechaPedido').AsDateTime;
+      Item.Prioridad           := Q.FieldByName('Prioridad').AsInteger;
+      Item.Orden               := Q.FieldByName('Orden').AsInteger;
+      Item.CentroPreferente    := Q.FieldByName('CentroPreferente').AsString;
+      Item.HorasEstimadas      := Q.FieldByName('HorasEstimadas').AsFloat;
+      Item.EstadoERP           := Q.FieldByName('EstadoERP').AsString;
+      Item.Observaciones       := Q.FieldByName('Observaciones').AsString;
+      AByClave.AddOrSetValue(Item.ClaveERP, Item);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TErpSyncRepo.PreviewBacklogOF(AReader: IErpReader;
+  AEjercicio: SmallInt): TArray<TSyncRowRawItem>;
+var
+  ErpItems: TArray<TRawItemErp>;
+  Locals: TDictionary<string, TSyncRowRawItem>;
+  ErpSeen: TDictionary<string, Boolean>;
+  Pair: TPair<string, TSyncRowRawItem>;
+  ResList: TList<TSyncRowRawItem>;
+  Row, LocalRow: TSyncRowRawItem;
+  Item, FullData: TRawItemErp;
+  LocalFull: TDictionary<string, TRawItemErp>;
+begin
+  SetLength(Result, 0);
+  ErpItems := AReader.ReadBacklogOF(AEjercicio);
+  LoadLocalRawItemsByClave('OF ', Locals);
+  ErpSeen := TDictionary<string, Boolean>.Create;
+  ResList := TList<TSyncRowRawItem>.Create;
+  try
+    for Item in ErpItems do
+    begin
+      FillChar(Row, SizeOf(Row), 0);
+      Row.ErpData := Item;
+      Row.NewHash := HashRawItem(Item);
+      ErpSeen.AddOrSetValue(Item.ClaveERP, True);
+
+      if Locals.TryGetValue(Item.ClaveERP, LocalRow) then
+      begin
+        Row.LocalRawItemId   := LocalRow.LocalRawItemId;
+        Row.LocalLastErpHash := LocalRow.LocalLastErpHash;
+        Row.HasPlannedNode   := LocalRow.HasPlannedNode;
+        if Row.NewHash = Row.LocalLastErpHash then
+        begin
+          Row.Status := ssSinCambios;
+          Row.Aplicar := False;
+        end
+        else
+        begin
+          Row.Status := ssActualizado;
+          Row.Aplicar := True;
+        end;
+      end
+      else
+      begin
+        Row.Status := ssNuevo;
+        Row.Aplicar := True;
+      end;
+
+      ResList.Add(Row);
+    end;
+
+    // Obsolets: locals que no apareixen al ERP. Si no tenen node, els marcarem
+    // Activo=0 al ApplyRawItems. Si tenen node, els deixem desmarcats i
+    // l'usuari decideix.
+    // Carreguem dades reals dels Raw_Item locals per poder mostrar-les al grid.
+    LoadLocalRawItemsFull('OF ', LocalFull);
+    try
+      for Pair in Locals do
+        if not ErpSeen.ContainsKey(Pair.Key) then
+        begin
+          Row := Pair.Value;
+          if LocalFull.TryGetValue(Pair.Key, FullData) then
+            Row.ErpData := FullData
+          else
+          begin
+            FillChar(Row.ErpData, SizeOf(Row.ErpData), 0);
+            Row.ErpData.ClaveERP := Pair.Key;
+            Row.ErpData.TipoOrigen := 'OF ';
+          end;
+          Row.Status := ssEliminadoErp;
+          Row.Aplicar := not Row.HasPlannedNode;
+          ResList.Add(Row);
+        end;
+    finally
+      LocalFull.Free;
+    end;
+
+    Result := ResList.ToArray;
+  finally
+    ErpSeen.Free;
+    Locals.Free;
+    ResList.Free;
+  end;
+end;
+
+procedure TErpSyncRepo.MarkRawItemObsoleto(ALocalRawItemId: Int64);
+var
+  Sql: string;
+begin
+  Sql :=
+    'UPDATE FS_PL_Raw_Item SET Activo = 0, LastErpSyncAt = SYSUTCDATETIME() ' +
+    'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+    '  AND RawItemId = ' + IntToStr(ALocalRawItemId);
+  ExecSql(Sql);
+end;
+
+procedure TErpSyncRepo.ApplyRawItem(const ARow: TSyncRowRawItem;
+  const AParentLocalIds: TDictionary<string, Int64>);
+var
+  Sql, EmpStr, NivelStr, NumDocStr, LinDocStr, PriStr, OrdStr: string;
+  CantStr, HorasStr: string;
+  FechaCompStr, FechaNecStr, FechaIniStr, FechaFinStr, FechaLanzStr, FechaPedStr: string;
+  ParentClauseInsert, ParentClauseUpdate: string;
+  ParentId: Int64;
+  FS: TFormatSettings;
+  CentroPrefSql: string;
+
+  function DateOrNull(D: TDateTime): string;
+  begin
+    if D > 0 then
+      Result := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', D) + ''''
+    else
+      Result := 'NULL';
+  end;
+
+begin
+  FS := TFormatSettings.Invariant;
+  EmpStr   := IntToStr(FCodigoEmpresa);
+  NivelStr := IntToStr(ARow.ErpData.Nivel);
+  NumDocStr := IntToStr(ARow.ErpData.NumeroDoc);
+  LinDocStr := IntToStr(ARow.ErpData.LineaDoc);
+  PriStr   := IntToStr(ARow.ErpData.Prioridad);
+  OrdStr   := IntToStr(ARow.ErpData.Orden);
+  CantStr  := FloatToStr(ARow.ErpData.Cantidad, FS);
+  HorasStr := FloatToStr(ARow.ErpData.HorasEstimadas, FS);
+  FechaCompStr := DateOrNull(ARow.ErpData.FechaCompromiso);
+  FechaNecStr  := DateOrNull(ARow.ErpData.FechaNecesaria);
+  FechaIniStr  := DateOrNull(ARow.ErpData.FechaInicioPrev);
+  FechaFinStr  := DateOrNull(ARow.ErpData.FechaFinPrev);
+  FechaLanzStr := DateOrNull(ARow.ErpData.FechaLanzamiento);
+  FechaPedStr  := DateOrNull(ARow.ErpData.FechaPedido);
+
+  // Resol ParentRawItemId si tenim el pare a la sessio actual
+  if (ARow.ErpData.ClaveERPPadre <> '') and
+     AParentLocalIds.TryGetValue(ARow.ErpData.ClaveERPPadre, ParentId) then
+  begin
+    ParentClauseInsert := IntToStr(ParentId);
+    ParentClauseUpdate := 'ParentRawItemId = ' + IntToStr(ParentId) + ', ';
+  end
+  else
+  begin
+    ParentClauseInsert := 'NULL';
+    ParentClauseUpdate := '';
+  end;
+
+  if Trim(ARow.ErpData.CentroPreferente) = '' then
+    CentroPrefSql := 'NULL'
+  else
+    CentroPrefSql := SqlStr(ARow.ErpData.CentroPreferente);
+
+  case ARow.Status of
+    ssNuevo:
+      begin
+        Sql :=
+          'INSERT INTO FS_PL_Raw_Item (CodigoEmpresa, TipoOrigen, Nivel, ' +
+          '  ParentRawItemId, OrigenERP, ClaveERP, ClaveERPPadre, ' +
+          '  NumeroDoc, SerieDoc, LineaDoc, CodigoProyecto, ' +
+          '  Codigo, Nombre, Descripcion, ' +
+          '  CodigoArticulo, DescripcionArticulo, Cantidad, UnidadMedida, ' +
+          '  CodigoCliente, NombreCliente, ' +
+          '  FechaCompromiso, FechaNecesaria, FechaInicioPrev, FechaFinPrev, ' +
+          '  FechaLanzamiento, FechaPedido, ' +
+          '  Prioridad, Orden, CentroPreferente, HorasEstimadas, ' +
+          '  EstadoERP, Observaciones, Activo, LastErpHash, LastErpSyncAt) VALUES (' +
+          EmpStr + ', ' + SqlStr(ARow.ErpData.TipoOrigen) + ', ' + NivelStr + ', ' +
+          ParentClauseInsert + ', ' + SqlStr(FErpSistema) + ', ' +
+          SqlStr(ARow.ErpData.ClaveERP) + ', ' + SqlStr(ARow.ErpData.ClaveERPPadre) + ', ' +
+          NumDocStr + ', ' + SqlStr(ARow.ErpData.SerieDoc) + ', ' +
+          LinDocStr + ', ' + SqlStr(ARow.ErpData.CodigoProyecto) + ', ' +
+          SqlStr(ARow.ErpData.Codigo) + ', ' + SqlStr(ARow.ErpData.Nombre) + ', ' +
+          SqlStr(ARow.ErpData.Descripcion) + ', ' +
+          SqlStr(ARow.ErpData.CodigoArticulo) + ', ' +
+          SqlStr(ARow.ErpData.DescripcionArticulo) + ', ' +
+          CantStr + ', ' + SqlStr(ARow.ErpData.UnidadMedida) + ', ' +
+          SqlStr(ARow.ErpData.CodigoCliente) + ', ' +
+          SqlStr(ARow.ErpData.NombreCliente) + ', ' +
+          FechaCompStr + ', ' + FechaNecStr + ', ' + FechaIniStr + ', ' + FechaFinStr + ', ' +
+          FechaLanzStr + ', ' + FechaPedStr + ', ' +
+          PriStr + ', ' + OrdStr + ', ' + CentroPrefSql + ', ' + HorasStr + ', ' +
+          SqlStr(ARow.ErpData.EstadoERP) + ', ' + SqlStr(ARow.ErpData.Observaciones) + ', ' +
+          '1, ' + SqlStr(ARow.NewHash) + ', SYSUTCDATETIME())';
+        ExecSql(Sql);
+      end;
+
+    ssActualizado:
+      begin
+        Sql :=
+          'UPDATE FS_PL_Raw_Item SET ' +
+          ParentClauseUpdate +
+          '  NumeroDoc = ' + NumDocStr + ', ' +
+          '  SerieDoc = ' + SqlStr(ARow.ErpData.SerieDoc) + ', ' +
+          '  LineaDoc = ' + LinDocStr + ', ' +
+          '  CodigoProyecto = ' + SqlStr(ARow.ErpData.CodigoProyecto) + ', ' +
+          '  Codigo = ' + SqlStr(ARow.ErpData.Codigo) + ', ' +
+          '  Nombre = ' + SqlStr(ARow.ErpData.Nombre) + ', ' +
+          '  Descripcion = ' + SqlStr(ARow.ErpData.Descripcion) + ', ' +
+          '  CodigoArticulo = ' + SqlStr(ARow.ErpData.CodigoArticulo) + ', ' +
+          '  DescripcionArticulo = ' + SqlStr(ARow.ErpData.DescripcionArticulo) + ', ' +
+          '  Cantidad = ' + CantStr + ', ' +
+          '  UnidadMedida = ' + SqlStr(ARow.ErpData.UnidadMedida) + ', ' +
+          '  CodigoCliente = ' + SqlStr(ARow.ErpData.CodigoCliente) + ', ' +
+          '  NombreCliente = ' + SqlStr(ARow.ErpData.NombreCliente) + ', ' +
+          '  FechaCompromiso = ' + FechaCompStr + ', ' +
+          '  FechaNecesaria = ' + FechaNecStr + ', ' +
+          '  FechaInicioPrev = ' + FechaIniStr + ', ' +
+          '  FechaFinPrev = ' + FechaFinStr + ', ' +
+          '  FechaLanzamiento = ' + FechaLanzStr + ', ' +
+          '  FechaPedido = ' + FechaPedStr + ', ' +
+          '  Prioridad = ' + PriStr + ', ' +
+          '  Orden = ' + OrdStr + ', ' +
+          '  CentroPreferente = ' + CentroPrefSql + ', ' +
+          '  HorasEstimadas = ' + HorasStr + ', ' +
+          '  EstadoERP = ' + SqlStr(ARow.ErpData.EstadoERP) + ', ' +
+          '  Observaciones = ' + SqlStr(ARow.ErpData.Observaciones) + ', ' +
+          '  Activo = 1, ' +
+          '  LastErpHash = ' + SqlStr(ARow.NewHash) + ', ' +
+          '  LastErpSyncAt = SYSUTCDATETIME() ' +
+          'WHERE CodigoEmpresa = ' + EmpStr +
+          '  AND RawItemId = ' + IntToStr(ARow.LocalRawItemId);
+        ExecSql(Sql);
+      end;
+  end;
+end;
+
+function TErpSyncRepo.ApplyRawItems(
+  const ARows: TArray<TSyncRowRawItem>): TSyncSummary;
+var
+  Row: TSyncRowRawItem;
+  ParentIds: TDictionary<string, Int64>;
+  Q: TADOQuery;
+  NewId: Int64;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Total := Length(ARows);
+  ParentIds := TDictionary<string, Int64>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+
+    // Carrega tots els RawItemIds existents perque els fills puguin trobar
+    // els seus pares ja persistits.
+    Q.SQL.Text :=
+      'SELECT RawItemId, ClaveERP FROM FS_PL_Raw_Item ' +
+      'WHERE CodigoEmpresa = :Emp AND TipoOrigen = ''OF ''';
+    Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      ParentIds.AddOrSetValue(Q.FieldByName('ClaveERP').AsString,
+                              Q.FieldByName('RawItemId').AsLargeInt);
+      Q.Next;
+    end;
+    Q.Close;
+
+    for Row in ARows do
+    begin
+      case Row.Status of
+        ssNuevo:        Inc(Result.Nuevos);
+        ssActualizado:  Inc(Result.Actualizados);
+        ssSinCambios:   Inc(Result.SinCambios);
+        ssEliminadoErp: Inc(Result.Eliminados);
+        ssError:        Inc(Result.Errores);
+      end;
+
+      if not Row.Aplicar then Continue;
+
+      try
+        if Row.Status = ssEliminadoErp then
+        begin
+          // Marcar obsolet nomes si NO te node planificat
+          if (Row.LocalRawItemId > 0) and (not Row.HasPlannedNode) then
+          begin
+            MarkRawItemObsoleto(Row.LocalRawItemId);
+            Inc(Result.Aplicados);
+          end;
+        end
+        else if Row.Status in [ssNuevo, ssActualizado] then
+        begin
+          ApplyRawItem(Row, ParentIds);
+          if Row.Status = ssNuevo then
+          begin
+            // Recupera el nou RawItemId per si te fills en aquest mateix lot
+            Q.SQL.Text :=
+              'SELECT RawItemId FROM FS_PL_Raw_Item ' +
+              'WHERE CodigoEmpresa = :Emp AND TipoOrigen = :Tipo AND ClaveERP = :Clv';
+            Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
+            Q.Parameters.ParamByName('Tipo').Value := Row.ErpData.TipoOrigen;
+            Q.Parameters.ParamByName('Clv').Value := Row.ErpData.ClaveERP;
+            Q.Open;
+            if not Q.Eof then
+            begin
+              NewId := Q.FieldByName('RawItemId').AsLargeInt;
+              ParentIds.AddOrSetValue(Row.ErpData.ClaveERP, NewId);
+            end;
+            Q.Close;
+          end;
+          Inc(Result.Aplicados);
+        end;
+      except
+        on E: Exception do
+          Inc(Result.Errores);
+      end;
+    end;
+  finally
+    Q.Free;
+    ParentIds.Free;
   end;
 end;
 

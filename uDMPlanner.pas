@@ -53,6 +53,7 @@ type
       AWindowsAuth: Boolean; const AUser: string = ''; const APassword: string = ''): TConnectorResult;
     procedure Disconnect;
     function IsConnected: Boolean;
+    procedure InstallTvfPendingErp;
 
     // Gestión de proyecto activo
     procedure LoadMasterProject;
@@ -103,7 +104,36 @@ implementation
 {$R *.dfm}
 
 uses
-  uLogin;
+  uLogin, uAppConfig;
+
+procedure TDMPlanner.InstallTvfPendingErp;
+var
+  ErpCfg: TErpSage200Config;
+  Cmd: TADOCommand;
+begin
+  if not ADOConnection.Connected then Exit;
+  try
+    ErpCfg := LoadErpSage200Config;
+  except
+    Exit;
+  end;
+  if Trim(ErpCfg.Database) = '' then Exit;
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := ADOConnection;
+    Cmd.CommandText := 'EXEC dbo.FS_PL_sp_InstallTvfPendingErp :SageDbName';
+    Cmd.Parameters.ParamByName('SageDbName').Value := ErpCfg.Database;
+    try
+      Cmd.Execute;
+    except
+      // Ignorat: la TVF mantindra el body provisional (retorna 0). El
+      // dashboard mostrara "0 pendientes" en comptes de fallar.
+    end;
+  finally
+    Cmd.Free;
+  end;
+end;
 
 function UserCanAccessProject(AUserId, AProjectId: Integer): Boolean;
 var
@@ -244,6 +274,11 @@ begin
         Migrator.Free;
       end;
     end;
+
+    // Instala el body real de la TVF FS_PL_fn_PendingErpOFs apuntando a la
+    // BD Sage configurada en el INI. Si no hay Sage configurado o falla,
+    // ignoramos: la TVF se queda con el body provisional (retorna 0).
+    InstallTvfPendingErp;
 
     Result := TConnectorResult.OK;
   except

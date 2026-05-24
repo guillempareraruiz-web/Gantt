@@ -146,6 +146,21 @@ type
     NewHash: string;
   end;
 
+  // Item del Backlog ERP (jerarquia OF/OT/OP o equivalent). El form de preview
+  // mostra una fila per cada element; l'usuari pot triar quins aplicar. No hi
+  // ha estat "Conflicto" perque els Raw_Item amb Source='ERP' no s'editen
+  // manualment: s'apliquen tal qual o es deixen com a obsolets.
+  TSyncRowRawItem = record
+    ErpData: TRawItemErp;
+    LocalRawItemId: Int64;        // 0 si no existe en local
+    LocalLastErpHash: string;
+    HasPlannedNode: Boolean;      // True si hi ha algun FS_PL_NodeData lligat
+    Status: TSyncStatus;
+    Aplicar: Boolean;
+    ErrorMsg: string;
+    NewHash: string;
+  end;
+
   TSyncSummary = record
     Total: Integer;
     Nuevos: Integer;
