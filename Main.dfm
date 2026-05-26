@@ -135,36 +135,12 @@ object Form1: TForm1
         Caption = 'Planificador Capacidad por Operario'
         OnClick = FiniteCapacityOperaris1Click
       end
-      object HeatmapCargaCentro1: TMenuItem
-        Caption = 'Heatmap carga por centro'
-        OnClick = HeatmapCargaCentro1Click
-      end
-      object HeatmapCargaOperario1: TMenuItem
-        Caption = 'Heatmap carga por operario'
-        OnClick = HeatmapCargaOperario1Click
-      end
-      object HeatmapEntregasVsCarga1: TMenuItem
-        Caption = 'Heatmap entregas vs capacidad'
-        OnClick = HeatmapEntregasVsCarga1Click
-      end
-      object HistogramasOperarios1: TMenuItem
-        Caption = 'Histogramas de operarios'
-        OnClick = HistogramasOperarios1Click
-      end
       object AutoPlanificacion1: TMenuItem
         Caption = 'Auto-planificaci'#243'n (scoring)...'
         OnClick = AutoPlanificacion1Click
       end
-      object CuadroPlanificacionDia1: TMenuItem
-        Caption = 'Cuadro Planificaci'#243'n del D'#237'a'
-        OnClick = CuadroPlanificacionDia1Click
-      end
       object N2: TMenuItem
         Caption = '-'
-      end
-      object Indicadoresdecentros1: TMenuItem
-        Caption = 'Indicadores de centros'
-        OnClick = Indicadoresdecentros1Click
       end
     end
     object Configuracion1: TMenuItem
@@ -236,6 +212,36 @@ object Form1: TForm1
       object ArticleDetail1: TMenuItem
         Caption = 'An'#225'lisis de art'#237'culo...'
         OnClick = ArticleDetail1Click
+      end
+      object N1: TMenuItem
+        Caption = '-'
+      end
+      object HeatmapCargaCentro1: TMenuItem
+        Caption = 'Heatmap carga por centro'
+        OnClick = HeatmapCargaCentro1Click
+      end
+      object HeatmapCargaOperario1: TMenuItem
+        Caption = 'Heatmap carga por operario'
+        OnClick = HeatmapCargaOperario1Click
+      end
+      object HeatmapEntregasVsCarga1: TMenuItem
+        Caption = 'Heatmap entregas vs capacidad'
+        OnClick = HeatmapEntregasVsCarga1Click
+      end
+      object HistogramasOperarios1: TMenuItem
+        Caption = 'Histogramas de operarios'
+        OnClick = HistogramasOperarios1Click
+      end
+      object N6: TMenuItem
+        Caption = '-'
+      end
+      object CuadroPlanificacionDia1: TMenuItem
+        Caption = 'Cuadro Planificaci'#243'n del D'#237'a'
+        OnClick = CuadroPlanificacionDia1Click
+      end
+      object Indicadoresdecentros1: TMenuItem
+        Caption = 'Indicadores de centros'
+        OnClick = Indicadoresdecentros1Click
       end
     end
     object Ayuda1: TMenuItem

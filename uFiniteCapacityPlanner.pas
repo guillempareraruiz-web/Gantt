@@ -20,9 +20,28 @@ uses
   System.DateUtils,
   Vcl.Controls, Vcl.Graphics, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls, Vcl.Menus, Vcl.CheckLst, Vcl.ComCtrls,
+  cxCheckComboBox, cxCheckBox, cxEdit, cxGraphics, cxControls, cxLookAndFeels,
+  cxLookAndFeelPainters, cxContainer, cxTextEdit, cxMaskEdit, cxDropDownEdit,
   uGanttTypes, uNodeDataRepo, uNodeInspector, uErpTypes, uCentreCalendar,
   uOperariosTypes, uOperariosRepo, uAssignOperaris, uCentreInspector,
-  uPlanningRules, uCustomFieldDefs, uPlanningPreview, uCardLayout;
+  uPlanningRules, uCustomFieldDefs, uPlanningPreview, uCardLayout,
+  uFCPLayoutRepo, dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
+  dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
+  dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
+  dxSkinLiquidSky, dxSkinLondonLiquidSky, dxSkinMcSkin, dxSkinMetropolis,
+  dxSkinMetropolisDark, dxSkinMoneyTwins, dxSkinOffice2007Black,
+  dxSkinOffice2007Blue, dxSkinOffice2007Green, dxSkinOffice2007Pink,
+  dxSkinOffice2007Silver, dxSkinOffice2010Black, dxSkinOffice2010Blue,
+  dxSkinOffice2010Silver, dxSkinOffice2013DarkGray, dxSkinOffice2013LightGray,
+  dxSkinOffice2013White, dxSkinOffice2016Colorful, dxSkinOffice2016Dark,
+  dxSkinOffice2019Black, dxSkinOffice2019Colorful, dxSkinOffice2019DarkGray,
+  dxSkinOffice2019White, dxSkinPumpkin, dxSkinSeven, dxSkinSevenClassic,
+  dxSkinSharp, dxSkinSharpPlus, dxSkinSilver, dxSkinSpringtime, dxSkinStardust,
+  dxSkinSummer2008, dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
+  dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
+  dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
+  dxSkinXmas2008Blue, cxButtons;
 
 type
   // Resultado de una asignación
@@ -130,7 +149,8 @@ type
     CARD_MARGIN = 6;
     CAP_BAR_H = 6;
     VSCROLLBAR_W = 8;
-    DAY_SEP_H = 20;
+    DAY_SEP_H = 28;
+    DAY_SEP_BAND_H = 20;  // alçada del badge/franja; la resta (8px) és aire
     HSCROLLBAR_H = 14;
   private
     FNodeRepo: TNodeDataRepo;
@@ -286,7 +306,6 @@ type
   TfrmFiniteCapacityPlanner = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
-    lblPendingCount: TLabel;
     pnlSeparator: TPanel;
     splitter: TSplitter;
     pnlPending: TPanel;
@@ -297,27 +316,50 @@ type
     pnlCentres: TPanel;
     pnlHeaderCentres: TPanel;
     lblCentresTitle: TLabel;
-    pnlFilterCentres: TPanel;
     lblFilterCaption: TLabel;
-    pnlFilterBtn: TPanel;
-    lblFilterText: TLabel;
-    lblFilterArrow: TLabel;
+    cbCentros: TcxCheckComboBox;
     pnlHeaderButtons: TPanel;
-    btnCancelar: TButton;
-    btnAceptar: TButton;
     pnlFooter: TPanel;
     lblFooterPending: TLabel;
     lblFooterAssigned: TLabel;
     lblFooterHours: TLabel;
     lblFooterCapacity: TLabel;
+    PnlUndo: TPanel;
+    LblUndoIcon: TLabel;
+    FBtnUndo: TLabel;
+    SepUR: TPanel;
+    PnlRedo: TPanel;
+    LblRedoIcon: TLabel;
+    FBtnRedo: TLabel;
+    FBtnOptions: TPanel;
+    LblDots: TLabel;
+    btnLayoutNew: TcxButton;
+    btnLayoutDelete: TcxButton;
+    cmbLayout: TcxComboBox;
+    lblLayout: TLabel;
+    btnLayoutSave: TcxButton;
+    btnAyuda: TButton;
+    LblRango: TLabel;
+    FDtpStart: TDateTimePicker;
+    FCmbRange: TComboBox;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormResize(Sender: TObject);
-    procedure btnAceptarClick(Sender: TObject);
-    procedure btnCancelarClick(Sender: TObject);
+    procedure FormHide(Sender: TObject);
     procedure edtSearchChange(Sender: TObject);
     procedure lblSearchClearClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure OnBtnOptionsClick(Sender: TObject);
+    procedure OnUndoClick(Sender: TObject);
+    procedure OnRedoClick(Sender: TObject);
+    procedure OnRangeChange(Sender: TObject);
+    procedure OnStartDateChange(Sender: TObject);
+    procedure cbCentrosChange(Sender: TObject);
+    procedure cmbLayoutChange(Sender: TObject);
+    procedure btnLayoutDeleteClick(Sender: TObject);
+    procedure btnAyudaClick(Sender: TObject);
+    procedure btnLayoutNewClick(Sender: TObject);
+    procedure btnLayoutSaveClick(Sender: TObject);
   private
     FNodeRepo: TNodeDataRepo;
     FOperariosRepo: TOperariosRepo;
@@ -341,8 +383,7 @@ type
     FGhostBmp: TBitmap;
     FGhostForm: TForm;
 
-    // Botón opciones pendientes
-    FBtnOptions: TPanel;
+    // Botón opciones pendientes (popup dinàmic; FBtnOptions ja és al DFM)
     FPendingPopup: TPopupMenu;
 
     // Menú contextual centros (cards)
@@ -356,11 +397,15 @@ type
     FColDragging: Boolean;
     FColGhostForm: TForm;
 
-    // Filtro de centros
-    FFilterCheckList: TCheckListBox;
-    FFilterDropDown: TForm;
-    FFilterLastCloseTick: Cardinal; // anti-rebote del boto centros
+    // Filtro de centros (multi-select via cbCentros: TcxCheckComboBox)
     FVisibleCentreIds: TList<Integer>;
+    FUpdatingCentros: Boolean;  // anti-recursió a cbCentrosChange
+
+    // Layouts d'usuari
+    FLayoutRepo: TFCPLayoutRepo;
+    FLayouts: TArray<TFCPLayout>;
+    FCurrentLayoutId: Integer;  // -1 = "(por defecto)"; >=0 = ID a BD
+    FUpdatingLayouts: Boolean;
 
     // Búsqueda y ordenación pendientes
     FSearchFilter: string;
@@ -374,24 +419,35 @@ type
     FFiltrosEstadoChecks: array[TNodoEstado] of TCheckBox;
     FFiltrosOpList: TCheckListBox;
 
-    // Undo / Redo
+    // Undo / Redo (FBtnUndo/FBtnRedo ja s'on al DFM)
     FUndoStack: TList<TFCPAction>;
     FRedoStack: TList<TFCPAction>;
-    FBtnUndo: TLabel;
-    FBtnRedo: TLabel;
 
     // Auto-scroll durant drag
     FAutoScrollTimer: TTimer;
 
-    // Rang de planificació
+    // Rang de planificació (FCmbRange/FDtpStart ja són al DFM)
     FPlanningRange: TPlanningRange;
     FPlanningStart: TDateTime;
-    FCmbRange: TComboBox;
-    FDtpStart: TDateTimePicker;
 
     // Dates calculades per capacitat finita: DataId -> (Start, End)
     FCalculatedTimes: TDictionary<Integer, TAbsInterval>;
     FGetNodeTimesCalc: TGetNodeTimesFunc;  // wrapper que consulta FCalculatedTimes
+
+    // Cache dels Start/End originals de BD (omplerts a Inicializar; ara és
+    // camp d'instància perquè la closure FGetNodeTimes el necessita viu).
+    FNodeTimesCache: TDictionary<Integer, TAbsInterval>;
+
+    // Backlog: DataIds sintètics (negatius) per Raw_Items encara no planificats.
+    // Mapeja DataId(negatiu) -> RawItemId(positiu) per persistir-los a Aceptar.
+    FBacklogRawItemIdByDataId: TDictionary<Integer, Integer>;
+    // DataIds positius que ja tenien centre quan s'ha obert el form (per detectar
+    // des-assignacions: si no apareixen al BuildAssignments final, cal posar
+    // CenterId=NULL a FS_PL_Node).
+    FInitiallyAssignedDataIds: TList<Integer>;
+
+    procedure LoadBacklogPending;
+    procedure PersistAssignments;
 
     procedure BuildPendingList;
     procedure UpdatePendingCount;
@@ -401,7 +457,6 @@ type
     procedure OnCentreBeginDrag(Sender: TObject);
     procedure DoDragMove(const ScreenPt: TPoint);
     procedure DoDragEnd(const ScreenPt: TPoint);
-    procedure OnBtnOptionsClick(Sender: TObject);
     procedure BuildOptionsPopup;
     procedure BuildCentrePopup;
     procedure OnCentrePopupShow(Sender: TObject);
@@ -447,39 +502,36 @@ type
     procedure UpdateUndoRedoButtons;
     function TakeSnapshot: TArray<TFCPAssignment>;
     procedure RestoreSnapshot(const ASnap: TArray<TFCPAssignment>);
-    procedure OnUndoClick(Sender: TObject);
-    procedure OnRedoClick(Sender: TObject);
     procedure OnAutoScrollTimer(Sender: TObject);
     procedure OnExportClick(Sender: TObject);
-    procedure OnRangeChange(Sender: TObject);
-    procedure OnStartDateChange(Sender: TObject);
     procedure GetPlanningDates(out AStart, AEnd: TDateTime);
     procedure RecalcAllCentreTimes;
     procedure RecalcCentreTimes(const CentreId: Integer);
-    procedure OnFilterBtnClick(Sender: TObject);
-    procedure OnFilterDropDownDeactivate(Sender: TObject);
-    procedure OnFilterCheckClick(Sender: TObject);
-    procedure CloseFilterDropDown;
-    procedure UpdateFilterText;
+    procedure PopularCentrosCombo;
     procedure ApplyCentreFilter;
+    procedure LoadLayouts;
+    procedure PopularCmbLayout(ASelectedLayoutId: Integer = -2);
+    procedure ApplyLayout(const ALayoutId: Integer);
+    function CapturarLayoutActual: TArray<TFCPLayoutCentro>;
+    procedure CentresOrdenAlfabetic;
     function BuildAssignments: TArray<TFCPAssignment>;
     procedure OnEditCardLayoutClick(Sender: TObject);
   protected
     procedure WndProc(var Message: TMessage); override;
   public
-    class function Execute(
+    procedure Inicializar(
       ANodeRepo: TNodeDataRepo;
       AOperariosRepo: TOperariosRepo;
-      out AAssignments: TArray<TFCPAssignment>;
       ARuleEngine: TPlanningRuleEngine = nil;
-      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
+      ACustomFieldDefs: TCustomFieldDefs = nil);
+    procedure SaveNow;
   end;
 
 implementation
 
 uses
   Data.Win.ADODB,
-  uDMPlanner, uCentresRepo,
+  uDMPlanner, uCentresRepo, uNodesRepo, uHelpViewer,
   uCardLayoutEditor;
 
 {$R *.dfm}
@@ -718,29 +770,24 @@ begin
     Urgente := (DaysLeft >= 0) and (DaysLeft <= 3);
   end;
 
-  // Fondo y borde
-  if IsSelected(D.DataId) then
-  begin
-    ACanvas.Brush.Color := $00FFF0E0;
-    ACanvas.Pen.Color := $00FF9020;
-    ACanvas.Pen.Width := 2;
-  end
+  // Fondo y borde "naturals" — la selecció només engruixa el border, sense
+  // alterar background ni color de border.
+  if Vencida then
+    ACanvas.Brush.Color := $00E8E0F0
+  else if IsHover then
+    ACanvas.Brush.Color := $00F0EDE8
   else
-  begin
-    if Vencida then
-      ACanvas.Brush.Color := $00E8E0F0
-    else if IsHover then
-      ACanvas.Brush.Color := $00F0EDE8
-    else
-      ACanvas.Brush.Color := clWhite;
-    if Vencida then
-      ACanvas.Pen.Color := $004040FF
-    else if Urgente then
-      ACanvas.Pen.Color := $000080FF
-    else
-      ACanvas.Pen.Color := $00E0E0E0;
+    ACanvas.Brush.Color := clWhite;
+  if Vencida then
+    ACanvas.Pen.Color := $004040FF
+  else if Urgente then
+    ACanvas.Pen.Color := $000080FF
+  else
+    ACanvas.Pen.Color := $00E0E0E0;
+  if IsSelected(D.DataId) then
+    ACanvas.Pen.Width := 3
+  else
     ACanvas.Pen.Width := 1;
-  end;
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
     FCardLayout.CornerRadius, FCardLayout.CornerRadius);
   ACanvas.Pen.Width := 1;
@@ -1284,14 +1331,18 @@ var
   S: string;
   TextW: Integer;
   LineY, X1, X2: Integer;
+  BandTop, BandBot: Integer;
 begin
   S := AnsiUpperCase(FormatDateTime('ddd dd/mm', ADate));
-  LineY := Y + DAY_SEP_H div 2;
+  // Centrar la banda de DAY_SEP_BAND_H dins DAY_SEP_H deixant aire dalt i baix.
+  BandTop := Y + (DAY_SEP_H - DAY_SEP_BAND_H) div 2;
+  BandBot := BandTop + DAY_SEP_BAND_H;
+  LineY := (BandTop + BandBot) div 2;
   X1 := CX + 6;
   X2 := CX + COL_WIDTH - VSCROLLBAR_W - 6;
 
   // Fons del separador — franja subtil
-  R := Rect(X1, Y + 2, X2, Y + DAY_SEP_H - 2);
+  R := Rect(X1, BandTop + 2, X2, BandBot - 2);
   ACanvas.Brush.Color := $00F0ECE8;
   ACanvas.Pen.Style := psClear;
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom, 4, 4);
@@ -1301,7 +1352,7 @@ begin
   ACanvas.Font.Size := 7;
   ACanvas.Font.Style := [fsBold];
   TextW := ACanvas.TextWidth(S);
-  BadgeR := Rect(X1 + 4, Y + 3, X1 + TextW + 14, Y + DAY_SEP_H - 3);
+  BadgeR := Rect(X1 + 4, BandTop + 3, X1 + TextW + 14, BandBot - 3);
   ACanvas.Brush.Color := $00D0C8C0;
   ACanvas.Pen.Style := psClear;
   ACanvas.RoundRect(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom, 6, 6);
@@ -1776,29 +1827,24 @@ begin
     Urgente := (DaysLeft >= 0) and (DaysLeft <= 3);
   end;
 
-  // Fondo y borde
-  if IsSelectedItem(DataId) then
-  begin
-    ACanvas.Brush.Color := $00FFF0E0;
-    ACanvas.Pen.Color := $00FF9020;
-    ACanvas.Pen.Width := 2;
-  end
+  // Fondo y borde "naturals" — la selecció només engruixa el border,
+  // sense alterar background ni color de border.
+  if Vencida then
+    ACanvas.Brush.Color := $00E8E0F0
+  else if IsHover then
+    ACanvas.Brush.Color := BlendColor(BaseBg, $00E0D8D0, 80)
   else
-  begin
-    if Vencida then
-      ACanvas.Brush.Color := $00E8E0F0
-    else if IsHover then
-      ACanvas.Brush.Color := BlendColor(BaseBg, $00E0D8D0, 80)
-    else
-      ACanvas.Brush.Color := BaseBg;
-    if Vencida then
-      ACanvas.Pen.Color := $004040FF
-    else if Urgente then
-      ACanvas.Pen.Color := $000080FF
-    else
-      ACanvas.Pen.Color := $00E0E0E0;
+    ACanvas.Brush.Color := BaseBg;
+  if Vencida then
+    ACanvas.Pen.Color := $004040FF
+  else if Urgente then
+    ACanvas.Pen.Color := $000080FF
+  else
+    ACanvas.Pen.Color := $00E0E0E0;
+  if IsSelectedItem(DataId) then
+    ACanvas.Pen.Width := 3
+  else
     ACanvas.Pen.Width := 1;
-  end;
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
     FCardLayout.CornerRadius, FCardLayout.CornerRadius);
   ACanvas.Pen.Width := 1;
@@ -2379,15 +2425,13 @@ end;
 {               TfrmFiniteCapacityPlanner                    }
 { ========================================================= }
 
-class function TfrmFiniteCapacityPlanner.Execute(
+procedure TfrmFiniteCapacityPlanner.Inicializar(
   ANodeRepo: TNodeDataRepo;
   AOperariosRepo: TOperariosRepo;
-  out AAssignments: TArray<TFCPAssignment>;
   ARuleEngine: TPlanningRuleEngine;
-  ACustomFieldDefs: TCustomFieldDefs): Boolean;
+  ACustomFieldDefs: TCustomFieldDefs);
 var
   Frm: TfrmFiniteCapacityPlanner;
-  NodeTimes: TDictionary<Integer, TAbsInterval>;
   Links: TArray<TErpLink>;
   Centres: TArray<TCentreTreball>;
   Q: TADOQuery;
@@ -2395,6 +2439,18 @@ var
   LI: Integer;
   Iv: TAbsInterval;
 begin
+  Frm := Self;
+
+  // Idempotencia: si ja s'ha inicialitzat, no fer res. Per refrescar s'ha
+  // d'usar el bot\303\263 expl\303\adcit o gestionar des del Main.
+  if FCentreColumns <> nil then Exit;
+
+  // NodeTimes \303\251s un cache per al callback FGetNodeTimes; el guardem com
+  // a camp perqu\303\251 viu mentre viu el form.
+  if FNodeTimesCache = nil then
+    FNodeTimesCache := TDictionary<Integer, TAbsInterval>.Create
+  else
+    FNodeTimesCache.Clear;
   // Omplir el repo de NodeData amb el projecte actiu
   if DMPlanner <> nil then
     DMPlanner.LoadNodes;
@@ -2406,7 +2462,6 @@ begin
     Centres := nil;
 
   // Carregar Start/End dels nodes des de BD per al projecte actiu
-  NodeTimes := TDictionary<Integer, TAbsInterval>.Create;
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := DMPlanner.ADOConnection;
@@ -2426,7 +2481,7 @@ begin
         Iv.E := 0
       else
         Iv.E := Q.FieldByName('FechaFin').AsDateTime;
-      NodeTimes.AddOrSetValue(Q.FieldByName('NodeId').AsInteger, Iv);
+      FNodeTimesCache.AddOrSetValue(Q.FieldByName('NodeId').AsInteger, Iv);
       Q.Next;
     end;
   finally
@@ -2465,8 +2520,6 @@ begin
     Q.Free;
   end;
 
-  Frm := TfrmFiniteCapacityPlanner.Create(nil);
-  try
     Frm.FNodeRepo := ANodeRepo;
     Frm.FOperariosRepo := AOperariosRepo;
     Frm.FCentres := Centres;
@@ -2476,7 +2529,7 @@ begin
       var
         It: TAbsInterval;
       begin
-        if NodeTimes.TryGetValue(DataId, It) then
+        if FNodeTimesCache.TryGetValue(DataId, It) then
         begin
           AStart := It.S;
           AEnd := It.E;
@@ -2500,159 +2553,31 @@ begin
     Frm.FRuleEngine := ARuleEngine;
     Frm.FCustomFieldDefs := ACustomFieldDefs;
 
-    // Botón opciones en la cabecera del panel pendientes
-    Frm.FBtnOptions := TPanel.Create(Frm);
-    Frm.FBtnOptions.Parent := Frm.pnlPending;
-    Frm.FBtnOptions.Align := alTop;
-    Frm.FBtnOptions.Height := 0; // invisible, el botó real va dins lblPendingTitle
-    // Realment posem el botó com a fill de pnlPending, alineat a la dreta del header
-    Frm.FBtnOptions.Free;
-    Frm.FBtnOptions := TPanel.Create(Frm);
-    Frm.FBtnOptions.Parent := Frm.lblPendingTitle.Parent; // pnlPending
-    Frm.FBtnOptions.SetBounds(
-      Frm.pnlPending.Width - 40, 4, 32, 28);
-    Frm.FBtnOptions.Anchors := [akTop, akRight];
-    Frm.FBtnOptions.BevelOuter := bvNone;
-    Frm.FBtnOptions.Color := Frm.pnlPending.Color;
-    Frm.FBtnOptions.ParentBackground := False;
-    Frm.FBtnOptions.Cursor := crHandPoint;
-    Frm.FBtnOptions.OnClick := Frm.OnBtnOptionsClick;
-    var LblDots := TLabel.Create(Frm.FBtnOptions);
-    LblDots.Parent := Frm.FBtnOptions;
-    LblDots.Align := alClient;
-    LblDots.Alignment := taCenter;
-    LblDots.Layout := tlCenter;
-    LblDots.Caption := '...';
-    LblDots.Font.Size := 14;
-    LblDots.Font.Style := [fsBold];
-    LblDots.Font.Color := $00888888;
-    LblDots.Cursor := crHandPoint;
-    LblDots.OnClick := Frm.OnBtnOptionsClick;
-    Frm.FBtnOptions.BringToFront;
+    // Tag per als labels d'undo/redo (referència a l'icon per canviar color
+    // al UpdateUndoRedoButtons).
+    FBtnUndo.Tag := NativeInt(LblUndoIcon);
+    FBtnRedo.Tag := NativeInt(LblRedoIcon);
 
-    Frm.BuildOptionsPopup;
-    Frm.BuildFiltrosBtn;
-    Frm.BuildCentrePopup;
-    Frm.BuildCentreHeaderPopup;
+    // Data inicial del selector de rang.
+    FDtpStart.Date := Date;
 
-    // Botones Undo / Redo en el header — estilo icono + texto
-    var PnlUndo := TPanel.Create(Frm);
-    PnlUndo.Parent := Frm.pnlHeaderButtons;
-    PnlUndo.SetBounds(0, 0, 50, 50);
-    PnlUndo.Align := alLeft;
-    PnlUndo.BevelOuter := bvNone;
-    PnlUndo.Color := clWhite;
-    PnlUndo.ParentBackground := False;
-    PnlUndo.Cursor := crHandPoint;
-    PnlUndo.OnClick := Frm.OnUndoClick;
-
-    var LblUndoIcon := TLabel.Create(PnlUndo);
-    LblUndoIcon.Parent := PnlUndo;
-    LblUndoIcon.SetBounds(0, 4, 50, 24);
-    LblUndoIcon.Alignment := taCenter;
-    LblUndoIcon.Caption := #$21B6;  // ↶
-    LblUndoIcon.Font.Size := 16;
-    LblUndoIcon.Font.Color := $00CCCCCC;
-    LblUndoIcon.Cursor := crHandPoint;
-    LblUndoIcon.OnClick := Frm.OnUndoClick;
-
-    Frm.FBtnUndo := TLabel.Create(PnlUndo);
-    Frm.FBtnUndo.Parent := PnlUndo;
-    Frm.FBtnUndo.SetBounds(0, 28, 50, 16);
-    Frm.FBtnUndo.Alignment := taCenter;
-    Frm.FBtnUndo.Caption := 'UNDO';
-    Frm.FBtnUndo.Font.Size := 7;
-    Frm.FBtnUndo.Font.Style := [fsBold];
-    Frm.FBtnUndo.Font.Color := $00CCCCCC;
-    Frm.FBtnUndo.Cursor := crHandPoint;
-    Frm.FBtnUndo.OnClick := Frm.OnUndoClick;
-    Frm.FBtnUndo.Tag := NativeInt(LblUndoIcon);  // guardar ref al icono
-
-    // Separador vertical
-    var SepUR := TPanel.Create(Frm);
-    SepUR.Parent := Frm.pnlHeaderButtons;
-    SepUR.SetBounds(50, 0, 1, 50);
-    SepUR.Align := alLeft;
-    SepUR.BevelOuter := bvNone;
-    SepUR.Color := $00E0E0E0;
-    SepUR.ParentBackground := False;
-
-    var PnlRedo := TPanel.Create(Frm);
-    PnlRedo.Parent := Frm.pnlHeaderButtons;
-    PnlRedo.SetBounds(51, 0, 50, 50);
-    PnlRedo.Align := alLeft;
-    PnlRedo.BevelOuter := bvNone;
-    PnlRedo.Color := clWhite;
-    PnlRedo.ParentBackground := False;
-    PnlRedo.Cursor := crHandPoint;
-    PnlRedo.OnClick := Frm.OnRedoClick;
-
-    var LblRedoIcon := TLabel.Create(PnlRedo);
-    LblRedoIcon.Parent := PnlRedo;
-    LblRedoIcon.SetBounds(0, 4, 50, 24);
-    LblRedoIcon.Alignment := taCenter;
-    LblRedoIcon.Caption := #$21B7;  // ↷
-    LblRedoIcon.Font.Size := 16;
-    LblRedoIcon.Font.Color := $00CCCCCC;
-    LblRedoIcon.Cursor := crHandPoint;
-    LblRedoIcon.OnClick := Frm.OnRedoClick;
-
-    Frm.FBtnRedo := TLabel.Create(PnlRedo);
-    Frm.FBtnRedo.Parent := PnlRedo;
-    Frm.FBtnRedo.SetBounds(0, 28, 50, 16);
-    Frm.FBtnRedo.Alignment := taCenter;
-    Frm.FBtnRedo.Caption := 'REDO';
-    Frm.FBtnRedo.Font.Size := 7;
-    Frm.FBtnRedo.Font.Style := [fsBold];
-    Frm.FBtnRedo.Font.Color := $00CCCCCC;
-    Frm.FBtnRedo.Cursor := crHandPoint;
-    Frm.FBtnRedo.OnClick := Frm.OnRedoClick;
-    Frm.FBtnRedo.Tag := NativeInt(LblRedoIcon);  // guardar ref al icono
-
-    // Selector de rang de planificació
-    var LblRango := TLabel.Create(Frm);
-    LblRango.Parent := Frm.pnlHeaderCentres;
-    LblRango.SetBounds(290, 0, 50, 36);
-    LblRango.Caption := 'Rango:';
-    LblRango.Font.Size := 9;
-    LblRango.Font.Color := clGray;
-    LblRango.Font.Style := [fsBold];
-    LblRango.Layout := tlCenter;
-
-    Frm.FDtpStart := TDateTimePicker.Create(Frm);
-    Frm.FDtpStart.Parent := Frm.pnlHeaderCentres;
-    Frm.FDtpStart.SetBounds(340, 6, 100, 24);
-    Frm.FDtpStart.Date := Date;
-    Frm.FDtpStart.Font.Name := 'Segoe UI';
-    Frm.FDtpStart.Font.Size := 9;
-    Frm.FDtpStart.OnChange := Frm.OnStartDateChange;
-
-    Frm.FCmbRange := TComboBox.Create(Frm);
-    Frm.FCmbRange.Parent := Frm.pnlHeaderCentres;
-    Frm.FCmbRange.SetBounds(446, 6, 110, 24);
-    Frm.FCmbRange.Style := csDropDownList;
-    Frm.FCmbRange.Font.Name := 'Segoe UI';
-    Frm.FCmbRange.Font.Size := 9;
-    Frm.FCmbRange.Items.Add('1 d' + #$00ED + 'a');
-    Frm.FCmbRange.Items.Add('2 d' + #$00ED + 'as');
-    Frm.FCmbRange.Items.Add('3 d' + #$00ED + 'as');
-    Frm.FCmbRange.Items.Add('5 d' + #$00ED + 'as');
-    Frm.FCmbRange.Items.Add('1 semana');
-    Frm.FCmbRange.Items.Add('2 semanas');
-    Frm.FCmbRange.Items.Add('1 mes');
-    Frm.FCmbRange.ItemIndex := 4; // 1 semana per defecte
-    Frm.FCmbRange.OnChange := Frm.OnRangeChange;
-
-    // Filtro de centros — conectar events
-    Frm.pnlFilterBtn.OnClick := Frm.OnFilterBtnClick;
-    Frm.lblFilterText.OnClick := Frm.OnFilterBtnClick;
-    Frm.lblFilterArrow.OnClick := Frm.OnFilterBtnClick;
+    BuildOptionsPopup;
+    BuildFiltrosBtn;
+    BuildCentrePopup;
+    BuildCentreHeaderPopup;
 
     // Inicializar todos los centros como visibles
     for var CI := 0 to High(Centres) do
       if Centres[CI].Visible and (Centres[CI].Id >= 0) then
         Frm.FVisibleCentreIds.Add(Centres[CI].Id);
-    Frm.UpdateFilterText;
+
+    // Poblar el TcxCheckComboBox de filtro de centros
+    Frm.PopularCentrosCombo;
+
+    // Layouts d'usuari
+    Frm.FLayoutRepo := TFCPLayoutRepo.Create(
+      DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    Frm.LoadLayouts;
 
     // Pending list
     Frm.FPendingList := TPendingListControl.Create(Frm);
@@ -2709,19 +2634,26 @@ begin
     Frm.FPendingList.FGetNodeTimes := Frm.FGetNodeTimesCalc;
     Frm.FCentreColumns.FGetNodeTimes := Frm.FGetNodeTimesCalc;
 
+    // Pre-poblar asignaciones con los nodos ya planificados del proyecto.
+    // Sin esto, todos los nodos aparecen como pendientes aunque ya tengan
+    // CenterId asignado en FS_PL_Node.
+    if (DMPlanner <> nil) and (DMPlanner.NodesRepo <> nil) then
+    begin
+      var ExistingNodes := DMPlanner.NodesRepo.GetAll;
+      for var NI := 0 to High(ExistingNodes) do
+        if (ExistingNodes[NI].CentreId >= 0) and (ExistingNodes[NI].DataId > 0) then
+        begin
+          Frm.FCentreColumns.AssignItem(
+            ExistingNodes[NI].DataId, ExistingNodes[NI].CentreId);
+          Frm.FInitiallyAssignedDataIds.Add(ExistingNodes[NI].DataId);
+        end;
+    end;
+
+    // Cargar Backlog (Raw_Item OPs sin nodo) como pendientes sintéticos.
+    Frm.LoadBacklogPending;
+
     Frm.BuildPendingList;
     Frm.UpdatePendingCount;
-
-    Frm.ShowModal;
-    Result := Frm.ModalResult = mrOk;
-    if Result then
-      AAssignments := Frm.BuildAssignments
-    else
-      AAssignments := nil;
-  finally
-    Frm.Free;
-    NodeTimes.Free;
-  end;
 end;
 
 procedure TfrmFiniteCapacityPlanner.FormCreate(Sender: TObject);
@@ -2745,6 +2677,8 @@ begin
   FPlanningRange := pr1Setmana;
   FPlanningStart := Date;
   FCalculatedTimes := TDictionary<Integer, TAbsInterval>.Create;
+  FBacklogRawItemIdByDataId := TDictionary<Integer, Integer>.Create;
+  FInitiallyAssignedDataIds := TList<Integer>.Create;
   FAutoScrollTimer := TTimer.Create(Self);
   FAutoScrollTimer.Interval := 50;
   FAutoScrollTimer.Enabled := False;
@@ -2752,14 +2686,15 @@ begin
   FGhostBmp := TBitmap.Create;
   FGhostBmp.SetSize(240, 60);
   FGhostForm := nil;
-  FFilterDropDown := nil;
-  FFilterLastCloseTick := 0;
   FVisibleCentreIds := TList<Integer>.Create;
+  FUpdatingCentros := False;
+  FCurrentLayoutId := -1;
+  FUpdatingLayouts := False;
+  FLayoutRepo := nil;
 end;
 
 procedure TfrmFiniteCapacityPlanner.FormDestroy(Sender: TObject);
 begin
-  FreeAndNil(FFilterDropDown);
   FreeAndNil(FColGhostForm);
   FreeAndNil(FGhostForm);
   FGhostBmp.Free;
@@ -2767,7 +2702,11 @@ begin
   FUndoStack.Free;
   FRedoStack.Free;
   FCalculatedTimes.Free;
+  FBacklogRawItemIdByDataId.Free;
+  FInitiallyAssignedDataIds.Free;
+  FNodeTimesCache.Free;
   FOperacionFilter.Free;
+  FreeAndNil(FLayoutRepo);
 end;
 
 procedure TfrmFiniteCapacityPlanner.FormResize(Sender: TObject);
@@ -2869,10 +2808,6 @@ procedure TfrmFiniteCapacityPlanner.WndProc(var Message: TMessage);
 var
   Pt: TPoint;
 begin
-  // Tancar dropdown filtre si clic fora
-  if (Message.Msg = WM_LBUTTONDOWN) or (Message.Msg = WM_RBUTTONDOWN) then
-    CloseFilterDropDown;
-
   case Message.Msg of
     WM_MOUSEMOVE:
     begin
@@ -3100,8 +3035,6 @@ end;
 
 procedure TfrmFiniteCapacityPlanner.UpdatePendingCount;
 begin
-  if FPendingList <> nil then
-    lblPendingCount.Caption := Format('  %d OT pendientes', [Length(FPendingList.Items)]);
   RecalcAllCentreTimes;
   UpdateFooter;
 end;
@@ -3428,125 +3361,118 @@ begin
   FPendingPopup.Popup(Pt.X, Pt.Y);
 end;
 
-{ --- Filtro de centros --- }
+{ --- Filtro de centros (TcxCheckComboBox) --- }
 
-procedure TfrmFiniteCapacityPlanner.OnFilterBtnClick(Sender: TObject);
+procedure TfrmFiniteCapacityPlanner.PopularCentrosCombo;
 var
-  Pt: TPoint;
   I: Integer;
-  ItemH, TotalH: Integer;
+  Lbl: string;
+  Sorted: TArray<TCentreTreball>;
+  AllChecked: Boolean;
+  Item: TcxCheckComboBoxItem;
 begin
-  // Anti-rebote: si l'OnDeactivate l'ha tancat fa <250ms a causa d'aquest mateix
-  // clic al boto (perd focus -> Close), no reobrir.
-  if (FFilterLastCloseTick > 0) and
-     (GetTickCount - FFilterLastCloseTick < 250) then
-    Exit;
+  FUpdatingCentros := True;
+  try
+    cbCentros.Properties.Items.Clear;
 
-  // Si ja està obert, tancar
-  if (FFilterDropDown <> nil) and FFilterDropDown.Visible then
-  begin
-    CloseFilterDropDown;
-    Exit;
-  end;
-
-  // Crear dropdown form
-  if FFilterDropDown = nil then
-  begin
-    FFilterDropDown := TForm.CreateNew(Self);
-    FFilterDropDown.BorderStyle := bsNone;
-    FFilterDropDown.FormStyle := fsStayOnTop;
-    FFilterDropDown.Color := clWhite;
-    FFilterDropDown.OnDeactivate := OnFilterDropDownDeactivate;
-
-    FFilterCheckList := TCheckListBox.Create(FFilterDropDown);
-    FFilterCheckList.Parent := FFilterDropDown;
-    FFilterCheckList.Align := alClient;
-    FFilterCheckList.BorderStyle := bsNone;
-    FFilterCheckList.Font.Name := 'Segoe UI';
-    FFilterCheckList.Font.Size := 10;
-    FFilterCheckList.Font.Color := $00444444;
-    FFilterCheckList.Color := clWhite;
-    FFilterCheckList.OnClickCheck := OnFilterCheckClick;
-  end;
-
-  // Omplir amb els centres
-  FFilterCheckList.Items.Clear;
-  for I := 0 to High(FCentres) do
-  begin
-    if not FCentres[I].Visible then Continue;
-    if FCentres[I].Id < 0 then Continue;
-    FFilterCheckList.Items.AddObject(FCentres[I].Titulo, TObject(FCentres[I].Id));
-    FFilterCheckList.Checked[FFilterCheckList.Items.Count - 1] :=
-      FVisibleCentreIds.Contains(FCentres[I].Id);
-  end;
-
-  // Posicionar sota el botó
-  Pt := pnlFilterBtn.ClientToScreen(Point(0, pnlFilterBtn.Height));
-  ItemH := FFilterCheckList.ItemHeight;
-  if ItemH < 20 then ItemH := 22;
-  TotalH := Min(FFilterCheckList.Items.Count * ItemH + 4, 400);
-  FFilterDropDown.SetBounds(Pt.X, Pt.Y, pnlFilterBtn.Width, TotalH);
-  // Show actiu (no SW_SHOWNOACTIVATE) perque OnDeactivate funcioni
-  FFilterDropDown.Show;
-  FFilterDropDown.SetFocus;
-end;
-
-procedure TfrmFiniteCapacityPlanner.OnFilterDropDownDeactivate(Sender: TObject);
-begin
-  CloseFilterDropDown;
-end;
-
-procedure TfrmFiniteCapacityPlanner.OnFilterCheckClick(Sender: TObject);
-var
-  I, CId: Integer;
-begin
-  // Reconstruir llista de centres visibles
-  FVisibleCentreIds.Clear;
-  for I := 0 to FFilterCheckList.Items.Count - 1 do
-  begin
-    if FFilterCheckList.Checked[I] then
-    begin
-      CId := Integer(FFilterCheckList.Items.Objects[I]);
-      FVisibleCentreIds.Add(CId);
-    end;
-  end;
-
-  UpdateFilterText;
-  ApplyCentreFilter;
-end;
-
-procedure TfrmFiniteCapacityPlanner.CloseFilterDropDown;
-begin
-  if (FFilterDropDown <> nil) and FFilterDropDown.Visible then
-  begin
-    FFilterDropDown.Hide;
-    FFilterLastCloseTick := GetTickCount;
-  end;
-end;
-
-procedure TfrmFiniteCapacityPlanner.UpdateFilterText;
-var
-  N, Total, I: Integer;
-begin
-  Total := 0;
-  for I := 0 to High(FCentres) do
-    if FCentres[I].Visible and (FCentres[I].Id >= 0) then
-      Inc(Total);
-
-  N := FVisibleCentreIds.Count;
-  if (N = 0) or (N = Total) then
-    lblFilterText.Caption := 'Todos los centros'
-  else if N = 1 then
-  begin
+    // Llista del combo: sempre alfab\303\250tica per T\303\255tulo (independent de
+    // l'ordre del layout al panel de columnes). Filtrem nom\303\251s Id v\303\240lid.
+    Sorted := nil;
     for I := 0 to High(FCentres) do
-      if FCentres[I].Id = FVisibleCentreIds[0] then
+      if FCentres[I].Id >= 0 then
       begin
-        lblFilterText.Caption := FCentres[I].Titulo;
-        Exit;
+        SetLength(Sorted, Length(Sorted) + 1);
+        Sorted[High(Sorted)] := FCentres[I];
       end;
-  end
-  else
-    lblFilterText.Caption := Format('%d centros seleccionados', [N]);
+    TArray.Sort<TCentreTreball>(Sorted, TComparer<TCentreTreball>.Construct(
+      function(const A, B: TCentreTreball): Integer
+      begin
+        Result := CompareText(A.Titulo, B.Titulo);
+      end));
+
+    // Item 0: pseudo "(Todos)" — marca/desmarca la resta
+    Item := cbCentros.Properties.Items.Add;
+    Item.Description := '(Todos)';
+    Item.Tag := -1;
+
+    AllChecked := True;
+    for I := 0 to High(Sorted) do
+    begin
+      Lbl := Sorted[I].Titulo;
+      if Trim(Lbl) = '' then Lbl := Sorted[I].CodiCentre;
+      Item := cbCentros.Properties.Items.Add;
+      Item.Description := Lbl;
+      Item.Tag := Sorted[I].Id;
+      if FVisibleCentreIds.Contains(Sorted[I].Id) then
+        cbCentros.States[cbCentros.Properties.Items.Count - 1] := cbsChecked
+      else
+      begin
+        cbCentros.States[cbCentros.Properties.Items.Count - 1] := cbsUnchecked;
+        AllChecked := False;
+      end;
+    end;
+    if AllChecked then
+      cbCentros.States[0] := cbsChecked
+    else
+      cbCentros.States[0] := cbsUnchecked;
+
+    cbCentros.Properties.EmptySelectionText := 'Todos los centros';
+  finally
+    FUpdatingCentros := False;
+  end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.cbCentrosChange(Sender: TObject);
+var
+  I: Integer;
+  TodosChecked, AllReal: Boolean;
+  NewState: TcxCheckBoxState;
+  CId: Integer;
+begin
+  if FUpdatingCentros then Exit;
+  if cbCentros.Properties.Items.Count = 0 then Exit;
+
+  FUpdatingCentros := True;
+  try
+    TodosChecked := (cbCentros.States[0] = cbsChecked);
+    AllReal := True;
+    for I := 1 to cbCentros.Properties.Items.Count - 1 do
+      if cbCentros.States[I] <> cbsChecked then
+      begin
+        AllReal := False;
+        Break;
+      end;
+
+    if TodosChecked <> AllReal then
+    begin
+      // L'usuari ha clicat "(Todos)": propagar a la resta
+      if TodosChecked then NewState := cbsChecked else NewState := cbsUnchecked;
+      for I := 1 to cbCentros.Properties.Items.Count - 1 do
+        cbCentros.States[I] := NewState;
+    end
+    else
+    begin
+      // L'usuari ha clicat un centre: sincronitzar "(Todos)" segons estat real
+      if AllReal then
+        cbCentros.States[0] := cbsChecked
+      else
+        cbCentros.States[0] := cbsUnchecked;
+    end;
+
+    // Reconstruir FVisibleCentreIds segons l'estat del combo (per Tag=CentroId)
+    FVisibleCentreIds.Clear;
+    for I := 1 to cbCentros.Properties.Items.Count - 1 do
+      if cbCentros.States[I] = cbsChecked then
+      begin
+        CId := cbCentros.Properties.Items[I].Tag;
+        if CId >= 0 then
+          FVisibleCentreIds.Add(CId);
+      end;
+  finally
+    FUpdatingCentros := False;
+  end;
+
+  ApplyCentreFilter;
 end;
 
 procedure TfrmFiniteCapacityPlanner.ApplyCentreFilter;
@@ -3558,11 +3484,275 @@ begin
     if FCentres[I].Visible and (FCentres[I].Id >= 0) then
       Inc(Total);
 
-  // Si tots seleccionats o cap, mostrar tots (nil = sense filtre)
-  if (FVisibleCentreIds.Count = 0) or (FVisibleCentreIds.Count = Total) then
+  // Si tots seleccionats, mostrar tots (nil = sense filtre). Si cap o
+  // parcial, passar la llista (pot ser buida = cap centre visible).
+  if FVisibleCentreIds.Count = Total then
     FCentreColumns.SetVisibleCentreIds(nil)
   else
     FCentreColumns.SetVisibleCentreIds(FVisibleCentreIds);
+end;
+
+{ --- Layouts d'usuari --- }
+
+procedure TfrmFiniteCapacityPlanner.CentresOrdenAlfabetic;
+var
+  Tmp: TArray<TCentreTreball>;
+  I: Integer;
+begin
+  Tmp := Copy(FCentres);
+  TArray.Sort<TCentreTreball>(Tmp, TComparer<TCentreTreball>.Construct(
+    function(const A, B: TCentreTreball): Integer
+    begin
+      Result := CompareText(A.Titulo, B.Titulo);
+    end));
+  for I := 0 to High(Tmp) do
+    FCentres[I] := Tmp[I];
+  if FCentreColumns <> nil then
+    FCentreColumns.Centres := FCentres;
+end;
+
+procedure TfrmFiniteCapacityPlanner.LoadLayouts;
+begin
+  if FLayoutRepo = nil then Exit;
+  FLayouts := FLayoutRepo.GetAll;
+
+  // Selecció inicial: si hi ha un IsDefault, aplicar; si no, "(por defecto)"
+  FCurrentLayoutId := -1;
+  for var I := 0 to High(FLayouts) do
+    if FLayouts[I].IsDefault then
+    begin
+      FCurrentLayoutId := FLayouts[I].LayoutId;
+      Break;
+    end;
+  PopularCmbLayout(FCurrentLayoutId);
+  ApplyLayout(FCurrentLayoutId);
+end;
+
+procedure TfrmFiniteCapacityPlanner.PopularCmbLayout(ASelectedLayoutId: Integer);
+var
+  I, IdxSel: Integer;
+  Nom: string;
+begin
+  FUpdatingLayouts := True;
+  try
+    cmbLayout.Properties.Items.BeginUpdate;
+    try
+      cmbLayout.Properties.Items.Clear;
+      // Index 0 = "(por defecto)" virtual
+      cmbLayout.Properties.Items.AddObject('(por defecto)', TObject(-1));
+      IdxSel := 0;
+      for I := 0 to High(FLayouts) do
+      begin
+        Nom := FLayouts[I].Nombre;
+        if FLayouts[I].IsDefault then Nom := Nom + ' *';
+        cmbLayout.Properties.Items.AddObject(Nom, TObject(FLayouts[I].LayoutId));
+        if (ASelectedLayoutId >= 0) and
+           (FLayouts[I].LayoutId = ASelectedLayoutId) then
+          IdxSel := cmbLayout.Properties.Items.Count - 1;
+      end;
+      cmbLayout.ItemIndex := IdxSel;
+    finally
+      cmbLayout.Properties.Items.EndUpdate;
+    end;
+  finally
+    FUpdatingLayouts := False;
+  end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.ApplyLayout(const ALayoutId: Integer);
+var
+  I, J, K: Integer;
+  Found: TFCPLayout;
+  HasFound: Boolean;
+  NewCentres: TArray<TCentreTreball>;
+  VisibleIds: TList<Integer>;
+begin
+  if FCentreColumns = nil then Exit;
+
+  if ALayoutId < 0 then
+  begin
+    // "(por defecto)": tots els centres, ordre alfabètic, tots visibles
+    CentresOrdenAlfabetic;
+    FVisibleCentreIds.Clear;
+    for I := 0 to High(FCentres) do
+      if FCentres[I].Visible and (FCentres[I].Id >= 0) then
+        FVisibleCentreIds.Add(FCentres[I].Id);
+    PopularCentrosCombo;
+    FCentreColumns.SetVisibleCentreIds(nil);
+    FCentreColumns.Invalidate;
+    Exit;
+  end;
+
+  // Layout amb ID: buscar a FLayouts
+  HasFound := False;
+  for I := 0 to High(FLayouts) do
+    if FLayouts[I].LayoutId = ALayoutId then
+    begin
+      Found := FLayouts[I];
+      HasFound := True;
+      Break;
+    end;
+  if not HasFound then Exit;
+
+  // Reordenar FCentres segons Found.Centros (els no llistats van al final)
+  SetLength(NewCentres, Length(FCentres));
+  K := 0;
+  // Primer els llistats al layout, en ordre
+  for I := 0 to High(Found.Centros) do
+    for J := 0 to High(FCentres) do
+      if FCentres[J].Id = Found.Centros[I].CentroId then
+      begin
+        NewCentres[K] := FCentres[J];
+        Inc(K);
+        Break;
+      end;
+  // Després els que no estan al layout (queden ocults)
+  for J := 0 to High(FCentres) do
+  begin
+    var AlLayout: Boolean := False;
+    for I := 0 to High(Found.Centros) do
+      if Found.Centros[I].CentroId = FCentres[J].Id then
+      begin
+        AlLayout := True;
+        Break;
+      end;
+    if not AlLayout then
+    begin
+      NewCentres[K] := FCentres[J];
+      Inc(K);
+    end;
+  end;
+  FCentres := NewCentres;
+  FCentreColumns.Centres := FCentres;
+
+  // Marcar visibles segons layout
+  VisibleIds := TList<Integer>.Create;
+  try
+    for I := 0 to High(Found.Centros) do
+      VisibleIds.Add(Found.Centros[I].CentroId);
+    FVisibleCentreIds.Clear;
+    for I := 0 to VisibleIds.Count - 1 do
+      FVisibleCentreIds.Add(VisibleIds[I]);
+  finally
+    VisibleIds.Free;
+  end;
+  PopularCentrosCombo;
+  ApplyCentreFilter;
+  FCentreColumns.Invalidate;
+end;
+
+function TfrmFiniteCapacityPlanner.CapturarLayoutActual: TArray<TFCPLayoutCentro>;
+var
+  Lst: TList<TFCPLayoutCentro>;
+  I, Orden: Integer;
+  C: TFCPLayoutCentro;
+begin
+  Lst := TList<TFCPLayoutCentro>.Create;
+  try
+    Orden := 0;
+    for I := 0 to High(FCentres) do
+    begin
+      if FCentres[I].Id < 0 then Continue;
+      if not FVisibleCentreIds.Contains(FCentres[I].Id) then Continue;
+      C.CentroId := FCentres[I].Id;
+      C.Orden := Orden;
+      Inc(Orden);
+      Lst.Add(C);
+    end;
+    Result := Lst.ToArray;
+  finally
+    Lst.Free;
+  end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.cmbLayoutChange(Sender: TObject);
+var
+  Lid: Integer;
+begin
+  if FUpdatingLayouts then Exit;
+  if cmbLayout.ItemIndex < 0 then Exit;
+  Lid := Integer(cmbLayout.Properties.Items.Objects[cmbLayout.ItemIndex]);
+  FCurrentLayoutId := Lid;
+  ApplyLayout(Lid);
+end;
+
+procedure TfrmFiniteCapacityPlanner.btnLayoutDeleteClick(Sender: TObject);
+begin
+ if FLayoutRepo = nil then Exit;
+  if FCurrentLayoutId < 0 then Exit;  // no es pot eliminar "(por defecto)"
+
+  if MessageDlg('¿Eliminar el layout seleccionado?',
+    mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  FLayoutRepo.Delete(FCurrentLayoutId);
+  FCurrentLayoutId := -1;
+  LoadLayouts;
+
+end;
+
+procedure TfrmFiniteCapacityPlanner.btnAyudaClick(Sender: TObject);
+begin
+  THelpViewer.Show('uFiniteCapacityPlanner',
+    'Planificador de Capacidad Finita');
+end;
+
+procedure TfrmFiniteCapacityPlanner.btnLayoutNewClick(Sender: TObject);
+var
+  Nom: string;
+  L: TFCPLayout;
+  NewId: Integer;
+begin
+  if FLayoutRepo = nil then Exit;
+  Nom := '';
+  if not InputQuery('Nuevo layout', 'Nombre del layout:', Nom) then Exit;
+  Nom := Trim(Nom);
+  if Nom = '' then Exit;
+
+  L.LayoutId := -1;
+  L.Nombre := Nom;
+  L.IsDefault := False;
+  L.Centros := CapturarLayoutActual;
+
+  NewId := FLayoutRepo.Insert(L);
+  if NewId < 0 then
+  begin
+    ShowMessage('No se ha podido crear el layout.');
+    Exit;
+  end;
+
+  // Refrescar la llista en mem\303\262ria + repintar combo, per\303\262 sense
+  // re-aplicar cap layout: l'estat actual del panel ja \303\251s el correcte.
+  FCurrentLayoutId := NewId;
+  FLayouts := FLayoutRepo.GetAll;
+  PopularCmbLayout(NewId);
+end;
+
+procedure TfrmFiniteCapacityPlanner.btnLayoutSaveClick(Sender: TObject);
+var
+  I: Integer;
+  L: TFCPLayout;
+begin
+  if FLayoutRepo = nil then Exit;
+  if FCurrentLayoutId < 0 then
+  begin
+    // "(por defecto)" no es persisteix: tractar com a Nou
+    btnLayoutNewClick(Sender);
+    Exit;
+  end;
+
+  // Trobar el layout actual i actualitzar-lo amb l'estat actual
+  for I := 0 to High(FLayouts) do
+    if FLayouts[I].LayoutId = FCurrentLayoutId then
+    begin
+      L := FLayouts[I];
+      L.Centros := CapturarLayoutActual;
+      FLayoutRepo.Update(L);
+      // Refrescar la llista en mem\303\262ria + repintar combo, mantenint el
+      // mateix layout actiu (no re-aplicar).
+      FLayouts := FLayoutRepo.GetAll;
+      PopularCmbLayout(FCurrentLayoutId);
+      Exit;
+    end;
 end;
 
 procedure TfrmFiniteCapacityPlanner.BuildCentreHeaderPopup;
@@ -4762,14 +4952,292 @@ begin
   end;
 end;
 
-procedure TfrmFiniteCapacityPlanner.btnAceptarClick(Sender: TObject);
+procedure TfrmFiniteCapacityPlanner.LoadBacklogPending;
+var
+  Q: TADOQuery;
+  D: TNodeData;
+  RawId, NextDataId, MinExistingId: Integer;
+  Op: string;
 begin
-  ModalResult := mrOk;
+  if (FNodeRepo = nil) or (DMPlanner = nil) or not DMPlanner.IsConnected then Exit;
+
+  // DataId sintetic: usem enters negatius per no xocar amb els reals (positius).
+  // Comencem a -1 i decrementem; si el repo ja en tenia algun (rar), partim per
+  // sota del minim.
+  NextDataId := -1;
+  MinExistingId := 0;
+  for var ND in FNodeRepo.GetAllData do
+    if ND.DataId < MinExistingId then
+      MinExistingId := ND.DataId;
+  if MinExistingId < 0 then
+    NextDataId := MinExistingId - 1;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT RawId, TipoOrigen, ClaveERP, CodigoDocumento, ' +
+      '       CodigoArticulo, DescripcionArticulo, ' +
+      '       Cantidad, CodigoCliente, NombreCliente, ' +
+      '       FechaCompromiso, FechaNecesaria, ' +
+      '       Prioridad, CentroPreferente, HorasEstimadas ' +
+      'FROM FS_PL_vw_Backlog ' +
+      'WHERE CodigoEmpresa = :Emp AND Nivel = 3';
+    Q.Parameters.ParamByName('Emp').Value := DMPlanner.CodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      RawId := Q.FieldByName('RawId').AsInteger;
+
+      D := Default(TNodeData);
+      D.DataId := NextDataId;
+      Dec(NextDataId);
+
+      Op := Trim(Q.FieldByName('CodigoDocumento').AsString);
+      D.Operacion := Op;
+      D.CodigoArticulo := Q.FieldByName('CodigoArticulo').AsString;
+      D.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
+      D.CodigoCliente := Q.FieldByName('CodigoCliente').AsString;
+
+      if not Q.FieldByName('FechaCompromiso').IsNull then
+        D.FechaEntrega := Q.FieldByName('FechaCompromiso').AsDateTime;
+      if not Q.FieldByName('FechaNecesaria').IsNull then
+        D.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
+
+      if not Q.FieldByName('Cantidad').IsNull then
+        D.UnidadesAFabricar := Q.FieldByName('Cantidad').AsFloat;
+      if not Q.FieldByName('HorasEstimadas').IsNull then
+        D.DurationMin := Q.FieldByName('HorasEstimadas').AsFloat * 60.0;
+      D.DurationMinOriginal := D.DurationMin;
+
+      if not Q.FieldByName('Prioridad').IsNull then
+        D.Prioridad := Q.FieldByName('Prioridad').AsInteger
+      else
+        D.Prioridad := 99;
+
+      D.Estado := nePendiente;
+      D.Tipo := ntOF;
+      D.OperariosNecesarios := 1;
+      D.LibreMoviment := True;
+
+      D.RawItemTipoOrigen := Q.FieldByName('TipoOrigen').AsString;
+      D.RawItemClaveERP := Q.FieldByName('ClaveERP').AsString;
+
+      FNodeRepo.AddOrUpdate(D);
+      FBacklogRawItemIdByDataId.AddOrSetValue(D.DataId, RawId);
+
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
 end;
 
-procedure TfrmFiniteCapacityPlanner.btnCancelarClick(Sender: TObject);
+procedure TfrmFiniteCapacityPlanner.PersistAssignments;
+var
+  Asgs: TArray<TFCPAssignment>;
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  AssignedNow: TList<Integer>;
+  RawId, NodeId, CenterId, OrigDataId: Integer;
+  D: TNodeData;
+  CE, PID: string;
+  Calc: TAbsInterval;
+  FIniStr, FFinStr, DurStr, UdsStr, FNecStr: string;
+  HasCalc: Boolean;
+
+  function QS(const S: string): string;
+  begin
+    Result := '''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
+  end;
+
+  function QSOrNull(const S: string): string;
+  begin
+    if S = '' then Result := 'NULL' else Result := QS(S);
+  end;
+
+  function FmtDT(const DT: TDateTime): string;
+  begin
+    if DT <= 0 then Result := 'NULL'
+    else Result := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', DT) + '''';
+  end;
+
 begin
-  ModalResult := mrCancel;
+  if (DMPlanner = nil) or not DMPlanner.IsConnected then Exit;
+  if DMPlanner.CurrentProjectId <= 0 then Exit;
+
+  Asgs := BuildAssignments;
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  PID := IntToStr(DMPlanner.CurrentProjectId);
+
+  AssignedNow := TList<Integer>.Create;
+  DMPlanner.ADOConnection.BeginTrans;
+  try
+    for var I := 0 to High(Asgs) do
+    begin
+      OrigDataId := Asgs[I].DataId;
+      CenterId := Asgs[I].CentreId;
+
+      if OrigDataId > 0 then
+      begin
+        // Node existent: update CenterId (i dates si tenim càlcul).
+        AssignedNow.Add(OrigDataId);
+        HasCalc := FCalculatedTimes.TryGetValue(OrigDataId, Calc);
+
+        Cmd := TADOCommand.Create(nil);
+        try
+          Cmd.Connection := DMPlanner.ADOConnection;
+          if HasCalc then
+            Cmd.CommandText :=
+              'UPDATE FS_PL_Node SET CenterId = ' + IntToStr(CenterId) +
+              ', FechaInicio = ' + FmtDT(Calc.S) +
+              ', FechaFin = ' + FmtDT(Calc.E) +
+              ' WHERE CodigoEmpresa = ' + CE +
+              ' AND ProjectId = ' + PID +
+              ' AND NodeId = ' + IntToStr(OrigDataId)
+          else
+            Cmd.CommandText :=
+              'UPDATE FS_PL_Node SET CenterId = ' + IntToStr(CenterId) +
+              ' WHERE CodigoEmpresa = ' + CE +
+              ' AND ProjectId = ' + PID +
+              ' AND NodeId = ' + IntToStr(OrigDataId);
+          Cmd.Execute;
+        finally
+          Cmd.Free;
+        end;
+      end
+      else
+      begin
+        // Backlog: crear Node + NodeData lligat al Raw_Item.
+        if not FBacklogRawItemIdByDataId.TryGetValue(OrigDataId, RawId) then
+          Continue;
+        if not FNodeRepo.TryGetById(OrigDataId, D) then
+          Continue;
+
+        HasCalc := FCalculatedTimes.TryGetValue(OrigDataId, Calc);
+        if HasCalc then
+        begin
+          FIniStr := FmtDT(Calc.S);
+          FFinStr := FmtDT(Calc.E);
+        end
+        else
+        begin
+          FIniStr := 'NULL';
+          FFinStr := 'NULL';
+        end;
+        if D.DurationMin > 0 then
+          DurStr := FloatToStr(D.DurationMin, TFormatSettings.Invariant)
+        else
+          DurStr := '0';
+
+        Cmd := TADOCommand.Create(nil);
+        try
+          Cmd.Connection := DMPlanner.ADOConnection;
+          Cmd.CommandText :=
+            'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, ' +
+            '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde) VALUES (' +
+            CE + ', ' + PID + ', ' + IntToStr(CenterId) + ', ' +
+            FIniStr + ', ' + FFinStr + ', ' + DurStr + ', ' +
+            QS(D.Operacion) + ', 15251072, 11166760)';
+          Cmd.Execute;
+        finally
+          Cmd.Free;
+        end;
+
+        Q := TADOQuery.Create(nil);
+        try
+          Q.Connection := DMPlanner.ADOConnection;
+          Q.SQL.Text :=
+            'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
+            'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+          Q.Open;
+          NodeId := Q.FieldByName('NewId').AsInteger;
+        finally
+          Q.Free;
+        end;
+
+        if D.UnidadesAFabricar > 0 then
+          UdsStr := FloatToStr(D.UnidadesAFabricar, TFormatSettings.Invariant)
+        else
+          UdsStr := '1';
+        FNecStr := FmtDT(D.FechaEntrega);
+
+        Cmd := TADOCommand.Create(nil);
+        try
+          Cmd.Connection := DMPlanner.ADOConnection;
+          Cmd.CommandText :=
+            'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
+            '  FechaEntrega, FechaNecesaria, CodigoCliente, ' +
+            '  CodigoArticulo, DescripcionArticulo, ' +
+            '  DuracionMin, DuracionMinOriginal, ' +
+            '  UnidadesAFabricar, OperariosNecesarios, Prioridad, ' +
+            '  RawItemClaveERP, RawItemTipoOrigen, ' +
+            '  ColorFondoOp, ColorBordeOp) VALUES (' +
+            CE + ', ' + IntToStr(NodeId) + ', ' + QS(D.Operacion) + ', ' +
+            FNecStr + ', ' + FNecStr + ', ' + QS(D.CodigoCliente) + ', ' +
+            QS(D.CodigoArticulo) + ', ' + QS(D.DescripcionArticulo) + ', ' +
+            DurStr + ', ' + DurStr + ', ' +
+            UdsStr + ', 1, ' + IntToStr(D.Prioridad) + ', ' +
+            QSOrNull(D.RawItemClaveERP) + ', ' +
+            QSOrNull(D.RawItemTipoOrigen) + ', ' +
+            '15251072, 11166760)';
+          Cmd.Execute;
+        finally
+          Cmd.Free;
+        end;
+      end;
+    end;
+
+    // Des-assignacions: DataIds inicialment al centre que ja no apareixen.
+    for var J := 0 to FInitiallyAssignedDataIds.Count - 1 do
+      if not AssignedNow.Contains(FInitiallyAssignedDataIds[J]) then
+      begin
+        Cmd := TADOCommand.Create(nil);
+        try
+          Cmd.Connection := DMPlanner.ADOConnection;
+          Cmd.CommandText :=
+            'UPDATE FS_PL_Node SET CenterId = NULL ' +
+            'WHERE CodigoEmpresa = ' + CE +
+            ' AND ProjectId = ' + PID +
+            ' AND NodeId = ' + IntToStr(FInitiallyAssignedDataIds[J]);
+          Cmd.Execute;
+        finally
+          Cmd.Free;
+        end;
+      end;
+
+    DMPlanner.ADOConnection.CommitTrans;
+  except
+    on E: Exception do
+    begin
+      DMPlanner.ADOConnection.RollbackTrans;
+      AssignedNow.Free;
+      raise;
+    end;
+  end;
+  AssignedNow.Free;
+
+  // Refresc del repo central de nodes per al Gantt.
+  DMPlanner.LoadNodes;
+end;
+
+procedure TfrmFiniteCapacityPlanner.FormHide(Sender: TObject);
+begin
+  // Auto-save quan es canvia de vista (Dashboard/Gantt). Si no s'ha
+  // inicialitzat encara (FCentreColumns=nil), no fa res.
+  if FCentreColumns <> nil then
+    SaveNow;
+end;
+
+procedure TfrmFiniteCapacityPlanner.SaveNow;
+begin
+  try
+    PersistAssignments;
+  except
+    on E: Exception do
+      MessageDlg('Error al guardar asignaciones:' + sLineBreak + E.Message,
+        mtError, [mbOK], 0);
+  end;
 end;
 
 procedure TfrmFiniteCapacityPlanner.edtSearchChange(Sender: TObject);
@@ -5076,9 +5544,8 @@ end;
 
 procedure TfrmFiniteCapacityPlanner.CloseAllDropDowns;
 begin
-  // Nomes el filtre de centros es no-modal i necessita auto-close.
-  // El de Filtros (Estados+Operacion) ja es un dialeg modal centrat.
-  CloseFilterDropDown;
+  // El TcxCheckComboBox de centres es tanca sol; el di\303\240leg "Filtros"
+  // (Estados+Operacion) ja es modal centrat. No hi ha res a tancar manualment.
 end;
 
 procedure TfrmFiniteCapacityPlanner.WMMove(var Msg: TMessage);

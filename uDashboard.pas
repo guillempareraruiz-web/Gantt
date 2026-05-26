@@ -30,6 +30,7 @@ type
     lblUsuarioRol: TLabel;
     pnlAcciones: TPanel;
     btnAbrirGantt: TButton;
+    btnAbrirFiniteCapacity: TButton;
     TimerReloj: TTimer;
     pnlMetricas: TPanel;
     lblMetricasCap: TLabel;
@@ -71,10 +72,15 @@ type
     lblValDependencias: TLabel;
     lblCapMarcadores: TLabel;
     lblValMarcadores: TLabel;
+    lblCapOFsPendientes: TLabel;
+    lblValOFsPendientes: TLabel;
+    lblCapOTsPendientes: TLabel;
+    lblValOTsPendientes: TLabel;
     procedure lblPendingSyncClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure TimerRelojTimer(Sender: TObject);
     procedure btnAbrirGanttClick(Sender: TObject);
+    procedure btnAbrirFiniteCapacityClick(Sender: TObject);
     procedure lblValCalendariosClick(Sender: TObject);
     procedure lblValCentrosClick(Sender: TObject);
     procedure lblValAreasClick(Sender: TObject);
@@ -84,12 +90,15 @@ type
     procedure lblValOperariosClick(Sender: TObject);
   private
     FOnAbrirGantt: TNotifyEvent;
+    FOnAbrirFiniteCapacity: TNotifyEvent;
     procedure ActualizarReloj;
     procedure RefrescarProyectoActivo;
     procedure RefrescarPendingSync;
   public
     procedure Refrescar;
     property OnAbrirGantt: TNotifyEvent read FOnAbrirGantt write FOnAbrirGantt;
+    property OnAbrirFiniteCapacity: TNotifyEvent read FOnAbrirFiniteCapacity
+      write FOnAbrirFiniteCapacity;
   end;
 
 implementation
@@ -364,6 +373,10 @@ var
 begin
   lblPendingSync.Visible := True;
   lblPendingSync.Caption := '(comprobando pendientes ERP...)';
+  lblValOFsPendientes.Caption := '--';
+  lblValOFsPendientes.Font.Color := clBlack;
+  lblValOTsPendientes.Caption := '--';
+  lblValOTsPendientes.Font.Color := clBlack;
   if not DMPlanner.IsConnected then
   begin
     lblPendingSync.Caption := '(sin conexion BD)';
@@ -407,6 +420,18 @@ begin
     lblPendingSync.Caption := 'Sin pendientes de sincronizar';
     lblPendingSync.Font.Color := clWhite;
   end;
+
+  lblValOFsPendientes.Caption := IntToStr(NumOFs);
+  if NumOFs > 0 then
+    lblValOFsPendientes.Font.Color := clRed
+  else
+    lblValOFsPendientes.Font.Color := clBlack;
+
+  lblValOTsPendientes.Caption := IntToStr(NumOTs);
+  if NumOTs > 0 then
+    lblValOTsPendientes.Font.Color := clRed
+  else
+    lblValOTsPendientes.Font.Color := clBlack;
 end;
 
 procedure TfrmDashboard.lblPendingSyncClick(Sender: TObject);
@@ -419,6 +444,12 @@ procedure TfrmDashboard.btnAbrirGanttClick(Sender: TObject);
 begin
   if Assigned(FOnAbrirGantt) then
     FOnAbrirGantt(Self);
+end;
+
+procedure TfrmDashboard.btnAbrirFiniteCapacityClick(Sender: TObject);
+begin
+  if Assigned(FOnAbrirFiniteCapacity) then
+    FOnAbrirFiniteCapacity(Self);
 end;
 
 procedure TfrmDashboard.lblValCalendariosClick(Sender: TObject);

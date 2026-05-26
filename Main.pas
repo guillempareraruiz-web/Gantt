@@ -18,7 +18,7 @@ uses
   uHeatmapEntregasVsCarga,
   uHistogramasOperarios,
   uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor,
-  uDashBoard, uVistaGantt;
+  uDashBoard, uVistaGantt, uFiniteCapacityPlanner;
 
 type
 
@@ -82,6 +82,8 @@ type
     N5: TMenuItem;
     StockCockpit1: TMenuItem;
     ArticleDetail1: TMenuItem;
+    N1: TMenuItem;
+    N6: TMenuItem;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -107,7 +109,9 @@ type
     procedure MostrarDashboard;
     procedure OcultarDashboard;
     procedure DashboardAbrirGantt(Sender: TObject);
+    procedure DashboardAbrirFiniteCapacity(Sender: TObject);
     procedure MostrarVistaGantt;
+    procedure MostrarFiniteCapacity;
     procedure LoadActivePlan;
     function HasActivePlan: Boolean;
 
@@ -197,12 +201,13 @@ var
   FCentresRows: TArray<TCentreTreball>;
   FDashboard: TfrmDashboard;
   FVistaGantt: TfrmVistaGantt;
+  FFiniteCapacity: TfrmFiniteCapacityPlanner;
 
 implementation
 
 uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList, uBacklog,
   uDemoBacklog,
-  uFiniteCapacityPlanner, uFiniteCapacityOperaris, uOperarioAusencias,
+  uFiniteCapacityOperaris, uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
   uGestionOperacionHabilidades, uGestionOperationTypes,
   uCuadroPlanificacionDelDia, uGestionTurnos,
@@ -346,39 +351,15 @@ begin
 end;
 
 procedure TForm1.FiniteCapacity1Click(Sender: TObject);
-var
-  Assignments: TArray<TFCPAssignment>;
 begin
-  if not Assigned(DMPlanner.NodeDataRepo) then
-  begin
-    ShowMessage('Repositorio de nodos no inicializado.');
-    Exit;
-  end;
-  if not Assigned(FOperariosRepo) then
-  begin
-    ShowMessage('Repositorio de operarios no inicializado.');
-    Exit;
-  end;
   if DMPlanner.CurrentProjectId <= 0 then
   begin
     ShowMessage('No hay ningún proyecto activo.');
     Exit;
   end;
-
-  if TfrmFiniteCapacityPlanner.Execute(
-    DMPlanner.NodeDataRepo,
-    FOperariosRepo,
-    Assignments,
-    FPlanningRuleEngine,
-    FCustomFieldDefs
-  ) then
-  begin
-    // TODO: aplicar asignaciones al Gantt
-  end;
-
-  // Refrescar Gantt por si hubo cambios
-  if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
-    FVistaGantt.GanttControl.Invalidate;
+  if Assigned(FVistaGantt) then
+    FVistaGantt.Visible := False;
+  MostrarFiniteCapacity;
 end;
 
 procedure TForm1.FiniteCapacityOperaris1Click(Sender: TObject);
@@ -1020,9 +1001,12 @@ begin
   begin
     FDashboard := TfrmDashboard.Create(Self);
     FDashboard.OnAbrirGantt := DashboardAbrirGantt;
+    FDashboard.OnAbrirFiniteCapacity := DashboardAbrirFiniteCapacity;
     FDashboard.Parent := Self;
     FDashboard.Align := alClient;
   end;
+  if Assigned(FFiniteCapacity) then
+    FFiniteCapacity.Visible := False;
   FDashboard.Refrescar;
   FDashboard.Visible := True;
   FDashboard.BringToFront;
@@ -1063,8 +1047,53 @@ begin
   if Assigned(FVistaGantt.GanttControl) then
     FVistaGantt.GanttControl.OnLinksModified := GanttLinksModified;
 
+  if Assigned(FFiniteCapacity) then
+    FFiniteCapacity.Visible := False;
   FVistaGantt.Visible := True;
   FVistaGantt.BringToFront;
+end;
+
+procedure TForm1.DashboardAbrirFiniteCapacity(Sender: TObject);
+begin
+  OcultarDashboard;
+  MostrarFiniteCapacity;
+end;
+
+procedure TForm1.MostrarFiniteCapacity;
+begin
+  if not HasActivePlan then
+  begin
+    MostrarDashboard;
+    Exit;
+  end;
+  if not Assigned(FOperariosRepo) then
+  begin
+    ShowMessage('Repositorio de operarios no inicializado.');
+    Exit;
+  end;
+  if FFiniteCapacity = nil then
+  begin
+    FFiniteCapacity := TfrmFiniteCapacityPlanner.Create(Self);
+    FFiniteCapacity.Parent := Self;
+    FFiniteCapacity.Align := alClient;
+    try
+      FFiniteCapacity.Inicializar(
+        DMPlanner.NodeDataRepo,
+        FOperariosRepo,
+        FPlanningRuleEngine,
+        FCustomFieldDefs);
+    except
+      on E: Exception do
+      begin
+        ShowMessage('Error en Inicializar FiniteCapacity: ' + sLineBreak +
+          E.ClassName + ': ' + E.Message);
+        FreeAndNil(FFiniteCapacity);
+        Exit;
+      end;
+    end;
+  end;
+  FFiniteCapacity.Visible := True;
+  FFiniteCapacity.BringToFront;
 end;
 
 function TForm1.HasActivePlan: Boolean;

@@ -79,7 +79,7 @@ object frmDashboard: TfrmDashboard
       Alignment = taRightJustify
       Anchors = [akTop, akRight]
       AutoSize = False
-      Caption = ''
+      Caption = 'OF pendientes'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWhite
       Font.Height = -13
@@ -754,6 +754,50 @@ object frmDashboard: TfrmDashboard
         Font.Style = [fsBold]
         ParentFont = False
       end
+      object lblCapOFsPendientes: TLabel
+        Left = 480
+        Top = 152
+        Width = 160
+        Height = 17
+        AutoSize = False
+        Caption = 'OF pendientes ERP:'
+      end
+      object lblValOFsPendientes: TLabel
+        Left = 644
+        Top = 152
+        Width = 200
+        Height = 17
+        AutoSize = False
+        Caption = '--'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clBlack
+        Font.Height = -13
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblCapOTsPendientes: TLabel
+        Left = 480
+        Top = 172
+        Width = 160
+        Height = 17
+        AutoSize = False
+        Caption = 'OT pendientes ERP:'
+      end
+      object lblValOTsPendientes: TLabel
+        Left = 644
+        Top = 172
+        Width = 200
+        Height = 17
+        AutoSize = False
+        Caption = '--'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clBlack
+        Font.Height = -13
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
     end
     object pnlAcciones: TPanel
       Left = 24
@@ -772,6 +816,15 @@ object frmDashboard: TfrmDashboard
         Caption = 'Abrir planificaci'#243'n (Gantt)'
         TabOrder = 0
         OnClick = btnAbrirGanttClick
+      end
+      object btnAbrirFiniteCapacity: TButton
+        Left = 228
+        Top = 14
+        Width = 200
+        Height = 32
+        Caption = 'Abrir Carga Finita'
+        TabOrder = 1
+        OnClick = btnAbrirFiniteCapacityClick
       end
     end
   end

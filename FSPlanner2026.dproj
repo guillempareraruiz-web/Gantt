@@ -354,6 +354,7 @@
             <DesignClass>TDataModule</DesignClass>
         </DCCReference>
         <DCCReference Include="uUserPreferencesRepo.pas"/>
+        <DCCReference Include="uFCPLayoutRepo.pas"/>
         <DCCReference Include="uLogin.pas">
             <Form>frmLogin</Form>
         </DCCReference>
