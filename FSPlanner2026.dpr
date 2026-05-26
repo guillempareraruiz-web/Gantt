@@ -145,7 +145,9 @@ uses
   uGanttDatesDialog in 'uGanttDatesDialog.pas' {frmGanttDatesDialog},
   uAppConfig in 'uAppConfig.pas',
   uDBConfig in 'uDBConfig.pas' {frmDBConfig},
-  uSincronizarERP in 'uSincronizarERP.pas' {frmSincronizarERP};
+  uSincronizarERP in 'uSincronizarERP.pas' {frmSincronizarERP},
+  uCardLayout in 'uCardLayout.pas',
+  uCardLayoutEditor in 'uCardLayoutEditor.pas' {frmCardLayoutEditor};
 
 {$R *.res}
 

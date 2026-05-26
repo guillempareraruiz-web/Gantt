@@ -18,6 +18,7 @@ uses
   uHeatmapEntregasVsCarga,
   uHistogramasOperarios,
   uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor,
+  uCardLayoutSetRepo, uCardLayoutSetManager,
   uDashBoard, uVistaGantt, uFiniteCapacityPlanner;
 
 type
@@ -53,6 +54,8 @@ type
     N10: TMenuItem;
     CamposPersonalizados1: TMenuItem;
     ReglasPlanificacion1: TMenuItem;
+    NCards1: TMenuItem;
+    GestionCardLayouts1: TMenuItem;
     Vistas1: TMenuItem;
     Kanban1: TMenuItem;
     DispatchList1: TMenuItem;
@@ -145,6 +148,7 @@ type
     procedure Maquinas1Click(Sender: TObject);
     procedure CamposPersonalizados1Click(Sender: TObject);
     procedure ReglasPlanificacion1Click(Sender: TObject);
+    procedure GestionCardLayouts1Click(Sender: TObject);
     procedure Kanban1Click(Sender: TObject);
     procedure DispatchList1Click(Sender: TObject);
     procedure Backlog1Click(Sender: TObject);
@@ -602,6 +606,25 @@ procedure TForm1.ReglasPlanificacion1Click(Sender: TObject);
 begin
   if TfrmPlanningRulesEditor.Execute(FPlanningRuleEngine) then
     FPlanningRuleEngine.SaveToFile;
+end;
+
+procedure TForm1.GestionCardLayouts1Click(Sender: TObject);
+var
+  Repo: TCardLayoutSetRepo;
+begin
+  if not DMPlanner.IsConnected then
+  begin
+    ShowMessage('No hay conexi'#243'n a BD.');
+    Exit;
+  end;
+  Repo := TCardLayoutSetRepo.Create(
+    DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Repo.SeedDefaultIfEmpty;
+    ShowCardLayoutSetManager(Self, Repo, FCustomFieldDefs);
+  finally
+    Repo.Free;
+  end;
 end;
 
 procedure TForm1.Calendarios1Click(Sender: TObject);

@@ -25,7 +25,8 @@ uses
   uGanttTypes, uNodeDataRepo, uNodeInspector, uErpTypes, uCentreCalendar,
   uOperariosTypes, uOperariosRepo, uAssignOperaris, uCentreInspector,
   uPlanningRules, uCustomFieldDefs, uPlanningPreview, uCardLayout,
-  uFCPLayoutRepo, dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  uFCPLayoutRepo, uCardLayoutSetRepo,
+  dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue,
   dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
@@ -88,6 +89,8 @@ type
     FLinks: TArray<TErpLink>;
     FGetNodeTimes: TGetNodeTimesFunc;
     FCardLayout: TCardLayout;
+    FCardLayoutSet: TCardLayoutSet;
+    FHasCardLayoutSet: Boolean;
     FItems: TArray<Integer>;  // DataIds pendientes
     FScrollY: Integer;
     FHoverIdx: Integer;
@@ -134,6 +137,7 @@ type
     property SelectedIds: TList<Integer> read FSelectedIds;
     property OnBeginDrag: TNotifyEvent read FOnBeginDrag write FOnBeginDrag;
     property CardLayout: TCardLayout read FCardLayout write FCardLayout;
+    procedure SetCardLayoutSet(const ASet: TCardLayoutSet);
   end;
 
   { --------------------------------------------------------- }
@@ -160,6 +164,8 @@ type
     FLinks: TArray<TErpLink>;
     FGetNodeTimes: TGetNodeTimesFunc;
     FCardLayout: TCardLayout;
+    FCardLayoutSet: TCardLayoutSet;
+    FHasCardLayoutSet: Boolean;
     FGetCalendar: TGetCalendarFunc;
     FPlanningStart: TDateTime;
     FPlanningEnd: TDateTime;
@@ -298,6 +304,7 @@ type
     property ColDragCentreId: Integer read FColDragCentreId;
     property ColDropTargetId: Integer read FColDropTargetId;
     property CardLayout: TCardLayout read FCardLayout write FCardLayout;
+    procedure SetCardLayoutSet(const ASet: TCardLayoutSet);
   end;
 
   { --------------------------------------------------------- }
@@ -403,6 +410,10 @@ type
 
     // Layouts d'usuari
     FLayoutRepo: TFCPLayoutRepo;
+    FCardSetRepo: TCardLayoutSetRepo;
+    FCardSetId: Integer;
+    FCardSetNombre: string;
+    FCardSetIsCommon: Boolean;
     FLayouts: TArray<TFCPLayout>;
     FCurrentLayoutId: Integer;  // -1 = "(por defecto)"; >=0 = ID a BD
     FUpdatingLayouts: Boolean;
@@ -532,9 +543,16 @@ implementation
 uses
   Data.Win.ADODB,
   uDMPlanner, uCentresRepo, uNodesRepo, uHelpViewer,
-  uCardLayoutEditor;
+  uCardLayoutEditor, uCardLayoutSetManager, uModalOverlay;
 
 {$R *.dfm}
+
+// Set de layouts dels cards: 1 fitxer global compartit per tots els usuaris.
+// Conte els 6 layouts (OF/PED/PROY x Pend/Plan).
+function CardLayoutSetFileName: string;
+begin
+  Result := ExtractFilePath(Application.ExeName) + 'cardlayouts.json';
+end;
 
 { ========================================================= }
 {                   Funciones auxiliares                      }
@@ -683,6 +701,13 @@ begin
   inherited;
 end;
 
+procedure TPendingListControl.SetCardLayoutSet(const ASet: TCardLayoutSet);
+begin
+  FCardLayoutSet := ASet;
+  FHasCardLayoutSet := True;
+  Invalidate;
+end;
+
 procedure TPendingListControl.ScrollBy(Delta: Integer);
 begin
   FScrollY := Max(0, Min(FScrollY + Delta, MaxScrollY));
@@ -788,13 +813,21 @@ begin
     ACanvas.Pen.Width := 3
   else
     ACanvas.Pen.Width := 1;
+  // Triar layout segons categoria (familia ERP + pendiente).
+  // Aquest control sempre pinta pendents (IsPlanned=False).
+  var L: TCardLayout;
+  if FHasCardLayoutSet then
+    L := FCardLayoutSet.Layouts[CategoryFor(D.Tipo, False)]
+  else
+    L := FCardLayout;
+
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
-    FCardLayout.CornerRadius, FCardLayout.CornerRadius);
+    L.CornerRadius, L.CornerRadius);
   ACanvas.Pen.Width := 1;
 
   // Renderizar contenido con el layout configurable
   Resolver := MakeNodeDataResolver(D);
-  RenderCard(ACanvas, R, FCardLayout, Resolver);
+  RenderCard(ACanvas, R, L, Resolver);
 
   // Indicador de dependencias pendientes (siempre visible)
   if HasPendingPredecessors(D.DataId, FLinks, FNodeRepo) then
@@ -1088,6 +1121,13 @@ begin
   FSelectedIds.Free;
   FDragDropStatus.Free;
   inherited;
+end;
+
+procedure TCentreColumnControl.SetCardLayoutSet(const ASet: TCardLayoutSet);
+begin
+  FCardLayoutSet := ASet;
+  FHasCardLayoutSet := True;
+  Invalidate;
 end;
 
 procedure TCentreColumnControl.SetData(ARepo: TNodeDataRepo;
@@ -1845,13 +1885,21 @@ begin
     ACanvas.Pen.Width := 3
   else
     ACanvas.Pen.Width := 1;
+  // Triar layout segons categoria (familia ERP + planificada).
+  // Aquest control sempre pinta planificades (IsPlanned=True).
+  var Lay: TCardLayout;
+  if FHasCardLayoutSet then
+    Lay := FCardLayoutSet.Layouts[CategoryFor(D.Tipo, True)]
+  else
+    Lay := FCardLayout;
+
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
-    FCardLayout.CornerRadius, FCardLayout.CornerRadius);
+    Lay.CornerRadius, Lay.CornerRadius);
   ACanvas.Pen.Width := 1;
 
   // Renderizar contenido con el layout configurable
   Resolver := MakeNodeDataResolver(D);
-  RenderCard(ACanvas, R, FCardLayout, Resolver);
+  RenderCard(ACanvas, R, Lay, Resolver);
 
   // Indicador de dependencias pendientes (siempre visible)
   if HasPendingPredecessors(DataId, FLinks, FNodeRepo) then
@@ -2604,6 +2652,17 @@ begin
     Frm.FCentreColumns.OnHeaderOptionsClick := Frm.OnCentreHeaderOptionsClick;
     Frm.FCentreColumns.OnColDragBegin := Frm.OnColDragBegin;
 
+    // Carregar set de layouts de cards (6 categories) des de BD i aplicar-lo.
+    // Instal.lacions noves: SeedDefaultIfEmpty crea el set comu "Por defecto".
+    Frm.FCardSetRepo := TCardLayoutSetRepo.Create(
+      DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    Frm.FCardSetRepo.SeedDefaultIfEmpty;
+    var LayoutSet: TCardLayoutSet;
+    Frm.FCardSetId := Frm.FCardSetRepo.LoadActive(LayoutSet,
+      Frm.FCardSetNombre, Frm.FCardSetIsCommon);
+    Frm.FPendingList.SetCardLayoutSet(LayoutSet);
+    Frm.FCentreColumns.SetCardLayoutSet(LayoutSet);
+
     // Inicialitzar rang de planificació al control
     var PS, PE: TDateTime;
     Frm.GetPlanningDates(PS, PE);
@@ -2691,6 +2750,10 @@ begin
   FCurrentLayoutId := -1;
   FUpdatingLayouts := False;
   FLayoutRepo := nil;
+  FCardSetRepo := nil;
+  FCardSetId := -1;
+  FCardSetNombre := '';
+  FCardSetIsCommon := False;
 end;
 
 procedure TfrmFiniteCapacityPlanner.FormDestroy(Sender: TObject);
@@ -2707,6 +2770,7 @@ begin
   FNodeTimesCache.Free;
   FOperacionFilter.Free;
   FreeAndNil(FLayoutRepo);
+  FreeAndNil(FCardSetRepo);
 end;
 
 procedure TfrmFiniteCapacityPlanner.FormResize(Sender: TObject);
@@ -5279,23 +5343,15 @@ end;
 
 procedure TfrmFiniteCapacityPlanner.OnEditCardLayoutClick(Sender: TObject);
 var
-  F: TfrmCardLayoutEditor;
+  S: TCardLayoutSet;
 begin
-  F := TfrmCardLayoutEditor.Create(Self);
-  try
-    F.CustomFieldDefs := FCustomFieldDefs;
-    F.Layout := FCentreColumns.CardLayout;
-    F.LayoutToUI;
-    if F.ShowModal = mrOk then
-    begin
-      FCentreColumns.CardLayout := F.Layout;
-      FPendingList.CardLayout := F.Layout;
-      FCentreColumns.Invalidate;
-      FPendingList.Invalidate;
-    end;
-  finally
-    F.Free;
-  end;
+  if FCardSetRepo = nil then Exit;
+  // Obre el gestor (graella + preview). Al tancar-lo, refresquem el set
+  // actiu per si l'usuari l'ha canviat o editat.
+  ShowCardLayoutSetManager(Self, FCardSetRepo, FCustomFieldDefs);
+  FCardSetId := FCardSetRepo.LoadActive(S, FCardSetNombre, FCardSetIsCommon);
+  FCentreColumns.SetCardLayoutSet(S);
+  FPendingList.SetCardLayoutSet(S);
 end;
 
 // ===========================================================================

@@ -195,6 +195,13 @@ object Form1: TForm1
         Caption = 'Reglas de Planificaci'#243'n'
         OnClick = ReglasPlanificacion1Click
       end
+      object NCards1: TMenuItem
+        Caption = '-'
+      end
+      object GestionCardLayouts1: TMenuItem
+        Caption = 'Gesti'#243'n de Card Layouts'
+        OnClick = GestionCardLayouts1Click
+      end
     end
     object Funcionalidades1: TMenuItem
       Caption = 'An'#225'lisis'

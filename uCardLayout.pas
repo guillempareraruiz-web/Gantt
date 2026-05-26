@@ -25,6 +25,14 @@ type
 
   TCardHAlign = (chaLeft, chaCenter, chaRight);
 
+  // Categoria del card: combinacio de familia ERP + estado planificacion.
+  // Cada categoria te el seu layout propi (uCardLayoutSet).
+  TCardCategory = (
+    ccOFPend, ccOFPlan,     // Orden de fabricacion
+    ccPedPend, ccPedPlan,   // Pedido
+    ccProyPend, ccProyPlan  // Tarea de proyecto
+  );
+
   TCardElement = record
     Kind: TCardElementKind;
     FieldExpr: string;       // p.ej. 'OF {NumeroOrdenFabricacion} - {Operacion}'
@@ -53,7 +61,15 @@ type
     PaddingH: Integer;       // padding horizontal interno
     PaddingV: Integer;       // padding vertical interno
     CornerRadius: Integer;
+    BgColor: TColor;         // color de fons del card (0 = usar default)
+    BorderColor: TColor;     // color del border (0 = usar default)
+    BorderWidth: Integer;    // gruix del border en px (0 = sense border)
     Rows: TArray<TCardRow>;
+  end;
+
+  // Conjunto de layouts: uno por categoria. Es lo que se persiste y edita.
+  TCardLayoutSet = record
+    Layouts: array[TCardCategory] of TCardLayout;
   end;
 
   // --- Renderer ---
@@ -93,6 +109,20 @@ type
   function JSONToCardLayout(const AJson: TJSONObject): TCardLayout;
   procedure SaveCardLayoutToFile(const ALayout: TCardLayout; const AFileName: string);
   function LoadCardLayoutFromFile(const AFileName: string): TCardLayout;
+
+  // --- Categorias y set de layouts ---
+
+  function CardCategoryToStr(C: TCardCategory): string;
+  function CardCategoryCaption(C: TCardCategory): string;
+  function StrToCardCategory(const S: string): TCardCategory;
+  function CategoryFor(ATipo: TNodoTipo; AIsPlanned: Boolean): TCardCategory;
+  function DefaultLayoutFor(C: TCardCategory): TCardLayout;
+  function DefaultCardLayoutSet: TCardLayoutSet;
+
+  function CardLayoutSetToJSON(const ASet: TCardLayoutSet): TJSONObject;
+  function JSONToCardLayoutSet(const AJson: TJSONObject): TCardLayoutSet;
+  procedure SaveCardLayoutSetToFile(const ASet: TCardLayoutSet; const AFileName: string);
+  function LoadCardLayoutSetFromFile(const AFileName: string): TCardLayoutSet;
 
 implementation
 
@@ -813,6 +843,9 @@ begin
   Result.AddPair('paddingH', TJSONNumber.Create(ALayout.PaddingH));
   Result.AddPair('paddingV', TJSONNumber.Create(ALayout.PaddingV));
   Result.AddPair('cornerRadius', TJSONNumber.Create(ALayout.CornerRadius));
+  Result.AddPair('bgColor', TJSONNumber.Create(Integer(ALayout.BgColor)));
+  Result.AddPair('borderColor', TJSONNumber.Create(Integer(ALayout.BorderColor)));
+  Result.AddPair('borderWidth', TJSONNumber.Create(ALayout.BorderWidth));
   Arr := TJSONArray.Create;
   for I := 0 to High(ALayout.Rows) do
     Arr.Add(RowToJSON(ALayout.Rows[I]));
@@ -830,6 +863,9 @@ begin
   Result.PaddingH := AJson.GetValue<Integer>('paddingH', 6);
   Result.PaddingV := AJson.GetValue<Integer>('paddingV', 6);
   Result.CornerRadius := AJson.GetValue<Integer>('cornerRadius', 6);
+  Result.BgColor := TColor(AJson.GetValue<Integer>('bgColor', 0));
+  Result.BorderColor := TColor(AJson.GetValue<Integer>('borderColor', 0));
+  Result.BorderWidth := AJson.GetValue<Integer>('borderWidth', 1);
   Arr := AJson.GetValue<TJSONArray>('rows');
   if Arr <> nil then
   begin
@@ -860,6 +896,146 @@ begin
   Obj := TJSONObject.ParseJSONValue(S) as TJSONObject;
   try
     Result := JSONToCardLayout(Obj);
+  finally
+    Obj.Free;
+  end;
+end;
+
+{ ---- Categorias y set de layouts ---- }
+
+function CardCategoryToStr(C: TCardCategory): string;
+begin
+  case C of
+    ccOFPend:   Result := 'of_pend';
+    ccOFPlan:   Result := 'of_plan';
+    ccPedPend:  Result := 'ped_pend';
+    ccPedPlan:  Result := 'ped_plan';
+    ccProyPend: Result := 'proy_pend';
+    ccProyPlan: Result := 'proy_plan';
+  else
+    Result := 'of_pend';
+  end;
+end;
+
+function CardCategoryCaption(C: TCardCategory): string;
+begin
+  case C of
+    ccOFPend:   Result := 'OF Pendiente';
+    ccOFPlan:   Result := 'OF Planificada';
+    ccPedPend:  Result := 'Pedido Pendiente';
+    ccPedPlan:  Result := 'Pedido Planificado';
+    ccProyPend: Result := 'Tarea Proyecto Pendiente';
+    ccProyPlan: Result := 'Tarea Proyecto Planificada';
+  else
+    Result := 'OF Pendiente';
+  end;
+end;
+
+function StrToCardCategory(const S: string): TCardCategory;
+var
+  L: string;
+begin
+  L := LowerCase(S);
+  if L = 'of_plan' then Result := ccOFPlan
+  else if L = 'ped_pend' then Result := ccPedPend
+  else if L = 'ped_plan' then Result := ccPedPlan
+  else if L = 'proy_pend' then Result := ccProyPend
+  else if L = 'proy_plan' then Result := ccProyPlan
+  else Result := ccOFPend;
+end;
+
+function CategoryFor(ATipo: TNodoTipo; AIsPlanned: Boolean): TCardCategory;
+begin
+  case ATipo of
+    ntPedido:
+      if AIsPlanned then Result := ccPedPlan else Result := ccPedPend;
+    ntProyecto:
+      if AIsPlanned then Result := ccProyPlan else Result := ccProyPend;
+  else
+    // ntOF y ntOferta caen a OF
+    if AIsPlanned then Result := ccOFPlan else Result := ccOFPend;
+  end;
+end;
+
+function DefaultLayoutFor(C: TCardCategory): TCardLayout;
+begin
+  case C of
+    ccOFPend:   Result := DefaultPendingCardLayout;
+    ccOFPlan:   Result := DefaultCardLayout;
+    ccPedPend:  Result := LayoutCliente;
+    ccPedPlan:  Result := LayoutLogistica;
+    ccProyPend: Result := LayoutCompacto;
+    ccProyPlan: Result := LayoutProduccion;
+  else
+    Result := DefaultCardLayout;
+  end;
+  Result.Name := CardCategoryCaption(C);
+end;
+
+function DefaultCardLayoutSet: TCardLayoutSet;
+var
+  C: TCardCategory;
+begin
+  Result := Default(TCardLayoutSet);
+  for C := Low(TCardCategory) to High(TCardCategory) do
+    Result.Layouts[C] := DefaultLayoutFor(C);
+end;
+
+function CardLayoutSetToJSON(const ASet: TCardLayoutSet): TJSONObject;
+var
+  C: TCardCategory;
+  Layouts: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('version', TJSONNumber.Create(1));
+  Layouts := TJSONObject.Create;
+  for C := Low(TCardCategory) to High(TCardCategory) do
+    Layouts.AddPair(CardCategoryToStr(C), CardLayoutToJSON(ASet.Layouts[C]));
+  Result.AddPair('layouts', Layouts);
+end;
+
+function JSONToCardLayoutSet(const AJson: TJSONObject): TCardLayoutSet;
+var
+  C: TCardCategory;
+  Layouts: TJSONObject;
+  V: TJSONValue;
+begin
+  Result := DefaultCardLayoutSet;  // baseline
+  if AJson = nil then Exit;
+  Layouts := AJson.GetValue<TJSONObject>('layouts');
+  if Layouts = nil then Exit;
+  for C := Low(TCardCategory) to High(TCardCategory) do
+  begin
+    V := Layouts.GetValue(CardCategoryToStr(C));
+    if (V <> nil) and (V is TJSONObject) then
+      Result.Layouts[C] := JSONToCardLayout(TJSONObject(V));
+  end;
+end;
+
+procedure SaveCardLayoutSetToFile(const ASet: TCardLayoutSet; const AFileName: string);
+var
+  Obj: TJSONObject;
+begin
+  Obj := CardLayoutSetToJSON(ASet);
+  try
+    TFile.WriteAllText(AFileName, Obj.Format(2), TEncoding.UTF8);
+  finally
+    Obj.Free;
+  end;
+end;
+
+function LoadCardLayoutSetFromFile(const AFileName: string): TCardLayoutSet;
+var
+  S: string;
+  Obj: TJSONObject;
+begin
+  Result := DefaultCardLayoutSet;
+  if not TFile.Exists(AFileName) then Exit;
+  S := TFile.ReadAllText(AFileName, TEncoding.UTF8);
+  Obj := TJSONObject.ParseJSONValue(S) as TJSONObject;
+  if Obj = nil then Exit;
+  try
+    Result := JSONToCardLayoutSet(Obj);
   finally
     Obj.Free;
   end;

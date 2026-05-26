@@ -354,7 +354,6 @@
             <DesignClass>TDataModule</DesignClass>
         </DCCReference>
         <DCCReference Include="uUserPreferencesRepo.pas"/>
-        <DCCReference Include="uFCPLayoutRepo.pas"/>
         <DCCReference Include="uLogin.pas">
             <Form>frmLogin</Form>
         </DCCReference>
@@ -458,24 +457,17 @@
             <Form>frmSincronizarERP</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uErpSyncTypes.pas"/>
-        <DCCReference Include="uErpSyncRepo.pas"/>
-        <DCCReference Include="uSyncBacklogPreview.pas">
-            <Form>frmSyncBacklogPreview</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
         <DCCReference Include="uCardLayout.pas"/>
         <DCCReference Include="uCardLayoutEditor.pas">
             <Form>frmCardLayoutEditor</Form>
+            <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uCustomFieldDefs.pas"/>
-        <DCCReference Include="uCustomFieldEditor.pas">
-            <Form>frmCustomFieldEditor</Form>
+        <DCCReference Include="uCardLayoutSetRepo.pas"/>
+        <DCCReference Include="uCardLayoutSetManager.pas">
+            <Form>frmCardLayoutSetManager</Form>
+            <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uPlanningPreview.pas">
-            <Form>frmPlanningPreview</Form>
-        </DCCReference>
-        <DCCReference Include="uPlanningRules.pas"/>
+        <DCCReference Include="uModalOverlay.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -498,13 +490,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

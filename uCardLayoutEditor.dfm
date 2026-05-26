@@ -1,6 +1,8 @@
 object frmCardLayoutEditor: TfrmCardLayoutEditor
   Left = 0
   Top = 0
+  BorderIcons = [biSystemMenu]
+  BorderStyle = bsDialog
   Caption = 'Editor de Card Layout'
   ClientHeight = 640
   ClientWidth = 920
@@ -53,12 +55,26 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       Font.Style = []
       ParentFont = False
     end
-    object lblTemplate: TLabel
-      Left = 530
+    object lblSetName: TLabel
+      Left = 180
       Top = 10
-      Width = 45
+      Width = 0
+      Height = 19
+      Caption = ''
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 4474440
+      Font.Height = -14
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = [fsItalic]
+      ParentFont = False
+    end
+    object lblCategoria: TLabel
+      Left = 654
+      Top = 10
+      Width = 54
       Height = 15
-      Caption = 'Plantilla:'
+      Anchors = [akTop, akRight]
+      Caption = 'Categor'#237'a:'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 4474440
       Font.Height = -12
@@ -66,23 +82,15 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       Font.Style = []
       ParentFont = False
     end
-    object cmbTemplate: TComboBox
-      Left = 596
+    object cmbCategoria: TComboBox
+      Left = 720
       Top = 7
-      Width = 200
+      Width = 184
       Height = 23
+      Anchors = [akTop, akRight]
       Style = csDropDownList
-      TabOrder = 1
-      OnChange = cmbTemplateChange
-    end
-    object btnApplyTemplate: TButton
-      Left = 804
-      Top = 6
-      Width = 100
-      Height = 25
-      Caption = 'Aplicar plantilla'
       TabOrder = 0
-      OnClick = btnApplyTemplateClick
+      OnChange = cmbCategoriaChange
     end
   end
   object pnlFooter: TPanel
@@ -120,6 +128,7 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       Height = 28
       Caption = 'Cargar...'
       TabOrder = 2
+      Visible = False
       OnClick = btnCargarClick
     end
     object btnGuardar: TButton
@@ -129,16 +138,8 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       Height = 28
       Caption = 'Guardar...'
       TabOrder = 3
+      Visible = False
       OnClick = btnGuardarClick
-    end
-    object btnDefecto: TButton
-      Left = 216
-      Top = 6
-      Width = 120
-      Height = 28
-      Caption = 'Layout por defecto'
-      TabOrder = 4
-      OnClick = btnDefectoClick
     end
   end
   object pnlMain: TPanel
@@ -149,22 +150,22 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
     Align = alClient
     BevelOuter = bvNone
     Color = 15790320
+    Padding.Left = 12
+    Padding.Top = 8
+    Padding.Right = 12
+    Padding.Bottom = 8
     ParentBackground = False
     TabOrder = 2
-    object splitter: TSplitter
-      Left = 600
-      Top = 0
-      Width = 5
-      Height = 550
-      Align = alRight
-      Color = 14540253
-      ParentColor = False
-    end
     object pnlLeft: TPanel
-      Left = 0
-      Top = 0
-      Width = 600
-      Height = 550
+      AlignWithMargins = True
+      Left = 12
+      Top = 8
+      Width = 572
+      Height = 534
+      Margins.Left = 0
+      Margins.Top = 0
+      Margins.Right = 8
+      Margins.Bottom = 0
       Align = alClient
       BevelOuter = bvNone
       Color = 15790320
@@ -173,16 +174,19 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       object pnlRowsHeader: TPanel
         Left = 0
         Top = 0
-        Width = 600
+        Width = 572
         Height = 36
         Align = alTop
         BevelOuter = bvNone
         Color = 15790320
         ParentBackground = False
         TabOrder = 0
+        DesignSize = (
+          572
+          36)
         object lblRows: TLabel
-          Left = 12
-          Top = 8
+          Left = 4
+          Top = 10
           Width = 26
           Height = 17
           Caption = 'Filas'
@@ -193,20 +197,31 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
           Font.Style = []
           ParentFont = False
         end
-        object btnAddRow: TButton
-          Left = 464
-          Top = 4
-          Width = 60
-          Height = 26
-          Caption = '+ Fila'
-          TabOrder = 0
+        object btnAddRow: TLabel
+          Left = 542
+          Top = 6
+          Width = 28
+          Height = 28
+          Anchors = [akTop, akRight]
+          Caption = #$2795
+          Cursor = crHandPoint
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = 12615680
+          Font.Height = -19
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ParentShowHint = False
+          ShowHint = True
+          Hint = 'Afegir fila'
           OnClick = btnAddRowClick
         end
         object btnDelRow: TButton
-          Left = 530
-          Top = 4
-          Width = 60
-          Height = 26
+          Left = 0
+          Top = 0
+          Width = 1
+          Height = 1
+          Visible = False
           Caption = '- Fila'
           TabOrder = 1
           OnClick = btnDelRowClick
@@ -215,8 +230,8 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       object pnlRowsArea: TPanel
         Left = 0
         Top = 36
-        Width = 600
-        Height = 514
+        Width = 572
+        Height = 498
         Align = alClient
         BevelOuter = bvNone
         Color = 15790320
@@ -225,8 +240,8 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
         object boxRows: TScrollBox
           Left = 0
           Top = 0
-          Width = 600
-          Height = 514
+          Width = 572
+          Height = 498
           Align = alClient
           BevelInner = bvNone
           BevelOuter = bvNone
@@ -238,10 +253,10 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       end
     end
     object pnlRight: TPanel
-      Left = 605
-      Top = 0
-      Width = 315
-      Height = 550
+      Left = 592
+      Top = 8
+      Width = 316
+      Height = 534
       Align = alRight
       BevelOuter = bvNone
       Color = clWhite
@@ -250,7 +265,7 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       object pnlPreviewHeader: TPanel
         Left = 0
         Top = 0
-        Width = 315
+        Width = 316
         Height = 36
         Align = alTop
         BevelOuter = bvNone
@@ -260,9 +275,9 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
         object lblPreview: TLabel
           Left = 12
           Top = 8
-          Width = 47
+          Width = 95
           Height = 17
-          Caption = 'Preview'
+          Caption = 'Previsualizaci'#243'n'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = 4474440
           Font.Height = -13
@@ -274,7 +289,7 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       object pnlPreviewArea: TPanel
         Left = 0
         Top = 36
-        Width = 315
+        Width = 316
         Height = 254
         Align = alTop
         BevelOuter = bvNone
@@ -291,14 +306,17 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
       end
       object pnlProps: TPanel
         Left = 0
-        Top = 290
-        Width = 315
+        Top = 274
+        Width = 316
         Height = 260
         Align = alBottom
         BevelOuter = bvNone
         Color = clWhite
         ParentBackground = False
         TabOrder = 2
+        DesignSize = (
+          316
+          260)
         object lblProps: TLabel
           Left = 12
           Top = 4
@@ -312,92 +330,18 @@ object frmCardLayoutEditor: TfrmCardLayoutEditor
           Font.Style = []
           ParentFont = False
         end
-        object lblLayoutName: TLabel
-          Left = 12
-          Top = 30
-          Width = 47
-          Height = 15
-          Caption = 'Nombre:'
-        end
-        object lblCardHeight: TLabel
-          Left = 12
-          Top = 58
-          Width = 61
-          Height = 15
-          Caption = 'Altura card:'
-        end
-        object lblPaddingH: TLabel
-          Left = 12
-          Top = 86
-          Width = 59
-          Height = 15
-          Caption = 'Padding H:'
-        end
-        object lblPaddingV: TLabel
-          Left = 160
-          Top = 86
-          Width = 57
-          Height = 15
-          Caption = 'Padding V:'
-        end
-        object lblCornerR: TLabel
-          Left = 160
-          Top = 58
-          Width = 67
-          Height = 15
-          Caption = 'Radio borde:'
-        end
-        object edtName: TEdit
-          Left = 90
-          Top = 27
-          Width = 210
-          Height = 23
+        object vgProps: TcxVerticalGrid
+          Left = 14
+          Top = 28
+          Width = 288
+          Height = 224
+          Anchors = [akLeft, akTop, akRight, akBottom]
+          OptionsView.PaintStyle = psDelphi
+          OptionsView.GridLineColor = 14540253
+          OptionsView.RowHeaderWidth = 110
+          OptionsBehavior.GoToNextCellOnEnter = True
           TabOrder = 0
-          OnChange = edtNameChange
-        end
-        object seCardHeight: TSpinEdit
-          Left = 90
-          Top = 55
-          Width = 60
-          Height = 24
-          MaxValue = 300
-          MinValue = 30
-          TabOrder = 1
-          Value = 88
-          OnChange = seCardHeightChange
-        end
-        object sePaddingH: TSpinEdit
-          Left = 90
-          Top = 83
-          Width = 50
-          Height = 24
-          MaxValue = 40
-          MinValue = 0
-          TabOrder = 2
-          Value = 6
-          OnChange = sePaddingHChange
-        end
-        object sePaddingV: TSpinEdit
-          Left = 240
-          Top = 83
-          Width = 50
-          Height = 24
-          MaxValue = 40
-          MinValue = 0
-          TabOrder = 3
-          Value = 6
-          OnChange = sePaddingVChange
-        end
-        object seCornerRadius: TSpinEdit
-          Left = 250
-          Top = 55
-          Width = 50
-          Height = 24
-          MaxValue = 30
-          MinValue = 0
-          TabOrder = 4
-          Value = 6
-          OnChange = seCornerRadiusChange
+          Version = 1
         end
       end
     end
