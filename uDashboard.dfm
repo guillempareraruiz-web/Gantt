@@ -3,7 +3,7 @@ object frmDashboard: TfrmDashboard
   Top = 0
   BorderStyle = bsNone
   Caption = 'Dashboard'
-  ClientHeight = 720
+  ClientHeight = 784
   ClientWidth = 900
   Color = 15395562
   Font.Charset = DEFAULT_CHARSET
@@ -11,6 +11,7 @@ object frmDashboard: TfrmDashboard
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
+  OnCreate = FormCreate
   OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 15
@@ -18,7 +19,7 @@ object frmDashboard: TfrmDashboard
     Left = 0
     Top = 0
     Width = 900
-    Height = 80
+    Height = 70
     Align = alTop
     BevelOuter = bvNone
     Color = 3553567
@@ -26,10 +27,10 @@ object frmDashboard: TfrmDashboard
     TabOrder = 0
     DesignSize = (
       900
-      80)
+      70)
     object lblTitulo: TLabel
-      Left = 24
-      Top = 16
+      Left = 70
+      Top = 5
       Width = 177
       Height = 32
       Caption = 'Panel de control'
@@ -41,8 +42,8 @@ object frmDashboard: TfrmDashboard
       ParentFont = False
     end
     object lblSubtitulo: TLabel
-      Left = 24
-      Top = 52
+      Left = 70
+      Top = 39
       Width = 148
       Height = 15
       Caption = 'Resumen de la sesi'#243'n actual'
@@ -90,17 +91,62 @@ object frmDashboard: TfrmDashboard
       Layout = tlCenter
       OnClick = lblPendingSyncClick
     end
+    object imgSection: TcxImage
+      AlignWithMargins = True
+      Left = 3
+      Top = 6
+      Margins.Top = 6
+      Margins.Right = 5
+      Margins.Bottom = 12
+      Align = alLeft
+      Picture.Data = {
+        0D546478536D617274496D6167653C3F786D6C2076657273696F6E3D22312E30
+        2220656E636F64696E673D225554462D38223F3E0D0A3C737667207669657742
+        6F783D223020302032342032342220786D6C6E733D22687474703A2F2F777777
+        2E77332E6F72672F323030302F737667223E0D0A093C706174682066696C6C3D
+        2223464646464646222066696C6C2D6F7061636974793D22302E352220643D22
+        4D31342032314331332E343437372032312031332032302E3535323320313320
+        32305631324331332031312E343437372031332E343437372031312031342031
+        314832304332302E353532332031312032312031312E34343737203231203132
+        5632304332312032302E353532332032302E3535323320323120323020323148
+        31345A4D3420313343332E343437373220313320332031322E35353233203320
+        31325634433320332E343437373220332E343437373220332034203348313043
+        31302E35353233203320313120332E3434373732203131203456313243313120
+        31322E353532332031302E3535323320313320313020313348345A4D39203131
+        5635483556313148395A4D3420323143332E343437373220323120332032302E
+        35353233203320323056313643332031352E3434373720332E34343737322031
+        3520342031354831304331302E353532332031352031312031352E3434373720
+        31312031365632304331312032302E353532332031302E353532332032312031
+        3020323148345A4D35203139483956313748355631395A4D3135203139483139
+        5631334831355631395A4D3133203443313320332E34343737322031332E3434
+        3737203320313420334832304332302E35353233203320323120332E34343737
+        322032312034563843323120382E35353232382032302E353532332039203230
+        20394831344331332E34343737203920313320382E3535323238203133203856
+        345A4D31352035563748313956354831355A222F3E0D0A3C2F7376673E0D0A}
+      Properties.FitMode = ifmProportionalStretch
+      Properties.ReadOnly = True
+      Properties.ShowFocusRect = False
+      Style.BorderStyle = ebsNone
+      TabOrder = 0
+      Transparent = True
+      ExplicitTop = 12
+      ExplicitHeight = 56
+      Height = 52
+      Width = 56
+    end
   end
   object pnlCards: TPanel
     Left = 0
-    Top = 80
+    Top = 70
     Width = 900
-    Height = 640
+    Height = 714
     Align = alClient
     BevelOuter = bvNone
     Color = 15395562
     ParentBackground = False
     TabOrder = 1
+    ExplicitTop = 80
+    ExplicitHeight = 704
     object pnlEmpresa: TPanel
       Left = 24
       Top = 24
@@ -261,9 +307,9 @@ object frmDashboard: TfrmDashboard
       Left = 24
       Top = 184
       Width = 872
-      Height = 140
+      Height = 150
       BevelOuter = bvNone
-      Color = clWhite
+      Color = 15856098
       ParentBackground = False
       TabOrder = 3
       object lblMetricasCap: TLabel
@@ -492,7 +538,7 @@ object frmDashboard: TfrmDashboard
     end
     object pnlProyectoActivo: TPanel
       Left = 24
-      Top = 340
+      Top = 354
       Width = 872
       Height = 200
       BevelOuter = bvNone
@@ -801,31 +847,13 @@ object frmDashboard: TfrmDashboard
     end
     object pnlAcciones: TPanel
       Left = 24
-      Top = 560
+      Top = 576
       Width = 872
-      Height = 60
+      Height = 41
       BevelOuter = bvNone
       Color = clWhite
       ParentBackground = False
       TabOrder = 5
-      object btnAbrirGantt: TButton
-        Left = 16
-        Top = 14
-        Width = 200
-        Height = 32
-        Caption = 'Abrir planificaci'#243'n (Gantt)'
-        TabOrder = 0
-        OnClick = btnAbrirGanttClick
-      end
-      object btnAbrirFiniteCapacity: TButton
-        Left = 228
-        Top = 14
-        Width = 200
-        Height = 32
-        Caption = 'Abrir Carga Finita'
-        TabOrder = 1
-        OnClick = btnAbrirFiniteCapacityClick
-      end
     end
   end
   object TimerReloj: TTimer

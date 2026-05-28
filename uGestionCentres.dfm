@@ -1,6 +1,7 @@
 object frmGestionCentres: TfrmGestionCentres
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Centros'
   ClientHeight = 540
   ClientWidth = 1320
@@ -52,25 +53,6 @@ object frmGestionCentres: TfrmGestionCentres
       ParentFont = False
     end
   end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 500
-    Width = 1320
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 1
-    object btnClose: TButton
-      Left = 1212
-      Top = 6
-      Width = 100
-      Height = 28
-      Cancel = True
-      Caption = 'Cerrar'
-      TabOrder = 0
-      OnClick = btnCloseClick
-    end
-  end
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
@@ -78,7 +60,7 @@ object frmGestionCentres: TfrmGestionCentres
     Height = 40
     Align = alTop
     BevelOuter = bvNone
-    TabOrder = 2
+    TabOrder = 1
     object btnAdd: TButton
       Left = 4
       Top = 6
@@ -130,9 +112,10 @@ object frmGestionCentres: TfrmGestionCentres
     Left = 0
     Top = 100
     Width = 1320
-    Height = 400
+    Height = 440
     Align = alClient
-    TabOrder = 3
+    TabOrder = 2
+    ExplicitHeight = 400
     object tvCentros: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
       ScrollbarAnnotations.CustomAnnotations = <>

@@ -25,7 +25,6 @@ type
     btnNueva: TButton;
     btnEditar: TButton;
     btnEliminar: TButton;
-    btnCerrar: TButton;
     lvCols: TListView;
     procedure FormShow(Sender: TObject);
     procedure btnNuevaClick(Sender: TObject);

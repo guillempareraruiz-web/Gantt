@@ -76,15 +76,21 @@ type
     class function MarkdownToRtf(const AMd: string): string;
   end;
 
-  // Component intern: emmagatzema la config d'ajuda d'un form i gestiona F1.
+  // Component intern: emmagatzema la config d'ajuda d'un form, gestiona F1
+  // i intercepta WM_SYSCOMMAND/SC_CONTEXTHELP del boto '?' del caption.
   THelpHook = class(TComponent)
   private
+    FForm: TForm;
     FTopicKey: string;
     FTitulo: string;
     FLang: string;
+    FOldWndProc: TWndMethod;
     procedure FormKeyDownHandler(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure BtnAyudaClick(Sender: TObject);
+    procedure HookedWndProc(var Msg: TMessage);
+  public
+    destructor Destroy; override;
   end;
 implementation
 {$R *.dfm}
@@ -491,43 +497,70 @@ begin
   THelpViewer.Show(FTopicKey, FTitulo, FLang);
 end;
 
+procedure THelpHook.HookedWndProc(var Msg: TMessage);
+begin
+  // SC_CONTEXTHELP llega via WM_SYSCOMMAND cuando el usuario clica el boton
+  // '?' del caption (BorderIcons = [..., biHelp]). Lo redirigimos al
+  // HelpViewer en lugar del modo "what's this" estandar de Windows.
+  if (Msg.Msg = WM_SYSCOMMAND)
+     and ((Msg.WParam and $FFF0) = SC_CONTEXTHELP) then
+  begin
+    THelpViewer.Show(FTopicKey, FTitulo, FLang);
+    Msg.Result := 0;
+    Exit;
+  end;
+  if Assigned(FOldWndProc) then
+    FOldWndProc(Msg);
+end;
+
+destructor THelpHook.Destroy;
+begin
+  if Assigned(FForm) and Assigned(FOldWndProc) then
+    FForm.WindowProc := FOldWndProc;
+  inherited;
+end;
+
 // ----------------------------------------------------------------------------
-// THelpViewer.InstallHelp: connecta F1 + crea boto "?" a la cantonada
-// sup-dreta del form. Reusable a qualsevol form.
+// THelpViewer.InstallHelp: activa el boton '?' del caption (biHelp) y conecta
+// F1. Una sola llamada por form (tipicamente desde FormCreate).
+//
+// Patron:
+//   procedure TfrmMyForm.FormCreate(Sender: TObject);
+//   begin
+//     THelpViewer.InstallHelp(Self, 'uMyForm', 'Mi titulo');
+//   end;
+//
+// Requisitos del form:
+//   - BorderStyle = bsDialog o bsSingle (con biHelp el '?' solo se pinta si
+//     no hay biMinimize ni biMaximize visibles).
+//   - Si el form tiene BorderStyle = bsSizeable, este helper igualmente
+//     anyade biHelp pero Windows NO pintara el '?' al caption -- en ese
+//     caso F1 sigue funcionando pero el boton no aparece.
 // ----------------------------------------------------------------------------
 
 class procedure THelpViewer.InstallHelp(AForm: TForm;
   const ATopicKey, ATitulo, ALang: string);
 var
   Hook: THelpHook;
-  Btn: TButton;
 begin
   if AForm = nil then Exit;
 
-  // Component que viu lligat al form (es destrueix amb ell)
   Hook := THelpHook.Create(AForm);
+  Hook.FForm := AForm;
   Hook.FTopicKey := ATopicKey;
   Hook.FTitulo := ATitulo;
   if ALang = '' then Hook.FLang := 'es' else Hook.FLang := ALang;
 
-  // F1 = obrir ajuda
+  // 1. Activar el boton '?' nativo en el caption
+  AForm.BorderIcons := AForm.BorderIcons + [biHelp];
+
+  // 2. Interceptar WM_SYSCOMMAND/SC_CONTEXTHELP via WindowProc hook
+  Hook.FOldWndProc := AForm.WindowProc;
+  AForm.WindowProc := Hook.HookedWndProc;
+
+  // 3. F1 = abrir ayuda
   AForm.KeyPreview := True;
   AForm.OnKeyDown := Hook.FormKeyDownHandler;
-
-  // Boto "?" 28x28 ancorat a la cantonada sup-dreta del form
-  Btn := TButton.Create(Hook);
-  Btn.Parent := AForm;
-  Btn.SetBounds(AForm.ClientWidth - 36, 8, 28, 28);
-  Btn.Anchors := [akTop, akRight];
-  Btn.Caption := '?';
-  Btn.Font.Name := 'Segoe UI Semibold';
-  Btn.Font.Size := 12;
-  Btn.Font.Style := [fsBold];
-  Btn.ParentFont := False;
-  Btn.Hint := 'Ayuda (F1)';
-  Btn.ShowHint := True;
-  Btn.OnClick := Hook.BtnAyudaClick;
-  Btn.BringToFront;
 end;
 
 end.

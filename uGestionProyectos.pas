@@ -1,4 +1,4 @@
-unit uGestionProyectos;
+﻿unit uGestionProyectos;
 
 interface
 
@@ -13,15 +13,29 @@ uses
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
   cxTextEdit, cxMaskEdit, cxCalendar, cxDropDownEdit,
-  Data.Win.ADODB, Data.DB;
+  Data.Win.ADODB, Data.DB, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
+  dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
+  dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
+  dxSkinLiquidSky, dxSkinLondonLiquidSky, dxSkinMcSkin, dxSkinMetropolis,
+  dxSkinMetropolisDark, dxSkinMoneyTwins, dxSkinOffice2007Black,
+  dxSkinOffice2007Blue, dxSkinOffice2007Green, dxSkinOffice2007Pink,
+  dxSkinOffice2007Silver, dxSkinOffice2010Black, dxSkinOffice2010Blue,
+  dxSkinOffice2010Silver, dxSkinOffice2013DarkGray, dxSkinOffice2013LightGray,
+  dxSkinOffice2013White, dxSkinOffice2016Colorful, dxSkinOffice2016Dark,
+  dxSkinOffice2019Black, dxSkinOffice2019DarkGray, dxSkinOffice2019White,
+  dxSkinPumpkin, dxSkinSeven, dxSkinSevenClassic, dxSkinSharp, dxSkinSharpPlus,
+  dxSkinSilver, dxSkinSpringtime, dxSkinStardust, dxSkinSummer2008,
+  dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
+  dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
+  dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
+  dxSkinXmas2008Blue;
 
 type
   TfrmGestionProyectos = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     pnlToolbar: TPanel;
     btnNuevoEscenario: TButton;
     btnActivar: TButton;
@@ -45,7 +59,6 @@ type
     lvProyectos: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnNuevoEscenarioClick(Sender: TObject);
     procedure btnActivarClick(Sender: TObject);
     procedure btnPromoverClick(Sender: TObject);
@@ -102,11 +115,6 @@ end;
 procedure TfrmGestionProyectos.FormCreate(Sender: TObject);
 begin
   LoadProyectos;
-end;
-
-procedure TfrmGestionProyectos.btnCloseClick(Sender: TObject);
-begin
-  Close;
 end;
 
 procedure TfrmGestionProyectos.LoadProyectos;

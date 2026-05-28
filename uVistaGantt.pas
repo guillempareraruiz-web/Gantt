@@ -36,7 +36,8 @@ uses
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
   uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttCentres, uGanttTypes, uErpTypes,
   System.Generics.Collections, System.Threading, System.Math, uHelpGuide,
-  uOperariosTypes, System.Variants, uColorPalette64LayeredPopup;
+  uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
+  dxGDIPlusClasses, cxImage;
 type
   // Items agregados de nodos usados para calculo de KPIs por centro.
   TNodeKPIItem = record
@@ -244,6 +245,7 @@ type
     btnGanttDates: TcxButton;
     cxButton9: TcxButton;
     Label38: TLabel;
+    imgSection: TcxImage;
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);

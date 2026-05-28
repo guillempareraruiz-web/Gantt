@@ -1,4 +1,4 @@
-unit uGestionUsuarios;
+﻿unit uGestionUsuarios;
 
 interface
 
@@ -15,7 +15,23 @@ uses
   dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
-  Data.Win.ADODB, Data.DB;
+  Data.Win.ADODB, Data.DB, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
+  dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
+  dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
+  dxSkinLiquidSky, dxSkinLondonLiquidSky, dxSkinMcSkin, dxSkinMetropolis,
+  dxSkinMetropolisDark, dxSkinMoneyTwins, dxSkinOffice2007Black,
+  dxSkinOffice2007Blue, dxSkinOffice2007Green, dxSkinOffice2007Pink,
+  dxSkinOffice2007Silver, dxSkinOffice2010Black, dxSkinOffice2010Blue,
+  dxSkinOffice2010Silver, dxSkinOffice2013DarkGray, dxSkinOffice2013LightGray,
+  dxSkinOffice2013White, dxSkinOffice2016Colorful, dxSkinOffice2016Dark,
+  dxSkinOffice2019Black, dxSkinOffice2019DarkGray, dxSkinOffice2019White,
+  dxSkinPumpkin, dxSkinSeven, dxSkinSevenClassic, dxSkinSharp, dxSkinSharpPlus,
+  dxSkinSilver, dxSkinSpringtime, dxSkinStardust, dxSkinSummer2008,
+  dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
+  dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
+  dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
+  dxSkinXmas2008Blue;
 
 type
   TfrmGestionUsuarios = class(TForm)
@@ -23,8 +39,6 @@ type
     lblTitle: TLabel;
     lblSubtitle: TLabel;
     shpHeaderLine: TShape;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     pnlToolbar: TPanel;
     btnAdd: TButton;
     btnDel: TButton;
@@ -45,7 +59,6 @@ type
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnSaveClick(Sender: TObject);
@@ -123,11 +136,6 @@ end;
 procedure TfrmGestionUsuarios.FormDestroy(Sender: TObject);
 begin
   // nada
-end;
-
-procedure TfrmGestionUsuarios.btnCloseClick(Sender: TObject);
-begin
-  Close;
 end;
 
 procedure TfrmGestionUsuarios.LoadRoles;

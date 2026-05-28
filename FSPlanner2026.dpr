@@ -147,7 +147,10 @@ uses
   uDBConfig in 'uDBConfig.pas' {frmDBConfig},
   uSincronizarERP in 'uSincronizarERP.pas' {frmSincronizarERP},
   uCardLayout in 'uCardLayout.pas',
-  uCardLayoutEditor in 'uCardLayoutEditor.pas' {frmCardLayoutEditor};
+  uCardLayoutEditor in 'uCardLayoutEditor.pas' {frmCardLayoutEditor},
+  uModalOverlayAuto in 'uModalOverlayAuto.pas',
+  uHelpAutoInstall in 'uHelpAutoInstall.pas',
+  uKPICard in 'uKPICard.pas';
 
 {$R *.res}
 

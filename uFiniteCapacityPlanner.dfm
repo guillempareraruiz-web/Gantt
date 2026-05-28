@@ -21,9 +21,9 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
   TextHeight = 17
   object splitter: TSplitter
     Left = 320
-    Top = 66
+    Top = 71
     Width = 5
-    Height = 606
+    Height = 601
     Color = 14737632
     ParentColor = False
     ExplicitTop = 51
@@ -33,7 +33,7 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
     Left = 0
     Top = 0
     Width = 1300
-    Height = 65
+    Height = 70
     Align = alTop
     BevelOuter = bvNone
     Color = 3553567
@@ -41,23 +41,21 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
     TabOrder = 0
     DesignSize = (
       1300
-      65)
+      70)
     object lblTitle: TLabel
-      Left = 0
-      Top = 0
+      Left = 68
+      Top = 4
       Width = 400
-      Height = 65
-      Align = alLeft
+      Height = 36
       AutoSize = False
-      Caption = '  Planificador de Capacidad Finita'
+      Caption = 'Carga por centro'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWhite
-      Font.Height = -19
-      Font.Name = 'Segoe UI'
-      Font.Style = [fsBold]
+      Font.Height = -24
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
       ParentFont = False
       Layout = tlCenter
-      ExplicitHeight = 50
     end
     object lblLayout: TLabel
       Left = 860
@@ -90,6 +88,19 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
       ParentFont = False
       Layout = tlCenter
     end
+    object lblSubtitle: TLabel
+      Left = 68
+      Top = 40
+      Width = 219
+      Height = 15
+      Caption = 'Planificaci'#243'n de tareas por Centro Trabajo'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 14869218
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
     object btnAyuda: TButton
       Left = 1187
       Top = 27
@@ -110,17 +121,18 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
       Left = 1224
       Top = 0
       Width = 76
-      Height = 65
+      Height = 70
       Align = alRight
       BevelOuter = bvNone
       Color = 3553567
       ParentBackground = False
       TabOrder = 0
+      ExplicitHeight = 65
       object PnlUndo: TPanel
         Left = 0
         Top = 0
         Width = 34
-        Height = 65
+        Height = 70
         Cursor = crHandPoint
         Align = alLeft
         BevelOuter = bvNone
@@ -128,7 +140,7 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
         ParentBackground = False
         TabOrder = 0
         OnClick = OnUndoClick
-        ExplicitLeft = 16
+        ExplicitHeight = 65
         object LblUndoIcon: TLabel
           Left = -2
           Top = 4
@@ -168,19 +180,19 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
         Left = 34
         Top = 0
         Width = 1
-        Height = 65
+        Height = 70
         Align = alLeft
         BevelOuter = bvNone
         Color = 14737632
         ParentBackground = False
         TabOrder = 1
-        ExplicitLeft = 50
+        ExplicitHeight = 65
       end
       object PnlRedo: TPanel
         Left = 35
         Top = 0
         Width = 38
-        Height = 65
+        Height = 70
         Cursor = crHandPoint
         Align = alLeft
         BevelOuter = bvNone
@@ -188,6 +200,7 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
         ParentBackground = False
         TabOrder = 2
         OnClick = OnRedoClick
+        ExplicitHeight = 65
         object LblRedoIcon: TLabel
           Left = -2
           Top = 2
@@ -353,29 +366,66 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
         '2 semanas'
         '1 mes')
     end
+    object imgSection: TcxImage
+      AlignWithMargins = True
+      Left = 3
+      Top = 6
+      Margins.Top = 6
+      Margins.Right = 5
+      Margins.Bottom = 12
+      Align = alLeft
+      Picture.Data = {
+        0D546478536D617274496D6167653C3F786D6C2076657273696F6E3D22312E30
+        2220656E636F64696E673D225554462D38223F3E0D0A3C737667207669657742
+        6F783D223020302032342032342220786D6C6E733D22687474703A2F2F777777
+        2E77332E6F72672F323030302F737667223E0D0A093C706174682066696C6C3D
+        2223464646464646222066696C6C2D6F7061636974793D22302E352220643D22
+        4D3320313956352E3730303436433320352E323739393520332E323633303720
+        342E393034333720332E363538323620342E37363036374C31332E3332393120
+        312E32343339384331332E3538383620312E31343936312031332E3837353520
+        312E32383334392031332E3936393920312E35343330314331332E3938393820
+        312E353937373820313420312E363535363120313420312E373133383856362E
+        363636374C32302E3331363220382E37373231314332302E3732343620382E39
+        3038323220323120392E323930333620323120392E3732303739563139483233
+        563231483156313948335A4D3520313948313256332E38353534334C3520362E
+        34303038395631395A4D31392031395631302E343431364C313420382E373734
+        38385631394831395A222F3E0D0A3C2F7376673E0D0A}
+      Properties.FitMode = ifmProportionalStretch
+      Properties.ReadOnly = True
+      Properties.ShowFocusRect = False
+      Style.BorderStyle = ebsNone
+      TabOrder = 8
+      Transparent = True
+      ExplicitHeight = 47
+      Height = 52
+      Width = 56
+    end
   end
   object pnlSeparator: TPanel
     Left = 0
-    Top = 65
+    Top = 70
     Width = 1300
     Height = 1
     Align = alTop
     BevelOuter = bvNone
     Color = 14737632
     TabOrder = 1
+    ExplicitTop = 65
   end
   object pnlPending: TPanel
     Left = 0
-    Top = 66
+    Top = 71
     Width = 320
-    Height = 606
+    Height = 601
     Align = alLeft
     BevelOuter = bvNone
     Color = 15263458
     TabOrder = 2
+    ExplicitTop = 66
+    ExplicitHeight = 606
     DesignSize = (
       320
-      606)
+      601)
     object lblPendingTitle: TLabel
       Left = 0
       Top = 0
@@ -475,13 +525,15 @@ object frmFiniteCapacityPlanner: TfrmFiniteCapacityPlanner
   end
   object pnlCentres: TPanel
     Left = 325
-    Top = 66
+    Top = 71
     Width = 975
-    Height = 606
+    Height = 601
     Align = alClient
     BevelOuter = bvNone
     Color = 15789544
     TabOrder = 3
+    ExplicitTop = 66
+    ExplicitHeight = 606
     object pnlHeaderCentres: TPanel
       Left = 0
       Top = 0

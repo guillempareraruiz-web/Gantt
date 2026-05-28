@@ -48,7 +48,7 @@ uses
   dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, Vcl.Menus, cxButtons;
+  dxSkinXmas2008Blue, Vcl.Menus, cxButtons, dxGDIPlusClasses, cxImage;
 
 const
   BACKLOG_GRID_ID = 'BACKLOG';
@@ -78,6 +78,7 @@ type
     Prioridad: Integer;
     CentroPreferente: string;
     HorasEstimadas: Double;
+    TiempoUnidadFabSecs: Double;
     EstadoERP: string;
     Extras: TDictionary<string, Variant>;
     // Solo se rellenan en el tab Planificados (via FS_PL_vw_BacklogPlanned)
@@ -101,12 +102,6 @@ type
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    pnlBottom: TPanel;
-    btnPlanificar: TButton;
-    btnGuardarLayout: TButton;
-    btnResetLayout: TButton;
-    btnConfigurarColumnas: TButton;
-    btnClose: TButton;
     pnlFiltros: TPanel;
     lblFiltros: TLabel;
     lblFiltroOrigen: TLabel;
@@ -127,8 +122,6 @@ type
     chkUsaFechaHasta: TCheckBox;
     btnLimpiarFiltros: TButton;
     tabMode: TTabControl;
-    btnDesplanificarSel: TButton;
-    btnDesplanificarTodo: TButton;
     pnlImpacto: TPanel;
     pnlImpactoHeader: TPanel;
     lblImpacto: TLabel;
@@ -151,10 +144,6 @@ type
     tvBacklog: TcxGridTableView;
     lvBacklog: TcxGridLevel;
     btnToggleImpacto: TButton;
-    btnAbrirGantt: TButton;
-    btnVaciarPlan: TButton;
-    btnRecargar: TcxButton;
-    cxButton1: TcxButton;
     cxButton9: TcxButton;
     Label28: TLabel;
     cxButton2: TcxButton;
@@ -166,25 +155,33 @@ type
     N2: TMenuItem;
     RegenerarNodosDemo1: TMenuItem;
     RegenerarBacklogDemo1: TMenuItem;
-    lblCountRegs: TLabel;
     btnSelectAll: TButton;
     btnDeselectAll: TButton;
+    pnlSubTitulo: TPanel;
+    btnDesplanificarSel: TButton;
+    btnPlanificar: TButton;
     btnSyncErp: TcxButton;
+    btnDesplanificarTodo: TButton;
+    PopupMenu2: TPopupMenu;
+    Columnas1: TMenuItem;
+    Configurar1: TMenuItem;
+    Guardar1: TMenuItem;
+    Restablecer1: TMenuItem;
+    N3: TMenuItem;
+    Vaciarylimpiartodalaplanificacin2: TMenuItem;
+    imgSection: TcxImage;
+    cxButton1: TcxButton;
+    btnRecargar: TcxButton;
+    lblCountRegs: TLabel;
     procedure btnSyncErpClick(Sender: TObject);
     procedure RegenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarBacklogDemo1Click(Sender: TObject);
     procedure btnSelectAllClick(Sender: TObject);
     procedure btnDeselectAllClick(Sender: TObject);
-    procedure btnVaciarPlanClick(Sender: TObject);
-    procedure btnAbrirGanttClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnPlanificarClick(Sender: TObject);
-    procedure btnGuardarLayoutClick(Sender: TObject);
-    procedure btnResetLayoutClick(Sender: TObject);
-    procedure btnConfigurarColumnasClick(Sender: TObject);
     procedure btnToggleImpactoClick(Sender: TObject);
     procedure btnLimpiarFiltrosClick(Sender: TObject);
     procedure FiltroChanged(Sender: TObject);
@@ -198,6 +195,10 @@ type
     procedure btnDesplanificarSelClick(Sender: TObject);
     procedure btnDesplanificarTodoClick(Sender: TObject);
     procedure btnRecargarClick(Sender: TObject);
+    procedure Configurar1Click(Sender: TObject);
+    procedure Restablecer1Click(Sender: TObject);
+    procedure Guardar1Click(Sender: TObject);
+    procedure Vaciarylimpiartodalaplanificacin2Click(Sender: TObject);
   private
     FRows: TList<TBacklogRow>;
     FFilteredIndices: TArray<Integer>;   // FRows index per cada fila del grid
@@ -263,15 +264,12 @@ const
   BACKLOG_MOD = 'BACKLOG';
 
 procedure ShowBacklog;
-var
-  F: TfrmBacklog;
 begin
-  F := TfrmBacklog.Create(Application);
-  try
-    F.ShowModal;
-  finally
-    F.Free;
-  end;
+  // Backlog es ahora una vista embedded del Form1 (no modal, hermana de
+  // Dashboard / Gantt / FiniteCapacity). Delegamos siempre al Main para
+  // que gestione la instancia unica y el cambio de vista activa.
+  if Assigned(Main.Form1) then
+    Main.Form1.MostrarBacklog;
 end;
 
 { TfrmBacklog }
@@ -286,6 +284,40 @@ begin
   Result := CurrentSession.Login;
   if Result = '' then
     Result := '(anon)';
+end;
+
+procedure TfrmBacklog.Vaciarylimpiartodalaplanificacin2Click(Sender: TObject);
+var
+  Cmd: TADOCommand;
+  PID: Integer;
+begin
+  PID := DMPlanner.CurrentProjectId;
+  if PID <= 0 then
+  begin
+    ShowMessage('No hay proyecto activo.');
+    Exit;
+  end;
+
+  if MessageDlg(
+       'Se borrara TODO lo planificado del proyecto activo (nodos, dependencias, '
+       + 'marcadores y snapshots). El Backlog y los centros no se tocan.' + sLineBreak +
+       sLineBreak + 'Seguro que quieres vaciar el plan?',
+       mtWarning, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := DMPlanner.ADOConnection;
+    Cmd.CommandText := 'EXEC FS_PL_sp_ClearProjectPlan :CodigoEmpresa, :ProjectId';
+    Cmd.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Cmd.Parameters.ParamByName('ProjectId').Value := PID;
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  LoadData;
+  ShowMessage('Plan vaciado correctamente.');
+
 end;
 
 function TfrmBacklog.EmpresaCode: SmallInt;
@@ -307,7 +339,7 @@ begin
     btnPlanificar.Visible := not IsPlanningTab;
     btnDesplanificarSel.Visible := IsPlanningTab;
     btnDesplanificarTodo.Visible := IsPlanningTab;
-    btnConfigurarColumnas.Visible := uLogin.IsAdmin;
+    Columnas1.Enabled := uLogin.IsAdmin;
 
     BuildBaseColumns;
     LoadCustomColumnDefs;
@@ -350,51 +382,6 @@ begin
     if FRows[I].Extras <> nil then
       FRows[I].Extras.Free;
   FRows.Clear;
-end;
-
-procedure TfrmBacklog.btnCloseClick(Sender: TObject);
-begin
-  Close;
-end;
-
-procedure TfrmBacklog.btnAbrirGanttClick(Sender: TObject);
-begin
-  Close;
-  if Form1 <> nil then
-    Form1.MostrarVistaGantt;
-end;
-
-procedure TfrmBacklog.btnVaciarPlanClick(Sender: TObject);
-var
-  Cmd: TADOCommand;
-  PID: Integer;
-begin
-  PID := DMPlanner.CurrentProjectId;
-  if PID <= 0 then
-  begin
-    ShowMessage('No hay proyecto activo.');
-    Exit;
-  end;
-
-  if MessageDlg(
-       'Se borrara TODO lo planificado del proyecto activo (nodos, dependencias, '
-       + 'marcadores y snapshots). El Backlog y los centros no se tocan.' + sLineBreak +
-       sLineBreak + 'Seguro que quieres vaciar el plan?',
-       mtWarning, [mbYes, mbNo], 0) <> mrYes then Exit;
-
-  Cmd := TADOCommand.Create(nil);
-  try
-    Cmd.Connection := DMPlanner.ADOConnection;
-    Cmd.CommandText := 'EXEC FS_PL_sp_ClearProjectPlan :CodigoEmpresa, :ProjectId';
-    Cmd.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
-    Cmd.Parameters.ParamByName('ProjectId').Value := PID;
-    Cmd.Execute;
-  finally
-    Cmd.Free;
-  end;
-
-  LoadData;
-  ShowMessage('Plan vaciado correctamente.');
 end;
 
 procedure TfrmBacklog.btnLimpiarFiltrosClick(Sender: TObject);
@@ -450,12 +437,16 @@ begin
       Input.SerieOF := '';
       Input.NumeroPedido := 0;
       Input.SeriePedido := '';
-      if Row.Origen = 'OF' then
+      // El check correcte es per familia ERP (TipoOrigen), no per nivell del leaf
+      // (Origen). Per a una operacio Nivel=3, Origen val 'OP' i la familia pot
+      // ser 'OF ', 'PED' o 'PRJ'. La view V048 ja propaga NumeroDoc/SerieDoc
+      // heredats del pare per a Nivel=3.
+      if Trim(Row.TipoOrigen) = 'OF' then
       begin
         Input.NumeroOF := Row.NumeroDoc;
         Input.SerieOF := Row.SerieDoc;
       end
-      else if Row.Origen = 'PEDIDO' then
+      else if Trim(Row.TipoOrigen) = 'PED' then
       begin
         Input.NumeroPedido := Row.NumeroDoc;
         Input.SeriePedido := Row.SerieDoc;
@@ -466,6 +457,9 @@ begin
       Input.DescripcionArticulo := Row.DescripcionArticulo;
       Input.UnidadesAFabricar := Row.Cantidad;
       Input.NumeroTrabajo := Row.CodigoProyecto;
+      Input.FechaEntrega := Row.FechaCompromiso;
+      Input.FechaNecesaria := Row.FechaNecesaria;
+      Input.TiempoUnidadFabSecs := Row.TiempoUnidadFabSecs;
 
       // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
       Input.RawItemClaveERP := Row.ClaveERP;
@@ -488,7 +482,7 @@ var
   CE, PID: string;
   NodeId: Integer;
   DurStr, FIniStr, FFinStr, CenterStr: string;
-  UdsStr, FNecStr: string;
+  UdsStr, FNecStr, FEntStr, TufStr: string;
   NumCreats: Integer;
 
   function QS(const S: string): string;
@@ -560,10 +554,20 @@ begin
         UdsStr := FloatToStr(Item.Input.UnidadesAFabricar, TFormatSettings.Invariant)
       else
         UdsStr := '1';
-      if Item.Input.FechaCompromiso > 0 then
+      if Item.Input.FechaEntrega > 0 then
+        FEntStr := FmtDT(Item.Input.FechaEntrega)
+      else
+        FEntStr := 'NULL';
+      if Item.Input.FechaNecesaria > 0 then
+        FNecStr := FmtDT(Item.Input.FechaNecesaria)
+      else if Item.Input.FechaCompromiso > 0 then
         FNecStr := FmtDT(Item.Input.FechaCompromiso)
       else
         FNecStr := 'NULL';
+      if Item.Input.TiempoUnidadFabSecs > 0 then
+        TufStr := FloatToStr(Item.Input.TiempoUnidadFabSecs, TFormatSettings.Invariant)
+      else
+        TufStr := '0';
       Cmd := TADOCommand.Create(nil);
       try
         Cmd.Connection := DMPlanner.ADOConnection;
@@ -573,17 +577,18 @@ begin
           '  FechaEntrega, FechaNecesaria, CodigoCliente, ' +
           '  CodigoArticulo, DescripcionArticulo, ' +
           '  DuracionMin, DuracionMinOriginal, ' +
-          '  UnidadesAFabricar, OperariosNecesarios, Prioridad, ' +
+          '  UnidadesAFabricar, TiempoUnidadFabSecs, ' +
+          '  OperariosNecesarios, Prioridad, ' +
           '  RawItemClaveERP, RawItemTipoOrigen, ' +
           '  ColorFondoOp, ColorBordeOp) VALUES (' +
           CE + ', ' + IntToStr(NodeId) + ', ' + QS(Item.Input.CodigoDocumento) + ', ' +
           IntToStr(Item.Input.NumeroOF) + ', ' + QS(Item.Input.SerieOF) + ', ' +
           IntToStr(Item.Input.NumeroPedido) + ', ' + QS(Item.Input.SeriePedido) + ', ' +
           QS(Item.Input.NumeroTrabajo) + ', ' +
-          FNecStr + ', ' + FNecStr + ', ' + QS(Item.Input.CodigoCliente) + ', ' +
+          FEntStr + ', ' + FNecStr + ', ' + QS(Item.Input.CodigoCliente) + ', ' +
           QS(Item.Input.CodigoArticulo) + ', ' + QS(Item.Input.DescripcionArticulo) + ', ' +
           DurStr + ', ' + DurStr + ', ' +
-          UdsStr + ', 1, ' + IntToStr(Item.Input.Prioridad) + ', ' +
+          UdsStr + ', ' + TufStr + ', 1, ' + IntToStr(Item.Input.Prioridad) + ', ' +
           QSOrNull(Item.Input.RawItemClaveERP) + ', ' +
           QSOrNull(Item.Input.RawItemTipoOrigen) + ', ' +
           '15251072, 11166760)';
@@ -608,6 +613,17 @@ begin
     'Planificacion confirmada: %d nodos creados en el plan actual.' + sLineBreak +
     'El Backlog se recargara.',
     [NumCreats]));
+end;
+
+procedure TfrmBacklog.Configurar1Click(Sender: TObject);
+begin
+  if uBacklogCustomCols.TfrmBacklogCustomCols.Execute then
+  begin
+    // Si ha habido altas/bajas/ediciones, recargar definiciones, columnas y datos.
+    LoadCustomColumnDefs;
+    BuildCustomColumns;
+    LoadData;
+  end;
 end;
 
 procedure TfrmBacklog.btnPlanificarClick(Sender: TObject);
@@ -677,12 +693,6 @@ begin
       Exit;
     end;
   end;
-end;
-
-procedure TfrmBacklog.btnGuardarLayoutClick(Sender: TObject);
-begin
-  SaveUserLayout;
-  ShowMessage('Layout guardado para el usuario actual.');
 end;
 
 procedure TfrmBacklog.btnRecargarClick(Sender: TObject);
@@ -757,24 +767,6 @@ begin
   uDemoBacklog.GenerarBacklogDemo(NumOFs, NumCom, NumPrj, False);
 
   LoadData;
-end;
-
-procedure TfrmBacklog.btnConfigurarColumnasClick(Sender: TObject);
-begin
-  if uBacklogCustomCols.TfrmBacklogCustomCols.Execute then
-  begin
-    // Si ha habido altas/bajas/ediciones, recargar definiciones, columnas y datos.
-    LoadCustomColumnDefs;
-    BuildCustomColumns;
-    LoadData;
-  end;
-end;
-
-procedure TfrmBacklog.btnResetLayoutClick(Sender: TObject);
-begin
-  if MessageDlg('Restablecer layout por defecto del grid?',
-    mtConfirmation, [mbYes, mbNo], 0) = mrYes then
-    ResetLayout;
 end;
 
 procedure TfrmBacklog.ApplyImpactoVisible(AVisible: Boolean);
@@ -1352,6 +1344,11 @@ begin
       Row.Prioridad           := Q.FieldByName('Prioridad').AsInteger;
       Row.CentroPreferente    := Q.FieldByName('CentroPreferente').AsString;
       Row.HorasEstimadas      := Q.FieldByName('HorasEstimadas').AsFloat;
+      if (Q.FindField('TiempoUnidadFabSecs') <> nil)
+         and not Q.FieldByName('TiempoUnidadFabSecs').IsNull then
+        Row.TiempoUnidadFabSecs := Q.FieldByName('TiempoUnidadFabSecs').AsFloat
+      else
+        Row.TiempoUnidadFabSecs := 0;
       Row.EstadoERP           := Q.FieldByName('EstadoERP').AsString;
 
       // Campos del nodo (solo vw_BacklogPlanned)
@@ -1593,6 +1590,13 @@ begin
     // OPs hijas). Diff > 2 -> mas de 3 niveles, no aplica al modelo actual.
     Result := 0;
   end;
+end;
+
+procedure TfrmBacklog.Restablecer1Click(Sender: TObject);
+begin
+  if MessageDlg('Restablecer layout por defecto del grid?',
+    mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+    ResetLayout;
 end;
 
 // ---------------------------------------------------------------------------
@@ -2188,6 +2192,12 @@ begin
   Result := -1;
   if (AGridIdx < 0) or (AGridIdx > High(FFilteredIndices)) then Exit;
   Result := FFilteredIndices[AGridIdx];
+end;
+
+procedure TfrmBacklog.Guardar1Click(Sender: TObject);
+begin
+  SaveUserLayout;
+  ShowMessage('Layout guardado para el usuario actual.');
 end;
 
 procedure TfrmBacklog.OnColVerButtonClick(Sender: TObject;

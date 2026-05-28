@@ -462,12 +462,9 @@
             <Form>frmCardLayoutEditor</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uCardLayoutSetRepo.pas"/>
-        <DCCReference Include="uCardLayoutSetManager.pas">
-            <Form>frmCardLayoutSetManager</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uModalOverlay.pas"/>
+        <DCCReference Include="uModalOverlayAuto.pas"/>
+        <DCCReference Include="uHelpAutoInstall.pas"/>
+        <DCCReference Include="uKPICard.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -490,13 +487,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

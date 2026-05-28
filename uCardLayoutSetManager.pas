@@ -43,6 +43,7 @@ type
     btnEdit: TButton;
     btnDuplicate: TButton;
     btnDelete: TButton;
+    btnSetActive: TButton;
     pnlMain: TPanel;
     pnlLeft: TPanel;
     grid: TcxGrid;
@@ -65,6 +66,10 @@ type
     procedure btnEditClick(Sender: TObject);
     procedure btnDuplicateClick(Sender: TObject);
     procedure btnDeleteClick(Sender: TObject);
+    procedure btnSetActiveClick(Sender: TObject);
+    procedure tvCustomDrawCell(Sender: TcxCustomGridTableView;
+      ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
+      var ADone: Boolean);
     procedure cmbFiltroChange(Sender: TObject);
     procedure cmbPreviewCategoriaChange(Sender: TObject);
     procedure pbPreviewPaint(Sender: TObject);
@@ -84,6 +89,7 @@ type
     FMetas: TArray<TCardLayoutSetMeta>;     // tots els carregats des de BD
     FVisibleIdxs: TArray<Integer>;          // indexs de FMetas que passen el filtre
     FActiveSetId: Integer;
+    FActiveDirty: Boolean;                  // true si l'Active ha canviat o s'ha editat el seu contingut
     FPreviewSet: TCardLayoutSet;
     FPreviewSetId: Integer;
     FPreviewCategoria: TCardCategory;
@@ -96,8 +102,11 @@ type
     procedure UpdateButtons;
   public
     property CustomFieldDefs: TCustomFieldDefs read FCustomFieldDefs write FCustomFieldDefs;
+    property ActiveDirty: Boolean read FActiveDirty;
   end;
 
+// Retorna True si l'Active Set ha canviat o si s'ha modificat el contingut
+// del set que era actiu en algun moment, perque el caller pugui recarregar.
 function ShowCardLayoutSetManager(AOwner: TForm; ARepo: TCardLayoutSetRepo;
   ACustomFieldDefs: TCustomFieldDefs): Boolean;
 
@@ -128,7 +137,7 @@ begin
     F.CustomFieldDefs := ACustomFieldDefs;
     F.LoadAll;
     ShowModalWithOverlay(F, AOwner);
-    Result := True;
+    Result := F.ActiveDirty;
   finally
     F.Free;
   end;
@@ -138,7 +147,10 @@ procedure TfrmCardLayoutSetManager.FormCreate(Sender: TObject);
 var
   C: TCardCategory;
 begin
+  // El boton '?' del caption se instala automaticamente via uHelpAutoInstall
+  // (TopicKey = 'uCardLayoutSetManager', MD en Help/es/uCardLayoutSetManager.md).
   FActiveSetId := -1;
+  FActiveDirty := False;
   FPreviewSetId := -1;
   FPreviewSet := DefaultCardLayoutSet;
   FPreviewCategoria := ccOFPend;
@@ -164,7 +176,7 @@ begin
   tv.OptionsView.Indicator := True;
   tv.OptionsData.Editing := True;
   tv.OptionsCustomize.ColumnFiltering := False;
-  colActivo.Options.Editing := True;
+  colActivo.Options.Editing := False;
   colFechaMod.Options.Editing := False;
   colScope.Options.Editing := True;
   colNombre.Options.Editing := True;
@@ -224,6 +236,7 @@ begin
     begin
       FActiveSetId := FMetas[0].SetId;
       FRepo.SetActiveSetId(FActiveSetId);
+      FActiveDirty := True;
     end;
   end;
   RebuildGrid;
@@ -316,6 +329,40 @@ begin
   btnDuplicate.Enabled := HasSel;
   btnDelete.Enabled := HasSel and not M.IsSystem
     and (not M.IsCommon) and (M.UserId = CurrentUserIdSafe);
+  btnSetActive.Enabled := HasSel and (M.SetId <> FActiveSetId);
+end;
+
+procedure TfrmCardLayoutSetManager.btnSetActiveClick(Sender: TObject);
+var
+  M: TCardLayoutSetMeta;
+begin
+  M := CurrentMeta;
+  if M.SetId < 0 then Exit;
+  if M.SetId = FActiveSetId then Exit;
+  FRepo.SetActiveSetId(M.SetId);
+  FActiveSetId := M.SetId;
+  FActiveDirty := True;
+  RebuildGrid;
+end;
+
+procedure TfrmCardLayoutSetManager.tvCustomDrawCell(
+  Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
+  AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
+var
+  Row: Integer;
+  IsActiveRow: Boolean;
+begin
+  if AViewInfo = nil then Exit;
+  if AViewInfo.GridRecord = nil then Exit;
+  Row := AViewInfo.GridRecord.RecordIndex;
+  if (Row < 0) or (Row >= Length(FVisibleIdxs)) then Exit;
+  IsActiveRow := FMetas[FVisibleIdxs[Row]].SetId = FActiveSetId;
+  if not IsActiveRow then Exit;
+  if AViewInfo.Selected or AViewInfo.Focused then Exit;
+  // Verd suau per a la fila activa
+  ACanvas.Brush.Color := $00D8F5D8;
+  ACanvas.Font.Color := $00115C11;
+  ACanvas.Font.Style := ACanvas.Font.Style + [fsBold];
 end;
 
 procedure TfrmCardLayoutSetManager.cmbFiltroChange(Sender: TObject);
@@ -364,21 +411,17 @@ begin
   Idx := FVisibleIdxs[Row];
   M := FMetas[Idx];
 
-  // El set Sistema no es pot editar (ni nom ni scope ni activo)
-  if M.IsSystem then
+  // Activo no es editable desde el grid: cal usar el boto "Marcar como activo".
+  if AItem = colActivo then
   begin
-    // Activo si que es pot canviar (per marcar el sistema com a actiu si es el cas)
-    if AItem = colActivo then
-      AAllow := M.SetId <> FActiveSetId  // nomes si encara no es actiu
-    else
-      AAllow := False;
+    AAllow := False;
     Exit;
   end;
 
-  // Activo: nomes es pot MARCAR (no desmarcar)
-  if AItem = colActivo then
+  // El set Sistema no es pot editar (ni nom ni scope)
+  if M.IsSystem then
   begin
-    AAllow := M.SetId <> FActiveSetId;
+    AAllow := False;
     Exit;
   end;
 
@@ -414,14 +457,6 @@ begin
     FRepo.ChangeScope(FMetas[Idx].SetId, NewIsCommon);
     FMetas[Idx].IsCommon := NewIsCommon;
     if NewIsCommon then FMetas[Idx].UserId := 0;
-  end
-  else if AItem = colActivo then
-  begin
-    // Sempre marcar aquest com a actiu (no permetem "desactivar" sense
-    // marcar-ne un altre: hi ha d'haver sempre un actiu).
-    FRepo.SetActiveSetId(FMetas[Idx].SetId);
-    FActiveSetId := FMetas[Idx].SetId;
-    RebuildGrid;
   end;
 end;
 
@@ -466,6 +501,7 @@ procedure TfrmCardLayoutSetManager.btnCloseClick(Sender: TObject);
 begin
   Close;
 end;
+
 
 procedure TfrmCardLayoutSetManager.btnNewClick(Sender: TObject);
 var
@@ -546,11 +582,19 @@ begin
       FRepo.Insert(Nombre, False, S);
     end
     else
+    begin
       FRepo.UpdateSet(M.SetId, M.Nombre, S);
+      if M.SetId = FActiveSetId then FActiveDirty := True;
+    end;
   end
   else
+  begin
     FRepo.UpdateSet(M.SetId, M.Nombre, S);
+    if M.SetId = FActiveSetId then FActiveDirty := True;
+  end;
 
+  // Forcem recarrega del preview: el SetId no ha canviat pero el contingut si.
+  FPreviewSetId := -1;
   LoadAll;
 end;
 

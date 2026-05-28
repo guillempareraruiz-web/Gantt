@@ -1,9 +1,7 @@
 unit uSyncBacklogPreview;
-
 {
   TfrmSyncBacklogPreview - Preview y aplicacion selectiva de la sincronizacion
   ERP -> Backlog (FS_PL_Raw_Item).
-
   Flujo:
     1. OnShow: llama a TErpSyncRepo.PreviewBacklogOF (filtra OFs Estado IN 0,1).
     2. Pinta el resultado en un cxGrid agrupado por OF -> OT -> OP.
@@ -11,9 +9,7 @@ unit uSyncBacklogPreview;
     4. Boton "Sincronizar seleccionados" -> ApplyRawItems con los marcados.
     5. Cierra y refresca el Backlog del caller.
 }
-
 interface
-
 uses
   Winapi.Windows, System.SysUtils, System.Classes, System.Variants,
   System.Generics.Collections,
@@ -43,7 +39,6 @@ uses
   dxSkinVisualStudio2013Dark, dxSkinVisualStudio2013Light, dxSkinVS2010,
   dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, Vcl.Menus, dxDateRanges,
   dxScrollbarAnnotations;
-
 type
   TfrmSyncBacklogPreview = class(TForm)
     pnlTop: TPanel;
@@ -64,7 +59,6 @@ type
     colOP: TcxGridColumn;
     colNivel: TcxGridColumn;
     btnAgrupar: TcxButton;
-
     colClaveERP: TcxGridColumn;
     colCodigo: TcxGridColumn;
     colDescripcion: TcxGridColumn;
@@ -103,14 +97,10 @@ type
       ACodigoEmpresa: SmallInt; const AErpSistema: string;
       AReader: IErpReader; AEjercicio: SmallInt): Boolean;
   end;
-
 implementation
-
 {$R *.dfm}
-
 uses
   System.DateUtils;
-
 class function TfrmSyncBacklogPreview.Execute(AOwner: TComponent;
   AConn: TADOConnection; ACodigoEmpresa: SmallInt;
   const AErpSistema: string; AReader: IErpReader;
@@ -131,17 +121,14 @@ begin
     Frm.Free;
   end;
 end;
-
 procedure TfrmSyncBacklogPreview.FormShow(Sender: TObject);
 begin
   LoadPreview;
 end;
-
 procedure TfrmSyncBacklogPreview.FormDestroy(Sender: TObject);
 begin
   SetLength(FRows, 0);
 end;
-
 procedure TfrmSyncBacklogPreview.LoadPreview;
 var
   Repo: TErpSyncRepo;
@@ -160,7 +147,6 @@ begin
   RefreshGrid;
   RefreshResumen;
 end;
-
 procedure TfrmSyncBacklogPreview.RefreshGrid;
 var
   I: Integer;
@@ -174,7 +160,6 @@ begin
   try
     for I := 0 to High(FRows) do
       ByClave.AddOrSetValue(FRows[I].ErpData.ClaveERP, FRows[I]);
-
     GridView.BeginUpdate;
     try
       GridView.DataController.RecordCount := 0;
@@ -189,7 +174,6 @@ begin
         else
           Origen := '?';
         end;
-
         // Calcul OF/OT/OP pujant per ClaveERPPadre fins on calgui
         OFTxt := ''; OTTxt := ''; OPTxt := '';
         case Row.ErpData.Nivel of
@@ -212,7 +196,6 @@ begin
                end;
              end;
         end;
-
         GridView.DataController.Values[I, colAplicar.Index]   := Row.Aplicar;
         GridView.DataController.Values[I, colTipo.Index]      := Origen;
         GridView.DataController.Values[I, colOF.Index]        := OFTxt;
@@ -240,7 +223,6 @@ begin
     ByClave.Free;
   end;
 end;
-
 procedure TfrmSyncBacklogPreview.btnAgruparClick(Sender: TObject);
 var
   Agrupado: Boolean;
@@ -267,7 +249,6 @@ begin
     GridView.EndUpdate;
   end;
 end;
-
 procedure TfrmSyncBacklogPreview.RefreshResumen;
 var
   Row: TSyncRowRawItem;
@@ -289,7 +270,6 @@ begin
            'Seleccionados: %d',
            [Length(FRows), Nuevos, Actu, Sin_, Elim, Sel]);
 end;
-
 procedure TfrmSyncBacklogPreview.SetAllAplicar(AValue: Boolean);
 var
   I: Integer;
@@ -306,17 +286,14 @@ begin
   RefreshGrid;
   RefreshResumen;
 end;
-
 procedure TfrmSyncBacklogPreview.btnSelectAllClick(Sender: TObject);
 begin
   SetAllAplicar(True);
 end;
-
 procedure TfrmSyncBacklogPreview.btnDeselectAllClick(Sender: TObject);
 begin
   SetAllAplicar(False);
 end;
-
 procedure TfrmSyncBacklogPreview.btnAplicarClick(Sender: TObject);
 var
   Repo: TErpSyncRepo;
@@ -330,7 +307,6 @@ begin
     V := GridView.DataController.Values[I, colAplicar.Index];
     FRows[I].Aplicar := (not VarIsNull(V)) and Boolean(V);
   end;
-
   Screen.Cursor := crHourGlass;
   try
     Repo := TErpSyncRepo.Create(FConn, FCodigoEmpresa, FErpSistema);
@@ -342,23 +318,19 @@ begin
   finally
     Screen.Cursor := crDefault;
   end;
-
   ShowMessage(Format(
     'Sincronizacion completada.'#13#10#13#10 +
     'Aplicados: %d'#13#10 +
     'Nuevos: %d   Actualizados: %d   Obsoletos: %d   Errores: %d',
     [Summary.Aplicados, Summary.Nuevos, Summary.Actualizados,
      Summary.Eliminados, Summary.Errores]));
-
   FApplied := True;
   ModalResult := mrOk;
 end;
-
 procedure TfrmSyncBacklogPreview.btnCancelarClick(Sender: TObject);
 begin
   ModalResult := mrCancel;
 end;
-
 procedure TfrmSyncBacklogPreview.GridViewCustomDrawCell(
   Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
   AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
@@ -369,5 +341,4 @@ begin
   if (Idx >= 0) and (Idx <= High(FRows)) then
     ACanvas.Brush.Color := SyncStatusColor(FRows[Idx].Status);
 end;
-
 end.

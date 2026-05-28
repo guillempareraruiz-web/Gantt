@@ -17,14 +17,159 @@ object Form1: TForm1
   OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 15
+  object Panel2: TPanel
+    Left = 0
+    Top = 0
+    Width = 1092
+    Height = 33
+    Align = alTop
+    BevelOuter = bvNone
+    Color = 14869218
+    ParentBackground = False
+    TabOrder = 0
+    object btnTB_Dashboard: TcxButton
+      AlignWithMargins = True
+      Left = 6
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Left = 6
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Dashboard'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Down = True
+      SpeedButtonOptions.Flat = True
+      TabOrder = 0
+      OnClick = Dashboard1Click
+    end
+    object btnTB_BackLog: TcxButton
+      AlignWithMargins = True
+      Left = 87
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Data'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 1
+      OnClick = Backlog1Click
+    end
+    object btnTB_PlaniCentros: TcxButton
+      AlignWithMargins = True
+      Left = 168
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Centros'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 2
+      OnClick = FiniteCapacity1Click
+    end
+    object cxButton1: TcxButton
+      AlignWithMargins = True
+      Left = 411
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Others...'
+      Enabled = False
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 3
+    end
+    object btnTB_PlaniOperarios: TcxButton
+      AlignWithMargins = True
+      Left = 249
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Operarios'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 4
+      OnClick = FiniteCapacityOperaris1Click
+    end
+    object btnTB_PlaniGantt: TcxButton
+      AlignWithMargins = True
+      Left = 330
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Gantt'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 5
+      OnClick = MnGanttClick
+    end
+    object btnTB_Help: TcxButton
+      AlignWithMargins = True
+      Left = 1064
+      Top = 5
+      Width = 25
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alRight
+      Caption = '?'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 6
+      OnClick = btnTB_HelpClick
+    end
+  end
   object tmr1Sec: TTimer
     OnTimer = tmr1SecTimer
-    Left = 760
-    Top = 8
+    Left = 720
+    Top = 128
   end
   object MainMenu1: TMainMenu
-    Left = 864
-    Top = 8
+    Left = 816
+    Top = 112
     object Archivo1: TMenuItem
       Caption = 'Archivo'
       object N4: TMenuItem

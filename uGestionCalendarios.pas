@@ -1,4 +1,4 @@
-unit uGestionCalendarios;
+﻿unit uGestionCalendarios;
 
 interface
 
@@ -46,9 +46,6 @@ type
     shpHeaderLine: TShape;
     chkVerIndicadores: TCheckBox;
     splDetalle: TSplitter;
-    btnAyuda: TButton;
-    pnlBottom: TPanel;
-    btnCerrar: TButton;
     splMain: TSplitter;
     pnlLeft: TPanel;
     lblCalendarios: TLabel;
@@ -230,7 +227,7 @@ end;
 
 procedure TfrmGestionCalendarios.btnCerrarClick(Sender: TObject);
 begin
-  ModalResult := mrOk;
+
 end;
 
 { ========== Lista calendarios ========== }
@@ -511,7 +508,7 @@ end;
 
 procedure TfrmGestionCalendarios.btnAyudaClick(Sender: TObject);
 begin
-  THelpViewer.Show('uGestionCalendarios', 'Gesti'#243'n de calendarios');
+
 end;
 
 { ========== Build day cache ========== }
@@ -1613,7 +1610,6 @@ begin
     lblTitle.Font.Color := DARK_TEXT;
     lblSubtitle.Font.Color := DARK_SUB;
     shpHeaderLine.Brush.Color := DARK_LINE;
-    pnlBottom.Color := DARK_HEADER;
     pnlLeft.Color := DARK_BG;
     pnlDetalle.Color := DARK_BG;
     pnlRight.Color := DARK_BG;
@@ -1633,7 +1629,6 @@ begin
     lblTitle.Font.Color := 4474440;
     lblSubtitle.Font.Color := clGray;
     shpHeaderLine.Brush.Color := 15061727;
-    pnlBottom.Color := clBtnFace;
     pnlLeft.Color := clBtnFace;
     pnlDetalle.Color := clBtnFace;
     pnlRight.Color := clBtnFace;

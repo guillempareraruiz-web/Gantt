@@ -1,6 +1,7 @@
 object frmGestionProyectos: TfrmGestionProyectos
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Proyectos'
   ClientHeight = 520
   ClientWidth = 920
@@ -27,7 +28,7 @@ object frmGestionProyectos: TfrmGestionProyectos
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 200
+      Width = 84
       Height = 25
       Caption = 'Proyectos'
       Font.Charset = DEFAULT_CHARSET
@@ -40,7 +41,7 @@ object frmGestionProyectos: TfrmGestionProyectos
     object lblSubtitle: TLabel
       Left = 16
       Top = 36
-      Width = 400
+      Width = 259
       Height = 15
       Caption = 'Planificaci'#243'n MASTER y escenarios de simulaci'#243'n'
       Font.Charset = DEFAULT_CHARSET
@@ -51,25 +52,6 @@ object frmGestionProyectos: TfrmGestionProyectos
       ParentFont = False
     end
   end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 480
-    Width = 920
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 1
-    object btnClose: TButton
-      Left = 812
-      Top = 6
-      Width = 100
-      Height = 28
-      Caption = 'Cerrar'
-      Cancel = True
-      TabOrder = 0
-      OnClick = btnCloseClick
-    end
-  end
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
@@ -77,7 +59,7 @@ object frmGestionProyectos: TfrmGestionProyectos
     Height = 40
     Align = alTop
     BevelOuter = bvNone
-    TabOrder = 2
+    TabOrder = 1
     object btnNuevoEscenario: TButton
       Left = 4
       Top = 6
@@ -137,11 +119,13 @@ object frmGestionProyectos: TfrmGestionProyectos
     Left = 0
     Top = 100
     Width = 920
-    Height = 380
+    Height = 420
     Align = alClient
-    TabOrder = 3
+    TabOrder = 2
+    ExplicitHeight = 380
     object tvProyectos: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
+      ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
       DataController.Summary.SummaryGroups = <>
@@ -151,8 +135,8 @@ object frmGestionProyectos: TfrmGestionProyectos
       OptionsView.Indicator = True
       object colProjId: TcxGridColumn
         Caption = 'ID'
-        Width = 50
         Options.Editing = False
+        Width = 50
       end
       object colProjCodigo: TcxGridColumn
         Caption = 'C'#243'digo'
@@ -168,23 +152,23 @@ object frmGestionProyectos: TfrmGestionProyectos
       end
       object colProjTipo: TcxGridColumn
         Caption = 'Tipo'
-        Width = 100
         Options.Editing = False
+        Width = 100
       end
       object colProjBasado: TcxGridColumn
         Caption = 'Basado en'
-        Width = 150
         Options.Editing = False
+        Width = 150
       end
       object colProjFecha: TcxGridColumn
         Caption = 'Creado'
-        Width = 120
         Options.Editing = False
+        Width = 120
       end
       object colProjActivo: TcxGridColumn
         Caption = 'Activo'
-        Width = 80
         Options.Editing = False
+        Width = 80
       end
       object colProjFechaBloqueo: TcxGridColumn
         Caption = 'Fecha bloqueo'
@@ -199,7 +183,6 @@ object frmGestionProyectos: TfrmGestionProyectos
           'CENTROS'
           'GRUPO'
           'TREE')
-        Options.Editing = True
         Width = 95
       end
       object colProjNivelAgrupacion: TcxGridColumn
@@ -209,7 +192,6 @@ object frmGestionProyectos: TfrmGestionProyectos
         Properties.Items.Strings = (
           '1'
           '2')
-        Options.Editing = True
         Width = 80
       end
     end
@@ -218,6 +200,7 @@ object frmGestionProyectos: TfrmGestionProyectos
     end
   end
   object LookAndFeel: TcxLookAndFeelController
+    NativeStyle = False
     SkinName = 'Office2019Colorful'
     Left = 860
     Top = 12

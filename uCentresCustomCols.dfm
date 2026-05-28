@@ -1,6 +1,7 @@
 object frmCentresCustomCols: TfrmCentresCustomCols
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Configurar columnas personalizadas - Centros'
   ClientHeight = 480
   ClientWidth = 760
@@ -12,6 +13,7 @@ object frmCentresCustomCols: TfrmCentresCustomCols
   Font.Style = []
   Position = poOwnerFormCenter
   OnShow = FormShow
+  PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
     Left = 0
@@ -26,8 +28,8 @@ object frmCentresCustomCols: TfrmCentresCustomCols
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 263
-      Height = 19
+      Width = 279
+      Height = 21
       Caption = 'Columnas personalizadas de Centros'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -39,9 +41,9 @@ object frmCentresCustomCols: TfrmCentresCustomCols
     object lblSubtitle: TLabel
       Left = 16
       Top = 28
-      Width = 480
+      Width = 471
       Height = 15
-      Caption =
+      Caption = 
         'Define los campos personalizados que apareceran como columnas en' +
         ' la pantalla Centros.'
     end
@@ -80,16 +82,6 @@ object frmCentresCustomCols: TfrmCentresCustomCols
       Caption = 'Eliminar'
       TabOrder = 2
       OnClick = btnEliminarClick
-    end
-    object btnCerrar: TButton
-      Left = 638
-      Top = 10
-      Width = 110
-      Height = 30
-      Cancel = True
-      Caption = 'Cerrar'
-      ModalResult = 1
-      TabOrder = 3
     end
   end
   object lvCols: TListView

@@ -19,7 +19,26 @@ uses
   uHistogramasOperarios,
   uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor,
   uCardLayoutSetRepo, uCardLayoutSetManager,
-  uDashBoard, uVistaGantt, uFiniteCapacityPlanner;
+  uDashBoard, uVistaGantt, uFiniteCapacityPlanner,
+  uBacklog, uFiniteCapacityOperaris, dxGDIPlusClasses,
+  dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
+  dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
+  dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
+  dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
+  dxSkinLiquidSky, dxSkinLondonLiquidSky, dxSkinMcSkin, dxSkinMetropolis,
+  dxSkinMetropolisDark, dxSkinMoneyTwins, dxSkinOffice2007Black,
+  dxSkinOffice2007Blue, dxSkinOffice2007Green, dxSkinOffice2007Pink,
+  dxSkinOffice2007Silver, dxSkinOffice2010Black, dxSkinOffice2010Blue,
+  dxSkinOffice2010Silver, dxSkinOffice2013DarkGray, dxSkinOffice2013LightGray,
+  dxSkinOffice2013White, dxSkinOffice2016Colorful, dxSkinOffice2016Dark,
+  dxSkinOffice2019Black, dxSkinOffice2019Colorful, dxSkinOffice2019DarkGray,
+  dxSkinOffice2019White, dxSkinPumpkin, dxSkinSeven, dxSkinSevenClassic,
+  dxSkinSharp, dxSkinSharpPlus, dxSkinSilver, dxSkinSpringtime, dxSkinStardust,
+  dxSkinSummer2008, dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
+  dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
+  dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
+  dxSkinXmas2008Blue, cxGraphics, cxLookAndFeels, cxLookAndFeelPainters,
+  cxButtons;
 
 type
 
@@ -87,6 +106,14 @@ type
     ArticleDetail1: TMenuItem;
     N1: TMenuItem;
     N6: TMenuItem;
+    Panel2: TPanel;
+    btnTB_Dashboard: TcxButton;
+    btnTB_BackLog: TcxButton;
+    btnTB_PlaniCentros: TcxButton;
+    cxButton1: TcxButton;
+    btnTB_PlaniOperarios: TcxButton;
+    btnTB_PlaniGantt: TcxButton;
+    btnTB_Help: TcxButton;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -111,6 +138,10 @@ type
     procedure PesosScoring1Click(Sender: TObject);
     procedure MostrarDashboard;
     procedure OcultarDashboard;
+    procedure MostrarBacklog;
+    procedure OcultarBacklog;
+    procedure MostrarFiniteCapacityOperaris;
+    procedure OcultarFiniteCapacityOperaris;
     procedure DashboardAbrirGantt(Sender: TObject);
     procedure DashboardAbrirFiniteCapacity(Sender: TObject);
     procedure MostrarVistaGantt;
@@ -163,6 +194,7 @@ type
     procedure Salir1Click(Sender: TObject);
     procedure MnGanttClick(Sender: TObject);
     procedure Indicadoresdecentros1Click(Sender: TObject);
+    procedure btnTB_HelpClick(Sender: TObject);
   private
     { Private declarations }
 
@@ -172,8 +204,20 @@ type
 
     FTurnos: TArray<TTurno>;
 
+    // Reentrancia: True mientras se esta abriendo un form via OpenAction.
+    // Evita que el usuario haga doble-click en la toolbar y dispare dos
+    // aperturas en paralelo (forms pesados como Backlog/Gantt/FCP).
+    FOpeningForm: Boolean;
+
   public
     { Public declarations }
+
+    // Envoltorio para abrir forms desde la toolbar: ignora clics nuevos
+    // mientras hay una apertura en curso y muestra el BusyDialog si AShowBusy.
+    // AAction recibe lo que normalmente harias en el OnClick: crear / mostrar
+    // el form (modal o no-modal).
+    procedure OpenAction(const ABusyMessage: string; AShowBusy: Boolean;
+      AAction: TProc);
 
     // Llamar despues de cada operaci'on que modifica nodos (Kanban, Inspector, Gantt).
     procedure NotifyPlanModified(const ADataIds: TArray<Integer>);
@@ -206,12 +250,14 @@ var
   FDashboard: TfrmDashboard;
   FVistaGantt: TfrmVistaGantt;
   FFiniteCapacity: TfrmFiniteCapacityPlanner;
+  FBacklog: uBacklog.TfrmBacklog;
+  FFiniteOps: uFiniteCapacityOperaris.TfrmFiniteCapacityOperaris;
 
 implementation
 
-uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList, uBacklog,
+uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList,
   uDemoBacklog,
-  uFiniteCapacityOperaris, uOperarioAusencias,
+  uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
   uGestionOperacionHabilidades, uGestionOperationTypes,
   uCuadroPlanificacionDelDia, uGestionTurnos,
@@ -220,9 +266,33 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uSincronizarERP, uInstallWizard,
   uDataConnector, uUserPrefs,
   uErpReader, uErpReaderFactory, uArticleDetail, uStockCockpit,
-  uDashboardOperativo;
+  uDashboardOperativo, uBusyDialog, uHelpViewer;
 
 {$R *.dfm}
+
+
+procedure TForm1.OpenAction(const ABusyMessage: string; AShowBusy: Boolean;
+  AAction: TProc);
+var
+  Busy: TfrmBusyDialog;
+begin
+  if FOpeningForm then Exit;
+  if not Assigned(AAction) then Exit;
+
+  FOpeningForm := True;
+  Busy := nil;
+  try
+    if AShowBusy and (ABusyMessage <> '') then
+      Busy := TfrmBusyDialog.Display(Self, ABusyMessage);
+    try
+      AAction();
+    finally
+      if Busy <> nil then Busy.Free;
+    end;
+  finally
+    FOpeningForm := False;
+  end;
+end;
 
 
 procedure TForm1.tmr1SecTimer(Sender: TObject);
@@ -339,9 +409,11 @@ end;
 
 procedure TForm1.Backlog1Click(Sender: TObject);
 begin
-  uBacklog.ShowBacklog;
-  if FVistaGantt <> nil then
-    FVistaGantt.Inicializar;
+  OpenAction('Cargando Backlog...', True,
+    procedure
+    begin
+      MostrarBacklog;
+    end);
 end;
 
 procedure TForm1.GenerarBacklogDemo1Click(Sender: TObject);
@@ -361,45 +433,22 @@ begin
     ShowMessage('No hay ningún proyecto activo.');
     Exit;
   end;
-  if Assigned(FVistaGantt) then
-    FVistaGantt.Visible := False;
-  MostrarFiniteCapacity;
+  OpenAction('Cargando Planificador de Centros...', True,
+    procedure
+    begin
+      if Assigned(FVistaGantt) then
+        FVistaGantt.Visible := False;
+      MostrarFiniteCapacity;
+    end);
 end;
 
 procedure TForm1.FiniteCapacityOperaris1Click(Sender: TObject);
-var
-  Assignments: TArray<TFCOAssignment>;
 begin
-  if not Assigned(DMPlanner.NodeDataRepo) then
-  begin
-    ShowMessage('Repositorio de nodos no inicializado.');
-    Exit;
-  end;
-  if not Assigned(FOperariosRepo) then
-  begin
-    ShowMessage('Repositorio de operarios no inicializado.');
-    Exit;
-  end;
-  if DMPlanner.CurrentProjectId <= 0 then
-  begin
-    ShowMessage('No hay ning'#250'n proyecto activo.');
-    Exit;
-  end;
-
-  if TfrmFiniteCapacityOperaris.Execute(
-    DMPlanner.NodeDataRepo,
-    FOperariosRepo,
-    Assignments,
-    FAbsenciasRepo,
-    nil,
-    FCustomFieldDefs
-  ) then
-  begin
-    // TODO: aplicar asignaciones al Gantt / persistir en BD
-  end;
-
-  if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
-    FVistaGantt.GanttControl.Invalidate;
+  OpenAction('Cargando Planificador de Operarios...', True,
+    procedure
+    begin
+      MostrarFiniteCapacityOperaris;
+    end);
 end;
 
 procedure TForm1.OperariosRepoAsignacionAdded(const A: TAsignacionOperario);
@@ -573,10 +622,56 @@ begin
 
 end;
 
+procedure TForm1.btnTB_HelpClick(Sender: TObject);
+var
+  TopicKey, Titulo: string;
+begin
+  // Determinar quina vista embedded esta visible i obrir-ne l'ajuda.
+  // El ordre del if/else if reflecteix prioritat: si dos forms estiguessin
+  // visibles simultaniament (no hauria de passar), guanya el primer.
+  TopicKey := '';
+  if Assigned(FVistaGantt) and FVistaGantt.Visible then
+  begin
+    TopicKey := 'uVistaGantt';
+    Titulo := 'Vista Gantt';
+  end
+  else if Assigned(FFiniteCapacity) and FFiniteCapacity.Visible then
+  begin
+    TopicKey := 'uFiniteCapacityPlanner';
+    Titulo := 'Planificador de Capacidad Finita';
+  end
+  else if Assigned(FFiniteOps) and FFiniteOps.Visible then
+  begin
+    TopicKey := 'uFiniteCapacityOperaris';
+    Titulo := 'Planificaci'#243'n por Operario';
+  end
+  else if Assigned(FBacklog) and FBacklog.Visible then
+  begin
+    TopicKey := 'uBacklog';
+    Titulo := 'Backlog / Carga pendiente';
+  end
+  else if Assigned(FDashboard) and FDashboard.Visible then
+  begin
+    TopicKey := 'uDashboard';
+    Titulo := 'Panel de control';
+  end;
+
+  if TopicKey = '' then
+    TopicKey := 'Main';
+  if Titulo = '' then
+    Titulo := 'FS Planner 2026';
+
+  THelpViewer.Show(TopicKey, Titulo);
+end;
+
 procedure TForm1.MnGanttClick(Sender: TObject);
 begin
-  OcultarDashboard;
-  MostrarVistaGantt;
+  OpenAction('Cargando Gantt...', True,
+    procedure
+    begin
+      //OcultarDashboard;
+      MostrarVistaGantt;
+    end);
 end;
 
 procedure TForm1.Moldes1Click(Sender: TObject);
@@ -1028,8 +1123,10 @@ begin
     FDashboard.Parent := Self;
     FDashboard.Align := alClient;
   end;
-  if Assigned(FFiniteCapacity) then
-    FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FVistaGantt) then    FVistaGantt.Visible := False;
+  if Assigned(FBacklog) then       FBacklog.Visible := False;
+  if Assigned(FFiniteOps) then     FFiniteOps.Visible := False;
   FDashboard.Refrescar;
   FDashboard.Visible := True;
   FDashboard.BringToFront;
@@ -1070,8 +1167,10 @@ begin
   if Assigned(FVistaGantt.GanttControl) then
     FVistaGantt.GanttControl.OnLinksModified := GanttLinksModified;
 
-  if Assigned(FFiniteCapacity) then
-    FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FDashboard) then      FDashboard.Visible := False;
+  if Assigned(FBacklog) then        FBacklog.Visible := False;
+  if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
   FVistaGantt.Visible := True;
   FVistaGantt.BringToFront;
 end;
@@ -1115,8 +1214,84 @@ begin
       end;
     end;
   end;
+  if Assigned(FDashboard) then  FDashboard.Visible := False;
+  if Assigned(FVistaGantt) then FVistaGantt.Visible := False;
+  if Assigned(FBacklog) then    FBacklog.Visible := False;
+  if Assigned(FFiniteOps) then  FFiniteOps.Visible := False;
   FFiniteCapacity.Visible := True;
   FFiniteCapacity.BringToFront;
+end;
+
+procedure TForm1.MostrarBacklog;
+begin
+  if not HasActivePlan then
+  begin
+    MostrarDashboard;
+    Exit;
+  end;
+  if FBacklog = nil then
+  begin
+    FBacklog := uBacklog.TfrmBacklog.Create(Self);
+    FBacklog.BorderStyle := bsNone;
+    FBacklog.Parent := Self;
+    FBacklog.Align := alClient;
+  end;
+  if Assigned(FDashboard) then      FDashboard.Visible := False;
+  if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
+  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
+  FBacklog.Visible := True;
+  FBacklog.BringToFront;
+end;
+
+procedure TForm1.OcultarBacklog;
+begin
+  if Assigned(FBacklog) then
+    FBacklog.Visible := False;
+end;
+
+procedure TForm1.MostrarFiniteCapacityOperaris;
+begin
+  if not HasActivePlan then
+  begin
+    MostrarDashboard;
+    Exit;
+  end;
+  if not Assigned(DMPlanner.NodeDataRepo) then
+  begin
+    ShowMessage('Repositorio de nodos no inicializado.');
+    Exit;
+  end;
+  if not Assigned(FOperariosRepo) then
+  begin
+    ShowMessage('Repositorio de operarios no inicializado.');
+    Exit;
+  end;
+  if FFiniteOps = nil then
+  begin
+    FFiniteOps := uFiniteCapacityOperaris.TfrmFiniteCapacityOperaris.Create(Self);
+    FFiniteOps.BorderStyle := bsNone;
+    FFiniteOps.Parent := Self;
+    FFiniteOps.Align := alClient;
+    FFiniteOps.InicializarEmbedded(
+      DMPlanner.NodeDataRepo,
+      FOperariosRepo,
+      FAbsenciasRepo,
+      nil,
+      FCustomFieldDefs);
+  end;
+  if Assigned(FDashboard) then      FDashboard.Visible := False;
+  if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
+  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FBacklog) then        FBacklog.Visible := False;
+  FFiniteOps.Visible := True;
+  FFiniteOps.BringToFront;
+end;
+
+procedure TForm1.OcultarFiniteCapacityOperaris;
+begin
+  if Assigned(FFiniteOps) then
+    FFiniteOps.Visible := False;
 end;
 
 function TForm1.HasActivePlan: Boolean;
@@ -1539,15 +1714,11 @@ end;
 
 procedure TForm1.Dashboard1Click(Sender: TObject);
 begin
-  if FDashboard <> nil then
-   if FDashboard.Visible then
-   begin
-    FDashboard.Visible := False;
-    Exit;
-   end;
-
-
-  MostrarDashboard;
+  OpenAction('', False,
+    procedure
+    begin
+      MostrarDashboard;
+    end);
 end;
 
 procedure TForm1.Areas1Click(Sender: TObject);

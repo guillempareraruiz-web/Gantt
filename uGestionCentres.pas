@@ -36,8 +36,6 @@ type
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     pnlToolbar: TPanel;
     btnAdd: TButton;
     btnDel: TButton;
@@ -69,7 +67,6 @@ type
     ColorDialog: TColorDialog;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnSaveClick(Sender: TObject);
@@ -177,10 +174,6 @@ begin
   BuildCustomColumns;
   tvCentros.OnEditValueChanged := tvCentrosCustomEditValueChanged;
   LoadCentros;
-end;
-procedure TfrmGestionCentres.btnCloseClick(Sender: TObject);
-begin
-  Close;
 end;
 procedure TfrmGestionCentres.LoadAreas;
 var

@@ -5,7 +5,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
   BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Card Layouts'
   ClientHeight = 600
-  ClientWidth = 1000
+  ClientWidth = 1090
   Color = 15790320
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -21,7 +21,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 1000
+    Width = 1090
     Height = 50
     Align = alTop
     BevelOuter = bvNone
@@ -58,7 +58,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
   object pnlToolbar: TPanel
     Left = 0
     Top = 50
-    Width = 1000
+    Width = 1090
     Height = 40
     Align = alTop
     BevelOuter = bvNone
@@ -117,11 +117,20 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
       TabOrder = 4
       OnClick = btnDeleteClick
     end
+    object btnSetActive: TButton
+      Left = 616
+      Top = 7
+      Width = 150
+      Height = 26
+      Caption = 'Marcar como activo'
+      TabOrder = 5
+      OnClick = btnSetActiveClick
+    end
   end
   object pnlBottom: TPanel
     Left = 0
     Top = 562
-    Width = 1000
+    Width = 1090
     Height = 38
     Align = alBottom
     BevelOuter = bvNone
@@ -129,7 +138,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
     ParentBackground = False
     TabOrder = 2
     object btnClose: TButton
-      Left = 906
+      Left = 996
       Top = 6
       Width = 80
       Height = 28
@@ -141,7 +150,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
   object pnlMain: TPanel
     Left = 0
     Top = 90
-    Width = 1000
+    Width = 1090
     Height = 472
     Align = alClient
     BevelOuter = bvNone
@@ -156,7 +165,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
       AlignWithMargins = True
       Left = 12
       Top = 8
-      Width = 580
+      Width = 670
       Height = 456
       Margins.Left = 0
       Margins.Top = 0
@@ -170,7 +179,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
       object grid: TcxGrid
         Left = 0
         Top = 0
-        Width = 580
+        Width = 670
         Height = 456
         Align = alClient
         TabOrder = 0
@@ -179,6 +188,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
           DataController.Summary.DefaultGroupSummaryItems = <>
           DataController.Summary.FooterSummaryItems = <>
           DataController.Summary.SummaryGroups = <>
+          OnCustomDrawCell = tvCustomDrawCell
           OnFocusedRecordChanged = tvFocusedRecordChanged
           OnCellDblClick = tvCellDblClick
           OnEditValueChanged = tvEditValueChanged
@@ -227,7 +237,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
       end
     end
     object pnlRight: TPanel
-      Left = 600
+      Left = 690
       Top = 8
       Width = 388
       Height = 456
@@ -268,7 +278,7 @@ object frmCardLayoutSetManager: TfrmCardLayoutSetManager
     end
   end
   object LookAndFeel: TcxLookAndFeelController
-    Left = 940
+    Left = 1030
     Top = 100
   end
 end

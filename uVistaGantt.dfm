@@ -156,7 +156,7 @@ object frmVistaGantt: TfrmVistaGantt
     TabOrder = 1
     object pnlToolbar: TPanel
       Left = 0
-      Top = 124
+      Top = 114
       Width = 1130
       Height = 109
       Align = alTop
@@ -164,6 +164,7 @@ object frmVistaGantt: TfrmVistaGantt
       ParentBackground = False
       TabOrder = 0
       Visible = False
+      ExplicitTop = 124
       DesignSize = (
         1130
         109)
@@ -625,7 +626,7 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object Panel3: TPanel
       Left = 0
-      Top = 233
+      Top = 223
       Width = 1130
       Height = 50
       Align = alTop
@@ -633,6 +634,7 @@ object frmVistaGantt: TfrmVistaGantt
       ParentBackground = False
       TabOrder = 1
       Visible = False
+      ExplicitTop = 233
       DesignSize = (
         1130
         50)
@@ -1155,7 +1157,7 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object pnlBuscar: TPanel
       Left = 0
-      Top = 283
+      Top = 273
       Width = 1130
       Height = 51
       Align = alTop
@@ -1163,6 +1165,7 @@ object frmVistaGantt: TfrmVistaGantt
       ParentBackground = False
       TabOrder = 2
       Visible = False
+      ExplicitTop = 283
       DesignSize = (
         1130
         51)
@@ -1568,7 +1571,7 @@ object frmVistaGantt: TfrmVistaGantt
       Left = 0
       Top = 0
       Width = 1130
-      Height = 80
+      Height = 70
       Align = alTop
       BevelOuter = bvNone
       Color = 3553567
@@ -1576,10 +1579,10 @@ object frmVistaGantt: TfrmVistaGantt
       TabOrder = 3
       DesignSize = (
         1130
-        80)
+        70)
       object lblTitulo: TLabel
-        Left = 24
-        Top = 16
+        Left = 69
+        Top = 5
         Width = 122
         Height = 32
         Caption = 'Vista Gantt'
@@ -1591,8 +1594,8 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
       end
       object lblSubtitulo: TLabel
-        Left = 24
-        Top = 52
+        Left = 69
+        Top = 39
         Width = 148
         Height = 15
         Caption = 'Resumen de la sesi'#243'n actual'
@@ -1605,7 +1608,7 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object lblFechaHora: TLabel
         Left = 859
-        Top = 47
+        Top = 38
         Width = 240
         Height = 29
         Alignment = taRightJustify
@@ -1638,8 +1641,8 @@ object frmVistaGantt: TfrmVistaGantt
         Layout = tlCenter
       end
       object Label29: TLabel
-        Left = 1003
-        Top = 21
+        Left = 914
+        Top = 22
         Width = 96
         Height = 19
         Alignment = taRightJustify
@@ -1655,8 +1658,8 @@ object frmVistaGantt: TfrmVistaGantt
         Layout = tlCenter
       end
       object Label38: TLabel
-        Left = 1003
-        Top = 32
+        Left = 1002
+        Top = 22
         Width = 96
         Height = 19
         Alignment = taRightJustify
@@ -1681,7 +1684,7 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object btnGanttDates: TcxButton
         Left = 1104
-        Top = 54
+        Top = 45
         Width = 18
         Height = 18
         Cursor = crHandPoint
@@ -1773,10 +1776,37 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 2
         OnClick = cxButton9Click
       end
+      object imgSection: TcxImage
+        AlignWithMargins = True
+        Left = 3
+        Top = 6
+        Margins.Top = 6
+        Margins.Right = 5
+        Margins.Bottom = 12
+        Align = alLeft
+        Picture.Data = {
+          0D546478536D617274496D6167653C3F786D6C2076657273696F6E3D22312E30
+          2220656E636F64696E673D225554462D38223F3E0D0A3C737667207669657742
+          6F783D223020302032342032342220786D6C6E733D22687474703A2F2F777777
+          2E77332E6F72672F323030302F737667223E0D0A093C706174682066696C6C3D
+          2223464646464646222066696C6C2D6F7061636974793D22302E352220643D22
+          4D313220335637483356334831325A4D31362031375632314833563137483136
+          5A4D323220313056313448335631304832325A222F3E0D0A3C2F7376673E0D0A}
+        Properties.FitMode = ifmProportionalStretch
+        Properties.ReadOnly = True
+        Properties.ShowFocusRect = False
+        Style.BorderStyle = ebsNone
+        TabOrder = 3
+        Transparent = True
+        ExplicitTop = 12
+        ExplicitHeight = 62
+        Height = 52
+        Width = 56
+      end
     end
     object pnlSubTitulo: TPanel
       Left = 0
-      Top = 80
+      Top = 70
       Width = 1130
       Height = 44
       Align = alTop
@@ -1784,6 +1814,7 @@ object frmVistaGantt: TfrmVistaGantt
       Color = 7699523
       ParentBackground = False
       TabOrder = 4
+      ExplicitTop = 80
       DesignSize = (
         1130
         44)

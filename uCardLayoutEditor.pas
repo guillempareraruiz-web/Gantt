@@ -246,7 +246,12 @@ type
   private
     cmbFields: TComboBox;
     edtExpr: TEdit;
+    FStyleRules: TArray<TStyleRule>;
+    FCustomFieldDefs: TCustomFieldDefs;
+    lblRulesCount: TLabel;
     procedure DoInsertField(Sender: TObject);
+    procedure DoEditRules(Sender: TObject);
+    procedure UpdateRulesCount;
   end;
 
 // Dialogo para editar un elemento individual
@@ -357,6 +362,313 @@ begin
     edtExpr.Text := edtExpr.Text + '{' + cmbFields.Items[cmbFields.ItemIndex] + '}';
 end;
 
+procedure ManageStyleRulesDialog(AOwner: TForm; var ARules: TArray<TStyleRule>;
+  ACustomFieldDefs: TCustomFieldDefs); forward;
+
+procedure TfrmEditElement.UpdateRulesCount;
+begin
+  if lblRulesCount <> nil then
+    lblRulesCount.Caption := Format('%d regla(s)', [Length(FStyleRules)]);
+end;
+
+procedure TfrmEditElement.DoEditRules(Sender: TObject);
+begin
+  ManageStyleRulesDialog(Self, FStyleRules, FCustomFieldDefs);
+  UpdateRulesCount;
+end;
+
+// Format llegible d'una regla per a la llista
+function StyleRuleToDisplay(const R: TStyleRule): string;
+var
+  Bits: string;
+begin
+  Result := R.Field + ' ' + StyleRuleOpToStr(R.Op) + ' ' + R.Value + '  '#8594'  ';
+  Bits := '';
+  if R.FontColor <> 0 then Bits := Bits + Format('font=#%.6x ', [R.FontColor]);
+  if R.BgColor <> 0   then Bits := Bits + Format('bg=#%.6x ',   [R.BgColor]);
+  if R.SetBold        then Bits := Bits + 'B ';
+  if R.SetItalic      then Bits := Bits + 'I ';
+  if Bits = '' then Bits := '(sin estilo)';
+  Result := Result + Trim(Bits);
+end;
+
+type
+  TfrmEditRule = class(TForm)
+  private
+    chkUseFontColor, chkUseBgColor: TCheckBox;
+    ccFontColor, ccBgColor: TcxColorComboBox;
+  end;
+
+// Dialeg per editar una regla d'estil
+function EditStyleRuleDialog(AOwner: TForm; var ARule: TStyleRule;
+  ACustomFieldDefs: TCustomFieldDefs): Boolean;
+var
+  Dlg: TfrmEditRule;
+  lblField, lblOp, lblValue, lblFontColor, lblBgColor: TLabel;
+  cmbField, cmbOp: TComboBox;
+  edtValue: TEdit;
+  chkBold, chkItalic: TCheckBox;
+  btnOk, btnCancel: TButton;
+  Fields: TArray<string>;
+  I, Y: Integer;
+begin
+  Result := False;
+  Dlg := TfrmEditRule.CreateNew(AOwner);
+  try
+    Dlg.Caption := 'Regla condicional';
+    Dlg.ClientWidth := 420;
+    Dlg.ClientHeight := 280;
+    Dlg.Position := poOwnerFormCenter;
+    Dlg.BorderStyle := bsDialog;
+    Dlg.Font.Name := 'Segoe UI';
+    Dlg.Font.Size := 9;
+
+    Y := 12;
+
+    lblField := TLabel.Create(Dlg); lblField.Parent := Dlg;
+    lblField.SetBounds(12, Y, 80, 15); lblField.Caption := 'Campo:';
+    cmbField := TComboBox.Create(Dlg); cmbField.Parent := Dlg;
+    cmbField.Style := csDropDownList;
+    cmbField.SetBounds(100, Y - 2, 200, 23);
+    Fields := GetAvailableFields(ACustomFieldDefs);
+    for I := 0 to High(Fields) do
+      cmbField.Items.Add(Fields[I]);
+    cmbField.ItemIndex := cmbField.Items.IndexOf(ARule.Field);
+    if cmbField.ItemIndex < 0 then cmbField.ItemIndex := 0;
+    Inc(Y, 30);
+
+    lblOp := TLabel.Create(Dlg); lblOp.Parent := Dlg;
+    lblOp.SetBounds(12, Y, 80, 15); lblOp.Caption := 'Operador:';
+    cmbOp := TComboBox.Create(Dlg); cmbOp.Parent := Dlg;
+    cmbOp.Style := csDropDownList;
+    cmbOp.SetBounds(100, Y - 2, 80, 23);
+    cmbOp.Items.AddStrings(['=', '<>', '<', '<=', '>', '>=']);
+    case ARule.Op of
+      sroEq:  cmbOp.ItemIndex := 0;
+      sroNeq: cmbOp.ItemIndex := 1;
+      sroLt:  cmbOp.ItemIndex := 2;
+      sroLe:  cmbOp.ItemIndex := 3;
+      sroGt:  cmbOp.ItemIndex := 4;
+      sroGe:  cmbOp.ItemIndex := 5;
+    end;
+    Inc(Y, 30);
+
+    lblValue := TLabel.Create(Dlg); lblValue.Parent := Dlg;
+    lblValue.SetBounds(12, Y, 80, 15); lblValue.Caption := 'Valor:';
+    edtValue := TEdit.Create(Dlg); edtValue.Parent := Dlg;
+    edtValue.SetBounds(100, Y - 2, 200, 23);
+    edtValue.Text := ARule.Value;
+    edtValue.Hint := 'N'#250'mero, texto o TODAY (fecha de hoy)';
+    edtValue.ShowHint := True;
+    Inc(Y, 34);
+
+    Dlg.chkUseFontColor := TCheckBox.Create(Dlg); Dlg.chkUseFontColor.Parent := Dlg;
+    Dlg.chkUseFontColor.SetBounds(12, Y, 100, 20); Dlg.chkUseFontColor.Caption := 'Color font:';
+    Dlg.chkUseFontColor.Checked := ARule.FontColor <> 0;
+    lblFontColor := nil;
+    Dlg.ccFontColor := TcxColorComboBox.Create(Dlg); Dlg.ccFontColor.Parent := Dlg;
+    Dlg.ccFontColor.SetBounds(120, Y - 2, 180, 23);
+    Dlg.ccFontColor.Properties.AllowSelectColor := True;
+    Dlg.ccFontColor.Properties.ColorDialogType := cxcdtAdvanced;
+    if ARule.FontColor <> 0 then Dlg.ccFontColor.ColorValue := ARule.FontColor
+    else Dlg.ccFontColor.ColorValue := clRed;
+    Inc(Y, 30);
+
+    Dlg.chkUseBgColor := TCheckBox.Create(Dlg); Dlg.chkUseBgColor.Parent := Dlg;
+    Dlg.chkUseBgColor.SetBounds(12, Y, 100, 20); Dlg.chkUseBgColor.Caption := 'Color fondo:';
+    Dlg.chkUseBgColor.Checked := ARule.BgColor <> 0;
+    lblBgColor := nil;
+    Dlg.ccBgColor := TcxColorComboBox.Create(Dlg); Dlg.ccBgColor.Parent := Dlg;
+    Dlg.ccBgColor.SetBounds(120, Y - 2, 180, 23);
+    Dlg.ccBgColor.Properties.AllowSelectColor := True;
+    Dlg.ccBgColor.Properties.ColorDialogType := cxcdtAdvanced;
+    if ARule.BgColor <> 0 then Dlg.ccBgColor.ColorValue := ARule.BgColor
+    else Dlg.ccBgColor.ColorValue := clYellow;
+    Inc(Y, 30);
+
+    chkBold := TCheckBox.Create(Dlg); chkBold.Parent := Dlg;
+    chkBold.SetBounds(100, Y, 80, 20); chkBold.Caption := 'Negrita';
+    chkBold.Checked := ARule.SetBold;
+    chkItalic := TCheckBox.Create(Dlg); chkItalic.Parent := Dlg;
+    chkItalic.SetBounds(180, Y, 80, 20); chkItalic.Caption := 'Cursiva';
+    chkItalic.Checked := ARule.SetItalic;
+    Inc(Y, 36);
+
+    btnOk := TButton.Create(Dlg); btnOk.Parent := Dlg;
+    btnOk.SetBounds(230, Y, 80, 28);
+    btnOk.Caption := 'Aceptar';
+    btnOk.ModalResult := mrOk;
+    btnOk.Default := True;
+    btnCancel := TButton.Create(Dlg); btnCancel.Parent := Dlg;
+    btnCancel.SetBounds(320, Y, 80, 28);
+    btnCancel.Caption := 'Cancelar';
+    btnCancel.ModalResult := mrCancel;
+
+    // Suppress unused warning per labels nil
+    if (lblFontColor = nil) and (lblBgColor = nil) then;
+
+    if Dlg.ShowModal = mrOk then
+    begin
+      if cmbField.ItemIndex >= 0 then
+        ARule.Field := cmbField.Items[cmbField.ItemIndex];
+      case cmbOp.ItemIndex of
+        0: ARule.Op := sroEq;
+        1: ARule.Op := sroNeq;
+        2: ARule.Op := sroLt;
+        3: ARule.Op := sroLe;
+        4: ARule.Op := sroGt;
+        5: ARule.Op := sroGe;
+      end;
+      ARule.Value := edtValue.Text;
+      if Dlg.chkUseFontColor.Checked then ARule.FontColor := Dlg.ccFontColor.ColorValue
+      else ARule.FontColor := 0;
+      if Dlg.chkUseBgColor.Checked then ARule.BgColor := Dlg.ccBgColor.ColorValue
+      else ARule.BgColor := 0;
+      ARule.SetBold := chkBold.Checked;
+      ARule.SetItalic := chkItalic.Checked;
+      Result := True;
+    end;
+  finally
+    Dlg.Free;
+  end;
+end;
+
+// Form intern per gestionar regles (necessita ser una classe perqu\303\250 OnClick
+// requereix m\303\250todes d'objecte, no closures).
+type
+  TfrmManageRules = class(TForm)
+  private
+    lst: TListBox;
+    FRulesPtr: ^TArray<TStyleRule>;
+    FCustomFieldDefs: TCustomFieldDefs;
+    procedure Refresh;
+    procedure DoAdd(Sender: TObject);
+    procedure DoEdit(Sender: TObject);
+    procedure DoDel(Sender: TObject);
+    procedure DoUp(Sender: TObject);
+    procedure DoDown(Sender: TObject);
+  end;
+
+procedure TfrmManageRules.Refresh;
+var I: Integer;
+begin
+  lst.Items.BeginUpdate;
+  try
+    lst.Items.Clear;
+    for I := 0 to High(FRulesPtr^) do
+      lst.Items.Add(StyleRuleToDisplay(FRulesPtr^[I]));
+  finally
+    lst.Items.EndUpdate;
+  end;
+end;
+
+procedure TfrmManageRules.DoAdd(Sender: TObject);
+var R: TStyleRule;
+begin
+  R := Default(TStyleRule);
+  if EditStyleRuleDialog(Self, R, FCustomFieldDefs) then
+  begin
+    SetLength(FRulesPtr^, Length(FRulesPtr^) + 1);
+    FRulesPtr^[High(FRulesPtr^)] := R;
+    Refresh;
+    lst.ItemIndex := High(FRulesPtr^);
+  end;
+end;
+
+procedure TfrmManageRules.DoEdit(Sender: TObject);
+var R: TStyleRule; Idx: Integer;
+begin
+  Idx := lst.ItemIndex;
+  if (Idx < 0) or (Idx > High(FRulesPtr^)) then Exit;
+  R := FRulesPtr^[Idx];
+  if EditStyleRuleDialog(Self, R, FCustomFieldDefs) then
+  begin
+    FRulesPtr^[Idx] := R;
+    Refresh;
+    lst.ItemIndex := Idx;
+  end;
+end;
+
+procedure TfrmManageRules.DoDel(Sender: TObject);
+var Idx, K, J: Integer; NewArr: TArray<TStyleRule>;
+begin
+  Idx := lst.ItemIndex;
+  if (Idx < 0) or (Idx > High(FRulesPtr^)) then Exit;
+  SetLength(NewArr, Length(FRulesPtr^) - 1);
+  J := 0;
+  for K := 0 to High(FRulesPtr^) do
+    if K <> Idx then begin NewArr[J] := FRulesPtr^[K]; Inc(J); end;
+  FRulesPtr^ := NewArr;
+  Refresh;
+end;
+
+procedure TfrmManageRules.DoUp(Sender: TObject);
+var Idx: Integer; Tmp: TStyleRule;
+begin
+  Idx := lst.ItemIndex;
+  if Idx <= 0 then Exit;
+  Tmp := FRulesPtr^[Idx]; FRulesPtr^[Idx] := FRulesPtr^[Idx-1]; FRulesPtr^[Idx-1] := Tmp;
+  Refresh; lst.ItemIndex := Idx - 1;
+end;
+
+procedure TfrmManageRules.DoDown(Sender: TObject);
+var Idx: Integer; Tmp: TStyleRule;
+begin
+  Idx := lst.ItemIndex;
+  if (Idx < 0) or (Idx >= High(FRulesPtr^)) then Exit;
+  Tmp := FRulesPtr^[Idx]; FRulesPtr^[Idx] := FRulesPtr^[Idx+1]; FRulesPtr^[Idx+1] := Tmp;
+  Refresh; lst.ItemIndex := Idx + 1;
+end;
+
+procedure ManageStyleRulesDialog(AOwner: TForm; var ARules: TArray<TStyleRule>;
+  ACustomFieldDefs: TCustomFieldDefs);
+var
+  Dlg: TfrmManageRules;
+  btnAdd, btnEdit, btnDel, btnUp, btnDown, btnClose: TButton;
+begin
+  Dlg := TfrmManageRules.CreateNew(AOwner);
+  try
+    Dlg.Caption := 'Reglas condicionales';
+    Dlg.ClientWidth := 560;
+    Dlg.ClientHeight := 320;
+    Dlg.Position := poOwnerFormCenter;
+    Dlg.BorderStyle := bsDialog;
+    Dlg.Font.Name := 'Segoe UI';
+    Dlg.Font.Size := 9;
+    Dlg.FRulesPtr := @ARules;
+    Dlg.FCustomFieldDefs := ACustomFieldDefs;
+
+    Dlg.lst := TListBox.Create(Dlg); Dlg.lst.Parent := Dlg;
+    Dlg.lst.SetBounds(12, 12, 420, 260);
+
+    btnAdd := TButton.Create(Dlg); btnAdd.Parent := Dlg;
+    btnAdd.SetBounds(440, 12, 105, 26); btnAdd.Caption := 'A'#241'adir...';
+    btnAdd.OnClick := Dlg.DoAdd;
+    btnEdit := TButton.Create(Dlg); btnEdit.Parent := Dlg;
+    btnEdit.SetBounds(440, 42, 105, 26); btnEdit.Caption := 'Editar...';
+    btnEdit.OnClick := Dlg.DoEdit;
+    btnDel := TButton.Create(Dlg); btnDel.Parent := Dlg;
+    btnDel.SetBounds(440, 72, 105, 26); btnDel.Caption := 'Eliminar';
+    btnDel.OnClick := Dlg.DoDel;
+    btnUp := TButton.Create(Dlg); btnUp.Parent := Dlg;
+    btnUp.SetBounds(440, 110, 105, 26); btnUp.Caption := 'Subir';
+    btnUp.OnClick := Dlg.DoUp;
+    btnDown := TButton.Create(Dlg); btnDown.Parent := Dlg;
+    btnDown.SetBounds(440, 140, 105, 26); btnDown.Caption := 'Bajar';
+    btnDown.OnClick := Dlg.DoDown;
+
+    btnClose := TButton.Create(Dlg); btnClose.Parent := Dlg;
+    btnClose.SetBounds(440, 282, 105, 26); btnClose.Caption := 'Cerrar';
+    btnClose.ModalResult := mrOk;
+    btnClose.Default := True;
+
+    Dlg.Refresh;
+    Dlg.ShowModal;
+  finally
+    Dlg.Free;
+  end;
+end;
+
 function EditElementDialog(AOwner: TForm; var AElem: TCardElement;
   ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
 var
@@ -370,6 +682,7 @@ var
   seWidth: TSpinEdit;
   edtCondition: TEdit;
   edtBgColorField: TEdit;
+  ccFontColor: TcxColorComboBox;
   seRadius: TSpinEdit;
   btnOk, btnCancel: TButton;
   btnInsertField: TButton;
@@ -381,7 +694,7 @@ begin
   try
     Dlg.Caption := 'Editar Elemento';
     Dlg.ClientWidth := 440;
-    Dlg.ClientHeight := 400;
+    Dlg.ClientHeight := 460;
     Dlg.Position := poOwnerFormCenter;
     Dlg.BorderStyle := bsDialog;
     Dlg.Font.Name := 'Segoe UI';
@@ -454,6 +767,19 @@ begin
     cmbAlign.ItemIndex := Ord(AElem.HAlign);
     Inc(Y, 30);
 
+    // Color font
+    lblFontColor := TLabel.Create(Dlg); lblFontColor.Parent := Dlg;
+    lblFontColor.SetBounds(12, Y, 80, 15); lblFontColor.Caption := 'Color:';
+    ccFontColor := TcxColorComboBox.Create(Dlg); ccFontColor.Parent := Dlg;
+    ccFontColor.SetBounds(100, Y - 2, 160, 23);
+    ccFontColor.Properties.AllowSelectColor := True;
+    ccFontColor.Properties.ColorDialogType := cxcdtAdvanced;
+    if AElem.FontColor = 0 then
+      ccFontColor.ColorValue := clBlack
+    else
+      ccFontColor.ColorValue := AElem.FontColor;
+    Inc(Y, 30);
+
     // Ancho %
     lblWidth := TLabel.Create(Dlg); lblWidth.Parent := Dlg;
     lblWidth.SetBounds(12, Y, 80, 15); lblWidth.Caption := 'Ancho %:';
@@ -491,6 +817,18 @@ begin
     chkVisible := TCheckBox.Create(Dlg); chkVisible.Parent := Dlg;
     chkVisible.SetBounds(12, Y, 80, 20); chkVisible.Caption := 'Visible';
     chkVisible.Checked := AElem.Visible;
+
+    // Reglas condicionales
+    Dlg.FStyleRules := Copy(AElem.StyleRules, 0, Length(AElem.StyleRules));
+    Dlg.FCustomFieldDefs := ACustomFieldDefs;
+    var btnRules: TButton := TButton.Create(Dlg); btnRules.Parent := Dlg;
+    btnRules.SetBounds(150, Y - 2, 160, 24);
+    btnRules.Caption := 'Reglas condicionales...';
+    btnRules.OnClick := Dlg.DoEditRules;
+    Dlg.lblRulesCount := TLabel.Create(Dlg); Dlg.lblRulesCount.Parent := Dlg;
+    Dlg.lblRulesCount.SetBounds(320, Y, 100, 20);
+    Dlg.UpdateRulesCount;
+
     Inc(Y, 34);
 
     // Botones
@@ -517,13 +855,14 @@ begin
       AElem.FontSize := seFontSize.Value;
       AElem.FontBold := chkBold.Checked;
       AElem.FontItalic := chkItalic.Checked;
-      AElem.FontColor := AElem.FontColor; // se mantiene
+      AElem.FontColor := ccFontColor.ColorValue;
       AElem.HAlign := TCardHAlign(cmbAlign.ItemIndex);
       AElem.WidthPct := seWidth.Value;
       AElem.BgColorField := edtBgColorField.Text;
       AElem.ConditionField := edtCondition.Text;
       AElem.RoundRadius := seRadius.Value;
       AElem.Visible := chkVisible.Checked;
+      AElem.StyleRules := Dlg.FStyleRules;
       Result := True;
     end;
   finally
@@ -547,6 +886,7 @@ begin
   Color := clWhite;
   ParentBackground := False;
   Cursor := crDefault;
+  DoubleBuffered := True;
 
   // Kind label
   lblKind := TLabel.Create(Self); lblKind.Parent := Self;
@@ -715,6 +1055,7 @@ begin
   BevelOuter := bvNone;
   Color := $00F5F0EB;
   ParentBackground := False;
+  DoubleBuffered := True;
 
   // Header
   pnlHeader := TPanel.Create(Self); pnlHeader.Parent := Self;
@@ -1025,6 +1366,7 @@ begin
   FSelectedElemIdx := -1;
   FCurrentCategory := ccOFPend;
   FLayoutSet := DefaultCardLayoutSet;
+  boxRows.DoubleBuffered := True;
   BuildSampleData;
   BuildPropsGrid;
   PopulateCategorias;
@@ -1144,30 +1486,46 @@ procedure TfrmCardLayoutEditor.RebuildRowPanels;
 var
   I, Y: Integer;
   RP: TRowPanel;
+  Redrawing: Boolean;
 begin
   // Invalida punters: els TRowPanel actuals seran destruits
   FSelectedRow := nil;
   FSelectedElemRow := -1;
   FSelectedElemIdx := -1;
-  FRowPanels.Clear;
-  Y := 4;
-  for I := 0 to High(FLayout.Rows) do
-  begin
-    RP := TRowPanel.Create(boxRows, I, FLayout.Rows[I]);
-    RP.Parent := boxRows;
-    RP.SetBounds(4, Y, boxRows.ClientWidth - 24, RP.Height);
-    RP.Anchors := [akLeft, akTop, akRight];
-    RP.CustomFieldDefs := FCustomFieldDefs;
-    RP.OnChanged := OnRowChanged;
-    RP.OnSelect := HandleRowSelected;
-    RP.OnElemSelect := HandleElemSelected;
-    RP.OnDelete := HandleRowDeleted;
-    RP.OnMoveUp := HandleRowMoveUp;
-    RP.OnMoveDown := HandleRowMoveDown;
-    FRowPanels.Add(RP);
-    Y := Y + RP.Height + 8;
-  end;
 
+  // Suspendre repaint del contenidor mentre destruim+creem fills per evitar flicker
+  Redrawing := boxRows.HandleAllocated;
+  if Redrawing then
+    SendMessage(boxRows.Handle, WM_SETREDRAW, 0, 0);
+  boxRows.DisableAlign;
+  try
+    FRowPanels.Clear;
+    Y := 4;
+    for I := 0 to High(FLayout.Rows) do
+    begin
+      RP := TRowPanel.Create(boxRows, I, FLayout.Rows[I]);
+      RP.Parent := boxRows;
+      RP.SetBounds(4, Y, boxRows.ClientWidth - 24, RP.Height);
+      RP.Anchors := [akLeft, akTop, akRight];
+      RP.CustomFieldDefs := FCustomFieldDefs;
+      RP.OnChanged := OnRowChanged;
+      RP.OnSelect := HandleRowSelected;
+      RP.OnElemSelect := HandleElemSelected;
+      RP.OnDelete := HandleRowDeleted;
+      RP.OnMoveUp := HandleRowMoveUp;
+      RP.OnMoveDown := HandleRowMoveDown;
+      FRowPanels.Add(RP);
+      Y := Y + RP.Height + 8;
+    end;
+  finally
+    boxRows.EnableAlign;
+    if Redrawing then
+    begin
+      SendMessage(boxRows.Handle, WM_SETREDRAW, 1, 0);
+      RedrawWindow(boxRows.Handle, nil, 0,
+        RDW_INVALIDATE or RDW_ALLCHILDREN or RDW_ERASE or RDW_UPDATENOW);
+    end;
+  end;
 end;
 
 procedure TfrmCardLayoutEditor.RestoreSelection(ARowIdx, AElemIdx: Integer);
@@ -1531,6 +1889,7 @@ procedure TfrmCardLayoutEditor.BuildPropsGrid;
     Result.Properties.EditPropertiesClassName := 'TcxTextEditProperties';
     Result.Properties.Value := AValue;
     (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := AReadOnly;
+    (Result.Properties.EditProperties as TcxTextEditProperties).ImmediatePost := True;
     Result.Properties.EditProperties.OnEditValueChanged := HandlePropChanged;
     if AReadOnly then
       Result.Styles.Content := vgProps.Styles.Category;
@@ -1547,6 +1906,7 @@ procedure TfrmCardLayoutEditor.BuildPropsGrid;
     P.ValueType := vtInt;
     P.MinValue := AMin;
     P.MaxValue := AMax;
+    P.ImmediatePost := True;
     Result.Properties.Value := AValue;
     P.OnEditValueChanged := HandlePropChanged;
   end;
@@ -1561,6 +1921,7 @@ procedure TfrmCardLayoutEditor.BuildPropsGrid;
     P := Result.Properties.EditProperties as TcxColorComboBoxProperties;
     P.AllowSelectColor := True;
     P.ColorDialogType := cxcdtAdvanced;
+    P.ImmediatePost := True;
     Result.Properties.Value := AValue;
     P.OnEditValueChanged := HandlePropChanged;
   end;
@@ -1594,6 +1955,16 @@ begin
   FLayout.BorderColor  := TColor(Integer(FRowBorderColor.Properties.Value));
   FLayout.BorderWidth  := FRowBorderWidth.Properties.Value;
   RefreshPreview;
+  // En alguns events (diàleg "..." del color combo) el valor pot arribar
+  // al row despres del primer dispatch; programem un segon refresh.
+  TThread.ForceQueue(nil,
+    procedure
+    begin
+      if FUpdatingProps then Exit;
+      FLayout.BgColor      := TColor(Integer(FRowBgColor.Properties.Value));
+      FLayout.BorderColor  := TColor(Integer(FRowBorderColor.Properties.Value));
+      RefreshPreview;
+    end);
 end;
 
 end.

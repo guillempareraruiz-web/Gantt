@@ -42,7 +42,7 @@ uses
   dxSkinSummer2008, dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, cxButtons;
+  dxSkinXmas2008Blue, cxButtons, dxGDIPlusClasses, cxImage;
 
 type
   // Resultado de una asignación
@@ -78,7 +78,7 @@ type
   { --------------------------------------------------------- }
   TPendingListControl = class(TCustomControl)
   private const
-    CARD_H = 82;
+    CARD_H_DEFAULT = 82;
     CARD_GAP = 4;
     CARD_MARGIN = 8;
     SCROLLBAR_W = 12;
@@ -114,6 +114,7 @@ type
     function MaxScrollY: Integer;
     function IsOnScrollbar(const X: Integer): Boolean;
     function IsSelected(const DataId: Integer): Boolean;
+    function EffCardH: Integer;
     procedure DrawCard(const ACanvas: TCanvas; const Idx: Integer;
       const R: TRect; const IsHover: Boolean);
     procedure DrawScrollbar(const ACanvas: TCanvas);
@@ -148,7 +149,7 @@ type
     COL_WIDTH = 260;
     COL_GAP = 10;
     HEADER_H = 58;
-    CARD_H = 88;
+    CARD_H_DEFAULT = 88;
     CARD_GAP = 5;
     CARD_MARGIN = 6;
     CAP_BAR_H = 6;
@@ -229,6 +230,7 @@ type
     FVSBGrabY: Integer;
     FVSBGrabScrollY: Integer;
 
+    function EffCardH: Integer;
     function IsOnColVScrollbar(const CentreId, LocalX, Y: Integer): Boolean;
     function IsCentreVisible(const CentreId: Integer): Boolean;
     function ContentWidth: Single;
@@ -349,6 +351,8 @@ type
     LblRango: TLabel;
     FDtpStart: TDateTimePicker;
     FCmbRange: TComboBox;
+    imgSection: TcxImage;
+    lblSubtitle: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormResize(Sender: TObject);
@@ -753,9 +757,22 @@ begin
     Result := -1;
 end;
 
+function TPendingListControl.EffCardH: Integer;
+var
+  H: Integer;
+begin
+  Result := CARD_H_DEFAULT;
+  if not FHasCardLayoutSet then Exit;
+  // Alt\303\240ria can\303\262nica: la d'OF pendent. Totes les cards de la llista comparteixen
+  // la mateixa caixa (independent del Tipo). Si vols cards m\303\251s altes/baixes,
+  // edita ccOFPend.CardHeight.
+  H := FCardLayoutSet.Layouts[ccOFPend].CardHeight;
+  if H >= 30 then Result := H;
+end;
+
 function TPendingListControl.MaxScrollY: Integer;
 begin
-  Result := Max(0, Length(FItems) * (CARD_H + CARD_GAP) - ClientHeight + CARD_MARGIN * 2);
+  Result := Max(0, Length(FItems) * (EffCardH + CARD_GAP) - ClientHeight + CARD_MARGIN * 2);
 end;
 
 function TPendingListControl.IsOnScrollbar(const X: Integer): Boolean;
@@ -767,7 +784,7 @@ function TPendingListControl.IdxAtY(const Y: Integer): Integer;
 var
   Idx: Integer;
 begin
-  Idx := (Y + FScrollY - CARD_MARGIN) div (CARD_H + CARD_GAP);
+  Idx := (Y + FScrollY - CARD_MARGIN) div (EffCardH + CARD_GAP);
   if (Idx >= 0) and (Idx <= High(FItems)) then
     Result := Idx
   else
@@ -795,31 +812,43 @@ begin
     Urgente := (DaysLeft >= 0) and (DaysLeft <= 3);
   end;
 
-  // Fondo y borde "naturals" — la selecció només engruixa el border, sense
-  // alterar background ni color de border.
-  if Vencida then
-    ACanvas.Brush.Color := $00E8E0F0
-  else if IsHover then
-    ACanvas.Brush.Color := $00F0EDE8
-  else
-    ACanvas.Brush.Color := clWhite;
-  if Vencida then
-    ACanvas.Pen.Color := $004040FF
-  else if Urgente then
-    ACanvas.Pen.Color := $000080FF
-  else
-    ACanvas.Pen.Color := $00E0E0E0;
-  if IsSelected(D.DataId) then
-    ACanvas.Pen.Width := 3
-  else
-    ACanvas.Pen.Width := 1;
   // Triar layout segons categoria (familia ERP + pendiente).
   // Aquest control sempre pinta pendents (IsPlanned=False).
   var L: TCardLayout;
   if FHasCardLayoutSet then
-    L := FCardLayoutSet.Layouts[CategoryFor(D.Tipo, False)]
+  begin
+    L := FCardLayoutSet.Layouts[CategoryFor(D.Tipo, False)];
+    if Length(L.Rows) = 0 then
+      L := DefaultLayoutFor(CategoryFor(D.Tipo, False));
+  end
   else
     L := FCardLayout;
+
+  // Fons: del layout per defecte, amb override per vencida/hover
+  if Vencida then
+    ACanvas.Brush.Color := $00E8E0F0
+  else if IsHover then
+    ACanvas.Brush.Color := BlendColor(IfThen(L.BgColor <> 0, L.BgColor, clWhite),
+      $00E0D8D0, 80)
+  else if L.BgColor <> 0 then
+    ACanvas.Brush.Color := L.BgColor
+  else
+    ACanvas.Brush.Color := clWhite;
+  // Border: del layout, amb override per vencida/urgent
+  if Vencida then
+    ACanvas.Pen.Color := $004040FF
+  else if Urgente then
+    ACanvas.Pen.Color := $000080FF
+  else if L.BorderColor <> 0 then
+    ACanvas.Pen.Color := L.BorderColor
+  else
+    ACanvas.Pen.Color := $00E0E0E0;
+  if IsSelected(D.DataId) then
+    ACanvas.Pen.Width := 3
+  else if L.BorderWidth > 0 then
+    ACanvas.Pen.Width := L.BorderWidth
+  else
+    ACanvas.Pen.Width := 1;
 
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
     L.CornerRadius, L.CornerRadius);
@@ -860,7 +889,7 @@ begin
   ACanvas.Pen.Style := psClear;
   ACanvas.FillRect(TrackR);
 
-  ContentH := Length(FItems) * (CARD_H + CARD_GAP) + CARD_MARGIN * 2;
+  ContentH := Length(FItems) * (EffCardH + CARD_GAP) + CARD_MARGIN * 2;
   Ratio := ClientHeight / ContentH;
   ThumbH := Max(24, TrackR.Height * Ratio);
   if MxSY > 0 then
@@ -896,15 +925,15 @@ begin
     Exit;
   end;
 
-  First := Max(0, (FScrollY - CARD_MARGIN) div (CARD_H + CARD_GAP));
-  Last := Min(High(FItems), (FScrollY + ClientHeight) div (CARD_H + CARD_GAP) + 1);
+  First := Max(0, (FScrollY - CARD_MARGIN) div (EffCardH + CARD_GAP));
+  Last := Min(High(FItems), (FScrollY + ClientHeight) div (EffCardH + CARD_GAP) + 1);
 
   for I := First to Last do
   begin
-    Y := CARD_MARGIN + I * (CARD_H + CARD_GAP) - FScrollY;
-    if Y + CARD_H < 0 then Continue;
+    Y := CARD_MARGIN + I * (EffCardH + CARD_GAP) - FScrollY;
+    if Y + EffCardH < 0 then Continue;
     if Y > ClientHeight then Break;
-    R := Rect(CARD_MARGIN, Y, ClientWidth - SCROLLBAR_W - CARD_MARGIN, Y + CARD_H);
+    R := Rect(CARD_MARGIN, Y, ClientWidth - SCROLLBAR_W - CARD_MARGIN, Y + EffCardH);
     DrawCard(Canvas, I, R, I = FHoverIdx);
   end;
 
@@ -980,7 +1009,7 @@ begin
     MxSY := MaxScrollY;
     if MxSY > 0 then
     begin
-      var ContentH: Single := Length(FItems) * (CARD_H + CARD_GAP) + CARD_MARGIN * 2;
+      var ContentH: Single := Length(FItems) * (EffCardH + CARD_GAP) + CARD_MARGIN * 2;
       var Ratio: Single := ContentH / ClientHeight;
       FScrollY := Max(0, Min(Round(FSBGrabScrollY + (Y - FSBGrabY) * Ratio), MxSY));
       Invalidate;
@@ -1147,6 +1176,18 @@ begin
       FScrollYMap.Add(FCentres[I].Id, 0);
   end;
   Invalidate;
+end;
+
+function TCentreColumnControl.EffCardH: Integer;
+var
+  H: Integer;
+begin
+  Result := CARD_H_DEFAULT;
+  if not FHasCardLayoutSet then Exit;
+  // Alt\303\240ria can\303\262nica: la d'OF planificada. Totes les cards de les columnes
+  // comparteixen la mateixa caixa. Per canviar-la, edita ccOFPlan.CardHeight.
+  H := FCardLayoutSet.Layouts[ccOFPlan].CardHeight;
+  if H >= 30 then Result := H;
 end;
 
 function TCentreColumnControl.IsCentreVisible(const CentreId: Integer): Boolean;
@@ -1351,7 +1392,7 @@ end;
 
 function TCentreColumnControl.CardYOffset(const CentreId, Idx: Integer): Integer;
 begin
-  Result := Idx * (CARD_H + CARD_GAP) + DaySepCountBefore(CentreId, Idx) * DAY_SEP_H;
+  Result := Idx * (EffCardH + CARD_GAP) + DaySepCountBefore(CentreId, Idx) * DAY_SEP_H;
 end;
 
 function TCentreColumnControl.TotalContentHeight(const CentreId: Integer): Integer;
@@ -1361,7 +1402,7 @@ begin
   N := ColCountForCentre(CentreId);
   if N = 0 then Exit(0);
   Seps := DaySepCountBefore(CentreId, N);
-  Result := N * (CARD_H + CARD_GAP) + Seps * DAY_SEP_H + CARD_GAP;
+  Result := N * (EffCardH + CARD_GAP) + Seps * DAY_SEP_H + CARD_GAP;
 end;
 
 procedure TCentreColumnControl.DrawDaySeparator(const ACanvas: TCanvas;
@@ -1424,7 +1465,7 @@ begin
   for I := 0 to L.Count - 1 do
   begin
     CardY := CardsTop + CardYOffset(CentreId, I) - SY;
-    if (Y >= CardY) and (Y < CardY + CARD_H) then
+    if (Y >= CardY) and (Y < CardY + EffCardH) then
       Exit(I);
   end;
 end;
@@ -1440,7 +1481,7 @@ begin
   SY := ColScrollY(CentreId);
   for I := 0 to L.Count - 1 do
   begin
-    CardY := CardsTop + CardYOffset(CentreId, I) - SY + CARD_H div 2;
+    CardY := CardsTop + CardYOffset(CentreId, I) - SY + EffCardH div 2;
     if Y < CardY then
       Exit(I);
   end;
@@ -1798,10 +1839,10 @@ begin
       end;
       PrevDay := CurDay;
 
-      if CardY + CARD_H < CardsTop then Continue;
+      if CardY + EffCardH < CardsTop then Continue;
       if CardY > ClientHeight then Break;
 
-      R := Rect(CX + CARD_MARGIN, CardY, CX + COL_WIDTH - CARD_MARGIN - VSCROLLBAR_W, CardY + CARD_H);
+      R := Rect(CX + CARD_MARGIN, CardY, CX + COL_WIDTH - CARD_MARGIN - VSCROLLBAR_W, CardY + EffCardH);
       DrawCard(ACanvas, CentreId, I, R, (CentreId = FHoverCentreId) and (I = FHoverCardIdx));
     end;
 
@@ -1867,31 +1908,46 @@ begin
     Urgente := (DaysLeft >= 0) and (DaysLeft <= 3);
   end;
 
-  // Fondo y borde "naturals" — la selecció només engruixa el border,
-  // sense alterar background ni color de border.
-  if Vencida then
-    ACanvas.Brush.Color := $00E8E0F0
-  else if IsHover then
-    ACanvas.Brush.Color := BlendColor(BaseBg, $00E0D8D0, 80)
-  else
-    ACanvas.Brush.Color := BaseBg;
-  if Vencida then
-    ACanvas.Pen.Color := $004040FF
-  else if Urgente then
-    ACanvas.Pen.Color := $000080FF
-  else
-    ACanvas.Pen.Color := $00E0E0E0;
-  if IsSelectedItem(DataId) then
-    ACanvas.Pen.Width := 3
-  else
-    ACanvas.Pen.Width := 1;
   // Triar layout segons categoria (familia ERP + planificada).
   // Aquest control sempre pinta planificades (IsPlanned=True).
   var Lay: TCardLayout;
   if FHasCardLayoutSet then
-    Lay := FCardLayoutSet.Layouts[CategoryFor(D.Tipo, True)]
+  begin
+    Lay := FCardLayoutSet.Layouts[CategoryFor(D.Tipo, True)];
+    if Length(Lay.Rows) = 0 then
+      Lay := DefaultLayoutFor(CategoryFor(D.Tipo, True));
+  end
   else
     Lay := FCardLayout;
+
+  // Fons: si el layout te BgColor el respectem (barrejat amb el tint del centre).
+  // Vencida sobreposa; hover esmorteix.
+  var LayBg: TColor;
+  if Lay.BgColor <> 0 then
+    LayBg := BlendColor(Lay.BgColor, BaseBg, 40)
+  else
+    LayBg := BaseBg;
+  if Vencida then
+    ACanvas.Brush.Color := $00E8E0F0
+  else if IsHover then
+    ACanvas.Brush.Color := BlendColor(LayBg, $00E0D8D0, 80)
+  else
+    ACanvas.Brush.Color := LayBg;
+  // Border: del layout amb override per vencida/urgent
+  if Vencida then
+    ACanvas.Pen.Color := $004040FF
+  else if Urgente then
+    ACanvas.Pen.Color := $000080FF
+  else if Lay.BorderColor <> 0 then
+    ACanvas.Pen.Color := Lay.BorderColor
+  else
+    ACanvas.Pen.Color := $00E0E0E0;
+  if IsSelectedItem(DataId) then
+    ACanvas.Pen.Width := 3
+  else if Lay.BorderWidth > 0 then
+    ACanvas.Pen.Width := Lay.BorderWidth
+  else
+    ACanvas.Pen.Width := 1;
 
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
     Lay.CornerRadius, Lay.CornerRadius);
@@ -5346,9 +5402,10 @@ var
   S: TCardLayoutSet;
 begin
   if FCardSetRepo = nil then Exit;
-  // Obre el gestor (graella + preview). Al tancar-lo, refresquem el set
-  // actiu per si l'usuari l'ha canviat o editat.
-  ShowCardLayoutSetManager(Self, FCardSetRepo, FCustomFieldDefs);
+  // Obre el gestor (graella + preview). Nomes refresquem si l'usuari ha
+  // canviat l'Active o ha modificat el contingut del set actiu.
+  if not ShowCardLayoutSetManager(Self, FCardSetRepo, FCustomFieldDefs) then
+    Exit;
   FCardSetId := FCardSetRepo.LoadActive(S, FCardSetNombre, FCardSetIsCommon);
   FCentreColumns.SetCardLayoutSet(S);
   FPendingList.SetCardLayoutSet(S);

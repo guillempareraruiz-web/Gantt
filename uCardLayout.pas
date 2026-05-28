@@ -25,6 +25,23 @@ type
 
   TCardHAlign = (chaLeft, chaCenter, chaRight);
 
+  // Operadors de comparaci\303\263 per a regles d'estil condicional
+  TStyleRuleOp = (sroEq, sroNeq, sroLt, sroLe, sroGt, sroGe);
+
+  // Regla d'estil condicional aplicada a un element segons el valor d'un camp.
+  // Si Operator i Field comparat amb Value matcha, se sobreescriuen FontColor/BgColor/Bold/Italic
+  // (els que tinguin valor "set"). Field pot ser nom de camp normal (NodeData)
+  // o el literal 'TODAY' s'admet a Value.
+  TStyleRule = record
+    Field: string;           // nom del camp a avaluar (ex: 'FechaEntrega', 'Estado')
+    Op: TStyleRuleOp;
+    Value: string;           // literal: numero, string, o 'TODAY'
+    FontColor: TColor;       // 0 = no override
+    BgColor: TColor;         // 0 = no override
+    SetBold: Boolean;        // si True, aplica Bold (sempre activa)
+    SetItalic: Boolean;      // si True, aplica Italic
+  end;
+
   // Categoria del card: combinacio de familia ERP + estado planificacion.
   // Cada categoria te el seu layout propi (uCardLayoutSet).
   TCardCategory = (
@@ -47,6 +64,7 @@ type
     Visible: Boolean;
     ConditionField: string;  // campo > 0 para mostrar (ej: 'OperariosNecesarios')
     RoundRadius: Integer;
+    StyleRules: TArray<TStyleRule>;  // regles condicionals; la primera que matchi guanya
   end;
 
   TCardRow = record
@@ -80,6 +98,16 @@ type
     const ALayout: TCardLayout; AResolver: TCardFieldResolver);
 
   function ResolveExpr(const Expr: string; AResolver: TCardFieldResolver): string;
+
+  // Avalua les regles d'estil d'un element. Retorna True si alguna matcha i omple
+  // els overrides. Recorre en ordre i la primera que matchi guanya.
+  function EvaluateStyleRules(const ARules: TArray<TStyleRule>;
+    AResolver: TCardFieldResolver;
+    out AFontColor, ABgColor: TColor;
+    out ABold, AItalic: Boolean): Boolean;
+
+  function StyleRuleOpToStr(Op: TStyleRuleOp): string;
+  function StrToStyleRuleOp(const S: string): TStyleRuleOp;
 
   // --- Resolver de TNodeData ---
 
@@ -266,6 +294,83 @@ begin
     Result := $00808080;
 end;
 
+{ ---- Style rules evaluator ---- }
+
+function EvaluateStyleRules(const ARules: TArray<TStyleRule>;
+  AResolver: TCardFieldResolver;
+  out AFontColor, ABgColor: TColor;
+  out ABold, AItalic: Boolean): Boolean;
+var
+  I: Integer;
+  R: TStyleRule;
+  V: Variant;
+  LeftStr, RightStr: string;
+  LeftNum, RightNum: Double;
+  IsNum, Match: Boolean;
+  Cmp: Integer;
+begin
+  Result := False;
+  AFontColor := 0;
+  ABgColor := 0;
+  ABold := False;
+  AItalic := False;
+  if not Assigned(AResolver) then Exit;
+
+  for I := 0 to High(ARules) do
+  begin
+    R := ARules[I];
+    if R.Field = '' then Continue;
+
+    V := AResolver(R.Field);
+    if VarIsNull(V) or VarIsEmpty(V) then
+      LeftStr := ''
+    else
+      LeftStr := VarToStr(V);
+
+    // Resoldre 'TODAY' al costat dret
+    if SameText(Trim(R.Value), 'TODAY') then
+      RightStr := FormatDateTime('yyyy-mm-dd', Date)
+    else
+      RightStr := R.Value;
+
+    // Si el valor del camp es Date, normalitzar a yyyy-mm-dd per comparar amb TODAY
+    if (VarType(V) and varTypeMask) = varDate then
+      LeftStr := FormatDateTime('yyyy-mm-dd', VarToDateTime(V));
+
+    // Provar comparacio numerica si tots dos son numeros
+    IsNum := TryStrToFloat(LeftStr, LeftNum) and TryStrToFloat(RightStr, RightNum);
+    if IsNum then
+    begin
+      if LeftNum < RightNum then Cmp := -1
+      else if LeftNum > RightNum then Cmp := 1
+      else Cmp := 0;
+    end
+    else
+      Cmp := CompareText(LeftStr, RightStr);
+
+    case R.Op of
+      sroEq:  Match := Cmp = 0;
+      sroNeq: Match := Cmp <> 0;
+      sroLt:  Match := Cmp < 0;
+      sroLe:  Match := Cmp <= 0;
+      sroGt:  Match := Cmp > 0;
+      sroGe:  Match := Cmp >= 0;
+    else
+      Match := False;
+    end;
+
+    if Match then
+    begin
+      AFontColor := R.FontColor;
+      ABgColor := R.BgColor;
+      ABold := R.SetBold;
+      AItalic := R.SetItalic;
+      Result := True;
+      Exit;  // primera regla que matcha guanya
+    end;
+  end;
+end;
+
 { ---- Renderer generico ---- }
 
 procedure RenderCard(const ACanvas: TCanvas; const R: TRect;
@@ -346,12 +451,25 @@ begin
       if Elem.FontBold then Include(FS, fsBold);
       if Elem.FontItalic then Include(FS, fsItalic);
 
+      // Avaluar regles condicionals: poden sobreescriure FontColor/BgColor/Bold/Italic
+      var OvFc, OvBg: TColor;
+      var OvBold, OvItalic: Boolean;
+      var OvElemFontColor: TColor := Elem.FontColor;
+      var OvElemBgColor: TColor := Elem.BgColor;
+      if EvaluateStyleRules(Elem.StyleRules, AResolver, OvFc, OvBg, OvBold, OvItalic) then
+      begin
+        if OvFc <> 0 then OvElemFontColor := OvFc;
+        if OvBg <> 0 then OvElemBgColor := OvBg;
+        if OvBold then Include(FS, fsBold);
+        if OvItalic then Include(FS, fsItalic);
+      end;
+
       case Elem.Kind of
         ceText:
         begin
           ACanvas.Font.Size := Elem.FontSize;
           ACanvas.Font.Style := FS;
-          ACanvas.Font.Color := Elem.FontColor;
+          ACanvas.Font.Color := OvElemFontColor;
           ACanvas.Brush.Style := bsClear;
           var DTFlags: Cardinal := DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS or DT_NOPREFIX;
           case Elem.HAlign of
@@ -366,7 +484,9 @@ begin
         begin
           BadgeR := TR;
           // Fondo
-          if Elem.BgColorField <> '' then
+          if OvElemBgColor <> Elem.BgColor then
+            ACanvas.Brush.Color := OvElemBgColor
+          else if Elem.BgColorField <> '' then
             ACanvas.Brush.Color := ResolveFieldBgColor(Elem.BgColorField, AResolver)
           else if Elem.BgColor <> 0 then
             ACanvas.Brush.Color := Elem.BgColor
@@ -379,7 +499,7 @@ begin
           // Texto
           ACanvas.Font.Size := Elem.FontSize;
           ACanvas.Font.Style := FS;
-          ACanvas.Font.Color := Elem.FontColor;
+          ACanvas.Font.Color := OvElemFontColor;
           ACanvas.Brush.Style := bsClear;
           DrawText(ACanvas.Handle, PChar(S), -1, BadgeR,
             DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
@@ -765,7 +885,58 @@ begin
   else Result := ceText;
 end;
 
+function StyleRuleOpToStr(Op: TStyleRuleOp): string;
+begin
+  case Op of
+    sroEq:  Result := '=';
+    sroNeq: Result := '<>';
+    sroLt:  Result := '<';
+    sroLe:  Result := '<=';
+    sroGt:  Result := '>';
+    sroGe:  Result := '>=';
+  else
+    Result := '=';
+  end;
+end;
+
+function StrToStyleRuleOp(const S: string): TStyleRuleOp;
+begin
+  if S = '<>' then Result := sroNeq
+  else if S = '<' then Result := sroLt
+  else if S = '<=' then Result := sroLe
+  else if S = '>' then Result := sroGt
+  else if S = '>=' then Result := sroGe
+  else Result := sroEq;
+end;
+
+function StyleRuleToJSON(const R: TStyleRule): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('field', R.Field);
+  Result.AddPair('op', StyleRuleOpToStr(R.Op));
+  Result.AddPair('value', R.Value);
+  Result.AddPair('fontColor', TJSONNumber.Create(Integer(R.FontColor)));
+  Result.AddPair('bgColor', TJSONNumber.Create(Integer(R.BgColor)));
+  Result.AddPair('setBold', TJSONBool.Create(R.SetBold));
+  Result.AddPair('setItalic', TJSONBool.Create(R.SetItalic));
+end;
+
+function JSONToStyleRule(const AJson: TJSONObject): TStyleRule;
+begin
+  Result := Default(TStyleRule);
+  Result.Field := AJson.GetValue<string>('field', '');
+  Result.Op := StrToStyleRuleOp(AJson.GetValue<string>('op', '='));
+  Result.Value := AJson.GetValue<string>('value', '');
+  Result.FontColor := TColor(AJson.GetValue<Integer>('fontColor', 0));
+  Result.BgColor := TColor(AJson.GetValue<Integer>('bgColor', 0));
+  Result.SetBold := AJson.GetValue<Boolean>('setBold', False);
+  Result.SetItalic := AJson.GetValue<Boolean>('setItalic', False);
+end;
+
 function ElementToJSON(const E: TCardElement): TJSONObject;
+var
+  Arr: TJSONArray;
+  I: Integer;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('kind', KindToStr(E.Kind));
@@ -781,9 +952,19 @@ begin
   Result.AddPair('visible', TJSONBool.Create(E.Visible));
   Result.AddPair('conditionField', E.ConditionField);
   Result.AddPair('roundRadius', TJSONNumber.Create(E.RoundRadius));
+  if Length(E.StyleRules) > 0 then
+  begin
+    Arr := TJSONArray.Create;
+    for I := 0 to High(E.StyleRules) do
+      Arr.Add(StyleRuleToJSON(E.StyleRules[I]));
+    Result.AddPair('styleRules', Arr);
+  end;
 end;
 
 function JSONToElement(const AJson: TJSONObject): TCardElement;
+var
+  Arr: TJSONArray;
+  I: Integer;
 begin
   Result := Default(TCardElement);
   Result.Kind := StrToKind(AJson.GetValue<string>('kind', 'text'));
@@ -799,6 +980,16 @@ begin
   Result.Visible := AJson.GetValue<Boolean>('visible', True);
   Result.ConditionField := AJson.GetValue<string>('conditionField', '');
   Result.RoundRadius := AJson.GetValue<Integer>('roundRadius', 4);
+  if AJson.GetValue('styleRules') <> nil then
+  begin
+    Arr := AJson.GetValue('styleRules') as TJSONArray;
+    if Arr <> nil then
+    begin
+      SetLength(Result.StyleRules, Arr.Count);
+      for I := 0 to Arr.Count - 1 do
+        Result.StyleRules[I] := JSONToStyleRule(Arr.Items[I] as TJSONObject);
+    end;
+  end;
 end;
 
 function RowToJSON(const ARow: TCardRow): TJSONObject;

@@ -1,6 +1,7 @@
 object frmGestionUsuarios: TfrmGestionUsuarios
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Usuarios'
   ClientHeight = 560
   ClientWidth = 850
@@ -15,6 +16,14 @@ object frmGestionUsuarios: TfrmGestionUsuarios
   OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 15
+  object shpHeaderLine: TShape
+    Left = 0
+    Top = 60
+    Width = 850
+    Height = 2
+    Align = alTop
+    Pen.Color = 14540253
+  end
   object pnlHeader: TPanel
     Left = 0
     Top = 0
@@ -28,7 +37,7 @@ object frmGestionUsuarios: TfrmGestionUsuarios
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 200
+      Width = 73
       Height = 25
       Caption = 'Usuarios'
       Font.Charset = DEFAULT_CHARSET
@@ -41,7 +50,7 @@ object frmGestionUsuarios: TfrmGestionUsuarios
     object lblSubtitle: TLabel
       Left = 16
       Top = 36
-      Width = 300
+      Width = 256
       Height = 15
       Caption = 'Alta, baja y modificaci'#243'n de usuarios del sistema'
       Font.Charset = DEFAULT_CHARSET
@@ -52,33 +61,6 @@ object frmGestionUsuarios: TfrmGestionUsuarios
       ParentFont = False
     end
   end
-  object shpHeaderLine: TShape
-    Left = 0
-    Top = 60
-    Width = 850
-    Height = 2
-    Align = alTop
-    Pen.Color = 14540253
-  end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 520
-    Width = 850
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 1
-    object btnClose: TButton
-      Left = 742
-      Top = 6
-      Width = 100
-      Height = 28
-      Caption = 'Cerrar'
-      Cancel = True
-      TabOrder = 0
-      OnClick = btnCloseClick
-    end
-  end
   object pnlToolbar: TPanel
     Left = 0
     Top = 62
@@ -86,7 +68,7 @@ object frmGestionUsuarios: TfrmGestionUsuarios
     Height = 36
     Align = alTop
     BevelOuter = bvNone
-    TabOrder = 2
+    TabOrder = 1
     object btnAdd: TButton
       Left = 4
       Top = 4
@@ -137,11 +119,13 @@ object frmGestionUsuarios: TfrmGestionUsuarios
     Left = 0
     Top = 98
     Width = 850
-    Height = 422
+    Height = 462
     Align = alClient
-    TabOrder = 3
+    TabOrder = 2
+    ExplicitHeight = 422
     object tvUsers: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
+      ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
       DataController.Summary.SummaryGroups = <>
@@ -151,8 +135,8 @@ object frmGestionUsuarios: TfrmGestionUsuarios
       OptionsView.Indicator = True
       object colUserId: TcxGridColumn
         Caption = 'ID'
-        Width = 40
         Options.Editing = False
+        Width = 40
       end
       object colUserLogin: TcxGridColumn
         Caption = 'Login'
@@ -168,24 +152,24 @@ object frmGestionUsuarios: TfrmGestionUsuarios
       end
       object colUserRol: TcxGridColumn
         Caption = 'Rol'
-        Width = 120
         PropertiesClassName = 'TcxComboBoxProperties'
+        Width = 120
       end
       object colUserActivo: TcxGridColumn
         Caption = 'Activo'
-        Width = 55
         PropertiesClassName = 'TcxCheckBoxProperties'
+        Width = 55
       end
       object colUserBloqueado: TcxGridColumn
         Caption = 'Bloqueado'
-        Width = 70
         PropertiesClassName = 'TcxCheckBoxProperties'
         Options.Editing = False
+        Width = 70
       end
       object colUserUltimoAcceso: TcxGridColumn
         Caption = #218'ltimo Acceso'
-        Width = 140
         Options.Editing = False
+        Width = 140
       end
     end
     object lvUsers: TcxGridLevel
@@ -193,6 +177,7 @@ object frmGestionUsuarios: TfrmGestionUsuarios
     end
   end
   object LookAndFeel: TcxLookAndFeelController
+    NativeStyle = False
     SkinName = 'Office2019Colorful'
     Left = 790
     Top = 8

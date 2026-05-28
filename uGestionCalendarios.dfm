@@ -1,7 +1,7 @@
 object frmGestionCalendarios: TfrmGestionCalendarios
   Left = 0
   Top = 0
-  BorderStyle = bsSizeToolWin
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Calendarios'
   ClientHeight = 700
   ClientWidth = 1100
@@ -21,23 +21,24 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     Left = 180
     Top = 60
     Width = 6
-    Height = 600
-    Align = alLeft
+    Height = 640
+    ExplicitHeight = 600
   end
   object splModels: TSplitter
     Left = 386
     Top = 60
     Width = 6
-    Height = 600
-    Align = alLeft
+    Height = 640
+    ExplicitHeight = 600
   end
   object splDetalle: TSplitter
     Left = 804
     Top = 60
     Width = 6
-    Height = 600
+    Height = 640
     Align = alRight
     Visible = False
+    ExplicitHeight = 600
   end
   object pnlHeader: TPanel
     Left = 0
@@ -82,32 +83,6 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Font.Style = []
       ParentFont = False
     end
-    object chkVerIndicadores: TCheckBox
-      Left = 930
-      Top = 20
-      Width = 120
-      Height = 21
-      Anchors = [akTop, akRight]
-      Caption = 'Ver indicadores'
-      TabOrder = 0
-      OnClick = chkVerIndicadoresClick
-    end
-    object btnAyuda: TButton
-      Left = 1060
-      Top = 16
-      Width = 28
-      Height = 28
-      Anchors = [akTop, akRight]
-      Caption = '?'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWindowText
-      Font.Height = -16
-      Font.Name = 'Segoe UI Semibold'
-      Font.Style = [fsBold]
-      ParentFont = False
-      TabOrder = 1
-      OnClick = btnAyudaClick
-    end
     object shpHeaderLine: TShape
       Left = 0
       Top = 58
@@ -117,38 +92,26 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Brush.Color = 15061727
       Pen.Style = psClear
     end
-  end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 660
-    Width = 1100
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 2
-    DesignSize = (
-      1100
-      40)
-    object btnCerrar: TButton
-      Left = 1010
-      Top = 6
-      Width = 80
-      Height = 28
+    object chkVerIndicadores: TCheckBox
+      Left = 1002
+      Top = 20
+      Width = 120
+      Height = 21
       Anchors = [akTop, akRight]
-      Cancel = True
-      Caption = 'Cerrar'
+      Caption = 'Ver indicadores'
       TabOrder = 0
-      OnClick = btnCerrarClick
+      OnClick = chkVerIndicadoresClick
     end
   end
   object pnlLeft: TPanel
     Left = 0
     Top = 60
     Width = 180
-    Height = 600
+    Height = 640
     Align = alLeft
     BevelOuter = bvNone
     TabOrder = 1
+    ExplicitHeight = 600
     object lblCalendarios: TLabel
       Left = 8
       Top = 4
@@ -164,22 +127,24 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     end
     object lbCalendarios: TListBox
       Left = 0
-      Top = 24
+      Top = 0
       Width = 180
-      Height = 506
+      Height = 570
       Align = alClient
       ItemHeight = 15
       TabOrder = 0
       OnClick = lbCalendariosClick
+      ExplicitHeight = 530
     end
     object pnlCalToolbar: TPanel
       Left = 0
-      Top = 530
+      Top = 570
       Width = 180
       Height = 70
       Align = alBottom
       BevelOuter = bvNone
       TabOrder = 1
+      ExplicitTop = 530
       object btnCalAdd: TButton
         Left = 4
         Top = 4
@@ -222,17 +187,18 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     Left = 810
     Top = 60
     Width = 290
-    Height = 600
+    Height = 640
     Align = alRight
     BevelOuter = bvNone
     Color = clWhite
     ParentBackground = False
-    TabOrder = 5
+    TabOrder = 4
     Visible = False
+    ExplicitHeight = 600
     object lblDetalleTitulo: TLabel
       Left = 8
       Top = 4
-      Width = 270
+      Width = 129
       Height = 17
       Caption = 'Detalle del calendario'
       Font.Charset = DEFAULT_CHARSET
@@ -244,21 +210,23 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     end
     object sbDetalle: TScrollBox
       Left = 0
-      Top = 26
+      Top = 0
       Width = 290
-      Height = 574
+      Height = 640
       Align = alClient
       BorderStyle = bsNone
       Color = clWhite
       ParentColor = False
       TabOrder = 0
+      ExplicitHeight = 600
       object pbDetalle: TPaintBox
         Left = 0
         Top = 0
-        Width = 290
+        Width = 273
         Height = 800
         Align = alTop
         OnPaint = pbDetallePaint
+        ExplicitWidth = 290
       end
     end
   end
@@ -266,14 +234,15 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     Left = 186
     Top = 60
     Width = 200
-    Height = 600
+    Height = 640
     Align = alLeft
     BevelOuter = bvNone
-    TabOrder = 4
+    TabOrder = 3
+    ExplicitHeight = 600
     object lblModelos: TLabel
       Left = 8
       Top = 4
-      Width = 180
+      Width = 106
       Height = 17
       Caption = 'Modelos horarios'
       Font.Charset = DEFAULT_CHARSET
@@ -289,34 +258,38 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Width = 184
       Height = 30
       AutoSize = False
-      WordWrap = True
-      Caption = 'Plantillas horarias que definen las franjas laborables del calendario.'
+      Caption = 
+        'Plantillas horarias que definen las franjas laborables del calen' +
+        'dario.'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGrayText
       Font.Height = -10
       Font.Name = 'Segoe UI'
       Font.Style = []
       ParentFont = False
+      WordWrap = True
     end
     object lbModelos: TListBox
       Left = 0
-      Top = 56
+      Top = 0
       Width = 200
-      Height = 472
+      Height = 498
       Align = alClient
       ItemHeight = 15
       TabOrder = 0
       OnClick = lbModelosClick
       OnDblClick = lbModelosDblClick
+      ExplicitHeight = 458
     end
     object pnlModelosToolbar: TPanel
       Left = 0
-      Top = 458
+      Top = 498
       Width = 200
       Height = 142
       Align = alBottom
       BevelOuter = bvNone
       TabOrder = 1
+      ExplicitTop = 458
       object btnModeloAdd: TButton
         Left = 4
         Top = 4
@@ -377,10 +350,11 @@ object frmGestionCalendarios: TfrmGestionCalendarios
     Left = 392
     Top = 60
     Width = 412
-    Height = 600
+    Height = 640
     Align = alClient
     BevelOuter = bvNone
-    TabOrder = 3
+    TabOrder = 2
+    ExplicitHeight = 600
     object lblAnioCaption: TLabel
       Left = 8
       Top = 4
@@ -398,20 +372,22 @@ object frmGestionCalendarios: TfrmGestionCalendarios
       Left = 0
       Top = 0
       Width = 412
-      Height = 568
+      Height = 608
       Align = alClient
       OnDblClick = pbCalendarDblClick
       OnMouseMove = pbCalendarMouseMove
       OnPaint = pbCalendarPaint
+      ExplicitHeight = 568
     end
     object pnlLeyenda: TPanel
       Left = 0
-      Top = 568
+      Top = 608
       Width = 412
       Height = 32
       Align = alBottom
       BevelOuter = bvNone
       TabOrder = 0
+      ExplicitTop = 568
     end
   end
   object LookAndFeel: TcxLookAndFeelController

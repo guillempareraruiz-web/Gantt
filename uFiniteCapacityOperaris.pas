@@ -32,7 +32,25 @@ uses
   Vcl.ExtCtrls, Vcl.Menus, Vcl.ComCtrls,
   uGanttTypes, uNodeDataRepo, uCustomFieldDefs,
   uOperariosTypes, uOperariosRepo,
-  uOperatorAbsencesRepo, uOperationTypesRepo;
+  uOperatorAbsencesRepo, uOperationTypesRepo, dxSkinsCore, dxSkinBasic,
+  dxSkinBlack, dxSkinBlue, dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee,
+  dxSkinDarkroom, dxSkinDarkSide, dxSkinDevExpressDarkStyle,
+  dxSkinDevExpressStyle, dxSkinFoggy, dxSkinGlassOceans, dxSkinHighContrast,
+  dxSkiniMaginary, dxSkinLilian, dxSkinLiquidSky, dxSkinLondonLiquidSky,
+  dxSkinMcSkin, dxSkinMetropolis, dxSkinMetropolisDark, dxSkinMoneyTwins,
+  dxSkinOffice2007Black, dxSkinOffice2007Blue, dxSkinOffice2007Green,
+  dxSkinOffice2007Pink, dxSkinOffice2007Silver, dxSkinOffice2010Black,
+  dxSkinOffice2010Blue, dxSkinOffice2010Silver, dxSkinOffice2013DarkGray,
+  dxSkinOffice2013LightGray, dxSkinOffice2013White, dxSkinOffice2016Colorful,
+  dxSkinOffice2016Dark, dxSkinOffice2019Black, dxSkinOffice2019Colorful,
+  dxSkinOffice2019DarkGray, dxSkinOffice2019White, dxSkinPumpkin, dxSkinSeven,
+  dxSkinSevenClassic, dxSkinSharp, dxSkinSharpPlus, dxSkinSilver,
+  dxSkinSpringtime, dxSkinStardust, dxSkinSummer2008, dxSkinTheAsphaltWorld,
+  dxSkinTheBezier, dxSkinValentine, dxSkinVisualStudio2013Blue,
+  dxSkinVisualStudio2013Dark, dxSkinVisualStudio2013Light, dxSkinVS2010,
+  dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, cxGraphics, cxLookAndFeels,
+  cxLookAndFeelPainters, cxControls, cxContainer, cxEdit, dxGDIPlusClasses,
+  cxImage, cxButtons;
 
 type
   // Par (OpId, DataId) usado en multi-seleccion de columnas
@@ -307,6 +325,12 @@ type
     miGestionCalendario: TMenuItem;
     pmAbsence: TPopupMenu;
     miQuitarAusencia: TMenuItem;
+    pnlHeader: TPanel;
+    Label1: TLabel;
+    lblSubtitle: TLabel;
+    Label28: TLabel;
+    cxButton9: TcxButton;
+    imgSection: TcxImage;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnOKClick(Sender: TObject);
@@ -364,6 +388,16 @@ type
       AAbsRepo: TOperatorAbsencesRepo = nil;
       ATypesRepo: TOperationTypesRepo = nil;
       ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
+
+    // Inicializa la vista en modo embedded (hermana de Dashboard / Gantt /
+    // FCP / Backlog dentro del Form1). No usa ShowModal; los repos los
+    // gestiona la vista padre.
+    procedure InicializarEmbedded(
+      ANodeRepo: TNodeDataRepo;
+      AOpRepo: TOperariosRepo;
+      AAbsRepo: TOperatorAbsencesRepo = nil;
+      ATypesRepo: TOperationTypesRepo = nil;
+      ACustomFieldDefs: TCustomFieldDefs = nil);
   end;
 
 implementation
@@ -2915,6 +2949,55 @@ procedure TfrmFiniteCapacityOperaris.btnCancelClick(Sender: TObject);
 begin
   FAccepted := False;
   ModalResult := mrCancel;
+end;
+
+procedure TfrmFiniteCapacityOperaris.InicializarEmbedded(
+  ANodeRepo: TNodeDataRepo;
+  AOpRepo: TOperariosRepo;
+  AAbsRepo: TOperatorAbsencesRepo;
+  ATypesRepo: TOperationTypesRepo;
+  ACustomFieldDefs: TCustomFieldDefs);
+var
+  OperarioIds: TArray<Integer>;
+  Ops: TArray<TOperario>;
+  I: Integer;
+begin
+  FNodeRepo := ANodeRepo;
+  FOpRepo := AOpRepo;
+  FCustomFieldDefs := ACustomFieldDefs;
+
+  if Assigned(AAbsRepo) then
+  begin
+    FAbsRepo := AAbsRepo;
+    FOwnsAbsRepo := False;
+  end
+  else
+  begin
+    FAbsRepo := TOperatorAbsencesRepo.Create;
+    FOwnsAbsRepo := True;
+    if Assigned(AOpRepo) then
+    begin
+      Ops := AOpRepo.GetOperarios;
+      SetLength(OperarioIds, Length(Ops));
+      for I := 0 to High(Ops) do OperarioIds[I] := Ops[I].Id;
+      FAbsRepo.LoadSampleData(OperarioIds);
+    end;
+  end;
+
+  if Assigned(ATypesRepo) then
+  begin
+    FTypesRepo := ATypesRepo;
+    FOwnsTypesRepo := False;
+  end
+  else
+  begin
+    FTypesRepo := TOperationTypesRepo.Create;
+    FOwnsTypesRepo := True;
+    FTypesRepo.LoadSampleData;
+  end;
+
+  FillFiltroOp;
+  RefreshAll;
 end;
 
 class function TfrmFiniteCapacityOperaris.Execute(

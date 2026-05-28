@@ -60,6 +60,9 @@ type
     DescripcionArticulo: string;
     UnidadesAFabricar: Double;
     NumeroTrabajo: string;
+    FechaEntrega: TDateTime;
+    FechaNecesaria: TDateTime;
+    TiempoUnidadFabSecs: Double;
     // Link al modelo unificado FS_PL_Raw_Item (V016)
     RawItemClaveERP: string;     // ClaveERP del item planificado (Nivel 3 en el modelo PRO)
     RawItemTipoOrigen: string;   // 'OF ','PED','PRJ' (char(3) SQL)

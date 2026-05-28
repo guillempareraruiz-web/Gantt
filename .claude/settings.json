@@ -3,7 +3,14 @@
     "allow": [
       "Bash(grep -n \"ReadEmpresas\\\\|ReadCentrosTrabajo\\\\|ReadMaquinas\\\\|ReadOperarios\\\\|ReadGruposHorarios\" \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\uFestivosImportDialog.pas\" 2>nul | head -10)",
       "Bash(powershell -Command \"Select-String -Path uBacklog.pas -Pattern 'function BuildSQL|procedure LoadData' -Context 0,30 | head -100\")",
-      "Bash(powershell -Command \"Select-String -Path uBacklog.pas -Pattern 'function TfrmBacklog.BuildSQL' -Context 0,120 | tail -80\")"
+      "Bash(powershell -Command \"Select-String -Path uBacklog.pas -Pattern 'function TfrmBacklog.BuildSQL' -Context 0,120 | tail -80\")",
+      "WebFetch(domain:www.svgrepo.com)",
+      "Bash(curl -s -o gantt-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Business/bar-chart-horizontal-line.svg\")",
+      "Bash(curl -s -o centros-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Buildings/building-2-line.svg\")",
+      "Bash(curl -s -o operarios-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/User%20%26%20Faces/team-line.svg\")",
+      "Bash(curl -s -o backlog-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Document/list-check-2.svg\")",
+      "Bash(curl -s -o gantt-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Business/bar-chart-horizontal-fill.svg\")",
+      "Bash(curl -s -o backlog-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Document/task-line.svg\")"
     ],
     "additionalDirectories": [
       "d:\\PROJECTES\\GANTT\\GANTT"
