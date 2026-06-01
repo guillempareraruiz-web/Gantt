@@ -1,6 +1,8 @@
 object frmOperarioAusencias: TfrmOperarioAusencias
   Left = 0
   Top = 0
+  BorderIcons = [biSystemMenu, biHelp]
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de ausencias'
   ClientHeight = 660
   ClientWidth = 1100

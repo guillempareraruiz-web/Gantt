@@ -80,8 +80,6 @@ type
     lblOperarios: TLabel;
     cbOperarios: TcxCheckComboBox;
     btnRecalcular: TButton;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     pcTabs: TPageControl;
     tabCarga: TTabSheet;
     tabDistrib: TTabSheet;
@@ -95,7 +93,6 @@ type
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormResize(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnRecalcularClick(Sender: TObject);
     procedure ParametrosChange(Sender: TObject);
     procedure cbOperariosChange(Sender: TObject);
@@ -400,11 +397,6 @@ begin
     // dejamos el rectangulo recto. Si quieres esquinas reales, en el caller
     // usar RoundRect en lugar de este metodo.
   end;
-end;
-
-procedure TfrmHistogramasOperarios.btnCloseClick(Sender: TObject);
-begin
-  Close;
 end;
 
 procedure TfrmHistogramasOperarios.btnRecalcularClick(Sender: TObject);

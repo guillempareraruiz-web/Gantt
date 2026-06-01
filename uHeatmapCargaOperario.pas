@@ -75,14 +75,11 @@ type
     cbOperarios: TcxCheckComboBox;
     pnlLegend: TPanel;
     pbLegend: TPaintBox;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     sbMatrix: TScrollBox;
     pbMatrix: TPaintBox;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormResize(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnRecalcularClick(Sender: TObject);
     procedure ParametrosChange(Sender: TObject);
     procedure pbLegendPaint(Sender: TObject);
@@ -420,11 +417,6 @@ var
 begin
   ComputeMatrixSize(W, H);
   pbMatrix.SetBounds(0, 0, W, H);
-end;
-
-procedure TfrmHeatmapCargaOperario.btnCloseClick(Sender: TObject);
-begin
-  Close;
 end;
 
 procedure TfrmHeatmapCargaOperario.btnRecalcularClick(Sender: TObject);

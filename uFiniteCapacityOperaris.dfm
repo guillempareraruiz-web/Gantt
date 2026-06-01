@@ -27,8 +27,6 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
     Color = 16448250
     ParentBackground = False
     TabOrder = 0
-    ExplicitTop = 0
-    ExplicitWidth = 1320
     object lblTitle: TLabel
       Left = 16
       Top = 18
@@ -88,85 +86,35 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
       OnClick = btnOperariosVisiblesClick
     end
   end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 695
-    Width = 1336
-    Height = 44
-    Align = alBottom
-    BevelOuter = bvNone
-    Color = 15789544
-    ParentBackground = False
-    TabOrder = 1
-    ExplicitTop = 656
-    ExplicitWidth = 1320
-    object lblResumen: TLabel
-      Left = 16
-      Top = 14
-      Width = 53
-      Height = 17
-      Caption = 'Resumen'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = 4210752
-      Font.Height = -13
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-    end
-    object btnOK: TButton
-      Left = 1144
-      Top = 8
-      Width = 80
-      Height = 28
-      Caption = 'Aceptar'
-      Default = True
-      TabOrder = 0
-      OnClick = btnOKClick
-    end
-    object btnCancel: TButton
-      Left = 1232
-      Top = 8
-      Width = 80
-      Height = 28
-      Cancel = True
-      Caption = 'Cancelar'
-      TabOrder = 1
-      OnClick = btnCancelClick
-    end
-  end
   object pnlMain: TPanel
     Left = 0
     Top = 126
     Width = 1336
-    Height = 569
+    Height = 613
     Align = alClient
     BevelOuter = bvNone
     Color = 15789544
     ParentBackground = False
-    TabOrder = 2
-    ExplicitTop = 56
-    ExplicitWidth = 1320
-    ExplicitHeight = 600
+    TabOrder = 1
     object splPanels: TSplitter
       Left = 280
       Top = 0
       Width = 6
-      Height = 569
+      Height = 613
       Color = 14737632
       ParentColor = False
-      ExplicitHeight = 600
+      ExplicitHeight = 613
     end
     object pnlPendientes: TPanel
       Left = 0
       Top = 0
       Width = 280
-      Height = 569
+      Height = 613
       Align = alLeft
       BevelOuter = bvNone
       Color = 16579836
       ParentBackground = False
       TabOrder = 0
-      ExplicitHeight = 600
       object pnlPendientesHeader: TPanel
         Left = 0
         Top = 0
@@ -205,14 +153,12 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
       Left = 286
       Top = 0
       Width = 1050
-      Height = 569
+      Height = 613
       Align = alClient
       BevelOuter = bvNone
       Color = 16053492
       ParentBackground = False
       TabOrder = 1
-      ExplicitWidth = 1034
-      ExplicitHeight = 600
     end
   end
   object pnlHeader: TPanel
@@ -224,9 +170,7 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
     BevelOuter = bvNone
     Color = 3553567
     ParentBackground = False
-    TabOrder = 3
-    ExplicitTop = -27
-    ExplicitWidth = 1320
+    TabOrder = 2
     DesignSize = (
       1336
       70)
@@ -255,6 +199,170 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
       Font.Name = 'Segoe UI'
       Font.Style = []
       ParentFont = False
+    end
+    object pnlKpiOper: TPanel
+      Left = 750
+      Top = 10
+      Width = 110
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 1
+      object lblKpiOperVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 110
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiOperCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 110
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Operarios'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiAvg: TPanel
+      Left = 866
+      Top = 10
+      Width = 110
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 2
+      object lblKpiAvgVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 110
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0%'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiAvgCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 110
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Ocupaci'#243'n media'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiOver: TPanel
+      Left = 982
+      Top = 10
+      Width = 110
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 3
+      object lblKpiOverVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 110
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 4474111
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiOverCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 110
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Sobrecargados'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiUnder: TPanel
+      Left = 1098
+      Top = 10
+      Width = 110
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 4
+      object lblKpiUnderVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 110
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 4243951
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiUnderCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 110
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Subocupados'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
     end
     object Label28: TLabel
       Left = 1230

@@ -165,6 +165,7 @@ type
     function HasOverlap(const A: TAusencia; out OtherDesc: string): Boolean;
     function ConfirmOverlap(const OtherDesc: string): Boolean;
     procedure DoEditAusencia(var A: TAusencia; IsNew: Boolean);
+    procedure WMSysCommand(var Msg: TWMSysCommand); message WM_SYSCOMMAND;
   public
     class procedure Execute(AOpRepo: TOperariosRepo;
       AAbsRepo: TOperatorAbsencesRepo; AOperarioInicialId: Integer = 0);
@@ -173,7 +174,7 @@ type
 implementation
 
 uses
-  uAusenciaEdit;
+  uAusenciaEdit, uHelpViewer;
 
 {$R *.dfm}
 
@@ -485,6 +486,14 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TfrmOperarioAusencias.WMSysCommand(var Msg: TWMSysCommand);
+begin
+  if (Msg.CmdType and $FFF0) = SC_CONTEXTHELP then
+    THelpViewer.Show('uOperarioAusencias', 'Gesti'#243'n de ausencias')
+  else
+    inherited;
 end;
 
 procedure TfrmOperarioAusencias.FormCreate(Sender: TObject);

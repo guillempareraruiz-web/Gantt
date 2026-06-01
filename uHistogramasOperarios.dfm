@@ -1,6 +1,8 @@
 object frmHistogramasOperarios: TfrmHistogramasOperarios
   Left = 0
   Top = 0
+  BorderIcons = [biSystemMenu, biHelp]
+  BorderStyle = bsDialog
   Caption = 'Histogramas de operarios'
   ClientHeight = 660
   ClientWidth = 1320
@@ -129,31 +131,6 @@ object frmHistogramasOperarios: TfrmHistogramasOperarios
       Caption = 'Recalcular'
       TabOrder = 3
       OnClick = btnRecalcularClick
-    end
-  end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 620
-    Width = 1320
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    Color = 16317660
-    ParentBackground = False
-    TabOrder = 2
-    DesignSize = (
-      1320
-      40)
-    object btnClose: TButton
-      Left = 1196
-      Top = 6
-      Width = 100
-      Height = 28
-      Anchors = [akTop, akRight]
-      Cancel = True
-      Caption = 'Cerrar'
-      TabOrder = 0
-      OnClick = btnCloseClick
     end
   end
   object pcTabs: TPageControl

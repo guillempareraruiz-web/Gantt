@@ -1,8 +1,6 @@
 unit uFiniteCapacityOperaris;
-
 {
   TfrmFiniteCapacityOperaris - Planificador de capacidad finita por OPERARIO.
-
   Layout estilo Kanban:
   - Panel izquierdo: OT/operaciones pendientes de asignar (cards arrastrables)
     con filtros por operacion / area / departamento / solo capacitados.
@@ -10,7 +8,6 @@ unit uFiniteCapacityOperaris;
     bloques de ausencia, marca de solapamientos y soporte multi-operario
     (la misma OT puede asignarse a varios operarios; badge X/N).
   - Drag & drop desde pendientes hacia operarios y entre operarios.
-
   Decisiones de modelo (ver docs/design/FiniteCapacityOperaris.md):
   - Escenario C: paralelismo con MaxOperariosParalelos + FactorParalelismo.
   - Manera B: cada operario asignado consume la duracion entera del bloque.
@@ -20,9 +17,7 @@ unit uFiniteCapacityOperaris;
   - Ausencias en tabla aparte FS_PL_OperatorAbsence.
   - Solapamientos detectados visualmente (no bloquean).
 }
-
 interface
-
 uses
   Winapi.Windows, Winapi.Messages,
   System.SysUtils, System.Types, System.UITypes, System.Classes,
@@ -51,20 +46,16 @@ uses
   dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, cxGraphics, cxLookAndFeels,
   cxLookAndFeelPainters, cxControls, cxContainer, cxEdit, dxGDIPlusClasses,
   cxImage, cxButtons;
-
 type
   // Par (OpId, DataId) usado en multi-seleccion de columnas
   TOpCardRef = record
     OperarioId: Integer;
     DataId: Integer;
   end;
-
   // Rango temporal mostrado en cabecera
   TFCORange = (frHoy, frSemana, fr2Semanas, frMes);
-
   // Modo de orden de columnas
   TFCOSortMode = (smNombre, smOcupacion, smDepartamento, smNivel);
-
   // Resultado para el caller
   TFCOAssignment = record
     OperarioId: Integer;
@@ -72,10 +63,8 @@ type
     Horas: Double;
     IsLocked: Boolean;
   end;
-
   TGetNodeTimesFunc = reference to function(const DataId: Integer;
     out AStart, AEnd: TDateTime): Boolean;
-
   { ----------------------------------------------------------- }
   {  TPendingOpsListControl - lista vertical de OTs pendientes  }
   { ----------------------------------------------------------- }
@@ -147,7 +136,6 @@ type
     property DblClickDataId: Integer read FDblClickDataId;
     property DropActive: Boolean read FDropActive;
   end;
-
   { ----------------------------------------------------------- }
   {  TOperariColumnsControl - columnas por operario              }
   { ----------------------------------------------------------- }
@@ -289,7 +277,6 @@ type
     property OnHeaderOptionsClick: TNotifyEvent read FOnHeaderOptionsClick write FOnHeaderOptionsClick;
     property HeaderOptionsClickedOpId: Integer read FHeaderOptionsClickedOpId;
   end;
-
   { ----------------------------------------------------------- }
   {  TfrmFiniteCapacityOperaris - form principal                 }
   { ----------------------------------------------------------- }
@@ -301,10 +288,6 @@ type
     cbFiltroOp: TComboBox;
     chkSoloCapacitados: TCheckBox;
     btnOperariosVisibles: TButton;
-    pnlBottom: TPanel;
-    lblResumen: TLabel;
-    btnOK: TButton;
-    btnCancel: TButton;
     pnlMain: TPanel;
     pnlPendientes: TPanel;
     pnlPendientesHeader: TPanel;
@@ -331,10 +314,20 @@ type
     Label28: TLabel;
     cxButton9: TcxButton;
     imgSection: TcxImage;
+    pnlKpiOper: TPanel;
+    lblKpiOperVal: TLabel;
+    lblKpiOperCap: TLabel;
+    pnlKpiAvg: TPanel;
+    lblKpiAvgVal: TLabel;
+    lblKpiAvgCap: TLabel;
+    pnlKpiOver: TPanel;
+    lblKpiOverVal: TLabel;
+    lblKpiOverCap: TLabel;
+    pnlKpiUnder: TPanel;
+    lblKpiUnderVal: TLabel;
+    lblKpiUnderCap: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnOKClick(Sender: TObject);
-    procedure btnCancelClick(Sender: TObject);
     procedure cbRangoChange(Sender: TObject);
     procedure cbOrdenChange(Sender: TObject);
     procedure cbFiltroOpChange(Sender: TObject);
@@ -360,8 +353,6 @@ type
     FVisibleOperarioIds: TArray<Integer>;  // si len=0, todos visibles
     FPendingList: TPendingOpsListControl;
     FOperariColumns: TOperariColumnsControl;
-    FResult: TArray<TFCOAssignment>;
-    FAccepted: Boolean;
     procedure OnPendingBeginDrag(Sender: TObject);
     procedure OnColBeginDrag(Sender: TObject);
     procedure OnColLockToggle(Sender: TObject);
@@ -381,14 +372,6 @@ type
     procedure DoAssignFromPending(DataId, OpId: Integer);
     procedure DoMoveAssignment(DataId, FromOpId, ToOpId: Integer);
   public
-    class function Execute(
-      ANodeRepo: TNodeDataRepo;
-      AOpRepo: TOperariosRepo;
-      out AAssignments: TArray<TFCOAssignment>;
-      AAbsRepo: TOperatorAbsencesRepo = nil;
-      ATypesRepo: TOperationTypesRepo = nil;
-      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
-
     // Inicializa la vista en modo embedded (hermana de Dashboard / Gantt /
     // FCP / Backlog dentro del Form1). No usa ShowModal; los repos los
     // gestiona la vista padre.
@@ -399,23 +382,17 @@ type
       ATypesRepo: TOperationTypesRepo = nil;
       ACustomFieldDefs: TCustomFieldDefs = nil);
   end;
-
 implementation
-
 uses
   uNodeInspector, uOperariosVisiblesDlg, uOperarioAusencias;
-
 {$R *.dfm}
-
 { ===================== Helpers ===================== }
-
 function ClampInt(V, Lo, Hi: Integer): Integer;
 begin
   if V < Lo then Result := Lo
   else if V > Hi then Result := Hi
   else Result := V;
 end;
-
 function NivelLetra(N: TNivelSkill): string;
 begin
   case N of
@@ -426,7 +403,6 @@ begin
   else Result := '?';
   end;
 end;
-
 function NivelColor(N: TNivelSkill): TColor;
 begin
   case N of
@@ -437,7 +413,6 @@ begin
   else Result := clGray;
   end;
 end;
-
 function OcupacionColor(Pct: Double): TColor;
 begin
   if Pct < 70 then       Result := $0070C070
@@ -445,7 +420,6 @@ begin
   else if Pct <= 110 then Result := $000080FF
   else                   Result := $004040E0;  // rojo
 end;
-
 procedure DrawLockIcon(const ACanvas: TCanvas; X, Y: Integer; AColor: TColor);
 var
   OldPen: TPen;
@@ -457,28 +431,23 @@ begin
   try
     OldPen.Assign(ACanvas.Pen);
     OldBrush.Assign(ACanvas.Brush);
-
     ACanvas.Pen.Color := AColor;
     ACanvas.Pen.Width := 2;
     ACanvas.Pen.Style := psSolid;
     ACanvas.Brush.Style := bsClear;
-
     // Arco superior (asa)
     ACanvas.Arc(X + 2, Y, X + 12, Y + 10,
                 X + 12, Y + 5,
                 X + 2, Y + 5);
-
     // Cuerpo
     ACanvas.Pen.Width := 1;
     ACanvas.Brush.Style := bsSolid;
     ACanvas.Brush.Color := AColor;
     ACanvas.RoundRect(X, Y + 6, X + 14, Y + 16, 3, 3);
-
     // Punto en el centro (ojo de la cerradura)
     ACanvas.Brush.Color := clWhite;
     ACanvas.Pen.Color := clWhite;
     ACanvas.Ellipse(X + 6, Y + 9, X + 9, Y + 12);
-
     ACanvas.Pen.Assign(OldPen);
     ACanvas.Brush.Assign(OldBrush);
   finally
@@ -486,7 +455,6 @@ begin
     OldBrush.Free;
   end;
 end;
-
 function GetRangeBounds(R: TFCORange; out AStart, AEnd: TDateTime): Boolean;
 var
   Hoy: TDateTime;
@@ -519,9 +487,7 @@ begin
   end;
   Result := True;
 end;
-
 { ================== TPendingOpsListControl ================== }
-
 constructor TPendingOpsListControl.Create(AOwner: TComponent);
 begin
   inherited;
@@ -536,13 +502,11 @@ begin
   FDragIdx := -1;
   FSelectedSet := TDictionary<Integer, Boolean>.Create;
 end;
-
 destructor TPendingOpsListControl.Destroy;
 begin
   FSelectedSet.Free;
   inherited;
 end;
-
 procedure TPendingOpsListControl.SetData(ANodeRepo: TNodeDataRepo;
   AOpRepo: TOperariosRepo; const AIds: TArray<Integer>);
 begin
@@ -552,7 +516,6 @@ begin
   ApplyFilters;
   Invalidate;
 end;
-
 procedure TPendingOpsListControl.SetFilter(const AOperacion: string;
   AAreaId, ADeptId: Integer; ASoloCapacitados: Boolean;
   const AArticulo: string);
@@ -565,7 +528,6 @@ begin
   ApplyFilters;
   Invalidate;
 end;
-
 procedure TPendingOpsListControl.ApplyFilters;
 var
   L: TList<Integer>;
@@ -582,16 +544,13 @@ begin
       Ops := FOperariosRepo.GetOperarios
     else
       SetLength(Ops, 0);
-
     for I := 0 to High(FAllItems) do
     begin
       if not Assigned(FNodeRepo) then Continue;
       if not FNodeRepo.TryGetById(FAllItems[I], D) then Continue;
       Pasa := True;
-
       if (FFilterOperacion <> '') and not SameText(FFilterOperacion, D.Operacion) then
         Pasa := False;
-
       // Filtro libre por articulo / OT / descripcion
       if Pasa and (FFilterArticulo <> '') then
       begin
@@ -601,7 +560,6 @@ begin
            (Pos(UpperCase(FFilterArticulo), UpperCase(IntToStr(D.NumeroOrdenFabricacion))) = 0) then
           Pasa := False;
       end;
-
       // Filtro solo capacitados: alguien (operario activo del repo) puede hacer la operacion
       if Pasa and FFilterSoloCapacitados and Assigned(FOperariosRepo) then
       begin
@@ -614,7 +572,6 @@ begin
           end;
         if not AlguienCapacitado then Pasa := False;
       end;
-
       // Area / Dept: pendientes de implementar cuando exista lookup nodo->area/dept
       if Pasa then L.Add(FAllItems[I]);
     end;
@@ -625,7 +582,6 @@ begin
   if FScrollY > MaxScrollY then FScrollY := MaxScrollY;
   if FScrollY < 0 then FScrollY := 0;
 end;
-
 function TPendingOpsListControl.IdxAtY(Y: Integer): Integer;
 var
   RealY: Integer;
@@ -635,7 +591,6 @@ begin
   Result := RealY div (CARD_H + CARD_GAP);
   if (Result < 0) or (Result >= Length(FItems)) then Result := -1;
 end;
-
 function TPendingOpsListControl.MaxScrollY: Integer;
 var
   Total: Integer;
@@ -643,12 +598,10 @@ begin
   Total := Length(FItems) * (CARD_H + CARD_GAP) + CARD_MARGIN * 2;
   Result := Max(0, Total - ClientHeight);
 end;
-
 function TPendingOpsListControl.IsOnSBar(X: Integer): Boolean;
 begin
   Result := (X >= ClientWidth - SBAR_W) and (MaxScrollY > 0);
 end;
-
 procedure TPendingOpsListControl.DrawCard(const ACanvas: TCanvas; Idx: Integer;
   const R: TRect; IsHover: Boolean);
 var
@@ -658,13 +611,11 @@ var
   N, Nec: Integer;
 begin
   if not Assigned(FNodeRepo) or not FNodeRepo.TryGetById(FItems[Idx], D) then Exit;
-
   // Sombra Trello-style
   ACanvas.Pen.Style := psClear;
   ACanvas.Brush.Color := $00DCDCDC;
   ACanvas.RoundRect(R.Left + 1, R.Top + 2, R.Right + 1, R.Bottom + 2, 8, 8);
   ACanvas.Pen.Style := psSolid;
-
   // Card seleccionada (multi-select): borde naranja
   if FSelectedSet.ContainsKey(FItems[Idx]) then
   begin
@@ -686,7 +637,6 @@ begin
   end;
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom, 8, 8);
   ACanvas.Pen.Width := 1;
-
   // Barra de prioridad a la izquierda
   case D.Prioridad of
     1: ACanvas.Brush.Color := $004040FF;
@@ -698,7 +648,6 @@ begin
   ACanvas.Pen.Style := psClear;
   ACanvas.RoundRect(R.Left, R.Top + 2, R.Left + 5, R.Bottom - 2, 3, 3);
   ACanvas.Pen.Style := psSolid;
-
   // Caption
   ACanvas.Brush.Style := bsClear;
   ACanvas.Font.Color := $00303030;
@@ -711,13 +660,11 @@ begin
   else
     S := Format('Nodo-%d', [FItems[Idx]]);
   ACanvas.TextOut(R.Left + 12, R.Top + 6, S);
-
   // Operacion
   ACanvas.Font.Style := [];
   ACanvas.Font.Color := $00606060;
   ACanvas.Font.Size := 8;
   ACanvas.TextOut(R.Left + 12, R.Top + 24, D.Operacion);
-
   // Necesarios / asignados
   if Assigned(FOperariosRepo) then
   begin
@@ -729,7 +676,6 @@ begin
   S := Format('%d/%d operarios', [N, Nec]);
   ACanvas.Font.Color := IfThen(N >= Nec, $0040A040, $004040E0);
   ACanvas.TextOut(R.Left + 12, R.Top + 40, S);
-
   // Duracion
   if D.DurationMin > 0 then
   begin
@@ -737,10 +683,8 @@ begin
     S := Format('%.1f h', [D.DurationMin / 60]);
     ACanvas.TextOut(R.Left + 12, R.Top + 56, S);
   end;
-
   ACanvas.Brush.Style := bsSolid;
 end;
-
 procedure TPendingOpsListControl.DrawSBar(const ACanvas: TCanvas);
 var
   Total, ThumbH, ThumbY: Integer;
@@ -756,7 +700,6 @@ begin
   ACanvas.FillRect(Rect(ClientWidth - SBAR_W + 2, ThumbY,
     ClientWidth - 2, ThumbY + ThumbH));
 end;
-
 procedure TPendingOpsListControl.Paint;
 var
   I, Y: Integer;
@@ -800,7 +743,6 @@ begin
     Canvas.Brush.Style := bsSolid;
   end;
   DrawSBar(Canvas);
-
   // Ghost del drag activo cuando el cursor sobrevuela este panel
   if FDragActive and Assigned(FDragGhostBmp) then
   begin
@@ -821,7 +763,6 @@ begin
     end;
   end;
 end;
-
 procedure TPendingOpsListControl.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
@@ -834,15 +775,12 @@ begin
     Exit;
   end;
   if Button <> mbLeft then Exit;
-
   // No iniciar drag en doble clic
   if ssDouble in Shift then Exit;
-
   FDragIdx := IdxAtY(Y);
   if FDragIdx >= 0 then
   begin
     var ClickedId := FItems[FDragIdx];
-
     if ssCtrl in Shift then
     begin
       // Toggle seleccion
@@ -862,7 +800,6 @@ begin
         Invalidate;
       end;
     end;
-
     FDragStartPt := Point(X, Y);
     FDragPending := True;
     MouseCapture := True;
@@ -880,7 +817,6 @@ begin
     end;
   end;
 end;
-
 procedure TPendingOpsListControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   NewIdx, Range, Total: Integer;
@@ -896,13 +832,11 @@ begin
     Invalidate;
     Exit;
   end;
-
   if FDragPending and (Abs(X - FDragStartPt.X) + Abs(Y - FDragStartPt.Y) > 6) then
   begin
     FDragPending := False;
     if Assigned(FOnBeginDrag) then FOnBeginDrag(Self);
   end;
-
   NewIdx := IdxAtY(Y);
   if NewIdx <> FHoverIdx then
   begin
@@ -910,7 +844,6 @@ begin
     Invalidate;
   end;
 end;
-
 procedure TPendingOpsListControl.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
@@ -926,7 +859,6 @@ begin
   end;
   // El reset de FDragIdx tras drag real lo hace ApplicationOnIdle del form.
 end;
-
 function TPendingOpsListControl.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
@@ -934,7 +866,6 @@ begin
   Invalidate;
   Result := True;
 end;
-
 function TPendingOpsListControl.DragDataId: Integer;
 begin
   if (FDragIdx >= 0) and (FDragIdx < Length(FItems)) then
@@ -942,7 +873,6 @@ begin
   else
     Result := 0;
 end;
-
 function TPendingOpsListControl.IsCardInActiveDrag(DataId: Integer): Boolean;
 begin
   // No hay drag activo si no se ha pasado el threshold
@@ -955,7 +885,6 @@ begin
     (FDragIdx < Length(FItems)) and
     FSelectedSet.ContainsKey(FItems[FDragIdx]);
 end;
-
 function TPendingOpsListControl.DragDataIds: TArray<Integer>;
 var
   L: TList<Integer>;
@@ -979,7 +908,6 @@ begin
     L.Free;
   end;
 end;
-
 procedure TPendingOpsListControl.EndDrag;
 begin
   FDragIdx := -1;
@@ -987,7 +915,6 @@ begin
   // NOTA: la seleccion no se limpia aqui. Solo se limpia tras un drop real
   // (lo hace ClearSelection desde el form cuando procesa el drop).
 end;
-
 procedure TPendingOpsListControl.ClearSelection;
 begin
   if FSelectedSet.Count > 0 then
@@ -996,7 +923,6 @@ begin
     Invalidate;
   end;
 end;
-
 procedure TPendingOpsListControl.SetDropActive(AActive: Boolean);
 begin
   if FDropActive <> AActive then
@@ -1005,7 +931,6 @@ begin
     Invalidate;
   end;
 end;
-
 procedure TPendingOpsListControl.SetDragActive(AActive: Boolean; AGhost: TBitmap);
 begin
   // Recibimos puntero al bitmap del control de columnas (sin owning).
@@ -1013,7 +938,6 @@ begin
   FDragGhostBmp := AGhost;
   Invalidate;
 end;
-
 function TPendingOpsListControl.PointIsInside(const ScreenPt: TPoint): Boolean;
 var
   Pt: TPoint;
@@ -1021,7 +945,6 @@ begin
   Pt := ScreenToClient(ScreenPt);
   Result := PtInRect(ClientRect, Pt);
 end;
-
 procedure TPendingOpsListControl.DblClick;
 var
   Pt: TPoint;
@@ -1036,9 +959,7 @@ begin
     if Assigned(FOnDblClickCard) then FOnDblClickCard(Self);
   end;
 end;
-
 { ================== TOperariColumnsControl ================== }
-
 constructor TOperariColumnsControl.Create(AOwner: TComponent);
 begin
   inherited;
@@ -1059,7 +980,6 @@ begin
   FRightClickAbsenceId := 0;
   GetRangeBounds(FRange, FRangeStart, FRangeEnd);
 end;
-
 destructor TOperariColumnsControl.Destroy;
 begin
   ClearDragGhost;
@@ -1067,7 +987,6 @@ begin
   FScrollYMap.Free;
   inherited;
 end;
-
 procedure TOperariColumnsControl.SetData(AOpRepo: TOperariosRepo;
   ANodeRepo: TNodeDataRepo; AAbsRepo: TOperatorAbsencesRepo;
   ATypesRepo: TOperationTypesRepo; const AOperarios: TArray<TOperario>);
@@ -1081,7 +1000,6 @@ begin
   SortOperarios;
   Invalidate;
 end;
-
 procedure TOperariColumnsControl.SetVisibleIds(const AIds: TArray<Integer>);
 begin
   FVisibleIds := Copy(AIds, 0, Length(AIds));
@@ -1089,7 +1007,6 @@ begin
   SortOperarios;
   Invalidate;
 end;
-
 procedure TOperariColumnsControl.ComputeSummary(
   out ATotal, AOver, AUnder: Integer; out AAvgPct: Double);
 var
@@ -1110,7 +1027,6 @@ begin
   end;
   if ATotal > 0 then AAvgPct := Sum / ATotal;
 end;
-
 function TOperariColumnsControl.GetVisibleIds: TArray<Integer>;
 var
   L: TList<Integer>;
@@ -1126,27 +1042,23 @@ begin
     L.Free;
   end;
 end;
-
 procedure TOperariColumnsControl.SetRange(ARange: TFCORange);
 begin
   FRange := ARange;
   GetRangeBounds(FRange, FRangeStart, FRangeEnd);
   Invalidate;
 end;
-
 procedure TOperariColumnsControl.SetSortMode(AMode: TFCOSortMode);
 begin
   FSortMode := AMode;
   SortOperarios;
   Invalidate;
 end;
-
 procedure TOperariColumnsControl.RebuildOrder;
 begin
   SortOperarios;
   Invalidate;
 end;
-
 procedure TOperariColumnsControl.ApplyVisibleFilter;
 var
   L: TList<TOperario>;
@@ -1176,17 +1088,14 @@ begin
     L.Free;
   end;
 end;
-
 function TOperariColumnsControl.SelKey(OpId, DataId: Integer): string;
 begin
   Result := IntToStr(OpId) + '-' + IntToStr(DataId);
 end;
-
 function TOperariColumnsControl.IsSelected(OpId, DataId: Integer): Boolean;
 begin
   Result := FSelectedSet.ContainsKey(SelKey(OpId, DataId));
 end;
-
 function TOperariColumnsControl.IsCardInActiveDrag(OpId, DataId: Integer): Boolean;
 begin
   // Solo durante drag confirmado (post threshold)
@@ -1197,7 +1106,6 @@ begin
   Result := IsSelected(OpId, DataId) and
     IsSelected(FDragOpId, DragDataId);
 end;
-
 procedure TOperariColumnsControl.BuildDragGhost(DataId, OpId: Integer; ExtraCount: Integer);
 var
   D: TNodeData;
@@ -1211,7 +1119,6 @@ var
 begin
   ClearDragGhost;
   if not Assigned(FNodeRepo) or not FNodeRepo.TryGetById(DataId, D) then Exit;
-
   // Reconstruir asignacion para pintar la card identica
   FillChar(Asig, SizeOf(Asig), 0);
   Asig.DataId := DataId;
@@ -1228,10 +1135,8 @@ begin
   end;
   if Asig.Horas <= 0 then
     Asig.Horas := D.DurationMin / 60;
-
   GhostW := COL_W - CARD_MARGIN * 2 - SBAR_W;
   GhostH := CARD_H;
-
   FDragGhostBmp := TBitmap.Create;
   FDragGhostBmp.PixelFormat := pf32bit;
   FDragGhostBmp.SetSize(GhostW + 4, GhostH + 4);
@@ -1240,7 +1145,6 @@ begin
   FDragGhostBmp.Canvas.FillRect(Rect(0, 0, GhostW + 4, GhostH + 4));
   R := Rect(2, 2, GhostW + 2, GhostH + 2);
   DrawCard(FDragGhostBmp.Canvas, OpId, Asig, R, False, False);
-
   // Badge "+N" si hay multi-seleccion
   if ExtraCount > 1 then
   begin
@@ -1261,17 +1165,14 @@ begin
       R.Top - 2,
       BadgeStr);
   end;
-
   FDragGhostDataId := DataId;
 end;
-
 procedure TOperariColumnsControl.ClearDragGhost;
 begin
   if Assigned(FDragGhostBmp) then
     FreeAndNil(FDragGhostBmp);
   FDragGhostDataId := 0;
 end;
-
 procedure TOperariColumnsControl.DrawDragGhost(const ACanvas: TCanvas);
 var
   Pt: TPoint;
@@ -1292,7 +1193,6 @@ begin
     ACanvas.Handle, DestX, DestY, GhostW, GhostH,
     FDragGhostBmp.Canvas.Handle, 0, 0, GhostW, GhostH, BF);
 end;
-
 procedure TOperariColumnsControl.SortOperarios;
 var
   Arr: TArray<TOperario>;
@@ -1340,14 +1240,12 @@ begin
   end;
   FOperarios := Arr;
 end;
-
 function TOperariColumnsControl.GetCardsForOperario(
   OpId: Integer): TArray<TAsignacionOperario>;
 begin
   if not Assigned(FOpRepo) then Exit(nil);
   Result := FOpRepo.GetAsignacionsByOperario(OpId);
 end;
-
 function TOperariColumnsControl.NodeIntersectsRange(DataId: Integer): Boolean;
 begin
   // v1: TNodeData no contiene fechas (estan en FS_PL_Node tabla DB).
@@ -1355,7 +1253,6 @@ begin
   // FechaInicio/FechaFin en TNodeData (o se consulte DB), refinar aqui.
   Result := True;
 end;
-
 function TOperariColumnsControl.CalcOcupacionPct(OpId: Integer;
   out HrsAsig, HrsDisp: Double): Double;
 var
@@ -1366,16 +1263,13 @@ var
 begin
   HrsAsig := 0;
   HrsDisp := 0;
-
   if not Assigned(FOpRepo) then Exit(0);
-
   // v1: sumamos las horas declaradas en cada asignacion (sin filtro temporal
   // del nodo). Ver project_finite_capacity_operaris_pending: anyadir filtro
   // por FechaInicio/FechaFin del nodo cuando esten disponibles en TNodeData.
   Asigs := FOpRepo.GetAsignacionsByOperario(OpId);
   for I := 0 to High(Asigs) do
     HrsAsig := HrsAsig + Asigs[I].Horas;
-
   // Horas disponibles: por simplicidad v1, calendario standard 8h/dia laboral
   // (en v1.1 leer FS_PL_Calendar real del operario)
   RangeHrs := (FRangeEnd - FRangeStart) * 8;  // 8h/dia
@@ -1384,7 +1278,6 @@ begin
   else
     HoursAbs := 0;
   HrsDisp := Max(0, RangeHrs - HoursAbs);
-
   if HrsDisp > 0 then
     Result := (HrsAsig / HrsDisp) * 100
   else if HrsAsig > 0 then
@@ -1392,24 +1285,20 @@ begin
   else
     Result := 0;
 end;
-
 function TOperariColumnsControl.HasOverlap(OpId: Integer): Boolean;
 begin
   // v1: sin fechas en TNodeData no podemos detectar solapamiento real.
   // Pendiente para v1.1 cuando carguemos FechaInicio/FechaFin del nodo.
   Result := False;
 end;
-
 function TOperariColumnsControl.ColScrollY(OpId: Integer): Integer;
 begin
   if not FScrollYMap.TryGetValue(OpId, Result) then Result := 0;
 end;
-
 procedure TOperariColumnsControl.SetColScrollY(OpId, V: Integer);
 begin
   FScrollYMap.AddOrSetValue(OpId, V);
 end;
-
 function TOperariColumnsControl.MaxColScrollY(OpId: Integer): Integer;
 var
   N, Total: Integer;
@@ -1418,17 +1307,14 @@ begin
   Total := AbsenceOffset(OpId) + N * (CARD_H + CARD_GAP) + CARD_MARGIN * 2;
   Result := Max(0, Total - (ClientHeight - HEADER_H - HSBAR_H));
 end;
-
 function TOperariColumnsControl.ContentWidth: Integer;
 begin
   Result := Length(FOperarios) * (COL_W + COL_GAP) + COL_GAP;
 end;
-
 function TOperariColumnsControl.MaxScrollX: Integer;
 begin
   Result := Max(0, ContentWidth - ClientWidth);
 end;
-
 function TOperariColumnsControl.ColIdxAtX(X: Integer): Integer;
 var
   RealX: Integer;
@@ -1438,7 +1324,6 @@ begin
   Result := RealX div (COL_W + COL_GAP);
   if (Result < 0) or (Result >= Length(FOperarios)) then Result := -1;
 end;
-
 function TOperariColumnsControl.OperarioAtX(X: Integer): Integer;
 var
   Idx: Integer;
@@ -1447,7 +1332,6 @@ begin
   if Idx < 0 then Result := -1
   else Result := FOperarios[Idx].Id;
 end;
-
 function TOperariColumnsControl.AbsenceOffset(OpId: Integer): Integer;
 var
   Aus: TArray<TAusencia>;
@@ -1458,7 +1342,6 @@ begin
   if Length(Aus) > 0 then
     Result := Length(Aus) * (ABS_H + CARD_GAP);
 end;
-
 function TOperariColumnsControl.AbsenceIdxAtPoint(OpId, Y: Integer): Integer;
 var
   RealY: Integer;
@@ -1473,7 +1356,6 @@ begin
   Result := RealY div (ABS_H + CARD_GAP);
   if (Result < 0) or (Result >= Length(Aus)) then Result := -1;
 end;
-
 function TOperariColumnsControl.CardIdxAtPoint(OpId, Y: Integer): Integer;
 var
   RealY: Integer;
@@ -1487,7 +1369,6 @@ begin
   Result := RealY div (CARD_H + CARD_GAP);
   if (Result < 0) or (Result >= Length(Cards)) then Result := -1;
 end;
-
 procedure TOperariColumnsControl.DrawHeader(const ACanvas: TCanvas;
   const R: TRect; OpId: Integer);
 var
@@ -1501,12 +1382,9 @@ var
   I: Integer;
 begin
   if not Assigned(FOpRepo) or not FOpRepo.GetOperarioById(OpId, Op) then Exit;
-
   // El fondo redondeado lo pinta DrawColumn (que envuelve la columna entera).
   // Aqui solo dibujamos contenido de la cabecera dentro de R.
-
   ACanvas.Brush.Style := bsClear;
-
   // Nivel mas alto del operario (badge redondeado)
   HighestN := nsAprendiz;
   if Assigned(FOpRepo) then
@@ -1525,13 +1403,11 @@ begin
   ACanvas.Font.Size := 9;
   ACanvas.Font.Style := [fsBold];
   ACanvas.TextOut(R.Left + 13, R.Top + 9, NivelLetra(HighestN));
-
   // Nombre
   ACanvas.Font.Color := $00303030;
   ACanvas.Font.Size := 10;
   ACanvas.Font.Style := [fsBold];
   ACanvas.TextOut(R.Left + 32, R.Top + 10, Op.Nombre);
-
   // Badge "[N]" con numero de cards asignadas (mismo tama'no que el badge nivel: 18x18)
   N := Length(GetCardsForOperario(OpId));
   if N > 0 then
@@ -1553,13 +1429,11 @@ begin
       R.Top + 9,
       BadgeStr);
   end;
-
   // Boton "..." en esquina superior derecha
   ACanvas.Font.Size := 12;
   ACanvas.Font.Style := [fsBold];
   ACanvas.Font.Color := IfThen(FHoverOptionsOpId = OpId, $00404040, $00888888);
   ACanvas.TextOut(R.Right - 24, R.Top + 4, '...');
-
   // Solapamientos (icono !)
   if HasOverlap(OpId) then
   begin
@@ -1567,7 +1441,6 @@ begin
     ACanvas.Font.Size := 11;
     ACanvas.TextOut(R.Right - 24, R.Top + 24, '!');
   end;
-
   // Ocupacion
   Pct := CalcOcupacionPct(OpId, HrsA, HrsD);
   S := Format('Ocup. %.0f%% (%.1f / %.1f h)', [Pct, HrsA, HrsD]);
@@ -1575,7 +1448,6 @@ begin
   ACanvas.Font.Size := 8;
   ACanvas.Font.Color := $00606060;
   ACanvas.TextOut(R.Left + 8, R.Top + 32, S);
-
   // Barra de ocupacion redondeada
   ACanvas.Brush.Style := bsSolid;
   ACanvas.Brush.Color := $00E8E8E8;
@@ -1591,7 +1463,6 @@ begin
   end;
   ACanvas.Pen.Style := psSolid;
 end;
-
 procedure TOperariColumnsControl.DrawCard(const ACanvas: TCanvas; OpId: Integer;
   const Asig: TAsignacionOperario; const R: TRect;
   IsHover, IsOverlap: Boolean);
@@ -1603,13 +1474,11 @@ var
   PrioColor: TColor;
 begin
   if not Assigned(FNodeRepo) or not FNodeRepo.TryGetById(Asig.DataId, D) then Exit;
-
   // Sombra estilo Kanban/Trello (debajo y un pelin a la derecha)
   ACanvas.Pen.Style := psClear;
   ACanvas.Brush.Color := $00DCDCDC;
   ACanvas.RoundRect(R.Left + 1, R.Top + 2, R.Right + 1, R.Bottom + 2, 8, 8);
   ACanvas.Pen.Style := psSolid;
-
   // Fondo blanco (con tinte hover/overlap/seleccion)
   if IsSelected(OpId, Asig.DataId) then
     ACanvas.Brush.Color := $00E8F4FF
@@ -1619,7 +1488,6 @@ begin
     ACanvas.Brush.Color := $00E8ECFF
   else
     ACanvas.Brush.Color := clWhite;
-
   if IsSelected(OpId, Asig.DataId) then
   begin
     ACanvas.Pen.Color := $00E89040;
@@ -1647,7 +1515,6 @@ begin
   end;
   ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom, 8, 8);
   ACanvas.Pen.Width := 1;
-
   // Barra de prioridad a la izquierda (color por D.Prioridad)
   case D.Prioridad of
     1: PrioColor := $004040FF;  // alta
@@ -1660,7 +1527,6 @@ begin
   ACanvas.Pen.Style := psClear;
   ACanvas.RoundRect(R.Left, R.Top + 2, R.Left + 5, R.Bottom - 2, 3, 3);
   ACanvas.Pen.Style := psSolid;
-
   // Caption
   ACanvas.Brush.Style := bsClear;
   ACanvas.Font.Color := $00303030;
@@ -1673,13 +1539,11 @@ begin
   else
     S := Format('Nodo-%d', [Asig.DataId]);
   ACanvas.TextOut(R.Left + 12, R.Top + 6, S);
-
   // Operacion
   ACanvas.Font.Style := [];
   ACanvas.Font.Size := 8;
   ACanvas.Font.Color := $00606060;
   ACanvas.TextOut(R.Left + 12, R.Top + 24, D.Operacion);
-
   // Badge X/N
   if Assigned(FOpRepo) then
     N := FOpRepo.CountAssignatsAlNode(Asig.DataId)
@@ -1693,7 +1557,6 @@ begin
   else
     ACanvas.Font.Color := $004040E0;
   ACanvas.TextOut(R.Right - 36, R.Top + 24, S);
-
   // Nivel del operario en esta operacion (mini badge redondeado)
   if Assigned(FOpRepo) and FOpRepo.GetCapacitacioInfo(OpId, D.Operacion, CapInfo) then
   begin
@@ -1715,23 +1578,19 @@ begin
     ACanvas.Font.Color := clWhite;
     ACanvas.TextOut(R.Left + 16, R.Top + 41, '?');
   end;
-
   // Lock indicator: candado dibujado con primitivas
   if Asig.IsLocked then
   begin
     DrawLockIcon(ACanvas, R.Right - 24, R.Top + 38, $004080FF);
   end;
-
   // Horas
   ACanvas.Font.Style := [];
   ACanvas.Font.Size := 8;
   ACanvas.Font.Color := $00808080;
   S := Format('%.1f h', [Asig.Horas]);
   ACanvas.TextOut(R.Left + 34, R.Top + 58, S);
-
   ACanvas.Brush.Style := bsSolid;
 end;
-
 procedure TOperariColumnsControl.DrawAbsenceBlock(const ACanvas: TCanvas;
   const R: TRect; const Aus: TAusencia);
 var
@@ -1765,7 +1624,6 @@ begin
   end;
   ACanvas.Brush.Style := bsSolid;
 end;
-
 procedure TOperariColumnsControl.DrawColumn(const ACanvas: TCanvas;
   ColIdx: Integer; CX: Integer);
 var
@@ -1777,10 +1635,8 @@ var
   ScY: Integer;
 begin
   Op := FOperarios[ColIdx];
-
   // Area completa de la columna (estilo Kanban con round corners)
   ColR := Rect(CX, 0, CX + COL_W, ClientHeight - HSBAR_H - 2);
-
   // Fondo redondeado de la columna entera
   if Op.Id = FDropTargetOpId then
     ACanvas.Brush.Color := $00FAE5D5
@@ -1798,25 +1654,20 @@ begin
   end;
   ACanvas.RoundRect(ColR.Left, ColR.Top, ColR.Right, ColR.Bottom, 12, 12);
   ACanvas.Pen.Width := 1;
-
   // Cabecera dentro de la columna
   HeaderR := Rect(CX, 0, CX + COL_W, HEADER_H);
   DrawHeader(ACanvas, HeaderR, Op.Id);
-
   // Linea separadora cabecera/area cards
   ACanvas.Pen.Color := $00E0E0E0;
   ACanvas.MoveTo(CX + 8, HEADER_H);
   ACanvas.LineTo(CX + COL_W - 8, HEADER_H);
-
   // Clip de la zona de cards/ausencias
   SaveDC(ACanvas.Handle);
   try
     IntersectClipRect(ACanvas.Handle,
       CX + 1, HEADER_H + 1,
       CX + COL_W - 1, ClientHeight - HSBAR_H - 3);
-
     ScY := ColScrollY(Op.Id);
-
     // Ausencias (al inicio del area, scrollables junto con cards)
     Y := HEADER_H + CARD_MARGIN - ScY;
     if Assigned(FAbsRepo) then
@@ -1831,7 +1682,6 @@ begin
         Inc(Y, ABS_H + CARD_GAP);
       end;
     end;
-
     // Cards asignadas
     Cards := GetCardsForOperario(Op.Id);
     for I := 0 to High(Cards) do
@@ -1859,7 +1709,6 @@ begin
   finally
     RestoreDC(ACanvas.Handle, -1);
   end;
-
   // VScrollbar de la columna
   if MaxColScrollY(Op.Id) > 0 then
   begin
@@ -1874,7 +1723,6 @@ begin
     ACanvas.Pen.Style := psSolid;
   end;
 end;
-
 function TOperariColumnsControl.VSBThumbRect(OpId, CX: Integer): TRect;
 var
   TrackTop, TrackBottom, TrackH, ThumbH, ThumbY: Integer;
@@ -1892,7 +1740,6 @@ begin
   Result := Rect(CX + COL_W - SBAR_W - 2, ThumbY,
     CX + COL_W - 2, ThumbY + ThumbH);
 end;
-
 function TOperariColumnsControl.IsOnVSB(const X, Y: Integer; out OpId: Integer): Boolean;
 var
   Idx, CX: Integer;
@@ -1909,7 +1756,6 @@ begin
     Result := MaxColScrollY(OpId) > 0;
   end;
 end;
-
 function TOperariColumnsControl.IsOnOptionsBtn(const X, Y: Integer;
   out OpId: Integer): Boolean;
 var
@@ -1927,7 +1773,6 @@ begin
     Result := True;
   end;
 end;
-
 function TOperariColumnsControl.HSBThumbRect: TRect;
 var
   Total, ThumbW, ThumbX: Integer;
@@ -1943,12 +1788,10 @@ begin
   Result := Rect(ThumbX, ClientHeight - HSBAR_H + 2,
     ThumbX + ThumbW, ClientHeight - 2);
 end;
-
 function TOperariColumnsControl.IsOnHSB(const X, Y: Integer): Boolean;
 begin
   Result := (MaxScrollX > 0) and (Y >= ClientHeight - HSBAR_H);
 end;
-
 procedure TOperariColumnsControl.Paint;
 var
   I, CX: Integer;
@@ -1958,7 +1801,6 @@ begin
   Canvas.Font.Quality := fqClearTypeNatural;
   Canvas.Brush.Color := Color;
   Canvas.FillRect(ClientRect);
-
   CX := COL_GAP - FScrollX;
   for I := 0 to High(FOperarios) do
   begin
@@ -1966,7 +1808,6 @@ begin
       DrawColumn(Canvas, I, CX);
     Inc(CX, COL_W + COL_GAP);
   end;
-
   // HScrollbar
   if MaxScrollX > 0 then
   begin
@@ -1976,11 +1817,9 @@ begin
     Canvas.Brush.Color := $00A0A0A0;
     Canvas.FillRect(R);
   end;
-
   // Ghost de drag (encima de todo)
   DrawDragGhost(Canvas);
 end;
-
 procedure TOperariColumnsControl.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
@@ -1991,7 +1830,6 @@ var
   AbsIdx: Integer;
 begin
   inherited;
-
   // Click sobre HScrollbar
   if (Button = mbLeft) and IsOnHSB(X, Y) then
   begin
@@ -2011,7 +1849,6 @@ begin
     end;
     Exit;
   end;
-
   // Click sobre VScrollbar de columna
   if (Button = mbLeft) and IsOnVSB(X, Y, VSBOp) then
   begin
@@ -2040,7 +1877,6 @@ begin
       Exit;
     end;
   end;
-
   // Click sobre boton "..." de la cabecera
   if (Button = mbLeft) and IsOnOptionsBtn(X, Y, OpId) then
   begin
@@ -2048,7 +1884,6 @@ begin
     if Assigned(FOnHeaderOptionsClick) then FOnHeaderOptionsClick(Self);
     Exit;
   end;
-
   OpId := OperarioAtX(X);
   if (Button = mbLeft) and (OpId > 0) and (Y > HEADER_H) then
   begin
@@ -2057,7 +1892,6 @@ begin
     begin
       Cards := GetCardsForOperario(OpId);
       var ClickedDataId := Cards[Idx].DataId;
-
       if ssCtrl in Shift then
       begin
         // Ctrl+click: alternar seleccion (no inicia drag)
@@ -2108,7 +1942,6 @@ begin
         FRightClickAbsenceId := AusList[AbsIdx].Id;
         Exit;  // popup se dispara en MouseUp
       end;
-
       Idx := CardIdxAtPoint(OpId, Y);
       if Idx >= 0 then
       begin
@@ -2118,14 +1951,12 @@ begin
     end;
   end;
 end;
-
 procedure TOperariColumnsControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   NewOp, NewIdx, NewOptOp, ThumbW, M: Integer;
   TrackTop, TrackBottom, TrackH, ThumbH: Integer;
 begin
   inherited;
-
   if FDraggingHSB and (MaxScrollX > 0) then
   begin
     ThumbW := HSBThumbRect.Width;
@@ -2136,7 +1967,6 @@ begin
     Invalidate;
     Exit;
   end;
-
   if FDraggingVSB and (FVSBOpId > 0) then
   begin
     M := MaxColScrollY(FVSBOpId);
@@ -2157,14 +1987,12 @@ begin
     Invalidate;
     Exit;
   end;
-
   if FDragPending and (Abs(X - FDragStartPt.X) + Abs(Y - FDragStartPt.Y) > 6) then
   begin
     FDragPending := False;
     BuildDragGhost(DragDataId, FDragOpId, Length(DragCardRefs));
     if Assigned(FOnBeginDrag) then FOnBeginDrag(Self);
   end;
-
   // Hover sobre boton "..." (cambio visual)
   if IsOnOptionsBtn(X, Y, NewOptOp) then
   begin
@@ -2179,7 +2007,6 @@ begin
     FHoverOptionsOpId := -1;
     Invalidate;
   end;
-
   NewOp := OperarioAtX(X);
   if Y > HEADER_H then
     NewIdx := CardIdxAtPoint(NewOp, Y)
@@ -2191,12 +2018,10 @@ begin
     FHoverCardIdx := NewIdx;
     Invalidate;
   end;
-
   // Forzar repaint mientras hay drag pegado: para que el ghost siga al cursor
   if (FDragOpId > 0) and not FDragPending then
     Invalidate;
 end;
-
 procedure TOperariColumnsControl.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
@@ -2218,7 +2043,6 @@ begin
   else if (Button = mbRight) and (FRightClickAbsenceId > 0) and Assigned(FOnRightClickAbsence) then
     FOnRightClickAbsence(Self);
 end;
-
 procedure TOperariColumnsControl.DblClick;
 var
   Pt: TPoint;
@@ -2236,7 +2060,6 @@ begin
   FDblClickDataId := Cards[Idx].DataId;
   if Assigned(FOnDblClickCard) then FOnDblClickCard(Self);
 end;
-
 function TOperariColumnsControl.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 var
@@ -2262,7 +2085,6 @@ begin
   Invalidate;
   Result := True;
 end;
-
 procedure TOperariColumnsControl.UpdateDropTarget(const ScreenPt: TPoint);
 var
   Pt: TPoint;
@@ -2289,24 +2111,20 @@ begin
     end;
   end;
 end;
-
 procedure TOperariColumnsControl.ClearDropTarget;
 begin
   FDropTargetOpId := -1;
   FDropActive := False;
   Invalidate;
 end;
-
 procedure TOperariColumnsControl.BeginExternalDrag(DataId: Integer; Count: Integer);
 begin
   BuildDragGhost(DataId, 0, Count);
 end;
-
 function TOperariColumnsControl.GhostBitmap: TBitmap;
 begin
   Result := FDragGhostBmp;
 end;
-
 function TOperariColumnsControl.DragDataId: Integer;
 var
   Cards: TArray<TAsignacionOperario>;
@@ -2319,12 +2137,10 @@ begin
       Result := Cards[FDragCardIdx].DataId;
   end;
 end;
-
 function TOperariColumnsControl.DragOpId: Integer;
 begin
   Result := FDragOpId;
 end;
-
 function TOperariColumnsControl.DragCardRefs: TArray<TOpCardRef>;
 var
   L: TList<TOpCardRef>;
@@ -2339,7 +2155,6 @@ begin
     Curr.OperarioId := FDragOpId;
     Curr.DataId := DragDataId;
     if Curr.DataId <= 0 then Exit(nil);
-
     // Si la card arrastrada esta en seleccion, devolver toda la seleccion.
     // Si no, solo la card arrastrada.
     if IsSelected(Curr.OperarioId, Curr.DataId) then
@@ -2363,7 +2178,6 @@ begin
     L.Free;
   end;
 end;
-
 procedure TOperariColumnsControl.ClearSelection;
 begin
   if FSelectedSet.Count > 0 then
@@ -2372,12 +2186,10 @@ begin
     Invalidate;
   end;
 end;
-
 function TOperariColumnsControl.DropTargetOpId: Integer;
 begin
   Result := FDropTargetOpId;
 end;
-
 procedure TOperariColumnsControl.EndDrag;
 begin
   FDragOpId := -1;
@@ -2386,34 +2198,28 @@ begin
   ClearDragGhost;
   Invalidate;
 end;
-
 { ================== TfrmFiniteCapacityOperaris ================== }
-
 procedure TfrmFiniteCapacityOperaris.FormCreate(Sender: TObject);
 begin
   // El Caption ya viene del DFM
   Position := poScreenCenter;
-
   cbRango.Items.Clear;
   cbRango.Items.Add('Hoy');
   cbRango.Items.Add('Esta semana');
   cbRango.Items.Add('Pr'#243'ximas 2 semanas');
   cbRango.Items.Add('Este mes');
   cbRango.ItemIndex := 1;
-
   cbOrden.Items.Clear;
   cbOrden.Items.Add('Ordenar por: Nombre');
   cbOrden.Items.Add('Ordenar por: Ocupaci'#243'n %');
   cbOrden.Items.Add('Ordenar por: Departamento');
   cbOrden.ItemIndex := 0;
-
   // Crear controles custom
   FPendingList := TPendingOpsListControl.Create(Self);
   FPendingList.Parent := pnlPendientes;
   FPendingList.Align := alClient;
   FPendingList.OnBeginDrag := OnPendingBeginDrag;
   FPendingList.OnDblClickCard := OnPendingDblClick;
-
   FOperariColumns := TOperariColumnsControl.Create(Self);
   FOperariColumns.Parent := pnlOperarios;
   FOperariColumns.Align := alClient;
@@ -2424,17 +2230,14 @@ begin
   FOperariColumns.OnRightClickAbsence := OnColRightClickAbsence;
   FOperariColumns.OnDblClickCard := OnColDblClick;
   FOperariColumns.OnHeaderOptionsClick := OnHeaderOptionsClick;
-
   Application.OnIdle := ApplicationOnIdle;
 end;
-
 procedure TfrmFiniteCapacityOperaris.FormDestroy(Sender: TObject);
 begin
   Application.OnIdle := nil;
   if FOwnsAbsRepo and Assigned(FAbsRepo) then FAbsRepo.Free;
   if FOwnsTypesRepo and Assigned(FTypesRepo) then FTypesRepo.Free;
 end;
-
 procedure TfrmFiniteCapacityOperaris.FillFiltroOp;
 var
   Ops: TArray<string>;
@@ -2450,7 +2253,6 @@ begin
   end;
   cbFiltroOp.ItemIndex := 0;
 end;
-
 function TfrmFiniteCapacityOperaris.CollectPendingDataIds: TArray<Integer>;
 var
   All: TArray<TNodeData>;
@@ -2479,7 +2281,6 @@ begin
     L.Free;
   end;
 end;
-
 procedure TfrmFiniteCapacityOperaris.RefreshAll;
 var
   Pending: TArray<Integer>;
@@ -2490,55 +2291,59 @@ begin
     Operarios := FOpRepo.GetOperarios
   else
     SetLength(Operarios, 0);
-
   FPendingList.SetData(FNodeRepo, FOpRepo, Pending);
   FOperariColumns.SetData(FOpRepo, FNodeRepo, FAbsRepo, FTypesRepo, Operarios);
   FOperariColumns.SetVisibleIds(FVisibleOperarioIds);
-
   case cbRango.ItemIndex of
     0: FOperariColumns.SetRange(frHoy);
     1: FOperariColumns.SetRange(frSemana);
     2: FOperariColumns.SetRange(fr2Semanas);
     3: FOperariColumns.SetRange(frMes);
   end;
-
   case cbOrden.ItemIndex of
     0: FOperariColumns.SetSortMode(smNombre);
     1: FOperariColumns.SetSortMode(smOcupacion);
     2: FOperariColumns.SetSortMode(smDepartamento);
   end;
-
   // Reaplicar filtros para que mantengan el efecto despues de SetData
   cbFiltroOpChange(nil);
-
   UpdateResumen;
-
   FPendingList.Invalidate;
   FOperariColumns.Invalidate;
 end;
-
 procedure TfrmFiniteCapacityOperaris.UpdateResumen;
 var
   Tot, Over, Under: Integer;
   Avg: Double;
 begin
   FOperariColumns.ComputeSummary(Tot, Over, Under, Avg);
-  lblResumen.Caption := Format(
-    'Operarios visibles: %d  |  Ocupaci'#243'n media: %.0f%%  |  ' +
-    'Sobrecargados (>100%%): %d  |  Subocupados (<70%%): %d',
-    [Tot, Avg, Over, Under]);
+  lblKpiOperVal.Caption := IntToStr(Tot);
+  lblKpiAvgVal.Caption := Format('%.0f%%', [Avg]);
+  if Avg > 100 then
+    lblKpiAvgVal.Font.Color := $004040E0
+  else if Avg < 70 then
+    lblKpiAvgVal.Font.Color := $000080FF
+  else
+    lblKpiAvgVal.Font.Color := clWhite;
+  lblKpiOverVal.Caption := IntToStr(Over);
+  if Over > 0 then
+    lblKpiOverVal.Font.Color := $004040E0
+  else
+    lblKpiOverVal.Font.Color := clWhite;
+  lblKpiUnderVal.Caption := IntToStr(Under);
+  if Under > 0 then
+    lblKpiUnderVal.Font.Color := $000080FF
+  else
+    lblKpiUnderVal.Font.Color := clWhite;
 end;
-
 procedure TfrmFiniteCapacityOperaris.cbRangoChange(Sender: TObject);
 begin
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.cbOrdenChange(Sender: TObject);
 begin
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.cbFiltroOpChange(Sender: TObject);
 var
   Op: string;
@@ -2551,17 +2356,14 @@ begin
     edFiltroArticulo.Text);
   UpdatePendingCount;
 end;
-
 procedure TfrmFiniteCapacityOperaris.chkSoloCapacitadosClick(Sender: TObject);
 begin
   cbFiltroOpChange(nil);
 end;
-
 procedure TfrmFiniteCapacityOperaris.edFiltroArticuloChange(Sender: TObject);
 begin
   cbFiltroOpChange(nil);
 end;
-
 procedure TfrmFiniteCapacityOperaris.btnOperariosVisiblesClick(Sender: TObject);
 var
   NewIds: TArray<Integer>;
@@ -2572,7 +2374,6 @@ begin
     RefreshAll;
   end;
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnPendingBeginDrag(Sender: TObject);
 var
   Ids: TArray<Integer>;
@@ -2580,22 +2381,18 @@ begin
   Ids := FPendingList.DragDataIds;
   FOperariColumns.BeginExternalDrag(FPendingList.DragDataId, Length(Ids));
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnColBeginDrag(Sender: TObject);
 begin
   // Drag interno entre columnas
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnColLockToggle(Sender: TObject);
 begin
   miLockClick(nil);
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnColUnassign(Sender: TObject);
 begin
   miUnassignClick(nil);
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnColRightClick(Sender: TObject);
 var
   P: TPoint;
@@ -2603,7 +2400,6 @@ begin
   GetCursorPos(P);
   pmCard.Popup(P.X, P.Y);
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnColRightClickAbsence(Sender: TObject);
 var
   P: TPoint;
@@ -2611,17 +2407,14 @@ begin
   GetCursorPos(P);
   pmAbsence.Popup(P.X, P.Y);
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnPendingDblClick(Sender: TObject);
 begin
   ShowNodeInspectorById(FPendingList.DblClickDataId);
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnColDblClick(Sender: TObject);
 begin
   ShowNodeInspectorById(FOperariColumns.DblClickDataId);
 end;
-
 procedure TfrmFiniteCapacityOperaris.ShowNodeInspectorById(DataId: Integer);
 var
   D: TNodeData;
@@ -2632,13 +2425,11 @@ begin
   TfrmNodeInspector.Execute(D, True, FCustomFieldDefs);
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.UpdatePendingCount;
 begin
   lblPendientes.Caption := Format('OTs pendientes (%d)',
     [Length(FPendingList.Items)]);
 end;
-
 procedure TfrmFiniteCapacityOperaris.OnHeaderOptionsClick(Sender: TObject);
 var
   P: TPoint;
@@ -2646,7 +2437,6 @@ begin
   GetCursorPos(P);
   pmOperario.Popup(P.X, P.Y);
 end;
-
 procedure TfrmFiniteCapacityOperaris.miDesasignarTodoClick(Sender: TObject);
 var
   OpId, I, Removed, Skipped: Integer;
@@ -2657,7 +2447,6 @@ begin
   if MessageDlg('?Quitar todas las asignaciones de este operario?'#13#10 +
        '(Las asignaciones bloqueadas se mantendr'#225'n)',
      mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-
   Asigs := FOpRepo.GetAsignacionsByOperario(OpId);
   Removed := 0;
   Skipped := 0;
@@ -2674,7 +2463,6 @@ begin
     ShowMessage(Format('Quitadas %d asignaciones. %d bloqueadas se han mantenido.',
       [Removed, Skipped]));
 end;
-
 procedure TfrmFiniteCapacityOperaris.miBloquearTodoClick(Sender: TObject);
 var
   OpId, I: Integer;
@@ -2688,7 +2476,6 @@ begin
       FOpRepo.SetAsignacionLock(OpId, Asigs[I].DataId, True, '');
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.miDesbloquearTodoClick(Sender: TObject);
 var
   OpId, I: Integer;
@@ -2702,7 +2489,6 @@ begin
       FOpRepo.SetAsignacionLock(OpId, Asigs[I].DataId, False, '');
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.miQuitarAusenciaClick(Sender: TObject);
 var
   AusId: Integer;
@@ -2714,7 +2500,6 @@ begin
   FAbsRepo.Remove(AusId);
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.miGestionAusenciasClick(Sender: TObject);
 var
   OpId: Integer;
@@ -2724,7 +2509,6 @@ begin
   TfrmOperarioAusencias.Execute(FOpRepo, FAbsRepo, OpId);
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.miGestionCalendarioClick(Sender: TObject);
 var
   OpId: Integer;
@@ -2734,7 +2518,6 @@ begin
   // TODO v1.1: abrir TfrmOperarioCalendario (calendario propio del operario)
   ShowMessage('Pr'#243'ximamente: gesti'#243'n de calendario del operario.');
 end;
-
 procedure TfrmFiniteCapacityOperaris.ApplicationOnIdle(Sender: TObject;
   var Done: Boolean);
 var
@@ -2744,11 +2527,9 @@ var
 begin
   Done := True;
   GetCursorPos(ScreenPt);
-
   PendingId := FPendingList.DragDataId;
   ColId := FOperariColumns.DragDataId;
   ColFromOp := FOperariColumns.DragOpId;
-
   if (GetKeyState(VK_LBUTTON) and $8000) <> 0 then
   begin
     if (PendingId > 0) or (ColId > 0) then
@@ -2767,7 +2548,6 @@ begin
     // Boton soltado: procesar drop
     DropOp := FOperariColumns.DropTargetOpId;
     DropOnPending := (ColId > 0) and FPendingList.PointIsInside(ScreenPt);
-
     if (PendingId > 0) and (DropOp > 0) then
     begin
       var Ids := FPendingList.DragDataIds;
@@ -2802,7 +2582,6 @@ begin
       FOperariColumns.ClearSelection;
       RefreshAll;
     end;
-
     FOperariColumns.ClearDropTarget;
     FPendingList.SetDropActive(False);
     FPendingList.SetDragActive(False, nil);
@@ -2810,7 +2589,6 @@ begin
     FPendingList.EndDrag;
   end;
 end;
-
 procedure TfrmFiniteCapacityOperaris.DoAssignFromPending(DataId, OpId: Integer);
 var
   D: TNodeData;
@@ -2822,7 +2600,6 @@ var
 begin
   if not Assigned(FOpRepo) or not Assigned(FNodeRepo) then Exit;
   if not FNodeRepo.TryGetById(DataId, D) then Exit;
-
   // No duplicar si ya esta asignado a este operario
   Existing := FOpRepo.GetAsignacionsByNode(DataId);
   AlreadyAssigned := False;
@@ -2833,10 +2610,8 @@ begin
       Break;
     end;
   if AlreadyAssigned then Exit;
-
   Horas := D.DurationMin / 60;
   if Horas <= 0 then Horas := 1;
-
   A.OperarioId := OpId;
   A.DataId := DataId;
   A.Horas := Horas;
@@ -2845,7 +2620,6 @@ begin
   A.LockedAt := 0;
   FOpRepo.AddAsignacion(A);
 end;
-
 procedure TfrmFiniteCapacityOperaris.DoMoveAssignment(DataId, FromOpId,
   ToOpId: Integer);
 var
@@ -2855,7 +2629,6 @@ var
 begin
   if not Assigned(FOpRepo) then Exit;
   if (FromOpId <= 0) or (ToOpId <= 0) or (FromOpId = ToOpId) then Exit;
-
   // Si el destino ya tiene esta asignacion, no duplicamos pero quitamos del origen
   Existing := FOpRepo.GetAsignacionsByNode(DataId);
   AlreadyTarget := False;
@@ -2865,7 +2638,6 @@ begin
       AlreadyTarget := True;
       Break;
     end;
-
   // No se mueve una asignacion bloqueada
   if FOpRepo.IsAsignacionLocked(FromOpId, DataId) then
   begin
@@ -2873,15 +2645,12 @@ begin
       'Desbloqu'#233'ela antes de moverla.');
     Exit;
   end;
-
   // Quitar del origen
   FOpRepo.RemoveAsignacion(FromOpId, DataId);
-
   // Anyadir al destino si no estaba ya
   if not AlreadyTarget then
     DoAssignFromPending(DataId, ToOpId);
 end;
-
 procedure TfrmFiniteCapacityOperaris.miLockClick(Sender: TObject);
 var
   OpId, DataId: Integer;
@@ -2894,7 +2663,6 @@ begin
   FOpRepo.SetAsignacionLock(OpId, DataId, not WasLocked, '');
   RefreshAll;
 end;
-
 procedure TfrmFiniteCapacityOperaris.miUnassignClick(Sender: TObject);
 var
   OpId, DataId: Integer;
@@ -2910,47 +2678,6 @@ begin
   FOpRepo.RemoveAsignacion(OpId, DataId);
   RefreshAll;
 end;
-
-procedure TfrmFiniteCapacityOperaris.btnOKClick(Sender: TObject);
-var
-  L: TList<TFCOAssignment>;
-  Ops: TArray<TOperario>;
-  Asigs: TArray<TAsignacionOperario>;
-  I, J: Integer;
-  R: TFCOAssignment;
-begin
-  L := TList<TFCOAssignment>.Create;
-  try
-    if Assigned(FOpRepo) then
-    begin
-      Ops := FOpRepo.GetOperarios;
-      for I := 0 to High(Ops) do
-      begin
-        Asigs := FOpRepo.GetAsignacionsByOperario(Ops[I].Id);
-        for J := 0 to High(Asigs) do
-        begin
-          R.OperarioId := Asigs[J].OperarioId;
-          R.DataId := Asigs[J].DataId;
-          R.Horas := Asigs[J].Horas;
-          R.IsLocked := Asigs[J].IsLocked;
-          L.Add(R);
-        end;
-      end;
-    end;
-    FResult := L.ToArray;
-  finally
-    L.Free;
-  end;
-  FAccepted := True;
-  ModalResult := mrOk;
-end;
-
-procedure TfrmFiniteCapacityOperaris.btnCancelClick(Sender: TObject);
-begin
-  FAccepted := False;
-  ModalResult := mrCancel;
-end;
-
 procedure TfrmFiniteCapacityOperaris.InicializarEmbedded(
   ANodeRepo: TNodeDataRepo;
   AOpRepo: TOperariosRepo;
@@ -2965,7 +2692,6 @@ begin
   FNodeRepo := ANodeRepo;
   FOpRepo := AOpRepo;
   FCustomFieldDefs := ACustomFieldDefs;
-
   if Assigned(AAbsRepo) then
   begin
     FAbsRepo := AAbsRepo;
@@ -2983,7 +2709,6 @@ begin
       FAbsRepo.LoadSampleData(OperarioIds);
     end;
   end;
-
   if Assigned(ATypesRepo) then
   begin
     FTypesRepo := ATypesRepo;
@@ -2995,75 +2720,7 @@ begin
     FOwnsTypesRepo := True;
     FTypesRepo.LoadSampleData;
   end;
-
   FillFiltroOp;
   RefreshAll;
 end;
-
-class function TfrmFiniteCapacityOperaris.Execute(
-  ANodeRepo: TNodeDataRepo;
-  AOpRepo: TOperariosRepo;
-  out AAssignments: TArray<TFCOAssignment>;
-  AAbsRepo: TOperatorAbsencesRepo;
-  ATypesRepo: TOperationTypesRepo;
-  ACustomFieldDefs: TCustomFieldDefs): Boolean;
-var
-  F: TfrmFiniteCapacityOperaris;
-  OperarioIds: TArray<Integer>;
-  Ops: TArray<TOperario>;
-  I: Integer;
-begin
-  Result := False;
-  SetLength(AAssignments, 0);
-  F := TfrmFiniteCapacityOperaris.Create(nil);
-  try
-    F.FNodeRepo := ANodeRepo;
-    F.FOpRepo := AOpRepo;
-    F.FCustomFieldDefs := ACustomFieldDefs;
-
-    if Assigned(AAbsRepo) then
-    begin
-      F.FAbsRepo := AAbsRepo;
-      F.FOwnsAbsRepo := False;
-    end
-    else
-    begin
-      F.FAbsRepo := TOperatorAbsencesRepo.Create;
-      F.FOwnsAbsRepo := True;
-      // Sample data si tenemos operarios
-      if Assigned(AOpRepo) then
-      begin
-        Ops := AOpRepo.GetOperarios;
-        SetLength(OperarioIds, Length(Ops));
-        for I := 0 to High(Ops) do OperarioIds[I] := Ops[I].Id;
-        F.FAbsRepo.LoadSampleData(OperarioIds);
-      end;
-    end;
-
-    if Assigned(ATypesRepo) then
-    begin
-      F.FTypesRepo := ATypesRepo;
-      F.FOwnsTypesRepo := False;
-    end
-    else
-    begin
-      F.FTypesRepo := TOperationTypesRepo.Create;
-      F.FOwnsTypesRepo := True;
-      F.FTypesRepo.LoadSampleData;
-    end;
-
-    F.FillFiltroOp;
-    F.RefreshAll;
-    F.ShowModal;
-
-    if F.FAccepted then
-    begin
-      AAssignments := F.FResult;
-      Result := True;
-    end;
-  finally
-    F.Free;
-  end;
-end;
-
 end.

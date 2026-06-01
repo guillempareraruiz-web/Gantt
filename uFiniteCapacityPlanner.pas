@@ -327,32 +327,33 @@ type
     lblCentresTitle: TLabel;
     lblFilterCaption: TLabel;
     cbCentros: TcxCheckComboBox;
-    pnlHeaderButtons: TPanel;
-    pnlFooter: TPanel;
-    lblFooterPending: TLabel;
-    lblFooterAssigned: TLabel;
-    lblFooterHours: TLabel;
-    lblFooterCapacity: TLabel;
-    PnlUndo: TPanel;
-    LblUndoIcon: TLabel;
-    FBtnUndo: TLabel;
-    SepUR: TPanel;
-    PnlRedo: TPanel;
-    LblRedoIcon: TLabel;
-    FBtnRedo: TLabel;
+    pnlKpiPend: TPanel;
+    lblKpiPendVal: TLabel;
+    lblKpiPendCap: TLabel;
+    pnlKpiAsig: TPanel;
+    lblKpiAsigVal: TLabel;
+    lblKpiAsigCap: TLabel;
+    pnlKpiTotal: TPanel;
+    lblKpiTotalVal: TLabel;
+    lblKpiTotalCap: TLabel;
+    pnlKpiCap: TPanel;
+    lblKpiCapVal: TLabel;
+    lblKpiCapCap: TLabel;
     FBtnOptions: TPanel;
     LblDots: TLabel;
-    btnLayoutNew: TcxButton;
-    btnLayoutDelete: TcxButton;
-    cmbLayout: TcxComboBox;
-    lblLayout: TLabel;
-    btnLayoutSave: TcxButton;
-    btnAyuda: TButton;
     LblRango: TLabel;
     FDtpStart: TDateTimePicker;
     FCmbRange: TComboBox;
     imgSection: TcxImage;
     lblSubtitle: TLabel;
+    lblLayout: TLabel;
+    cmbLayout: TcxComboBox;
+    btnLayoutNew: TcxButton;
+    btnLayoutDelete: TcxButton;
+    btnLayoutSave: TcxButton;
+    btnUndo: TcxButton;
+    btnRedo: TcxButton;
+    Label1: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormResize(Sender: TObject);
@@ -368,7 +369,6 @@ type
     procedure cbCentrosChange(Sender: TObject);
     procedure cmbLayoutChange(Sender: TObject);
     procedure btnLayoutDeleteClick(Sender: TObject);
-    procedure btnAyudaClick(Sender: TObject);
     procedure btnLayoutNewClick(Sender: TObject);
     procedure btnLayoutSaveClick(Sender: TObject);
   private
@@ -511,10 +511,10 @@ type
     procedure OnSelectAllClick(Sender: TObject);
     procedure OnDeselectAllClick(Sender: TObject);
     procedure UpdateFooter;
+    procedure UpdateUndoRedoButtons;
     procedure PushUndo(const AAction: TFCPAction);
     procedure DoUndo;
     procedure DoRedo;
-    procedure UpdateUndoRedoButtons;
     function TakeSnapshot: TArray<TFCPAssignment>;
     procedure RestoreSnapshot(const ASnap: TArray<TFCPAssignment>);
     procedure OnAutoScrollTimer(Sender: TObject);
@@ -2657,10 +2657,6 @@ begin
     Frm.FRuleEngine := ARuleEngine;
     Frm.FCustomFieldDefs := ACustomFieldDefs;
 
-    // Tag per als labels d'undo/redo (referència a l'icon per canviar color
-    // al UpdateUndoRedoButtons).
-    FBtnUndo.Tag := NativeInt(LblUndoIcon);
-    FBtnRedo.Tag := NativeInt(LblRedoIcon);
 
     // Data inicial del selector de rang.
     FDtpStart.Date := Date;
@@ -2789,6 +2785,7 @@ begin
   FOperacionFilter.Duplicates := dupIgnore;
   FUndoStack := TList<TFCPAction>.Create;
   FRedoStack := TList<TFCPAction>.Create;
+  UpdateUndoRedoButtons;
   FPlanningRange := pr1Setmana;
   FPlanningStart := Date;
   FCalculatedTimes := TDictionary<Integer, TAbsInterval>.Create;
@@ -3195,9 +3192,12 @@ begin
     end;
   end;
 
-  lblFooterPending.Caption := Format('Pendientes: %d  (%.1f h)', [PendingOTs, TotalMinPending / 60]);
-  lblFooterAssigned.Caption := Format('Asignadas: %d  (%.1f h)', [AssignedOTs, TotalMinAssigned / 60]);
-  lblFooterHours.Caption := Format('Total: %d OTs  (%.1f h)', [TotalOTs, (TotalMinPending + TotalMinAssigned) / 60]);
+  lblKpiPendVal.Caption := Format('%d', [PendingOTs]);
+  lblKpiPendCap.Caption := Format('Pendientes  %.1f h', [TotalMinPending / 60]);
+  lblKpiAsigVal.Caption := Format('%d', [AssignedOTs]);
+  lblKpiAsigCap.Caption := Format('Asignadas  %.1f h', [TotalMinAssigned / 60]);
+  lblKpiTotalVal.Caption := Format('%d', [TotalOTs]);
+  lblKpiTotalCap.Caption := Format('Total  %.1f h', [(TotalMinPending + TotalMinAssigned) / 60]);
 
   // Capacitat horària global
   var TotalWorkMin: Double := 0;
@@ -3214,8 +3214,14 @@ begin
   if TotalWorkMin > 0 then
   begin
     PctCap := (TotalMinAssigned / TotalWorkMin) * 100;
-    lblFooterCapacity.Caption := Format('Capacidad: %.1f / %.1f h (%.0f%%)',
-      [TotalMinAssigned / 60, TotalWorkMin / 60, PctCap]);
+    lblKpiCapVal.Caption := Format('%.0f%%', [PctCap]);
+    lblKpiCapCap.Caption := Format('%.1f / %.1f h', [TotalMinAssigned / 60, TotalWorkMin / 60]);
+    if PctCap > 100 then
+      lblKpiCapVal.Font.Color := $004040E0
+    else if PctCap < 70 then
+      lblKpiCapVal.Font.Color := $000080FF
+    else
+      lblKpiCapVal.Font.Color := clWhite;
   end
   else
   begin
@@ -3230,12 +3236,24 @@ begin
         if FCentres[I].MaxLaneCount > 0 then
           TotalCap := TotalCap + FCentres[I].MaxLaneCount;
       end;
+    lblKpiCapVal.Font.Color := clWhite;
     if TotalCap > 0 then
-      lblFooterCapacity.Caption := Format('Capacidad: %d/%d (%.0f%%)',
-        [TotalUsed, TotalCap, (TotalUsed / TotalCap) * 100])
+    begin
+      lblKpiCapVal.Caption := Format('%.0f%%', [(TotalUsed / TotalCap) * 100]);
+      lblKpiCapCap.Caption := Format('Slots %d / %d', [TotalUsed, TotalCap]);
+    end
     else
-      lblFooterCapacity.Caption := Format('Slots ocupados: %d', [TotalUsed]);
+    begin
+      lblKpiCapVal.Caption := IntToStr(TotalUsed);
+      lblKpiCapCap.Caption := 'Slots ocupados';
+    end;
   end;
+end;
+
+procedure TfrmFiniteCapacityPlanner.UpdateUndoRedoButtons;
+begin
+  btnUndo.Enabled := Assigned(FUndoStack) and (FUndoStack.Count > 0);
+  btnRedo.Enabled := Assigned(FRedoStack) and (FRedoStack.Count > 0);
 end;
 
 function IsCentrePermitido(const D: TNodeData; const CentreId: Integer): Boolean;
@@ -3808,12 +3826,6 @@ begin
   FCurrentLayoutId := -1;
   LoadLayouts;
 
-end;
-
-procedure TfrmFiniteCapacityPlanner.btnAyudaClick(Sender: TObject);
-begin
-  THelpViewer.Show('uFiniteCapacityPlanner',
-    'Planificador de Capacidad Finita');
 end;
 
 procedure TfrmFiniteCapacityPlanner.btnLayoutNewClick(Sender: TObject);
@@ -4750,27 +4762,7 @@ begin
   UpdateUndoRedoButtons;
 end;
 
-procedure TfrmFiniteCapacityPlanner.UpdateUndoRedoButtons;
-var
-  C: TColor;
-begin
-  if FBtnUndo <> nil then
-  begin
-    if FUndoStack.Count > 0 then C := $00666666
-    else C := $00CCCCCC;
-    FBtnUndo.Font.Color := C;
-    if FBtnUndo.Tag <> 0 then
-      TLabel(FBtnUndo.Tag).Font.Color := C;
-  end;
-  if FBtnRedo <> nil then
-  begin
-    if FRedoStack.Count > 0 then C := $00666666
-    else C := $00CCCCCC;
-    FBtnRedo.Font.Color := C;
-    if FBtnRedo.Tag <> 0 then
-      TLabel(FBtnRedo.Tag).Font.Color := C;
-  end;
-end;
+
 
 procedure TfrmFiniteCapacityPlanner.OnUndoClick(Sender: TObject);
 begin
