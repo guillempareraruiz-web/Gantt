@@ -27,7 +27,6 @@ object frmBacklog: TfrmBacklog
     Color = 3553567
     ParentBackground = False
     TabOrder = 0
-    ExplicitWidth = 1280
     DesignSize = (
       1296
       70)
@@ -59,7 +58,7 @@ object frmBacklog: TfrmBacklog
     end
     object Label28: TLabel
       Left = 1194
-      Top = 0
+      Top = 36
       Width = 67
       Height = 19
       Alignment = taRightJustify
@@ -73,7 +72,6 @@ object frmBacklog: TfrmBacklog
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
-      ExplicitLeft = 1178
     end
     object btnToggleImpacto: TButton
       Left = 826
@@ -84,7 +82,6 @@ object frmBacklog: TfrmBacklog
       Caption = 'Ocultar panel impacto'
       TabOrder = 0
       OnClick = btnToggleImpactoClick
-      ExplicitLeft = 810
     end
     object btnSelectAll: TButton
       Left = 646
@@ -95,7 +92,6 @@ object frmBacklog: TfrmBacklog
       Caption = 'Seleccionar'
       TabOrder = 3
       OnClick = btnSelectAllClick
-      ExplicitLeft = 630
     end
     object btnDeselectAll: TButton
       Left = 730
@@ -106,11 +102,10 @@ object frmBacklog: TfrmBacklog
       Caption = 'Deseleccionar'
       TabOrder = 4
       OnClick = btnDeselectAllClick
-      ExplicitLeft = 714
     end
     object cxButton9: TcxButton
       Left = 1266
-      Top = 2
+      Top = 38
       Width = 18
       Height = 18
       Cursor = crHandPoint
@@ -155,11 +150,10 @@ object frmBacklog: TfrmBacklog
       SpeedButtonOptions.Flat = True
       SpeedButtonOptions.Transparent = True
       TabOrder = 1
-      ExplicitLeft = 1250
     end
     object cxButton2: TcxButton
-      Left = 1194
-      Top = 25
+      Left = 1018
+      Top = 12
       Width = 90
       Height = 25
       Anchors = [akTop, akRight]
@@ -169,6 +163,7 @@ object frmBacklog: TfrmBacklog
       Colors.Disabled = 14737632
       Colors.DisabledText = clSilver
       DropDownMenu = PopupMenu1
+      Enabled = False
       Kind = cxbkOfficeDropDown
       LookAndFeel.SkinName = ''
       SpeedButtonOptions.CanBeFocused = False
@@ -179,7 +174,6 @@ object frmBacklog: TfrmBacklog
       Font.Name = 'Segoe UI'
       Font.Style = []
       ParentFont = False
-      ExplicitLeft = 1178
     end
     object imgSection: TcxImage
       AlignWithMargins = True
@@ -211,8 +205,6 @@ object frmBacklog: TfrmBacklog
       Style.BorderStyle = ebsNone
       TabOrder = 5
       Transparent = True
-      ExplicitTop = 12
-      ExplicitHeight = 42
       Height = 52
       Width = 56
     end
@@ -227,8 +219,6 @@ object frmBacklog: TfrmBacklog
     Color = 15790320
     ParentBackground = False
     TabOrder = 1
-    ExplicitTop = 142
-    ExplicitHeight = 498
     object lblFiltros: TLabel
       Left = 12
       Top = 10
@@ -412,9 +402,6 @@ object frmBacklog: TfrmBacklog
     Color = 16446704
     ParentBackground = False
     TabOrder = 2
-    ExplicitLeft = 960
-    ExplicitTop = 142
-    ExplicitHeight = 498
     DesignSize = (
       320
       567)
@@ -522,7 +509,6 @@ object frmBacklog: TfrmBacklog
       Height = 333
       Anchors = [akLeft, akTop, akRight, akBottom]
       TabOrder = 2
-      ExplicitHeight = 264
       object tvCargaCentro: TcxGridTableView
         Navigator.Buttons.CustomButtons = <>
         ScrollbarAnnotations.CustomAnnotations = <>
@@ -572,8 +558,6 @@ object frmBacklog: TfrmBacklog
       'Planificados')
     TabIndex = 0
     OnChange = tabModeChange
-    ExplicitTop = 114
-    ExplicitWidth = 1274
   end
   object grdBacklog: TcxGrid
     Left = 240
@@ -582,12 +566,10 @@ object frmBacklog: TfrmBacklog
     Height = 567
     Align = alClient
     TabOrder = 4
-    ExplicitTop = 142
-    ExplicitWidth = 720
-    ExplicitHeight = 498
     object tvBacklog: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
       ScrollbarAnnotations.CustomAnnotations = <>
+      OnCellDblClick = tvBacklogCellDblClick
       OnSelectionChanged = tvBacklogSelectionChanged
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
@@ -615,8 +597,6 @@ object frmBacklog: TfrmBacklog
     Color = 7699523
     ParentBackground = False
     TabOrder = 5
-    ExplicitTop = 60
-    ExplicitWidth = 1280
     DesignSize = (
       1296
       44)
@@ -630,7 +610,6 @@ object frmBacklog: TfrmBacklog
       TabOrder = 0
       Visible = False
       OnClick = btnDesplanificarSelClick
-      ExplicitLeft = 686
     end
     object btnPlanificar: TButton
       Left = 16
@@ -651,6 +630,15 @@ object frmBacklog: TfrmBacklog
       TabOrder = 2
       OnClick = btnSyncErpClick
     end
+    object btnVerOF: TcxButton
+      Left = 366
+      Top = 6
+      Width = 100
+      Height = 28
+      Caption = 'Ver OF...'
+      TabOrder = 6
+      OnClick = btnVerOFClick
+    end
     object btnDesplanificarTodo: TButton
       Left = 856
       Top = 6
@@ -661,7 +649,6 @@ object frmBacklog: TfrmBacklog
       TabOrder = 3
       Visible = False
       OnClick = btnDesplanificarTodoClick
-      ExplicitLeft = 840
     end
     object cxButton1: TcxButton
       Left = 1144
@@ -710,21 +697,6 @@ object frmBacklog: TfrmBacklog
   object PopupMenu1: TPopupMenu
     Left = 528
     Top = 72
-    object Guardarlayoutgrid1: TMenuItem
-      Caption = 'Guardar layout grid'
-    end
-    object Guardarlayoutgrid2: TMenuItem
-      Caption = 'Restablecer layout grid'
-    end
-    object N1: TMenuItem
-      Caption = '-'
-    end
-    object Vaciarylimpiartodalaplanificacin1: TMenuItem
-      Caption = 'Vaciar y limpiar toda la planificaci'#243'n'
-    end
-    object N2: TMenuItem
-      Caption = '-'
-    end
     object RegenerarNodosDemo1: TMenuItem
       Caption = 'Regenerar nodos del proyecto (demo)...'
       OnClick = RegenerarNodosDemo1Click
@@ -740,7 +712,7 @@ object frmBacklog: TfrmBacklog
     object Columnas1: TMenuItem
       Caption = 'Columnas'
       object Configurar1: TMenuItem
-        Caption = 'Configurar...'
+        Caption = 'Columnas personalizadas...'
         OnClick = Configurar1Click
       end
       object Guardar1: TMenuItem

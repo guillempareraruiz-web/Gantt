@@ -242,6 +242,7 @@
         <DCCReference Include="uBacklogScheduler.pas"/>
         <DCCReference Include="uPlanningEngineTypes.pas"/>
         <DCCReference Include="uPlanningEngineFCS.pas"/>
+        <DCCReference Include="uPlanningEngineRules.pas"/>
         <DCCReference Include="uPlanningEngine.pas"/>
         <DCCReference Include="uBacklogSchedParams.pas">
             <Form>frmBacklogSchedParams</Form>
@@ -251,8 +252,29 @@
             <Form>frmBacklogSchedPreview</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uReglasPlanParams.pas">
+            <Form>frmReglasPlanParams</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uReglasPlanPreview.pas">
+            <Form>frmReglasPlanPreview</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uReglasPlanComparativa.pas">
+            <Form>frmReglasPlanComparativa</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uBacklogCustomCols.pas">
             <Form>frmBacklogCustomCols</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uCustomColsManager.pas">
+            <Form>frmCustomColsManager</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uErpFieldMapRepo.pas"/>
+        <DCCReference Include="uErpFieldMapping.pas">
+            <Form>frmErpFieldMapping</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="uBacklogCustomColEdit.pas">
@@ -426,6 +448,9 @@
         </DCCReference>
         <DCCReference Include="uOFInspector.pas">
             <Form>frmOFInspector</Form>
+        </DCCReference>
+        <DCCReference Include="uOFViewer.pas">
+            <Form>frmOFViewer</Form>
         </DCCReference>
         <DCCReference Include="uErpReader.pas"/>
         <DCCReference Include="uErpReaderFactory.pas"/>

@@ -47,7 +47,7 @@ function CreatePlanningEngineForMode(AMode: TSchedMode): IPlanningEngine;
 implementation
 
 uses
-  uPlanningEngineFCS;
+  uPlanningEngineFCS, uPlanningEngineRules;
 
 function PlanningEngineKindToStr(K: TPlanningEngineKind): string;
 begin
@@ -59,6 +59,7 @@ begin
   case AKind of
     pekForward:  Result := TForwardSchedulerEngine.Create;
     pekBackward: Result := TBackwardSchedulerEngine.Create;
+    pekRules:    Result := TPriorityRuleEngine.Create;  // config por defecto
   else
     raise Exception.CreateFmt(
       'Planning engine no implementado: %s', [PlanningEngineKindToStr(AKind)]);

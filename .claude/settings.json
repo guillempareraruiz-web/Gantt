@@ -10,7 +10,12 @@
       "Bash(curl -s -o operarios-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/User%20%26%20Faces/team-line.svg\")",
       "Bash(curl -s -o backlog-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Document/list-check-2.svg\")",
       "Bash(curl -s -o gantt-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Business/bar-chart-horizontal-fill.svg\")",
-      "Bash(curl -s -o backlog-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Document/task-line.svg\")"
+      "Bash(curl -s -o backlog-line.svg \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Document/task-line.svg\")",
+      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -Q $q)",
+      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -Q $q)",
+      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -Q $q -W)",
+      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -Q $q2 -W)",
+      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d rp -E -C -Q $q -W)"
     ],
     "additionalDirectories": [
       "d:\\PROJECTES\\GANTT\\GANTT"

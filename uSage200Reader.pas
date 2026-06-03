@@ -16,6 +16,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.DateUtils, System.Math,
   System.Generics.Collections,
+  System.Variants,
   Data.Win.ADODB, Data.DB,
   uErpReader, uErpTypes, uAppConfig;
 
@@ -27,6 +28,15 @@ type
     FCodigoEmpresa: SmallInt;
     function ParseCodigoEmpresa: SmallInt;
     function BuildConnectionString: string;
+    // Variantes con inyeccion de campos custom mapeados (backlog). Las publicas
+    // delegan aqui con AExtraMaps=nil; ReadBacklogOF recibe los mapeos (que le
+    // pasa la capa Planner) y los propaga.
+    function ReadOrdenesFabricacionEx(AEjercicio: SmallInt; const ASerie: string;
+      ANumero: Integer; const AExtraMaps: TArray<TErpFieldMap>): TArray<TOrdenFabricacionErp>;
+    function ReadOrdenesTrabajoEx(AEjercicioTrabajo: SmallInt;
+      ANumeroTrabajo: Integer; const AExtraMaps: TArray<TErpFieldMap>): TArray<TOrdenTrabajoErp>;
+    function ReadOperacionesOTEx(AEjercicioTrabajo: SmallInt;
+      ANumeroTrabajo: Integer; const AExtraMaps: TArray<TErpFieldMap>): TArray<TOperacionOTErp>;
   public
     constructor Create; overload;
     constructor Create(const ACfg: TErpSage200Config); overload;
@@ -35,6 +45,8 @@ type
     // IErpReader
     function GetSistemaNombre: string;
     procedure EnsureConnected;
+    function ProbarExpresionSql(const ASelectExpr, AJoins: string;
+      ANivel: Integer): string;
     procedure EnsureConnectedCore(ARequireEmpresa: Boolean);
     function ReadPedidoCabecera(const ASerie: string; ANumero: Integer;
       AEjercicio: SmallInt): TPedidoCabecera;
@@ -73,7 +85,8 @@ type
       ANumeroTrabajo: Integer): TArray<TConsumoOTErp>;
     function ReadRelacionOTOF(AEjercicioFabricacion: SmallInt;
       const ASerieFabricacion: string; ANumeroFabricacion: Integer): TArray<TRelacionOTOFErp>;
-    function ReadBacklogOF(AEjercicio: SmallInt): TArray<TRawItemErp>;
+    function ReadBacklogOF(AEjercicio: SmallInt;
+      const AExtraMaps: TArray<TErpFieldMap> = nil): TArray<TRawItemErp>;
     function ReadProyectos(const AFiltroCodigo: string): TArray<TProyectoErp>;
     function ReadTareasProyecto(const ACodigoProyecto: string): TArray<TTareaProyectoErp>;
     function ReadGruposHorarios: TArray<TGrupoHorarioErp>;
@@ -152,6 +165,111 @@ begin
   end;
 end;
 
+// ---------------------------------------------------------------------------
+// Inyeccion de campos custom mapeados (FS_PL_Cfg_ErpFieldMap) en las queries
+// del backlog. Cada mapeo aplica a un nivel (1=OF, 2=OT, 3=OP) y aporta una
+// expresion SQL libre + JOINs opcionales. Se inyecta como
+//   , (<SqlExpression>) AS [Ext_<FieldKey>]
+// y se concatenan los SqlJoins (deduplicados por texto). Si no hay mapeos del
+// nivel, todos los helpers devuelven '' y la query queda identica a la original.
+// ---------------------------------------------------------------------------
+
+// Filtra los mapeos activos que aplican a un nivel concreto.
+function FilterMapsForNivel(const AMaps: TArray<TErpFieldMap>;
+  ANivel: Integer): TArray<TErpFieldMap>;
+var
+  L: TList<TErpFieldMap>;
+  M: TErpFieldMap;
+begin
+  L := TList<TErpFieldMap>.Create;
+  try
+    for M in AMaps do
+      if M.Activo and (Trim(M.SqlExpression) <> '') and
+         (M.AppliesToNivel = ANivel) then
+        L.Add(M);
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+// Fragmento SELECT: ', (expr) AS [Ext_<key>]' por cada mapeo del nivel.
+function BuildExtraSelect(const AMaps: TArray<TErpFieldMap>): string;
+var
+  M: TErpFieldMap;
+  SB: TStringBuilder;
+begin
+  if Length(AMaps) = 0 then Exit('');
+  SB := TStringBuilder.Create;
+  try
+    for M in AMaps do
+      SB.Append(', (').Append(M.SqlExpression).Append(') AS [Ext_')
+        .Append(M.FieldKey).Append(']');
+    Result := SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+// JOINs concatenados (deduplicados por texto exacto), con espacio delante.
+function BuildExtraJoins(const AMaps: TArray<TErpFieldMap>): string;
+var
+  M: TErpFieldMap;
+  J: string;
+  Seen: TStringList;
+  SB: TStringBuilder;
+begin
+  Result := '';
+  if Length(AMaps) = 0 then Exit;
+  Seen := TStringList.Create;
+  SB := TStringBuilder.Create;
+  try
+    Seen.CaseSensitive := False;
+    Seen.Duplicates := dupIgnore;
+    Seen.Sorted := True;
+    for M in AMaps do
+    begin
+      J := Trim(M.SqlJoins);
+      if (J = '') or (Seen.IndexOf(J) >= 0) then Continue;
+      Seen.Add(J);
+      SB.Append(' ').Append(J).Append(' ');
+    end;
+    Result := SB.ToString;
+  finally
+    SB.Free;
+    Seen.Free;
+  end;
+end;
+
+// Lee de la fila actual del query las columnas [Ext_<key>] hacia ExtraFields.
+function ReadExtraFields(Q: TADOQuery;
+  const AMaps: TArray<TErpFieldMap>): TArray<TErpExtraValue>;
+var
+  M: TErpFieldMap;
+  F: TField;
+  L: TList<TErpExtraValue>;
+  EV: TErpExtraValue;
+begin
+  if Length(AMaps) = 0 then Exit(nil);
+  L := TList<TErpExtraValue>.Create;
+  try
+    for M in AMaps do
+    begin
+      F := Q.FindField('Ext_' + M.FieldKey);
+      if F = nil then Continue;
+      EV.FieldKey := M.FieldKey;
+      if F.IsNull then
+        EV.Value := Null
+      else
+        EV.Value := F.Value;
+      L.Add(EV);
+    end;
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
 constructor TSage200Reader.Create;
 begin
   Create(LoadErpSage200Config);
@@ -220,6 +338,57 @@ begin
     FConn.LoginPrompt := False;
     FConn.ConnectionString := BuildConnectionString;
     FConn.Connected := True;
+  end;
+end;
+
+function TSage200Reader.ProbarExpresionSql(const ASelectExpr,
+  AJoins: string; ANivel: Integer): string;
+var
+  Q: TADOQuery;
+  N, MaxRows: Integer;
+  Sb: TStringBuilder;
+  Tabla, Alias: string;
+begin
+  // SELECT TOP 5 de prueba con la expresion y los JOINs que pone el integrador.
+  // La tabla/alias depende del nivel del campo mapeado, para que coincida con
+  // como inyecta luego ReadBacklogOF: 1=OF [of], 2=OT [ot], 3=OP [op].
+  EnsureConnected;
+  case ANivel of
+    2: begin Tabla := 'dbo.OrdenesTrabajo';  Alias := 'ot'; end;
+    3: begin Tabla := 'dbo.OperacionesOT';   Alias := 'op'; end;
+  else
+    begin Tabla := 'dbo.OrdenesFabricacion'; Alias := 'of'; end;
+  end;
+  MaxRows := 5;
+  Q := TADOQuery.Create(nil);
+  Sb := TStringBuilder.Create;
+  try
+    Q.Connection := FConn;
+    Q.SQL.Text :=
+      'SELECT TOP ' + IntToStr(MaxRows) + ' (' + ASelectExpr + ') AS ValorPrueba ' +
+      'FROM ' + Tabla + ' AS [' + Alias + '] ' + AJoins + ' ' +
+      'WHERE [' + Alias + '].CodigoEmpresa = :CE';
+    Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
+    try
+      Q.Open;
+    except
+      on E: Exception do
+        Exit('ERROR: ' + E.Message);
+    end;
+    N := 0;
+    Sb.AppendLine('OK. Muestras de valor:');
+    while (not Q.Eof) and (N < MaxRows) do
+    begin
+      Sb.AppendLine('  - ' + Q.FieldByName('ValorPrueba').AsString);
+      Inc(N);
+      Q.Next;
+    end;
+    if N = 0 then
+      Sb.AppendLine('  (la consulta no devolvio filas)');
+    Result := Sb.ToString;
+  finally
+    Q.Free;
+    Sb.Free;
   end;
 end;
 
@@ -1390,39 +1559,53 @@ end;
 
 function TSage200Reader.ReadOrdenesFabricacion(AEjercicio: SmallInt;
   const ASerie: string; ANumero: Integer): TArray<TOrdenFabricacionErp>;
+begin
+  Result := ReadOrdenesFabricacionEx(AEjercicio, ASerie, ANumero, nil);
+end;
+
+function TSage200Reader.ReadOrdenesFabricacionEx(AEjercicio: SmallInt;
+  const ASerie: string; ANumero: Integer;
+  const AExtraMaps: TArray<TErpFieldMap>): TArray<TOrdenFabricacionErp>;
 var
   Q: TADOQuery;
   O: TOrdenFabricacionErp;
   Idx: Integer;
   Serie: string;
   SQL: string;
+  Maps: TArray<TErpFieldMap>;
 begin
   SetLength(Result, 0);
   EnsureConnected;
   Serie := Trim(ASerie);
+  // Mapeos custom que aplican al Nivel 1 (OF). Se inyectan en el SELECT con
+  // alias [of] sobre OrdenesFabricacion; los SqlExpression del integrador deben
+  // referirse a esa tabla como 'of.' (y a sus propios joins).
+  Maps := FilterMapsForNivel(AExtraMaps, 1);
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := FConn;
     SQL :=
-      'SELECT EjercicioFabricacion, SerieFabricacion, NumeroFabricacion, ' +
-      '  CodigoArticulo, DescripcionArticulo, Formula, ' +
-      '  FechaCreacion, FechaLanzamiento, ' +
-      '  FechaInicioPrevista, FechaFinalPrevista, ' +
-      '  FechaInicioReal, FechaFinalReal, FechaEntrega, ' +
-      '  UnidadesAFabricar, UnidadesFabricadas, ' +
-      '  EstadoOF, Prioridad, TipoFabricacion, BloqueoPlanificacion, ' +
-      '  CodigoProyecto, ' +
-      '  CAST(Observaciones AS NVARCHAR(MAX)) AS Observaciones ' +
-      'FROM dbo.OrdenesFabricacion ' +
-      'WHERE CodigoEmpresa = :CE AND EjercicioFabricacion = :Ej ';
+      'SELECT [of].EjercicioFabricacion, [of].SerieFabricacion, [of].NumeroFabricacion, ' +
+      '  [of].CodigoArticulo, [of].DescripcionArticulo, [of].Formula, ' +
+      '  [of].FechaCreacion, [of].FechaLanzamiento, ' +
+      '  [of].FechaInicioPrevista, [of].FechaFinalPrevista, ' +
+      '  [of].FechaInicioReal, [of].FechaFinalReal, [of].FechaEntrega, ' +
+      '  [of].UnidadesAFabricar, [of].UnidadesFabricadas, ' +
+      '  [of].EstadoOF, [of].Prioridad, [of].TipoFabricacion, [of].BloqueoPlanificacion, ' +
+      '  [of].CodigoProyecto, ' +
+      '  CAST([of].Observaciones AS NVARCHAR(MAX)) AS Observaciones ' +
+      BuildExtraSelect(Maps) + ' ' +
+      'FROM dbo.OrdenesFabricacion AS [of] ' +
+      BuildExtraJoins(Maps) +
+      'WHERE [of].CodigoEmpresa = :CE AND [of].EjercicioFabricacion = :Ej ';
     if Serie <> '' then
-      SQL := SQL + 'AND SerieFabricacion = :Ser ';
+      SQL := SQL + 'AND [of].SerieFabricacion = :Ser ';
     if ANumero > 0 then
-      SQL := SQL + 'AND NumeroFabricacion = :Num ';
+      SQL := SQL + 'AND [of].NumeroFabricacion = :Num ';
     // Filtro v1: solo OFs en estado abierto (0) o pendiente (1). Las cerradas
     // ya no deben aparecer en el backlog. Aplicado siempre, sin parametro UI.
-    SQL := SQL + 'AND EstadoOF IN (0, 1) ';
-    SQL := SQL + 'ORDER BY SerieFabricacion, NumeroFabricacion';
+    SQL := SQL + 'AND [of].EstadoOF IN (0, 1) ';
+    SQL := SQL + 'ORDER BY [of].SerieFabricacion, [of].NumeroFabricacion';
     Q.SQL.Text := SQL;
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
     Q.Parameters.ParamByName('Ej').Value := AEjercicio;
@@ -1464,6 +1647,7 @@ begin
       O.BloqueoPlanificacion := Q.FieldByName('BloqueoPlanificacion').AsInteger <> 0;
       O.CodigoProyecto       := Q.FieldByName('CodigoProyecto').AsString;
       O.Observaciones        := Q.FieldByName('Observaciones').AsString;
+      O.ExtraFields          := ReadExtraFields(Q, Maps);
       Result[Idx] := O;
       Inc(Idx);
       Q.Next;
@@ -1480,29 +1664,41 @@ end;
 
 function TSage200Reader.ReadOrdenesTrabajo(AEjercicioTrabajo: SmallInt;
   ANumeroTrabajo: Integer): TArray<TOrdenTrabajoErp>;
+begin
+  Result := ReadOrdenesTrabajoEx(AEjercicioTrabajo, ANumeroTrabajo, nil);
+end;
+
+function TSage200Reader.ReadOrdenesTrabajoEx(AEjercicioTrabajo: SmallInt;
+  ANumeroTrabajo: Integer;
+  const AExtraMaps: TArray<TErpFieldMap>): TArray<TOrdenTrabajoErp>;
 var
   Q: TADOQuery;
   T: TOrdenTrabajoErp;
   Idx: Integer;
   SQL: string;
+  Maps: TArray<TErpFieldMap>;
 begin
   SetLength(Result, 0);
   EnsureConnected;
+  // Mapeos custom de Nivel 2 (OT); alias [ot] sobre OrdenesTrabajo.
+  Maps := FilterMapsForNivel(AExtraMaps, 2);
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := FConn;
     SQL :=
-      'SELECT EjercicioTrabajo, NumeroTrabajo, PeriodoFabricacion, Formula, ' +
-      '  CodigoArticulo, DescripcionArticulo, NivelCompuesto, CodigoAlmacen, ' +
-      '  FechaCreacion, FechaInicioPrevista, FechaFinalPrevista, ' +
-      '  TiempoPreparacion, TiempoFabricacion, TiempoTotal, ' +
-      '  EstadoOT, UnidadesAFabricar, ' +
-      '  EjercicioFabricacion, SerieFabricacion, NumeroFabricacion ' +
-      'FROM dbo.OrdenesTrabajo ' +
-      'WHERE CodigoEmpresa = :CE AND EjercicioTrabajo = :Ej ';
+      'SELECT [ot].EjercicioTrabajo, [ot].NumeroTrabajo, [ot].PeriodoFabricacion, [ot].Formula, ' +
+      '  [ot].CodigoArticulo, [ot].DescripcionArticulo, [ot].NivelCompuesto, [ot].CodigoAlmacen, ' +
+      '  [ot].FechaCreacion, [ot].FechaInicioPrevista, [ot].FechaFinalPrevista, ' +
+      '  [ot].TiempoPreparacion, [ot].TiempoFabricacion, [ot].TiempoTotal, ' +
+      '  [ot].EstadoOT, [ot].UnidadesAFabricar, ' +
+      '  [ot].EjercicioFabricacion, [ot].SerieFabricacion, [ot].NumeroFabricacion ' +
+      BuildExtraSelect(Maps) + ' ' +
+      'FROM dbo.OrdenesTrabajo AS [ot] ' +
+      BuildExtraJoins(Maps) +
+      'WHERE [ot].CodigoEmpresa = :CE AND [ot].EjercicioTrabajo = :Ej ';
     if ANumeroTrabajo > 0 then
-      SQL := SQL + 'AND NumeroTrabajo = :NT ';
-    SQL := SQL + 'ORDER BY NumeroTrabajo';
+      SQL := SQL + 'AND [ot].NumeroTrabajo = :NT ';
+    SQL := SQL + 'ORDER BY [ot].NumeroTrabajo';
     Q.SQL.Text := SQL;
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
     Q.Parameters.ParamByName('Ej').Value := AEjercicioTrabajo;
@@ -1536,6 +1732,7 @@ begin
       T.EjercicioFabricacion := Q.FieldByName('EjercicioFabricacion').AsInteger;
       T.SerieFabricacion     := Q.FieldByName('SerieFabricacion').AsString;
       T.NumeroFabricacion    := Q.FieldByName('NumeroFabricacion').AsInteger;
+      T.ExtraFields          := ReadExtraFields(Q, Maps);
       Result[Idx] := T;
       Inc(Idx);
       Q.Next;
@@ -1548,33 +1745,47 @@ end;
 
 function TSage200Reader.ReadOperacionesOT(AEjercicioTrabajo: SmallInt;
   ANumeroTrabajo: Integer): TArray<TOperacionOTErp>;
+begin
+  Result := ReadOperacionesOTEx(AEjercicioTrabajo, ANumeroTrabajo, nil);
+end;
+
+function TSage200Reader.ReadOperacionesOTEx(AEjercicioTrabajo: SmallInt;
+  ANumeroTrabajo: Integer;
+  const AExtraMaps: TArray<TErpFieldMap>): TArray<TOperacionOTErp>;
 var
   Q: TADOQuery;
   O: TOperacionOTErp;
   Idx: Integer;
+  Maps: TArray<TErpFieldMap>;
 begin
   SetLength(Result, 0);
   EnsureConnected;
   if ANumeroTrabajo <= 0 then
     raise Exception.Create('NumeroTrabajo es obligatorio para leer operaciones de OT.');
+  // Mapeos custom de Nivel 3 (OP); alias [op] sobre OperacionesOT.
+  Maps := FilterMapsForNivel(AExtraMaps, 3);
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := FConn;
     Q.SQL.Text :=
-      'SELECT EjercicioTrabajo, NumeroTrabajo, Orden, ' +
-      '  Operacion, DescripcionOperacion, ' +
-      '  CentroTrabajo, CentroTrabajoDefecto, OperacionExterna, ' +
-      '  TiempoPreparacion, TiempoFabricacion, TiempoTotal, ' +
-      '  UnidadesAFabricar, UnidadesFabricadas, ' +
-      '  CosteHoraMaquina, CosteHoraManoObra, ' +
-      '  [%ParaSigOperacion] AS PctParaSigOp, ' +
-      '  [%DedicacionOperario] AS PctDedicOperario, ' +
-      '  FechaInicioPrevista, FechaFinalPrevista, ' +
-      '  FechaInicioReal, FechaFinalReal, ' +
-      '  EstadoOperacion, StatusPlanificado ' +
-      'FROM dbo.OperacionesOT ' +
-      'WHERE CodigoEmpresa = :CE AND EjercicioTrabajo = :Ej AND NumeroTrabajo = :NT ' +
-      'ORDER BY Orden';
+      'SELECT [op].EjercicioTrabajo, [op].NumeroTrabajo, [op].Orden, ' +
+      '  [op].Operacion, [op].DescripcionOperacion, ' +
+      '  [op].CentroTrabajo, [op].CentroTrabajoDefecto, [op].OperacionExterna, ' +
+      '  [op].TiempoPreparacion, [op].TiempoFabricacion, [op].TiempoTotal, ' +
+      '  [op].UnidadesAFabricar, [op].UnidadesFabricadas, ' +
+      '  [op].CosteHoraMaquina, [op].CosteHoraManoObra, ' +
+      '  [op].[%ParaSigOperacion] AS PctParaSigOp, ' +
+      '  [op].[%DedicacionOperario] AS PctDedicOperario, ' +
+      '  [op].FechaInicioPrevista, [op].FechaFinalPrevista, ' +
+      '  [op].FechaInicioReal, [op].FechaFinalReal, ' +
+      '  [op].EstadoOperacion, [op].StatusPlanificado, ' +
+      '  [op].UnidadesHora, [op].CodigoProveedor, [op].SeccionFabrica, ' +
+      '  CAST([op].Observaciones AS NVARCHAR(MAX)) AS Observaciones ' +
+      BuildExtraSelect(Maps) + ' ' +
+      'FROM dbo.OperacionesOT AS [op] ' +
+      BuildExtraJoins(Maps) +
+      'WHERE [op].CodigoEmpresa = :CE AND [op].EjercicioTrabajo = :Ej AND [op].NumeroTrabajo = :NT ' +
+      'ORDER BY [op].Orden';
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
     Q.Parameters.ParamByName('Ej').Value := AEjercicioTrabajo;
     Q.Parameters.ParamByName('NT').Value := ANumeroTrabajo;
@@ -1611,6 +1822,11 @@ begin
         O.FechaFinalReal := Q.FieldByName('FechaFinalReal').AsDateTime;
       O.EstadoOperacion   := Q.FieldByName('EstadoOperacion').AsInteger;
       O.StatusPlanificado := Q.FieldByName('StatusPlanificado').AsInteger <> 0;
+      O.UnidadesHora      := Q.FieldByName('UnidadesHora').AsFloat;
+      O.CodigoProveedor   := Q.FieldByName('CodigoProveedor').AsString;
+      O.SeccionFabrica    := Q.FieldByName('SeccionFabrica').AsString;
+      O.Observaciones     := Q.FieldByName('Observaciones').AsString;
+      O.ExtraFields       := ReadExtraFields(Q, Maps);
       Result[Idx] := O;
       Inc(Idx);
       Q.Next;
@@ -1746,7 +1962,8 @@ end;
 // BACKLOG: OF -> OT -> OP (jerarquia neutra para FS_PL_Raw_Item)
 // ---------------------------------------------------------------------------
 
-function TSage200Reader.ReadBacklogOF(AEjercicio: SmallInt): TArray<TRawItemErp>;
+function TSage200Reader.ReadBacklogOF(AEjercicio: SmallInt;
+  const AExtraMaps: TArray<TErpFieldMap>): TArray<TRawItemErp>;
 var
   OFs, OFsTotales: TArray<TOrdenFabricacionErp>;
   Rel: TArray<TRelacionOTOFErp>;
@@ -1763,9 +1980,15 @@ var
   Q: TADOQuery;
   Ej: SmallInt;
   I, J, Idx: Integer;
+  Maps: TArray<TErpFieldMap>;
 begin
   SetLength(Result, 0);
   EnsureConnected;
+
+  // Mapeo de columnas custom Backlog -> expresion ERP. Lo carga la capa Planner
+  // (tiene la conexion a FS_PL_*) y lo pasa aqui; el reader solo lo inyecta en
+  // las 3 queries (OF/OT/OP). Sin mapeos, las queries quedan identicas.
+  Maps := AExtraMaps;
 
   // Si AEjercicio<=0, descobrim quins exercicis tenen OFs vives i les
   // llegim totes. Aix'i no depenem de l'any actual del PC.
@@ -1798,7 +2021,7 @@ begin
     for I := 0 to High(Ejercicios) do
     begin
       Ej := Ejercicios[I];
-      OFs := ReadOrdenesFabricacion(Ej, '', 0);
+      OFs := ReadOrdenesFabricacionEx(Ej, '', 0, Maps);
       Idx := Length(OFsTotales);
       SetLength(OFsTotales, Idx + Length(OFs));
       for J := 0 to High(OFs) do
@@ -1807,7 +2030,7 @@ begin
     OFs := OFsTotales;
   end
   else
-    OFs := ReadOrdenesFabricacion(AEjercicio, '', 0);
+    OFs := ReadOrdenesFabricacionEx(AEjercicio, '', 0, Maps);
 
   if Length(OFs) = 0 then Exit;
 
@@ -1837,6 +2060,7 @@ begin
       Item.FechaLanzamiento    := OFErp.FechaLanzamiento;
       Item.EstadoERP           := IntToStr(OFErp.EstadoOF);
       Item.Observaciones       := OFErp.Observaciones;
+      Item.ExtraFields         := OFErp.ExtraFields;
       Items.Add(Item);
 
       // OTs lligades a aquesta OF
@@ -1845,7 +2069,7 @@ begin
                               OFErp.NumeroFabricacion);
       for R in Rel do
       begin
-        OTs := ReadOrdenesTrabajo(R.EjercicioTrabajo, R.NumeroTrabajo);
+        OTs := ReadOrdenesTrabajoEx(R.EjercicioTrabajo, R.NumeroTrabajo, Maps);
         if Length(OTs) = 0 then Continue;
         OTErp := OTs[0];
 
@@ -1869,12 +2093,16 @@ begin
         Item.Cantidad            := OTErp.UnidadesAFabricar;
         Item.FechaInicioPrev     := OTErp.FechaInicioPrevista;
         Item.FechaFinPrev        := OTErp.FechaFinalPrevista;
+        // F.Compromiso se hereda de la OF: es la fecha de entrega comprometida
+        // (OrdenesFabricacion.FechaEntrega) que arrastra toda la jerarquia.
+        Item.FechaCompromiso     := OFErp.FechaEntrega;
         Item.HorasEstimadas      := OTErp.TiempoTotal / 60.0; // min -> h
         Item.EstadoERP           := IntToStr(OTErp.EstadoOT);
+        Item.ExtraFields         := OTErp.ExtraFields;
         Items.Add(Item);
 
         // Operacions (Nivel 3) - les planificables
-        Ops := ReadOperacionesOT(OTErp.EjercicioTrabajo, OTErp.NumeroTrabajo);
+        Ops := ReadOperacionesOTEx(OTErp.EjercicioTrabajo, OTErp.NumeroTrabajo, Maps);
         for OpErp in Ops do
         begin
           if OpErp.EstadoOperacion > 1 then Continue;
@@ -1890,9 +2118,15 @@ begin
           Item.Codigo              := OpErp.Operacion;
           Item.Nombre              := OpErp.DescripcionOperacion;
           Item.Descripcion         := OpErp.DescripcionOperacion;
+          // Articulo: la operacion (OperacionesOT) no lleva articulo; se hereda
+          // del articulo de la OT padre, para que la fila plana de OP lo muestre.
+          Item.CodigoArticulo      := OTErp.CodigoArticulo;
+          Item.DescripcionArticulo := OTErp.DescripcionArticulo;
           Item.Cantidad            := OpErp.UnidadesAFabricar;
           Item.FechaInicioPrev     := OpErp.FechaInicioPrevista;
           Item.FechaFinPrev        := OpErp.FechaFinalPrevista;
+          // F.Compromiso heredada de la OF raiz (igual que en la OT).
+          Item.FechaCompromiso     := OFErp.FechaEntrega;
           Item.HorasEstimadas      := OpErp.TiempoTotal / 60.0; // min -> h
           // Auto-asignacion del Centro: usem CentroTrabajo de la OP; si esta
           // buit, caiem al CentroTrabajoDefecto. Aquest valor s'escriura a
@@ -1904,6 +2138,23 @@ begin
           else
             Item.CentroPreferente := OpErp.CentroTrabajoDefecto;
           Item.EstadoERP           := IntToStr(OpErp.EstadoOperacion);
+          // Bloque OP: campos de la operacion para planificar/ordenar/filtrar.
+          Item.OpTiempoPreparacion     := OpErp.TiempoPreparacion;
+          Item.OpTiempoFabricacion     := OpErp.TiempoFabricacion;
+          Item.OpUnidadesHora          := OpErp.UnidadesHora;
+          Item.OpCosteHoraMaquina      := OpErp.CosteHoraMaquina;
+          Item.OpCosteHoraManoObra     := OpErp.CosteHoraManoObra;
+          Item.OpUnidadesFabricadas    := OpErp.UnidadesFabricadas;
+          Item.OpFechaInicioReal       := OpErp.FechaInicioReal;
+          Item.OpFechaFinalReal        := OpErp.FechaFinalReal;
+          Item.OpOperacionExterna      := OpErp.OperacionExterna;
+          Item.OpCodigoProveedor       := OpErp.CodigoProveedor;
+          Item.OpSeccionFabrica        := OpErp.SeccionFabrica;
+          Item.OpStatusPlanificado     := OpErp.StatusPlanificado;
+          Item.OpObservaciones         := OpErp.Observaciones;
+          Item.OpPctParaSigOperacion   := OpErp.PorcentajeParaSigOperacion;
+          Item.OpPctDedicacionOperario := OpErp.PorcentajeDedicacionOperario;
+          Item.ExtraFields         := OpErp.ExtraFields;
           Items.Add(Item);
         end;
       end;

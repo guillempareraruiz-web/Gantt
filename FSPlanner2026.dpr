@@ -134,6 +134,7 @@ uses
   uStockCockpit in 'uStockCockpit.pas' {frmStockCockpit},
   uDashboardOperativo in 'uDashboardOperativo.pas' {frmDashboardOperativo},
   uOFInspector in 'uOFInspector.pas' {frmOFInspector},
+  uOFViewer in 'uOFViewer.pas' {frmOFViewer},
   uErpReader in 'uErpReader.pas',
   uErpReaderFactory in 'uErpReaderFactory.pas',
   uSage200Reader in 'uSage200Reader.pas',

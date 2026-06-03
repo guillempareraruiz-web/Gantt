@@ -41,7 +41,9 @@ uses
 
 type
   TSchedMode = (smForward, smBackward);
-  TSchedOrder = (soFechaCompromiso, soPrioridad);
+  // soPreordenado: la cola ya viene ordenada por el llamador (p.ej. el motor
+  // de reglas de prioridad) y RunAutoScheduling NO debe reordenarla.
+  TSchedOrder = (soFechaCompromiso, soPrioridad, soPreordenado);
 
   TSchedInput = record
     RawId: Int64;
@@ -95,15 +97,140 @@ type
     TotalFueraPlazo: Integer;
   end;
 
+  // Indicadores derivados de un TSchedResult (para preview y comparativa).
+  TSchedKpis = record
+    Total: Integer;
+    Planificados: Integer;
+    NoPlanificados: Integer;
+    Saturados: Integer;
+    FueraPlazo: Integer;
+    Retrasos: Integer;        // ops con FechaFin > FechaCompromiso
+    RetrasoTotalH: Double;    // suma de horas de retraso
+    RetrasoMedioH: Double;    // RetrasoTotalH / Retrasos
+    MakespanH: Double;        // (max fin - min inicio) en horas
+  end;
+
+  // ---------------------------------------------------------------------------
+  // Reglas de prioridad (motor PRO de planificacion por reglas).
+  // Cada regla es un criterio determinista de ordenacion de la cola de
+  // operaciones. Se calculan sobre datos ya presentes en TSchedInput,
+  // relativos a una fecha base.
+  //
+  //   prEDD          Earliest Due Date   -> FechaCompromiso ascendente.
+  //   prSPT          Shortest Proc. Time -> HorasEstimadas ascendente.
+  //   prLPT          Longest Proc. Time  -> HorasEstimadas descendente.
+  //   prFIFO         First In First Out  -> orden de llegada (NumeroOF/RawId).
+  //   prCriticalRatio Critical Ratio     -> (tiempo hasta vencer)/trabajo asc.
+  //   prSlack        Holgura             -> (tiempo hasta vencer)-trabajo asc.
+  //   prPrioridadErp Prioridad ERP       -> Prioridad descendente.
+  // ---------------------------------------------------------------------------
+  TPriorityRule = (
+    prEDD, prSPT, prLPT, prFIFO, prCriticalRatio, prSlack, prPrioridadErp
+  );
+
+  // Conjunto de reglas con desempate multinivel: cuando la regla Principal
+  // produce empate (dentro de tolerancia), se aplica Desempate1, y luego
+  // Desempate2. Ultimo recurso siempre: RawId (estable y determinista).
+  TPriorityRuleSet = record
+    Principal: TPriorityRule;
+    Desempate1: TPriorityRule;
+    Desempate2: TPriorityRule;
+  end;
+
+function PriorityRuleToStr(R: TPriorityRule): string;
+function DefaultRuleSet: TPriorityRuleSet;
+function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
+
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
   const AParams: TSchedParams): TSchedResult;
 
 function StatusToStr(AStatus: TSchedStatus): string;
 
+// Ordena la cola segun un conjunto de reglas con desempate multinivel.
+// AFechaBase se usa como referencia para CriticalRatio y Slack.
+// SortInputs (2 criterios, legacy) se mantiene para los consumidores actuales.
+procedure SortInputsByRuleSet(var AInputs: TArray<TSchedInput>;
+  const ARules: TPriorityRuleSet; const AFechaBase: TDateTime);
+
 implementation
 
 uses
+  System.Generics.Defaults, System.Math,
   uDMPlanner, uCentresRepo, uCentreCalendar;
+
+function PriorityRuleToStr(R: TPriorityRule): string;
+begin
+  case R of
+    prEDD:           Result := 'EDD (vencimiento mas proximo)';
+    prSPT:           Result := 'SPT (tarea mas corta)';
+    prLPT:           Result := 'LPT (tarea mas larga)';
+    prFIFO:          Result := 'FIFO (orden de llegada)';
+    prCriticalRatio: Result := 'Critical Ratio (menos margen relativo)';
+    prSlack:         Result := 'Slack (menos holgura)';
+    prPrioridadErp:  Result := 'Prioridad ERP';
+  else
+    Result := '?';
+  end;
+end;
+
+function DefaultRuleSet: TPriorityRuleSet;
+begin
+  Result.Principal  := prEDD;
+  Result.Desempate1 := prFIFO;
+  Result.Desempate2 := prFIFO;
+end;
+
+function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
+var
+  I: Integer;
+  Item: TSchedOutput;
+  MinIni, MaxFin: TDateTime;
+  TieneRango: Boolean;
+begin
+  Result := Default(TSchedKpis);
+  Result.Total          := Length(AResult.Items);
+  Result.Planificados   := AResult.TotalPlanificados;
+  Result.NoPlanificados := AResult.TotalNoPlanificados;
+  Result.Saturados      := AResult.TotalSaturados;
+  Result.FueraPlazo     := AResult.TotalFueraPlazo;
+
+  MinIni := 0;
+  MaxFin := 0;
+  TieneRango := False;
+
+  for I := 0 to High(AResult.Items) do
+  begin
+    Item := AResult.Items[I];
+
+    if (Item.FechaFin <> 0) and (Item.Input.FechaCompromiso <> 0) and
+       (Item.FechaFin > Item.Input.FechaCompromiso) then
+    begin
+      Inc(Result.Retrasos);
+      Result.RetrasoTotalH := Result.RetrasoTotalH +
+        (Item.FechaFin - Item.Input.FechaCompromiso) * 24.0;
+    end;
+
+    if Item.FechaInicio <> 0 then
+    begin
+      if not TieneRango then
+      begin
+        MinIni := Item.FechaInicio;
+        MaxFin := Item.FechaFin;
+        TieneRango := True;
+      end
+      else
+      begin
+        if Item.FechaInicio < MinIni then MinIni := Item.FechaInicio;
+        if Item.FechaFin > MaxFin then MaxFin := Item.FechaFin;
+      end;
+    end;
+  end;
+
+  if Result.Retrasos > 0 then
+    Result.RetrasoMedioH := Result.RetrasoTotalH / Result.Retrasos;
+  if TieneRango then
+    Result.MakespanH := (MaxFin - MinIni) * 24.0;
+end;
 
 function StatusToStr(AStatus: TSchedStatus): string;
 begin
@@ -172,6 +299,8 @@ var
   Tmp: TSchedInput;
   Swap: Boolean;
 begin
+  // La cola ya viene ordenada por el llamador: respetar el orden recibido.
+  if AOrder = soPreordenado then Exit;
   // Bubble sort simple (muestras pequenas, N < 200)
   for I := 0 to High(AInputs) - 1 do
     for J := 0 to High(AInputs) - 1 - I do
@@ -195,6 +324,126 @@ begin
         AInputs[J + 1] := Tmp;
       end;
     end;
+end;
+
+// ---------------------------------------------------------------------------
+// Ordenacion por conjunto de reglas con desempate multinivel.
+// ---------------------------------------------------------------------------
+
+const
+  // Tolerancia (en dias) para considerar dos fechas "iguales" a efectos de
+  // desempate: mismo dia natural cuenta como empate y pasa al siguiente nivel.
+  RULE_DATE_TOL = 0.5;
+
+// Trabajo restante (en horas) usado por CriticalRatio y Slack. Hoy se usa
+// HorasEstimadas como proxy (no hay horas-hechas en el input). Minimo 0.
+function WorkHours(const A: TSchedInput): Double;
+begin
+  Result := A.HorasEstimadas;
+  if Result < 0 then Result := 0;
+end;
+
+// Compara A vs B segun UNA regla. Devuelve <0 si A va antes, >0 si despues,
+// 0 si empatan (a resolver por el siguiente nivel de desempate).
+// Las operaciones sin FechaCompromiso (=0) se consideran "sin urgencia" y
+// van detras de las que si la tienen, replicando el criterio de SortInputs.
+function CompareByRule(const A, B: TSchedInput; ARule: TPriorityRule;
+  const AFechaBase: TDateTime): Integer;
+
+  // Coloca los "sin fecha" al final. Devuelve True si ya ha resuelto el orden
+  // (uno tiene fecha y el otro no) y deja el resultado en AOut.
+  function ResolveMissingDue(out AOut: Integer): Boolean;
+  begin
+    Result := True;
+    if (A.FechaCompromiso = 0) and (B.FechaCompromiso <> 0) then
+      AOut := 1                       // A sin fecha -> detras
+    else if (A.FechaCompromiso <> 0) and (B.FechaCompromiso = 0) then
+      AOut := -1                      // B sin fecha -> A delante
+    else
+      Result := False;                // ambos con o sin fecha: no resuelto aqui
+  end;
+
+var
+  Resolved: Integer;
+  CrA, CrB, SlA, SlB, RemA, RemB: Double;
+begin
+  Result := 0;
+  case ARule of
+    prEDD:
+      begin
+        if ResolveMissingDue(Resolved) then Exit(Resolved);
+        if (A.FechaCompromiso = 0) and (B.FechaCompromiso = 0) then Exit(0);
+        Result := CompareValue(A.FechaCompromiso, B.FechaCompromiso, RULE_DATE_TOL);
+      end;
+
+    prSPT:
+      Result := CompareValue(WorkHours(A), WorkHours(B));
+
+    prLPT:
+      Result := CompareValue(WorkHours(B), WorkHours(A));
+
+    prFIFO:
+      begin
+        // Orden de llegada: NumeroOF como proxy principal, RawId como respaldo.
+        Result := CompareValue(A.NumeroOF, B.NumeroOF);
+        if Result = 0 then
+          Result := CompareValue(A.RawId, B.RawId);
+      end;
+
+    prCriticalRatio:
+      begin
+        // CR = (tiempo hasta vencer) / trabajo restante. Menor = mas critico.
+        // Sin fecha -> al final. Trabajo 0 -> CR infinito (no critico): detras.
+        if ResolveMissingDue(Resolved) then Exit(Resolved);
+        if (A.FechaCompromiso = 0) and (B.FechaCompromiso = 0) then Exit(0);
+        RemA := WorkHours(A);
+        RemB := WorkHours(B);
+        if RemA <= 0 then CrA := Infinity
+        else CrA := ((A.FechaCompromiso - AFechaBase) * 24.0) / RemA;
+        if RemB <= 0 then CrB := Infinity
+        else CrB := ((B.FechaCompromiso - AFechaBase) * 24.0) / RemB;
+        Result := CompareValue(CrA, CrB);
+      end;
+
+    prSlack:
+      begin
+        // Slack = (tiempo hasta vencer en horas) - trabajo restante. Menor = mas critico.
+        if ResolveMissingDue(Resolved) then Exit(Resolved);
+        if (A.FechaCompromiso = 0) and (B.FechaCompromiso = 0) then Exit(0);
+        SlA := (A.FechaCompromiso - AFechaBase) * 24.0 - WorkHours(A);
+        SlB := (B.FechaCompromiso - AFechaBase) * 24.0 - WorkHours(B);
+        Result := CompareValue(SlA, SlB);
+      end;
+
+    prPrioridadErp:
+      // Prioridad mas alta primero (descendente).
+      Result := CompareValue(B.Prioridad, A.Prioridad);
+  end;
+end;
+
+procedure SortInputsByRuleSet(var AInputs: TArray<TSchedInput>;
+  const ARules: TPriorityRuleSet; const AFechaBase: TDateTime);
+var
+  Comparer: IComparer<TSchedInput>;
+  Base: TDateTime;
+  Rules: TPriorityRuleSet;
+begin
+  if Length(AInputs) < 2 then Exit;
+  Base := AFechaBase;
+  Rules := ARules;
+  Comparer := TComparer<TSchedInput>.Construct(
+    function(const A, B: TSchedInput): Integer
+    begin
+      Result := CompareByRule(A, B, Rules.Principal, Base);
+      if Result = 0 then
+        Result := CompareByRule(A, B, Rules.Desempate1, Base);
+      if Result = 0 then
+        Result := CompareByRule(A, B, Rules.Desempate2, Base);
+      if Result = 0 then
+        // Desempate final estable y determinista.
+        Result := CompareValue(A.RawId, B.RawId);
+    end);
+  TArray.Sort<TSchedInput>(AInputs, Comparer);
 end;
 
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;

@@ -73,13 +73,35 @@ type
     CodigoCliente: string;
     NombreCliente: string;
     CodigoProyecto: string;
+    NumeroOF: Integer;       // numero de la OF raiz (familia OF); 0 si no aplica
+    SerieOF: string;         // serie de la OF raiz (familia OF); vacio si no aplica
+    CodigoOT: string;        // codigo de la OT (Nivel 2); vacio si no aplica
+    CodigoOP: string;        // codigo de la OP (Nivel 3); vacio si no aplica
     FechaCompromiso: TDateTime;
     FechaNecesaria: TDateTime;
+    FechaEntrega: TDateTime;
     Prioridad: Integer;
     CentroPreferente: string;
     HorasEstimadas: Double;
     TiempoUnidadFabSecs: Double;
     EstadoERP: string;
+    Orden: Integer;          // orden de la operacion dentro de la OT (secuencia)
+    // Bloque OP (Nivel 3): campos de la operacion; vacios en OF/OT.
+    OpTiempoPreparacion: Double;
+    OpTiempoFabricacion: Double;
+    OpUnidadesHora: Double;
+    OpCosteHoraMaquina: Double;
+    OpCosteHoraManoObra: Double;
+    OpUnidadesFabricadas: Double;
+    OpFechaInicioReal: TDateTime;
+    OpFechaFinalReal: TDateTime;
+    OpOperacionExterna: Variant;   // BIT nullable -> Variant (Null si no es OP)
+    OpCodigoProveedor: string;
+    OpSeccionFabrica: string;
+    OpStatusPlanificado: Variant;  // BIT nullable
+    OpObservaciones: string;
+    OpPctParaSigOperacion: Double;
+    OpPctDedicacionOperario: Double;
     Extras: TDictionary<string, Variant>;
     // Solo se rellenan en el tab Planificados (via FS_PL_vw_BacklogPlanned)
     NodeId: Integer;
@@ -144,15 +166,7 @@ type
     tvBacklog: TcxGridTableView;
     lvBacklog: TcxGridLevel;
     btnToggleImpacto: TButton;
-    cxButton9: TcxButton;
-    Label28: TLabel;
-    cxButton2: TcxButton;
     PopupMenu1: TPopupMenu;
-    Guardarlayoutgrid1: TMenuItem;
-    Guardarlayoutgrid2: TMenuItem;
-    N1: TMenuItem;
-    Vaciarylimpiartodalaplanificacin1: TMenuItem;
-    N2: TMenuItem;
     RegenerarNodosDemo1: TMenuItem;
     RegenerarBacklogDemo1: TMenuItem;
     btnSelectAll: TButton;
@@ -161,6 +175,7 @@ type
     btnDesplanificarSel: TButton;
     btnPlanificar: TButton;
     btnSyncErp: TcxButton;
+    btnVerOF: TcxButton;
     btnDesplanificarTodo: TButton;
     PopupMenu2: TPopupMenu;
     Columnas1: TMenuItem;
@@ -174,6 +189,7 @@ type
     btnRecargar: TcxButton;
     lblCountRegs: TLabel;
     procedure btnSyncErpClick(Sender: TObject);
+    procedure btnVerOFClick(Sender: TObject);
     procedure RegenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarBacklogDemo1Click(Sender: TObject);
     procedure btnSelectAllClick(Sender: TObject);
@@ -186,6 +202,9 @@ type
     procedure btnLimpiarFiltrosClick(Sender: TObject);
     procedure FiltroChanged(Sender: TObject);
     procedure tvBacklogSelectionChanged(Sender: TcxCustomGridTableView);
+    procedure tvBacklogCellDblClick(Sender: TcxCustomGridTableView;
+      ACellViewInfo: TcxGridTableDataCellViewInfo; AButton: TMouseButton;
+      AShift: TShiftState; var AHandled: Boolean);
     procedure tvBacklogCustomEditValueChanged(Sender: TcxCustomGridTableView;
       AItem: TcxCustomGridTableItem);
     procedure tvCargaCentroCustomDrawCell(Sender: TcxCustomGridTableView;
@@ -209,6 +228,7 @@ type
     FLoading: Boolean;
     FFirstShow: Boolean;
 
+    procedure VerOFActual;
     procedure BuildBaseColumns;
     procedure LoadCustomColumnDefs;
     procedure BuildCustomColumns;
@@ -230,6 +250,7 @@ type
 
     procedure LoadUserLayout;
     procedure SaveUserLayout;
+    procedure EnsureNewColumnsVisible(const AKeys: array of string);
     procedure ResetLayout;
 
     function CollectSelectedInputs: TArray<TSchedInput>;
@@ -258,10 +279,60 @@ uses
   uBacklogSchedParams, uBacklogSchedPreview, uUserPrefs, uGenerarNodosDemo,
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
   uFormulaArticuloViewer, Main,
-  uErpReader, uErpReaderFactory, uSyncBacklogPreview;
+  uErpReader, uErpReaderFactory, uSyncBacklogPreview, uOFViewer;
 
 const
   BACKLOG_MOD = 'BACKLOG';
+
+// Helpers de lectura tolerante de campos de la vista (FindField por robustez
+// ante vistas antiguas que aun no tengan la columna).
+function FieldFloat(Q: TDataSet; const AName: string): Double;
+begin
+  if (Q.FindField(AName) <> nil) and not Q.FieldByName(AName).IsNull then
+    Result := Q.FieldByName(AName).AsFloat
+  else
+    Result := 0;
+end;
+
+function FieldDate(Q: TDataSet; const AName: string): TDateTime;
+begin
+  if (Q.FindField(AName) <> nil) and not Q.FieldByName(AName).IsNull then
+    Result := Q.FieldByName(AName).AsDateTime
+  else
+    Result := 0;
+end;
+
+function FieldStr(Q: TDataSet; const AName: string): string;
+begin
+  if Q.FindField(AName) <> nil then
+    Result := Q.FieldByName(AName).AsString
+  else
+    Result := '';
+end;
+
+// BIT nullable: Null si la columna no existe o es NULL (filas no-OP). El
+// provider puede exponer BIT como Boolean o como entero segun driver; usamos
+// AsVariant y normalizamos, evitando AsInteger (que lanza "Cannot access field
+// as type Integer" cuando el campo es booleano).
+function FieldBoolVar(Q: TDataSet; const AName: string): Variant;
+var
+  F: TField;
+begin
+  F := Q.FindField(AName);
+  if (F = nil) or F.IsNull then
+    Exit(Null);
+  if F.DataType = ftBoolean then
+    Result := F.AsBoolean
+  else
+    Result := F.AsInteger <> 0;
+end;
+
+// Para volcado al grid: muestra Null en vez de 0 (evita ensuciar con ceros las
+// filas que no son operacion o que no tienen ese valor).
+function FloatOrNull(V: Double): Variant;
+begin
+  if V = 0 then Result := Null else Result := V;
+end;
 
 procedure ShowBacklog;
 begin
@@ -700,6 +771,11 @@ begin
   LoadData;
 end;
 
+procedure TfrmBacklog.btnVerOFClick(Sender: TObject);
+begin
+  VerOFActual;
+end;
+
 procedure TfrmBacklog.btnSyncErpClick(Sender: TObject);
 var
   Reader: IErpReader;
@@ -1027,12 +1103,34 @@ begin
       Cols.Add(AddCol('UnidadMedida',         'UM',             50));
       Cols.Add(AddCol('NombreCliente',        'Cliente',       180));
       Cols.Add(AddCol('CodigoProyecto',       'Proyecto',      100));
+      Cols.Add(AddCol('SerieOF',              'Serie OF',       70));
+      Cols.Add(AddCol('NumeroOF',             'OF',             70));
+      Cols.Add(AddCol('CodigoOT',             'OT',             90));
+      Cols.Add(AddCol('CodigoOP',             'OP',             90));
       Cols.Add(AddCol('FechaCompromiso',      'F. Compromiso', 110));
       Cols.Add(AddCol('FechaNecesaria',       'F. Necesaria',  110));
+      Cols.Add(AddCol('FechaEntrega',         'F. Entrega',    110));
       Cols.Add(AddCol('Prioridad',            'Prio',           50));
       Cols.Add(AddCol('CentroPreferente',     'Centro pref.',  100));
       Cols.Add(AddCol('HorasEstimadas',       'Horas est.',     80));
       Cols.Add(AddCol('EstadoERP',            'Estado',         90));
+      Cols.Add(AddCol('Orden',                'Orden op.',      70));
+      // Bloque OP (Nivel 3): solo con valor en filas de operacion.
+      Cols.Add(AddCol('OpTiempoPreparacion',  'T. Prep.',       70));
+      Cols.Add(AddCol('OpTiempoFabricacion',  'T. Fab.',        70));
+      Cols.Add(AddCol('OpUnidadesHora',       'Uds/hora',       70));
+      Cols.Add(AddCol('OpCosteHoraMaquina',   'C/h Maq.',       70));
+      Cols.Add(AddCol('OpCosteHoraManoObra',  'C/h M.Obra',     80));
+      Cols.Add(AddCol('OpUnidadesFabricadas', 'Uds fabr.',      70));
+      Cols.Add(AddCol('OpFechaInicioReal',    'Inicio real',   110));
+      Cols.Add(AddCol('OpFechaFinalReal',     'Fin real',      110));
+      Cols.Add(AddCol('OpOperacionExterna',   'Externa',        60));
+      Cols.Add(AddCol('OpCodigoProveedor',    'Proveedor',     100));
+      Cols.Add(AddCol('OpSeccionFabrica',     'Secci'#243'n',       80));
+      Cols.Add(AddCol('OpStatusPlanificado',  'Planif.',        60));
+      Cols.Add(AddCol('OpObservaciones',      'Obs. op.',      180));
+      Cols.Add(AddCol('OpPctParaSigOperacion','% Sig.Op',       70));
+      Cols.Add(AddCol('OpPctDedicacionOperario','% Dedic.',     70));
       Cols.Add(AddCol('OrigenERP',            'ERP',            70));
       Cols.Add(AddCol('ClaveERP',             'Clave ERP',     120));
 
@@ -1337,10 +1435,30 @@ begin
       Row.CodigoCliente       := Q.FieldByName('CodigoCliente').AsString;
       Row.NombreCliente       := Q.FieldByName('NombreCliente').AsString;
       Row.CodigoProyecto      := Q.FieldByName('CodigoProyecto').AsString;
+      if (Q.FindField('NumeroOF') <> nil) and not Q.FieldByName('NumeroOF').IsNull then
+        Row.NumeroOF := Q.FieldByName('NumeroOF').AsInteger
+      else
+        Row.NumeroOF := 0;
+      if Q.FindField('SerieOF') <> nil then
+        Row.SerieOF := Q.FieldByName('SerieOF').AsString
+      else
+        Row.SerieOF := '';
+      if Q.FindField('CodigoOT') <> nil then
+        Row.CodigoOT := Q.FieldByName('CodigoOT').AsString
+      else
+        Row.CodigoOT := '';
+      if Q.FindField('CodigoOP') <> nil then
+        Row.CodigoOP := Q.FieldByName('CodigoOP').AsString
+      else
+        Row.CodigoOP := '';
       if Q.FieldByName('FechaCompromiso').IsNull then Row.FechaCompromiso := 0
         else Row.FechaCompromiso := Q.FieldByName('FechaCompromiso').AsDateTime;
       if Q.FieldByName('FechaNecesaria').IsNull then Row.FechaNecesaria := 0
         else Row.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
+      if (Q.FindField('FechaEntrega') <> nil) and not Q.FieldByName('FechaEntrega').IsNull then
+        Row.FechaEntrega := Q.FieldByName('FechaEntrega').AsDateTime
+      else
+        Row.FechaEntrega := Row.FechaCompromiso;
       Row.Prioridad           := Q.FieldByName('Prioridad').AsInteger;
       Row.CentroPreferente    := Q.FieldByName('CentroPreferente').AsString;
       Row.HorasEstimadas      := Q.FieldByName('HorasEstimadas').AsFloat;
@@ -1350,6 +1468,27 @@ begin
       else
         Row.TiempoUnidadFabSecs := 0;
       Row.EstadoERP           := Q.FieldByName('EstadoERP').AsString;
+
+      // Bloque OP (Nivel 3). FindField por robustez ante vistas pre-V053.
+      if Q.FindField('Orden') <> nil then
+        Row.Orden := Q.FieldByName('Orden').AsInteger
+      else
+        Row.Orden := 0;
+      Row.OpTiempoPreparacion  := FieldFloat(Q, 'OpTiempoPreparacion');
+      Row.OpTiempoFabricacion  := FieldFloat(Q, 'OpTiempoFabricacion');
+      Row.OpUnidadesHora       := FieldFloat(Q, 'OpUnidadesHora');
+      Row.OpCosteHoraMaquina   := FieldFloat(Q, 'OpCosteHoraMaquina');
+      Row.OpCosteHoraManoObra  := FieldFloat(Q, 'OpCosteHoraManoObra');
+      Row.OpUnidadesFabricadas := FieldFloat(Q, 'OpUnidadesFabricadas');
+      Row.OpFechaInicioReal    := FieldDate(Q, 'OpFechaInicioReal');
+      Row.OpFechaFinalReal     := FieldDate(Q, 'OpFechaFinalReal');
+      Row.OpOperacionExterna   := FieldBoolVar(Q, 'OpOperacionExterna');
+      Row.OpCodigoProveedor    := FieldStr(Q, 'OpCodigoProveedor');
+      Row.OpSeccionFabrica     := FieldStr(Q, 'OpSeccionFabrica');
+      Row.OpStatusPlanificado  := FieldBoolVar(Q, 'OpStatusPlanificado');
+      Row.OpObservaciones      := FieldStr(Q, 'OpObservaciones');
+      Row.OpPctParaSigOperacion   := FieldFloat(Q, 'OpPctParaSigOperacion');
+      Row.OpPctDedicacionOperario := FieldFloat(Q, 'OpPctDedicacionOperario');
 
       // Campos del nodo (solo vw_BacklogPlanned)
       Row.NodeId := 0;
@@ -1482,6 +1621,19 @@ begin
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NombreCliente
         else if Key = 'CodigoProyecto' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.CodigoProyecto
+        else if Key = 'NumeroOF' then
+        begin
+          if Row.NumeroOF = 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NumeroOF;
+        end
+        else if Key = 'SerieOF' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.SerieOF
+        else if Key = 'CodigoOT' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.CodigoOT
+        else if Key = 'CodigoOP' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.CodigoOP
         else if Key = 'FechaCompromiso' then
         begin
           if Row.FechaCompromiso = 0 then
@@ -1496,6 +1648,13 @@ begin
           else
             tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.FechaNecesaria;
         end
+        else if Key = 'FechaEntrega' then
+        begin
+          if Row.FechaEntrega = 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.FechaEntrega;
+        end
         else if Key = 'Prioridad' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.Prioridad
         else if Key = 'CentroPreferente' then
@@ -1504,6 +1663,53 @@ begin
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.HorasEstimadas
         else if Key = 'EstadoERP' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.EstadoERP
+        else if Key = 'Orden' then
+        begin
+          if Row.Orden = 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.Orden;
+        end
+        else if Key = 'OpTiempoPreparacion' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpTiempoPreparacion)
+        else if Key = 'OpTiempoFabricacion' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpTiempoFabricacion)
+        else if Key = 'OpUnidadesHora' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpUnidadesHora)
+        else if Key = 'OpCosteHoraMaquina' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpCosteHoraMaquina)
+        else if Key = 'OpCosteHoraManoObra' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpCosteHoraManoObra)
+        else if Key = 'OpUnidadesFabricadas' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpUnidadesFabricadas)
+        else if Key = 'OpFechaInicioReal' then
+        begin
+          if Row.OpFechaInicioReal = 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpFechaInicioReal;
+        end
+        else if Key = 'OpFechaFinalReal' then
+        begin
+          if Row.OpFechaFinalReal = 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpFechaFinalReal;
+        end
+        else if Key = 'OpOperacionExterna' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpOperacionExterna
+        else if Key = 'OpCodigoProveedor' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpCodigoProveedor
+        else if Key = 'OpSeccionFabrica' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpSeccionFabrica
+        else if Key = 'OpStatusPlanificado' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpStatusPlanificado
+        else if Key = 'OpObservaciones' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OpObservaciones
+        else if Key = 'OpPctParaSigOperacion' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpPctParaSigOperacion)
+        else if Key = 'OpPctDedicacionOperario' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpPctDedicacionOperario)
         else if Key = 'OrigenERP' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.OrigenERP
         else if Key = 'ClaveERP' then
@@ -1562,6 +1768,17 @@ procedure TfrmBacklog.tvBacklogSelectionChanged(Sender: TcxCustomGridTableView);
 begin
   UpdateCountLabel;
   UpdateImpacto;
+end;
+
+procedure TfrmBacklog.tvBacklogCellDblClick(Sender: TcxCustomGridTableView;
+  ACellViewInfo: TcxGridTableDataCellViewInfo; AButton: TMouseButton;
+  AShift: TShiftState; var AHandled: Boolean);
+begin
+  // Doble-clic en una fila de OF abre el Visor de OF (jerarquia OF/OT/OP).
+  // No interferir con la columna de botones "Ver" (que tiene su propio editor).
+  if AButton <> mbLeft then Exit;
+  VerOFActual;
+  AHandled := True;
 end;
 
 // ---------------------------------------------------------------------------
@@ -2083,6 +2300,37 @@ begin
   finally
     Q.Free;
   end;
+
+  // Columnas nuevas que un layout antiguo (guardado antes de existir ellas)
+  // pudo dejar ocultas: las forzamos visibles para que aparezcan. El usuario
+  // puede reordenarlas/ocultarlas luego y se guardara a su gusto.
+  EnsureNewColumnsVisible(['SerieOF', 'NumeroOF', 'Orden',
+    'OpTiempoPreparacion', 'OpTiempoFabricacion', 'OpUnidadesHora',
+    'OpCosteHoraMaquina', 'OpCosteHoraManoObra', 'OpUnidadesFabricadas',
+    'OpFechaInicioReal', 'OpFechaFinalReal', 'OpOperacionExterna',
+    'OpCodigoProveedor', 'OpSeccionFabrica', 'OpStatusPlanificado',
+    'OpObservaciones', 'OpPctParaSigOperacion', 'OpPctDedicacionOperario']);
+end;
+
+// Marca como visibles las columnas cuyo Key este en AKeys (util tras restaurar
+// un layout antiguo que no las contenia).
+procedure TfrmBacklog.EnsureNewColumnsVisible(const AKeys: array of string);
+var
+  I, K: Integer;
+  Key: string;
+  Col: TcxGridColumn;
+begin
+  for I := 0 to tvBacklog.ColumnCount - 1 do
+  begin
+    Col := tvBacklog.Columns[I];
+    if not FColKeyByTag.TryGetValue(Col.Tag, Key) then Continue;
+    for K := 0 to High(AKeys) do
+      if SameText(Key, AKeys[K]) then
+      begin
+        Col.Visible := True;
+        Break;
+      end;
+  end;
 end;
 
 procedure TfrmBacklog.SaveUserLayout;
@@ -2192,6 +2440,34 @@ begin
   Result := -1;
   if (AGridIdx < 0) or (AGridIdx > High(FFilteredIndices)) then Exit;
   Result := FFilteredIndices[AGridIdx];
+end;
+
+// Abre el Visor de OF para la fila enfocada del grid. El visor resuelve la OF
+// raiz a partir del RawId (sea OF/OT/OP) y muestra toda la jerarquia.
+procedure TfrmBacklog.VerOFActual;
+var
+  GridIdx, RowIdx: Integer;
+  Row: TBacklogRow;
+begin
+  GridIdx := tvBacklog.Controller.FocusedRecordIndex;
+  RowIdx := GetRowFromGridIndex(GridIdx);
+  if (RowIdx < 0) or (RowIdx >= FRows.Count) then
+  begin
+    ShowMessage('Selecciona una fila del backlog para ver su OF.');
+    Exit;
+  end;
+  Row := FRows[RowIdx];
+  if Trim(Row.TipoOrigen) <> 'OF' then
+  begin
+    ShowMessage('El visor de OF solo aplica a filas de '#243'rdenes de fabricaci'#243'n.');
+    Exit;
+  end;
+  if Row.RawId <= 0 then
+  begin
+    ShowMessage('Esta fila no tiene un identificador v'#225'lido.');
+    Exit;
+  end;
+  TfrmOFViewer.Execute(Row.RawId);
 end;
 
 procedure TfrmBacklog.Guardar1Click(Sender: TObject);

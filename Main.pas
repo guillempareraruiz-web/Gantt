@@ -17,7 +17,8 @@ uses
   uHeatmapCargaOperario,
   uHeatmapEntregasVsCarga,
   uHistogramasOperarios,
-  uCustomFieldDefs, uCustomFieldEditor, uPlanningRules, uPlanningRulesEditor,
+  uCustomFieldDefs, uCustomFieldEditor, uCustomColsManager,
+  uPlanningRules, uPlanningRulesEditor,
   uCardLayoutSetRepo, uCardLayoutSetManager,
   uDashBoard, uVistaGantt, uFiniteCapacityPlanner,
   uBacklog, uFiniteCapacityOperaris, dxGDIPlusClasses,
@@ -72,6 +73,7 @@ type
     Links1: TMenuItem;
     N10: TMenuItem;
     CamposPersonalizados1: TMenuItem;
+    ColumnasPersonalizadas1: TMenuItem;
     ReglasPlanificacion1: TMenuItem;
     NCards1: TMenuItem;
     GestionCardLayouts1: TMenuItem;
@@ -87,6 +89,7 @@ type
     HeatmapEntregasVsCarga1: TMenuItem;
     HistogramasOperarios1: TMenuItem;
     AutoPlanificacion1: TMenuItem;
+    PlanificacionReglas1: TMenuItem;
     PesosScoring1: TMenuItem;
     CuadroPlanificacionDia1: TMenuItem;
     Configuracion1: TMenuItem;
@@ -135,6 +138,7 @@ type
     procedure OperacionHabilidades1Click(Sender: TObject);
     procedure OperationTypes1Click(Sender: TObject);
     procedure AutoPlanificacion1Click(Sender: TObject);
+    procedure PlanificacionReglas1Click(Sender: TObject);
     procedure PesosScoring1Click(Sender: TObject);
     procedure MostrarDashboard;
     procedure OcultarDashboard;
@@ -178,6 +182,7 @@ type
     procedure Centros1Click(Sender: TObject);
     procedure Maquinas1Click(Sender: TObject);
     procedure CamposPersonalizados1Click(Sender: TObject);
+    procedure ColumnasPersonalizadas1Click(Sender: TObject);
     procedure ReglasPlanificacion1Click(Sender: TObject);
     procedure GestionCardLayouts1Click(Sender: TObject);
     procedure Kanban1Click(Sender: TObject);
@@ -259,6 +264,8 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uDemoBacklog,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
+  uBacklogScheduler, uPlanningEngine, uPlanningEngineRules,
+  uReglasPlanParams, uReglasPlanPreview, uReglasPlanComparativa,
   uGestionOperacionHabilidades, uGestionOperationTypes,
   uCuadroPlanificacionDelDia, uGestionTurnos,
   uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
@@ -695,6 +702,12 @@ procedure TForm1.CamposPersonalizados1Click(Sender: TObject);
 begin
   if TfrmCustomFieldEditor.Execute(FCustomFieldDefs) then
     FCustomFieldDefs.SaveToFile;
+end;
+
+procedure TForm1.ColumnasPersonalizadas1Click(Sender: TObject);
+begin
+  // Punto unico: columnas personalizadas de Backlog/Centros/Operarios/Maquinas.
+  uCustomColsManager.TfrmCustomColsManager.Execute;
 end;
 
 procedure TForm1.ReglasPlanificacion1Click(Sender: TObject);
@@ -1891,6 +1904,216 @@ begin
     end;
     NotifyPlanModified(Ids);
   end;
+end;
+
+procedure TForm1.PlanificacionReglas1Click(Sender: TObject);
+var
+  Nodes: TArray<TNodeData>;
+  Inputs: TArray<TSchedInput>;
+  Centros: TArray<string>;
+  PerfilesCustom: TArray<string>;
+  LCentros: TList<string>;
+  NodeById: TDictionary<Integer, TNode>;            // DataId -> TNode (centro+duracion+fechas)
+  CentreCodeById: TDictionary<Integer, string>;     // CentreId -> CodigoCentro (auxiliar)
+  Centre: TCentreTreball;
+  GanttNodes: TArray<TNode>;
+  GNode: TNode;
+  Params: TSchedParams;
+  Global: TPriorityRuleSet;
+  Overrides: TArray<TCenterRuleOverride>;
+  PerfilSel: Integer;
+  Engine: TPriorityRuleEngine;
+  EngineRef: IPlanningEngine;
+  Res: TSchedResult;
+  I: Integer;
+  TituloRegla: string;
+  MR: TModalResult;
+
+  // Convierte los nodos (en su orden actual) a TSchedInput.
+  procedure NodesToInputs(const ANodes: TArray<TNodeData>);
+  var
+    LInputs: TList<TSchedInput>;
+    Node: TNodeData;
+    Input: TSchedInput;
+    GN: TNode;
+    HayGN: Boolean;
+    Dur: Double;
+    CodCentre: string;
+  begin
+    LInputs := TList<TSchedInput>.Create;
+    try
+      for Node in ANodes do
+      begin
+        Input := Default(TSchedInput);
+        Input.RawId := Node.DataId;
+        Input.CodigoDocumento := Node.Operacion;
+
+        // El nodo planificado (centro + duracion reales) se obtiene de NodesRepo
+        // via DataId. TNodeData.DurationMin / CentresTrabajo no siempre estan
+        // poblados; el TNode del repo de planificacion si.
+        HayGN := NodeById.TryGetValue(Node.DataId, GN);
+
+        // Centro: codigo resuelto desde TNode.CentreId. Fallbacks: centro
+        // permitido del TNodeData, o vacio (-> no planificable).
+        CodCentre := '';
+        if HayGN then
+          CentreCodeById.TryGetValue(GN.CentreId, CodCentre);
+        if (Trim(CodCentre) = '') and (Length(Node.CentresTrabajo) > 0) then
+          CodCentre := Node.CentresTrabajo[0];
+        Input.CentroPreferente := CodCentre;
+
+        // Duracion: la del nodo planificado (TNode) si la hay; si no, la del
+        // TNodeData. En horas para HorasEstimadas.
+        if HayGN and (GN.DurationMin > 0) then
+          Dur := GN.DurationMin
+        else
+          Dur := Node.DurationMin;
+        Input.HorasEstimadas := Dur / 60.0;
+
+        if Node.FechaNecesaria <> 0 then
+          Input.FechaCompromiso := Node.FechaNecesaria
+        else
+          Input.FechaCompromiso := Node.FechaEntrega;
+        Input.Prioridad := Node.Prioridad;
+        Input.NumeroOF := Node.NumeroOrdenFabricacion;
+        Input.SerieOF := Node.SerieFabricacion;
+        Input.CodigoArticulo := Node.CodigoArticulo;
+        Input.DescripcionArticulo := Node.DescripcionArticulo;
+        Input.FechaEntrega := Node.FechaEntrega;
+        Input.FechaNecesaria := Node.FechaNecesaria;
+        Input.RawItemClaveERP := Node.RawItemClaveERP;
+        Input.RawItemTipoOrigen := Node.RawItemTipoOrigen;
+        LInputs.Add(Input);
+      end;
+      Inputs := LInputs.ToArray;
+    finally
+      LInputs.Free;
+    end;
+  end;
+
+begin
+  if not Assigned(DMPlanner) or not Assigned(DMPlanner.NodeDataRepo) then
+  begin
+    ShowMessage('Repositorio de nodos no inicializado.');
+    Exit;
+  end;
+
+  Nodes := DMPlanner.NodeDataRepo.GetAllData;
+  if Length(Nodes) = 0 then
+  begin
+    ShowMessage('No hay nodos en el plan activo.');
+    Exit;
+  end;
+
+  CentreCodeById := TDictionary<Integer, string>.Create;
+  NodeById := TDictionary<Integer, TNode>.Create;
+  try
+    // Mapa auxiliar CentreId -> CodigoCentro y lista de TODOS los centros del
+    // plan (para el grid de overrides: siempre se muestran todos, tengan o no
+    // nodos planificados ahora mismo).
+    LCentros := TList<string>.Create;
+    try
+      if Assigned(DMPlanner.CentresRepo) then
+        for Centre in DMPlanner.CentresRepo.GetAll do
+        begin
+          CentreCodeById.AddOrSetValue(Centre.Id, Centre.CodiCentre);
+          if Trim(Centre.CodiCentre) <> '' then
+            LCentros.Add(Centre.CodiCentre);
+        end;
+      Centros := LCentros.ToArray;
+    finally
+      LCentros.Free;
+    end;
+
+    // Mapa DataId -> TNode (centro asignado + duracion + fechas planificadas).
+    // Fuente principal: NodesRepo (persistido en BD, no depende de tener el
+    // Gantt abierto). Fallback: nodos en memoria del Gantt si esta cargado.
+    if Assigned(DMPlanner.NodesRepo) then
+    begin
+      GanttNodes := DMPlanner.NodesRepo.GetAll;
+      for GNode in GanttNodes do
+        NodeById.AddOrSetValue(GNode.DataId, GNode);
+    end;
+    if (NodeById.Count = 0) and Assigned(FVistaGantt) and
+       Assigned(FVistaGantt.GanttControl) then
+    begin
+      GanttNodes := FVistaGantt.GanttControl.GetNodes;
+      for GNode in GanttNodes do
+        NodeById.AddOrSetValue(GNode.DataId, GNode);
+    end;
+
+    // 1) Inputs en orden original.
+    NodesToInputs(Nodes);
+
+    // Nombres de los perfiles custom de Reglas de Planificacion (para el combo).
+    SetLength(PerfilesCustom, 0);
+    if Assigned(FPlanningRuleEngine) then
+    begin
+      SetLength(PerfilesCustom, FPlanningRuleEngine.ProfileCount);
+      for I := 0 to FPlanningRuleEngine.ProfileCount - 1 do
+        PerfilesCustom[I] := FPlanningRuleEngine.GetProfile(I).Name;
+    end;
+
+    // 2) Configuracion (regla global / perfil custom + overrides + direccion).
+    Params := Default(TSchedParams);
+    Global := DefaultRuleSet;
+    SetLength(Overrides, 0);
+    PerfilSel := -1;
+    MR := TfrmReglasPlanParams.Execute(Centros, PerfilesCustom,
+      Params, Global, Overrides, PerfilSel);
+    if (MR <> mrOk) and (MR <> mrComparar) then
+      Exit;
+
+    // 3) Ejecutar (solo si NO es comparativa; en comparativa Inputs/Params ya
+    // estan listos y la ventana hara las 7 reglas tras el finally).
+    if MR <> mrComparar then
+    begin
+      if (PerfilSel >= 0) and Assigned(FPlanningRuleEngine) then
+      begin
+        // Perfil custom: ordenar los NODOS con el motor de Reglas de
+        // Planificacion (multi-campo + campos custom) y reconstruir los inputs
+        // en ESE orden. La cola ya viene ordenada -> apilar sin reordenar.
+        FPlanningRuleEngine.ActiveIndex := PerfilSel;
+        FPlanningRuleEngine.SortNodes(Nodes);
+        NodesToInputs(Nodes);
+        Params.Order := soPreordenado;
+        Res := RunAutoScheduling(Inputs, Params);
+        TituloRegla := FPlanningRuleEngine.GetProfile(PerfilSel).Name + ' (perfil)';
+      end
+      else
+      begin
+        // Regla canonica: via motor de reglas (ordena por centro + desempate).
+        Engine := TPriorityRuleEngine.Create;
+        EngineRef := Engine;  // gestion de vida via interface
+        Engine.Global := Global;
+        Engine.SetOverrides(Overrides);
+        Res := EngineRef.Schedule(Inputs, Params);
+        TituloRegla := PriorityRuleToStr(Global.Principal);
+      end;
+    end;
+  finally
+    CentreCodeById.Free;
+    NodeById.Free;
+  end;
+
+  // Modo comparativa: abrir la ventana con las 7 reglas. Inputs/Params ya estan
+  // listos (los maps de centro ya se aplicaron al construir Inputs).
+  if MR = mrComparar then
+  begin
+    TfrmReglasPlanComparativa.Execute(Inputs, Params);
+    Exit;
+  end;
+
+  // Aviso util: si NINGUNA operacion se pudo planificar y todas quedaron sin
+  // centro, el problema son los datos (nodos sin centro asignado), no el motor.
+  if (Res.TotalPlanificados = 0) and (Length(Res.Items) > 0) then
+    ShowMessage(
+      'Ninguna operaci'#243'n se ha podido planificar.' + sLineBreak +
+      'Comprueba que las operaciones del plan tengan centro asignado ' +
+      'y duraci'#243'n. El motor solo reordena lo que ya esta planificado.');
+
+  // 4) Preview (sin aplicar). El commit queda para una fase posterior.
+  TfrmReglasPlanPreview.Execute(Res, TituloRegla);
 end;
 
 // Handlers EditarLinksClick / GestionOperarisClick / AssignarOperarisClick

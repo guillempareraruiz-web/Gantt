@@ -3,7 +3,7 @@ unit uErpTypes;
 interface
 
 uses
-  System.SysUtils, System.DateUtils,
+  System.SysUtils, System.DateUtils, System.Variants,
   Winapi.Windows, Winapi.Messages,
   System.Classes, System.Types, uCentreCalendar, uGAnttTypes,
   Vcl.Graphics;
@@ -418,6 +418,28 @@ type
   // CodigoArticulo. La planificacio normalment treballa amb aquesta cabecera
   // i resol operacions per la formula referenciada.
   // ==========================================================================
+  // Valor de un campo custom poblado desde el ERP via mapeo (FS_PL_Cfg_ErpFieldMap).
+  // FieldKey = el de la columna custom; Value = lo leido del ERP. Se escribe luego
+  // en FS_PL_RawItem_Extra con Source='ERP' durante la sincronizacion.
+  TErpExtraValue = record
+    FieldKey: string;
+    Value: Variant;
+  end;
+
+  // Mapeo de una columna custom (FieldKey) a una expresion SQL libre contra el
+  // ERP + JOINs opcionales. Persistido en FS_PL_Cfg_ErpFieldMap (BD Planner).
+  // El reader ERP solo lo RECIBE para inyectarlo; quien lo carga es la capa
+  // Planner (uErpSyncRepo), que es la que conoce esa tabla.
+  TErpFieldMap = record
+    GridId: string;          // 'BACKLOG'
+    FieldKey: string;        // = FieldKey de la columna custom
+    ErpSource: string;       // 'SAGE200'
+    SqlExpression: string;   // expresion SQL libre
+    SqlJoins: string;        // JOINs extra (puede ser vacio)
+    AppliesToNivel: Integer; // 1/2/3; 0 = no especificado
+    Activo: Boolean;
+  end;
+
   TOrdenFabricacionErp = record
     EjercicioFabricacion: SmallInt;
     SerieFabricacion: string;
@@ -440,6 +462,7 @@ type
     BloqueoPlanificacion: Boolean;
     CodigoProyecto: string;
     Observaciones: string;
+    ExtraFields: TArray<TErpExtraValue>;   // campos custom mapeados (Nivel 1)
   end;
 
   // ==========================================================================
@@ -467,6 +490,7 @@ type
     EjercicioFabricacion: SmallInt;
     SerieFabricacion: string;
     NumeroFabricacion: Integer;
+    ExtraFields: TArray<TErpExtraValue>;   // campos custom mapeados (Nivel 2)
   end;
 
   // ==========================================================================
@@ -497,6 +521,12 @@ type
     FechaFinalReal: TDateTime;
     EstadoOperacion: Integer;
     StatusPlanificado: Boolean;
+    // Campos extra de alto valor para el backlog (planificar/ordenar/filtrar).
+    UnidadesHora: Double;
+    CodigoProveedor: string;     // si OperacionExterna: proveedor subcontratista
+    SeccionFabrica: string;
+    Observaciones: string;
+    ExtraFields: TArray<TErpExtraValue>;   // campos custom mapeados (Nivel 3)
   end;
 
   // ==========================================================================
@@ -975,6 +1005,28 @@ type
     HorasEstimadas: Double;      // Nivel 3 = horas planificables
     EstadoERP: string;
     Observaciones: string;
+
+    // Bloque de campos de la operacion (Nivel 3 / OP) de alto valor para el
+    // backlog. Solo se rellenan en items OP; vacios/0 en OF y OT.
+    OpTiempoPreparacion: Double;
+    OpTiempoFabricacion: Double;
+    OpUnidadesHora: Double;
+    OpCosteHoraMaquina: Double;
+    OpCosteHoraManoObra: Double;
+    OpUnidadesFabricadas: Double;
+    OpFechaInicioReal: TDateTime;
+    OpFechaFinalReal: TDateTime;
+    OpOperacionExterna: Boolean;
+    OpCodigoProveedor: string;
+    OpSeccionFabrica: string;
+    OpStatusPlanificado: Boolean;
+    OpObservaciones: string;
+    OpPctParaSigOperacion: Double;
+    OpPctDedicacionOperario: Double;
+
+    // Campos custom poblados desde el ERP via mapeo (FS_PL_Cfg_ErpFieldMap).
+    // Vacio si no hay mapeo activo para el nivel de este item.
+    ExtraFields: TArray<TErpExtraValue>;
   end;
 
 implementation

@@ -24,9 +24,14 @@ type
   TSchedOrder  = uBacklogScheduler.TSchedOrder;
   TSchedStatus = uBacklogScheduler.TSchedStatus;
 
+  // Reexport dels tipus de regles (motor PRO de planificacio per regles).
+  TPriorityRule    = uBacklogScheduler.TPriorityRule;
+  TPriorityRuleSet = uBacklogScheduler.TPriorityRuleSet;
+
   TPlanningEngineKind = (
     pekForward,        // FCS forward
     pekBackward,       // FCS backward
+    pekRules,          // FCS + ordenacio per regles de prioritat (PRO)
     pekBottleneck,     // futur: bottleneck-based
     pekDBR,            // futur: drum-buffer-rope
     pekKanbanPull,     // futur: pull amb WIP limits per estacio
@@ -57,6 +62,7 @@ begin
   case K of
     pekForward:      Result := 'Forward (FCS)';
     pekBackward:     Result := 'Backward (FCS)';
+    pekRules:        Result := 'Reglas de prioridad';
     pekBottleneck:   Result := 'Bottleneck-based';
     pekDBR:          Result := 'Drum-Buffer-Rope';
     pekKanbanPull:   Result := 'Kanban pull';

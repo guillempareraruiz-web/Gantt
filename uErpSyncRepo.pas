@@ -17,7 +17,7 @@ uses
   System.SysUtils, System.Classes, System.Generics.Collections,
   System.Hash,
   Data.Win.ADODB, Data.DB,
-  uErpReader, uErpTypes, uErpSyncTypes;
+  uErpReader, uErpTypes, uErpSyncTypes, uErpFieldMapRepo;
 
 type
   TErpSyncRepo = class
@@ -74,6 +74,11 @@ type
       out AByClave: TDictionary<string, TRawItemErp>);
     procedure ApplyRawItem(const ARow: TSyncRowRawItem;
       const AParentLocalIds: TDictionary<string, Int64>);
+    // Escribe los campos custom poblados desde el ERP (ExtraFields) en
+    // FS_PL_RawItem_Extra con Source='ERP'. MERGE que respeta los overrides
+    // manuales (no pisa filas con Source='MANUAL').
+    procedure ApplyRawItemExtras(ARawItemId: Int64;
+      const AExtras: TArray<TErpExtraValue>);
     procedure MarkRawItemObsoleto(ALocalRawItemId: Int64);
   public
     constructor Create(AConnection: TADOConnection; ACodigoEmpresa: SmallInt;
@@ -120,7 +125,7 @@ type
 implementation
 
 uses
-  System.StrUtils, System.DateUtils;
+  System.StrUtils, System.DateUtils, System.Variants;
 
 { TErpSyncRepo }
 
@@ -2471,6 +2476,9 @@ function TErpSyncRepo.HashRawItem(const Item: TRawItemErp): string;
 var
   Buf: string;
   FS: TFormatSettings;
+  Extras: TArray<string>;
+  EV: TErpExtraValue;
+  I: Integer;
 begin
   FS := TFormatSettings.Invariant;
   Buf :=
@@ -2489,7 +2497,38 @@ begin
     IntToStr(Item.Prioridad) + '|' + IntToStr(Item.Orden) + '|' +
     Item.CentroPreferente + '|' +
     FloatToStr(Item.HorasEstimadas, FS) + '|' +
-    Item.EstadoERP;
+    Item.EstadoERP + '|' +
+    // Bloque OP: que un cambio en estos campos marque ssActualizado y se
+    // reescriba (p.ej. UnidadesFabricadas avanza, cambia el coste...).
+    FloatToStr(Item.OpTiempoPreparacion, FS) + '|' +
+    FloatToStr(Item.OpTiempoFabricacion, FS) + '|' +
+    FloatToStr(Item.OpUnidadesHora, FS) + '|' +
+    FloatToStr(Item.OpCosteHoraMaquina, FS) + '|' +
+    FloatToStr(Item.OpCosteHoraManoObra, FS) + '|' +
+    FloatToStr(Item.OpUnidadesFabricadas, FS) + '|' +
+    FormatDateTime('yyyymmddhhnnss', Item.OpFechaInicioReal, FS) + '|' +
+    FormatDateTime('yyyymmddhhnnss', Item.OpFechaFinalReal, FS) + '|' +
+    BoolToStr(Item.OpOperacionExterna, True) + '|' +
+    Item.OpCodigoProveedor + '|' + Item.OpSeccionFabrica + '|' +
+    BoolToStr(Item.OpStatusPlanificado, True) + '|' +
+    Item.OpObservaciones + '|' +
+    FloatToStr(Item.OpPctParaSigOperacion, FS) + '|' +
+    FloatToStr(Item.OpPctDedicacionOperario, FS);
+
+  // Campos custom mapeados desde el ERP: si cambia el valor de uno (o aparece
+  // un mapeo nuevo), el hash cambia y el item pasa a ssActualizado, de modo
+  // que el sync reescribe FS_PL_RawItem_Extra. Se ordenan por FieldKey para
+  // que el hash no dependa del orden de los mapeos.
+  SetLength(Extras, Length(Item.ExtraFields));
+  for I := 0 to High(Item.ExtraFields) do
+  begin
+    EV := Item.ExtraFields[I];
+    Extras[I] := EV.FieldKey + '=' + VarToStrDef(EV.Value, '');
+  end;
+  TArray.Sort<string>(Extras);
+  for I := 0 to High(Extras) do
+    Buf := Buf + '|' + Extras[I];
+
   Result := THashSHA1.GetHashString(Buf);
 end;
 
@@ -2612,9 +2651,20 @@ var
   Row, LocalRow: TSyncRowRawItem;
   Item, FullData: TRawItemErp;
   LocalFull: TDictionary<string, TRawItemErp>;
+  MapRepo: TErpFieldMapRepo;
+  Maps: TArray<TErpFieldMap>;
 begin
   SetLength(Result, 0);
-  ErpItems := AReader.ReadBacklogOF(AEjercicio);
+  // Los mapeos custom viven en la BD Planner (FS_PL_Cfg_ErpFieldMap); se cargan
+  // aqui con FConnection y se pasan al reader, que solo los inyecta. Asi el
+  // reader ERP no necesita conocer ninguna tabla FS_PL_*.
+  MapRepo := TErpFieldMapRepo.Create(FConnection, FCodigoEmpresa);
+  try
+    Maps := MapRepo.LoadActive('BACKLOG');
+  finally
+    MapRepo.Free;
+  end;
+  ErpItems := AReader.ReadBacklogOF(AEjercicio, Maps);
   LoadLocalRawItemsByClave('OF ', Locals);
   ErpSeen := TDictionary<string, Boolean>.Create;
   ResList := TList<TSyncRowRawItem>.Create;
@@ -2706,6 +2756,9 @@ var
   ParentId: Int64;
   FS: TFormatSettings;
   CentroPrefSql: string;
+  IsOp: Boolean;
+  // Bloque OP: columnas y valores (solo en Nivel 3; NULL en OF/OT).
+  OpCols, OpValsIns, OpSetUpd: string;
 
   function DateOrNull(D: TDateTime): string;
   begin
@@ -2713,6 +2766,34 @@ var
       Result := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', D) + ''''
     else
       Result := 'NULL';
+  end;
+
+  // Decimal o NULL (NULL si no es OP, para no ensuciar OF/OT con ceros).
+  function NumOrNull(V: Double): string;
+  begin
+    if IsOp then Result := FloatToStr(V, FS) else Result := 'NULL';
+  end;
+
+  // Fecha OP o NULL.
+  function OpDateOrNull(D: TDateTime): string;
+  begin
+    if IsOp and (D > 0) then
+      Result := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', D) + ''''
+    else
+      Result := 'NULL';
+  end;
+
+  // Bit OP o NULL.
+  function BitOrNull(B: Boolean): string;
+  begin
+    if not IsOp then Result := 'NULL'
+    else if B then Result := '1' else Result := '0';
+  end;
+
+  // Texto OP o NULL.
+  function StrOrNull(const S: string): string;
+  begin
+    if IsOp and (Trim(S) <> '') then Result := SqlStr(S) else Result := 'NULL';
   end;
 
 begin
@@ -2750,6 +2831,48 @@ begin
   else
     CentroPrefSql := SqlStr(ARow.ErpData.CentroPreferente);
 
+  // Bloque OP: solo aplica a Nivel 3 (operaciones). En OF/OT, los helpers
+  // *OrNull devuelven NULL, asi que estas columnas quedan vacias en esos niveles.
+  IsOp := ARow.ErpData.Nivel = 3;
+  OpCols :=
+    'OpTiempoPreparacion, OpTiempoFabricacion, OpUnidadesHora, ' +
+    'OpCosteHoraMaquina, OpCosteHoraManoObra, OpUnidadesFabricadas, ' +
+    'OpFechaInicioReal, OpFechaFinalReal, OpOperacionExterna, ' +
+    'OpCodigoProveedor, OpSeccionFabrica, OpStatusPlanificado, ' +
+    'OpObservaciones, OpPctParaSigOperacion, OpPctDedicacionOperario';
+  OpValsIns :=
+    NumOrNull(ARow.ErpData.OpTiempoPreparacion) + ', ' +
+    NumOrNull(ARow.ErpData.OpTiempoFabricacion) + ', ' +
+    NumOrNull(ARow.ErpData.OpUnidadesHora) + ', ' +
+    NumOrNull(ARow.ErpData.OpCosteHoraMaquina) + ', ' +
+    NumOrNull(ARow.ErpData.OpCosteHoraManoObra) + ', ' +
+    NumOrNull(ARow.ErpData.OpUnidadesFabricadas) + ', ' +
+    OpDateOrNull(ARow.ErpData.OpFechaInicioReal) + ', ' +
+    OpDateOrNull(ARow.ErpData.OpFechaFinalReal) + ', ' +
+    BitOrNull(ARow.ErpData.OpOperacionExterna) + ', ' +
+    StrOrNull(ARow.ErpData.OpCodigoProveedor) + ', ' +
+    StrOrNull(ARow.ErpData.OpSeccionFabrica) + ', ' +
+    BitOrNull(ARow.ErpData.OpStatusPlanificado) + ', ' +
+    StrOrNull(ARow.ErpData.OpObservaciones) + ', ' +
+    NumOrNull(ARow.ErpData.OpPctParaSigOperacion) + ', ' +
+    NumOrNull(ARow.ErpData.OpPctDedicacionOperario);
+  OpSetUpd :=
+    'OpTiempoPreparacion = ' + NumOrNull(ARow.ErpData.OpTiempoPreparacion) + ', ' +
+    'OpTiempoFabricacion = ' + NumOrNull(ARow.ErpData.OpTiempoFabricacion) + ', ' +
+    'OpUnidadesHora = ' + NumOrNull(ARow.ErpData.OpUnidadesHora) + ', ' +
+    'OpCosteHoraMaquina = ' + NumOrNull(ARow.ErpData.OpCosteHoraMaquina) + ', ' +
+    'OpCosteHoraManoObra = ' + NumOrNull(ARow.ErpData.OpCosteHoraManoObra) + ', ' +
+    'OpUnidadesFabricadas = ' + NumOrNull(ARow.ErpData.OpUnidadesFabricadas) + ', ' +
+    'OpFechaInicioReal = ' + OpDateOrNull(ARow.ErpData.OpFechaInicioReal) + ', ' +
+    'OpFechaFinalReal = ' + OpDateOrNull(ARow.ErpData.OpFechaFinalReal) + ', ' +
+    'OpOperacionExterna = ' + BitOrNull(ARow.ErpData.OpOperacionExterna) + ', ' +
+    'OpCodigoProveedor = ' + StrOrNull(ARow.ErpData.OpCodigoProveedor) + ', ' +
+    'OpSeccionFabrica = ' + StrOrNull(ARow.ErpData.OpSeccionFabrica) + ', ' +
+    'OpStatusPlanificado = ' + BitOrNull(ARow.ErpData.OpStatusPlanificado) + ', ' +
+    'OpObservaciones = ' + StrOrNull(ARow.ErpData.OpObservaciones) + ', ' +
+    'OpPctParaSigOperacion = ' + NumOrNull(ARow.ErpData.OpPctParaSigOperacion) + ', ' +
+    'OpPctDedicacionOperario = ' + NumOrNull(ARow.ErpData.OpPctDedicacionOperario);
+
   case ARow.Status of
     ssNuevo:
       begin
@@ -2763,7 +2886,8 @@ begin
           '  FechaCompromiso, FechaNecesaria, FechaInicioPrev, FechaFinPrev, ' +
           '  FechaLanzamiento, FechaPedido, ' +
           '  Prioridad, Orden, CentroPreferente, HorasEstimadas, ' +
-          '  EstadoERP, Observaciones, Activo, LastErpHash, LastErpSyncAt) VALUES (' +
+          '  EstadoERP, Observaciones, ' + OpCols + ', ' +
+          '  Activo, LastErpHash, LastErpSyncAt) VALUES (' +
           EmpStr + ', ' + SqlStr(ARow.ErpData.TipoOrigen) + ', ' + NivelStr + ', ' +
           ParentClauseInsert + ', ' + SqlStr(FErpSistema) + ', ' +
           SqlStr(ARow.ErpData.ClaveERP) + ', ' + SqlStr(ARow.ErpData.ClaveERPPadre) + ', ' +
@@ -2780,6 +2904,7 @@ begin
           FechaLanzStr + ', ' + FechaPedStr + ', ' +
           PriStr + ', ' + OrdStr + ', ' + CentroPrefSql + ', ' + HorasStr + ', ' +
           SqlStr(ARow.ErpData.EstadoERP) + ', ' + SqlStr(ARow.ErpData.Observaciones) + ', ' +
+          OpValsIns + ', ' +
           '1, ' + SqlStr(ARow.NewHash) + ', SYSUTCDATETIME())';
         ExecSql(Sql);
       end;
@@ -2814,6 +2939,7 @@ begin
           '  HorasEstimadas = ' + HorasStr + ', ' +
           '  EstadoERP = ' + SqlStr(ARow.ErpData.EstadoERP) + ', ' +
           '  Observaciones = ' + SqlStr(ARow.ErpData.Observaciones) + ', ' +
+          '  ' + OpSetUpd + ', ' +
           '  Activo = 1, ' +
           '  LastErpHash = ' + SqlStr(ARow.NewHash) + ', ' +
           '  LastErpSyncAt = SYSUTCDATETIME() ' +
@@ -2821,6 +2947,58 @@ begin
           '  AND RawItemId = ' + IntToStr(ARow.LocalRawItemId);
         ExecSql(Sql);
       end;
+  end;
+end;
+
+procedure TErpSyncRepo.ApplyRawItemExtras(ARawItemId: Int64;
+  const AExtras: TArray<TErpExtraValue>);
+var
+  EV: TErpExtraValue;
+  ValSql, Sql: string;
+  FS: TFormatSettings;
+
+  // Convierte el Variant leido del ERP a literal SQL para NVARCHAR(MAX).
+  function VariantToSqlValue(const V: Variant): string;
+  begin
+    if VarIsNull(V) or VarIsEmpty(V) then
+      Exit('NULL');
+    case VarType(V) and varTypeMask of
+      varDate:
+        Result := SqlStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', VarToDateTime(V)));
+      varSingle, varDouble, varCurrency:
+        Result := SqlStr(FloatToStr(Double(V), FS));
+      varBoolean:
+        if Boolean(V) then Result := SqlStr('1') else Result := SqlStr('0');
+    else
+      Result := SqlStr(VarToStr(V));
+    end;
+  end;
+
+begin
+  if (ARawItemId <= 0) or (Length(AExtras) = 0) then Exit;
+  FS := TFormatSettings.Invariant;
+  for EV in AExtras do
+  begin
+    if Trim(EV.FieldKey) = '' then Continue;
+    ValSql := VariantToSqlValue(EV.Value);
+    // MERGE: solo escribe/actualiza si la fila no es un override MANUAL.
+    // Asi una importacion ERP nunca pisa lo que el usuario fijo a mano.
+    Sql :=
+      'MERGE FS_PL_RawItem_Extra AS T ' +
+      'USING (SELECT ' + IntToStr(FCodigoEmpresa) + ' AS CodigoEmpresa, ' +
+      IntToStr(ARawItemId) + ' AS RawItemId, ' +
+      SqlStr(EV.FieldKey) + ' AS FieldKey) AS S ' +
+      '  ON (T.CodigoEmpresa = S.CodigoEmpresa AND T.RawItemId = S.RawItemId ' +
+      '      AND T.FieldKey = S.FieldKey) ' +
+      'WHEN MATCHED AND T.Source <> ''MANUAL'' THEN UPDATE SET ' +
+      '  FieldValue = ' + ValSql + ', Source = ''ERP'', ' +
+      '  UpdatedBy = ' + SqlStr(FErpSistema) + ', UpdatedAt = SYSUTCDATETIME() ' +
+      'WHEN NOT MATCHED THEN INSERT ' +
+      '  (CodigoEmpresa, RawItemId, FieldKey, FieldValue, Source, UpdatedBy, UpdatedAt) ' +
+      '  VALUES (' + IntToStr(FCodigoEmpresa) + ', ' + IntToStr(ARawItemId) + ', ' +
+      SqlStr(EV.FieldKey) + ', ' + ValSql + ', ''ERP'', ' +
+      SqlStr(FErpSistema) + ', SYSUTCDATETIME());';
+    ExecSql(Sql);
   end;
 end;
 
@@ -2881,6 +3059,7 @@ begin
           ApplyRawItem(Row, ParentIds);
           if Row.Status = ssNuevo then
           begin
+            NewId := 0;
             // Recupera el nou RawItemId per si te fills en aquest mateix lot
             Q.SQL.Text :=
               'SELECT RawItemId FROM FS_PL_Raw_Item ' +
@@ -2895,7 +3074,12 @@ begin
               ParentIds.AddOrSetValue(Row.ErpData.ClaveERP, NewId);
             end;
             Q.Close;
-          end;
+            // Camps custom poblats des de l'ERP per a l'item nou.
+            ApplyRawItemExtras(NewId, Row.ErpData.ExtraFields);
+          end
+          else
+            // ssActualizado: ja tenim el RawItemId local.
+            ApplyRawItemExtras(Row.LocalRawItemId, Row.ErpData.ExtraFields);
           Inc(Result.Aplicados);
         end;
       except

@@ -284,6 +284,10 @@ object Form1: TForm1
         Caption = 'Auto-planificaci'#243'n (scoring)...'
         OnClick = AutoPlanificacion1Click
       end
+      object PlanificacionReglas1: TMenuItem
+        Caption = 'Planificaci'#243'n por reglas...'
+        OnClick = PlanificacionReglas1Click
+      end
       object N2: TMenuItem
         Caption = '-'
       end
@@ -333,8 +337,12 @@ object Form1: TForm1
         Caption = '-'
       end
       object CamposPersonalizados1: TMenuItem
-        Caption = 'Campos Personalizados'
+        Caption = 'Campos de nodos (reglas/cards)'
         OnClick = CamposPersonalizados1Click
+      end
+      object ColumnasPersonalizadas1: TMenuItem
+        Caption = 'Columnas personalizadas'
+        OnClick = ColumnasPersonalizadas1Click
       end
       object ReglasPlanificacion1: TMenuItem
         Caption = 'Reglas de Planificaci'#243'n'

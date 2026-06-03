@@ -29,6 +29,15 @@ type
     // Asegura connexio amb l'ERP. Llanca Exception si no es pot connectar.
     procedure EnsureConnected;
 
+    // Prova una expressio SQL del mapeo de camps custom contra l'ERP (backlog):
+    // executa un SELECT TOP de prova amb l'expressio i els JOINs indicats sobre
+    // la consulta base d'OFs i retorna un text amb mostres de valors o l'error.
+    // Pensat per al boto "Probar" de la UI de mapeo (perfil integrador).
+    // Prueba una expresion SQL de mapeo. ANivel (1=OF, 2=OT, 3=OP) elige la
+    // tabla/alias contra la que se evalua (of/ot/op).
+    function ProbarExpresionSql(const ASelectExpr, AJoins: string;
+      ANivel: Integer): string;
+
     // -- PEDIDOS DE CLIENTE ------------------------------------------------
     // Retorna la cabecera del pedido. Si no existeix, Result.Encontrado = False.
     function ReadPedidoCabecera(const ASerie: string; ANumero: Integer;
@@ -138,7 +147,11 @@ type
     // uErpSyncRepo.ApplyRawItems amb les seleccions de l'usuari.
     // Si AEjercicio<=0, llegeix automaticament tots els exercicis amb OFs
     // vives (Estado IN 0,1) sense filtrar per any concret.
-    function ReadBacklogOF(AEjercicio: SmallInt): TArray<TRawItemErp>;
+    // AExtraMaps: mapeos de columnas custom (FS_PL_Cfg_ErpFieldMap) que la capa
+    // Planner carga y pasa aqui; el reader solo los inyecta en sus queries. El
+    // reader NO conoce esa tabla (vive en la BD Planner, no en la del ERP).
+    function ReadBacklogOF(AEjercicio: SmallInt;
+      const AExtraMaps: TArray<TErpFieldMap> = nil): TArray<TRawItemErp>;
 
     // -- PROYECTOS / TAREAS -----------------------------------------------
     function ReadProyectos(const AFiltroCodigo: string): TArray<TProyectoErp>;
