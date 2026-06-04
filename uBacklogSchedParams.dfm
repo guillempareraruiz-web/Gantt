@@ -2,7 +2,7 @@ object frmBacklogSchedParams: TfrmBacklogSchedParams
   Left = 0
   Top = 0
   Caption = 'Par'#225'metros de auto-planificaci'#243'n'
-  ClientHeight = 320
+  ClientHeight = 510
   ClientWidth = 460
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
@@ -53,7 +53,7 @@ object frmBacklogSchedParams: TfrmBacklogSchedParams
   end
   object pnlBottom: TPanel
     Left = 0
-    Top = 280
+    Top = 470
     Width = 460
     Height = 40
     Align = alBottom
@@ -84,7 +84,7 @@ object frmBacklogSchedParams: TfrmBacklogSchedParams
     Left = 0
     Top = 56
     Width = 460
-    Height = 224
+    Height = 414
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 2
@@ -178,6 +178,96 @@ object frmBacklogSchedParams: TfrmBacklogSchedParams
       Width = 170
       Height = 23
       TabOrder = 4
+    end
+    object lblPlacement: TLabel
+      Left = 20
+      Top = 220
+      Width = 200
+      Height = 15
+      Caption = 'Colocaci'#243'n frente a nodos existentes'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -12
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
+      ParentFont = False
+    end
+    object cbPlacement: TComboBox
+      Left = 20
+      Top = 240
+      Width = 420
+      Height = 23
+      Style = csDropDownList
+      TabOrder = 5
+    end
+    object lblHuecoMin: TLabel
+      Left = 20
+      Top = 276
+      Width = 230
+      Height = 15
+      Caption = 'Hueco m'#237'nimo para insertar (min)'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object seHuecoMin: TSpinEdit
+      Left = 300
+      Top = 272
+      Width = 80
+      Height = 24
+      MaxValue = 100000
+      MinValue = 0
+      TabOrder = 6
+      Value = 30
+    end
+    object lblPctNodo: TLabel
+      Left = 20
+      Top = 308
+      Width = 230
+      Height = 15
+      Caption = '% m'#237'nimo del nodo que debe caber'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object sePctNodo: TSpinEdit
+      Left = 300
+      Top = 304
+      Width = 80
+      Height = 24
+      MaxValue = 100
+      MinValue = 0
+      TabOrder = 7
+      Value = 50
+    end
+    object lblDistMin: TLabel
+      Left = 20
+      Top = 340
+      Width = 230
+      Height = 15
+      Caption = 'M'#237'nima distancia entre nodos (min)'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object seDistMin: TSpinEdit
+      Left = 300
+      Top = 336
+      Width = 80
+      Height = 24
+      MaxValue = 100000
+      MinValue = 0
+      TabOrder = 8
+      Value = 0
     end
   end
 end

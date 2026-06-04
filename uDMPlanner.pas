@@ -65,6 +65,12 @@ type
     procedure LoadNodes;
     function CountTable(const ATableName: string): Integer;
 
+    // Desplanifica (borra del plan) los nodos indicados: elimina dependencias,
+    // asignaciones de operarios, NodeData y el propio Node, en una transaccion.
+    // No comprueba bloqueo (eso es responsabilidad del llamador). Devuelve el
+    // numero de nodos borrados. Compartida por Backlog y Gantt.
+    function DesplanificarNodes(const ANodeIds: TArray<Integer>): Integer;
+
     property CalendarsRepo: TCalendarsRepo read FCalendarsRepo;
     property CentresRepo: TCentresRepo read FCentresRepo;
     property NodesRepo: TNodesRepo read FNodesRepo;
@@ -227,6 +233,66 @@ begin
       Result := Q.FieldByName('N').AsInteger;
   finally
     Q.Free;
+  end;
+end;
+
+function TDMPlanner.DesplanificarNodes(const ANodeIds: TArray<Integer>): Integer;
+var
+  Cmd: TADOCommand;
+  IdList, CE: string;
+  I: Integer;
+begin
+  Result := 0;
+  if Length(ANodeIds) = 0 then Exit;
+  if not IsConnected then Exit;
+
+  IdList := '';
+  for I := 0 to High(ANodeIds) do
+  begin
+    if IdList <> '' then IdList := IdList + ',';
+    IdList := IdList + IntToStr(ANodeIds[I]);
+  end;
+  CE := IntToStr(FCodigoEmpresa);
+
+  ADOConnection.BeginTrans;
+  try
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+
+      // Dependencias que referencian estos nodos
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_Dependency WHERE CodigoEmpresa = ' + CE +
+        ' AND (FromNodeId IN (' + IdList + ') OR ToNodeId IN (' + IdList + '))';
+      Cmd.Execute;
+
+      // Asignaciones de operarios
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_OperatorAssignment WHERE CodigoEmpresa = ' + CE +
+        ' AND NodeId IN (' + IdList + ')';
+      Cmd.Execute;
+
+      // NodeData
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_NodeData WHERE CodigoEmpresa = ' + CE +
+        ' AND NodeId IN (' + IdList + ')';
+      Cmd.Execute;
+
+      // Nodos.
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE +
+        ' AND NodeId IN (' + IdList + ')';
+      Cmd.Execute;
+      // TADOCommand no expone RowsAffected; devolvemos los solicitados (el
+      // numero de nodos borrados coincide salvo que algun id ya no existiera).
+      Result := Length(ANodeIds);
+    finally
+      Cmd.Free;
+    end;
+    ADOConnection.CommitTrans;
+  except
+    ADOConnection.RollbackTrans;
+    raise;
   end;
 end;
 

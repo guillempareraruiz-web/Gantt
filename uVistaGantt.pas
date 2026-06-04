@@ -223,6 +223,8 @@ type
     miGestionOperarios: TMenuItem;
     SepOperarios2: TMenuItem;
     miEditarLinks: TMenuItem;
+    SepDesplanificar1: TMenuItem;
+    miDesplanificar: TMenuItem;
     N3: TMenuItem;
     Indicadores1: TMenuItem;
     Label28: TLabel;
@@ -267,6 +269,7 @@ type
     procedure btnDesasignarSelClick(Sender: TObject);
     procedure miGestionOperariosClick(Sender: TObject);
     procedure miEditarLinksClick(Sender: TObject);
+    procedure miDesplanificarClick(Sender: TObject);
     procedure CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
     procedure Button27Click(Sender: TObject);
 
@@ -1380,7 +1383,10 @@ begin
   if DMPlanner.NodeDataRepo.TryGetById(n.DataId, D) then
   begin
     D.LibreMoviment := LibreMovimiento1.Checked;
+    D.Modified := True;   // marcar dirty para que el AutoSaver lo persista
     DMPlanner.NodeDataRepo.AddOrUpdate(D);
+    if Assigned(Form1) then
+      Form1.NotifyPlanModified([n.DataId]);
   end;
 end;
 
@@ -1408,6 +1414,7 @@ begin
   node := FGanttControl.SelectedNode;
   node.Enabled := not node.Enabled;
   FGanttControl.UpdateNode(idx, node);
+  FGanttControl.PersistNodeChange(idx);  // persistir el cambio de bloqueo
 end;
 
 procedure TfrmVistaGantt.GanttFechaBloqueoChanged(Sender: TObject);
@@ -2344,6 +2351,79 @@ begin
   FGanttControl.Invalidate;
   if Assigned(Form1) then
     Form1.NotifyPlanModified(Ids);
+end;
+
+procedure TfrmVistaGantt.miDesplanificarClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  Ids: TArray<Integer>;
+  I, NBloqueados, Borrados: Integer;
+  N: TNode;
+  Bloqueo: TDateTime;
+  TieneBloqueo: Boolean;
+  L: TList<Integer>;
+  Msg: string;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then
+  begin
+    ShowMessage('Selecciona al menos un nodo en el Gantt para desplanificar.');
+    Exit;
+  end;
+
+  TieneBloqueo := DMPlanner.CurrentProjectTieneBloqueo;
+  Bloqueo := DMPlanner.CurrentProjectFechaBloqueo;
+
+  // Filtrar los nodos bloqueados (anteriores a la fecha de bloqueo): no se
+  // pueden desplanificar porque su carga ya esta consolidada.
+  NBloqueados := 0;
+  L := TList<Integer>.Create;
+  try
+    for I := 0 to High(SelIndexes) do
+    begin
+      N := FGanttControl.GetNodeAt(SelIndexes[I]);
+      if TieneBloqueo and (N.StartTime < Bloqueo) then
+        Inc(NBloqueados)
+      else
+        L.Add(N.DataId);
+    end;
+    Ids := L.ToArray;
+  finally
+    L.Free;
+  end;
+
+  if Length(Ids) = 0 then
+  begin
+    ShowMessage(Format(
+      'Los %d nodo(s) seleccionados son anteriores a la fecha de bloqueo (%s) ' +
+      'y no se pueden desplanificar.',
+      [NBloqueados, FormatDateTime('dd/mm/yyyy', Bloqueo)]));
+    Exit;
+  end;
+
+  Msg := Format('Se desplanificaran %d nodo(s): se borraran del plan y volveran ' +
+    'al Backlog como pendientes.' + sLineBreak, [Length(Ids)]);
+  if NBloqueados > 0 then
+    Msg := Msg + Format('(%d nodo(s) bloqueados se omitiran.)' + sLineBreak, [NBloqueados]);
+  Msg := Msg + sLineBreak + 'Continuar?';
+  if MessageDlg(Msg, mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  try
+    Borrados := DMPlanner.DesplanificarNodes(Ids);
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Error al desplanificar: ' + E.Message);
+      Exit;
+    end;
+  end;
+
+  // Recargar el plan completo (los nodos borrados desaparecen del Gantt).
+  if Assigned(Form1) then
+    Form1.LoadActivePlan;
+
+  ShowMessage(Format('%d nodo(s) desplanificados.', [Borrados]));
 end;
 
 end.

@@ -15,7 +15,15 @@
       "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -Q $q)",
       "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -Q $q -W)",
       "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -Q $q2 -W)",
-      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d rp -E -C -Q $q -W)"
+      "PowerShell(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d rp -E -C -Q $q -W)",
+      "Bash(command -v sqlcmd)",
+      "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -d FS -E -W -s '|' -Q ' *)",
+      "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -d FS -E -C -W -s '|' -Q ' *)",
+      "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -E -C -W -s '|' -Q ' *)",
+      "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -d RP -E -C -W -s '|' -Q ' *)",
+      "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -d RP -E -C -W -s '|' -b -Q ' *)",
+      "Bash([ -f \"$F\" ])",
+      "Read(//c//**)"
     ],
     "additionalDirectories": [
       "d:\\PROJECTES\\GANTT\\GANTT"

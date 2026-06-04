@@ -313,6 +313,10 @@ object Form1: TForm1
         Caption = 'Configuraci'#243'n de Empresa...'
         OnClick = ConfigEmpresa1Click
       end
+      object PreferenciasGantt1: TMenuItem
+        Caption = 'Preferencias del Gantt...'
+        OnClick = PreferenciasGantt1Click
+      end
       object SelectorErp1: TMenuItem
         Caption = 'Selector de ERP...'
         OnClick = SelectorErp1Click

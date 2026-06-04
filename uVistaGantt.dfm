@@ -2320,5 +2320,12 @@ object frmVistaGantt: TfrmVistaGantt
       Caption = 'Editar Links (Dependencias)...'
       OnClick = miEditarLinksClick
     end
+    object SepDesplanificar1: TMenuItem
+      Caption = '-'
+    end
+    object miDesplanificar: TMenuItem
+      Caption = 'Desplanificar (quitar del plan)'
+      OnClick = miDesplanificarClick
+    end
   end
 end

@@ -319,6 +319,10 @@ type
               ): Integer;
 
     function ClampNodeToPredecessors( const NodeIdx: Integer): Boolean;
+    // Un nodo es "movible" si NO esta bloqueado: ni deshabilitado por el usuario
+    // (Enabled=False) ni consolidado antes de la fecha de bloqueo del proyecto.
+    // La resolucion de colisiones nunca debe empujar un nodo no-movible.
+    function IsNodeMovable(const NodeIdx: Integer): Boolean;
     procedure CommitNodeMoveOrResize(const NodeIdx: Integer);
 
     procedure DrawDependenciesD2D(
@@ -587,6 +591,10 @@ type
     function GetLinksForNode(const ANodeId: Integer): TArray<Integer>; // indices dins FLinks
 
     procedure UpdateNode(const NodeIndex: Integer; const ANode: TNode);
+    // Marca el nodo como modificado (dirty) y notifica al exterior
+    // (OnPlanModified) para que el AutoSaver lo persista. Usar tras cambios
+    // que no pasan por el flujo de mover/redimensionar (p.ej. toggle bloqueo).
+    procedure PersistNodeChange(const NodeIndex: Integer);
     function GetRowsCopy: TArray<TRowLayout>;
     function SelectedNodeIndex: Integer;
     function SelectedNode: TNode;
@@ -5260,6 +5268,30 @@ begin
   Invalidate;
 end;
 
+procedure TGanttControl.PersistNodeChange(const NodeIndex: Integer);
+var
+  D: TNodeData;
+  DataIds: TArray<Integer>;
+begin
+  if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
+  if FNodes[NodeIndex].DataId = 0 then Exit;
+
+  // Marcar dirty para que el AutoSaver lo recoja.
+  if Assigned(FNodeRepo) and FNodeRepo.TryGetById(FNodes[NodeIndex].DataId, D) then
+  begin
+    D.Modified := True;
+    FNodeRepo.AddOrUpdate(D);
+  end;
+
+  // Notificar al exterior (Main -> sync NodesRepo desde GetNodes + AutoSaver).
+  if Assigned(FOnPlanModified) then
+  begin
+    SetLength(DataIds, 1);
+    DataIds[0] := FNodes[NodeIndex].DataId;
+    FOnPlanModified(Self, DataIds);
+  end;
+end;
+
 function TGanttControl.GetRowsCopy: TArray<TRowLayout>;
 var
   i: Integer;
@@ -7004,6 +7036,31 @@ begin
               Continue;
             end;
 
+            // Drag multiple: si este nodo esta seleccionado (y no es el
+            // arrastrado), durante el move se dibuja como fantasma desplazado el
+            // mismo delta de tiempo, en su propia fila. Los bloqueados no.
+            if FMoving and (NL.NodeIndex <> FMoveNodeIndex)
+               and IsNodeIndexSelected(NL.NodeIndex)
+               and FSelectedNodeIndexes.ContainsKey(FMoveNodeIndex)
+               and IsNodeMovable(NL.NodeIndex) then
+            begin
+              var DxW: Single :=
+                TimeToXWorld(FNodes[NL.NodeIndex].StartTime + (FMovePreviewStart - FMoveOrigStart))
+                - TimeToXWorld(FNodes[NL.NodeIndex].StartTime);
+              var GhostRect: TRectF := DrawRect;
+              GhostRect.Offset(DxW, 0);
+              if (GhostRect.Right >= 0) and (GhostRect.Left <= ClientWidth) and
+                 (GhostRect.Bottom >= 0) and (GhostRect.Top <= ClientHeight) then
+              begin
+                SetBrushColor(FillBrush, Node.FillColor, 0.55);
+                SetBrushColor(StrokeBrush, Node.BorderColor, 1.0);
+                RT.FillRectangle(RectFToD2D(GhostRect), FillBrush);
+                RT.DrawRoundedRectangle(RoundedRectToD2D(GhostRect, 3), StrokeBrush, 2.0);
+              end;
+              Inc(j);
+              Continue;  // no pintar el nodo en su posicion original
+            end;
+
             if (DrawRect.Right >= 0) and (DrawRect.Left <= ClientWidth) and
                (DrawRect.Bottom >= 0) and (DrawRect.Top <= ClientHeight) then
             begin
@@ -8443,6 +8500,17 @@ end;
 
 
 
+function TGanttControl.IsNodeMovable(const NodeIdx: Integer): Boolean;
+begin
+  Result := False;
+  if (NodeIdx < 0) or (NodeIdx > High(FNodes)) then Exit;
+  // Deshabilitado por el usuario (toggle Activar/bloquear) -> no se mueve.
+  if not FNodes[NodeIdx].Enabled then Exit;
+  // Consolidado antes de la fecha de bloqueo del proyecto -> no se mueve.
+  if (FFechaBloqueo <> 0) and (FNodes[NodeIdx].StartTime < FFechaBloqueo) then Exit;
+  Result := True;
+end;
+
 function TGanttControl.ResolveSequentialCollisionsFromNode(
   const CentreId: Integer;
   const ChangedIdx: Integer;
@@ -8455,6 +8523,8 @@ var
   prevEnd, desiredStart: TDateTime;
   cal: TCentreCalendar;
   Nodes: TArray<TNode>;
+  k, blocked: Integer;
+  candEnd: TDateTime;
 
   function FindPos(const A: TIdxArray; const NodeIdx: Integer): Integer;
   var j: Integer;
@@ -8555,19 +8625,96 @@ begin
     end;
   end;
 
-  prevEnd := FNodes[list[posC]].EndTime;
-  for i := posC + 1 to High(list) do
+  // Si el nodo movido (ChangedIdx) SOLAPA algun nodo BLOQUEADO (por cualquier
+  // lado), el que se aparta es el propio nodo movido (el bloqueado no se toca):
+  // se reubica detras del bloqueado que choca. Se repite por si tras saltar
+  // choca con otro bloqueado mas adelante.
+  if not IsNodeMovable(ChangedIdx) then
   begin
-    desiredStart := IncMinute(prevEnd, MinGapMin);
-    desiredStart := ApplyOverlayAndCalendar(desiredStart);
-    if FNodes[list[i]].StartTime < desiredStart then
-    begin
-      if MoveNodeKeepingDuration(list[i], desiredStart) then
+    // El propio nodo movido es no-movible: no deberia llegar aqui (no se mueve),
+    // pero por seguridad no lo tocamos.
+  end
+  else
+    repeat
+      posB := -1;
+      for i := 0 to High(list) do
+      begin
+        if list[i] = ChangedIdx then Continue;
+        if IsNodeMovable(list[i]) then Continue;   // solo bloqueados
+        // solapa [start,end) del movido con el bloqueado?
+        if (FNodes[ChangedIdx].StartTime < FNodes[list[i]].EndTime) and
+           (FNodes[ChangedIdx].EndTime   > FNodes[list[i]].StartTime) then
+        begin
+          if (posB < 0) or (FNodes[list[i]].EndTime > FNodes[list[posB]].EndTime) then
+            posB := i;
+        end;
+      end;
+      if posB < 0 then Break;  // ya no choca con ningun bloqueado
+      desiredStart := IncMinute(FNodes[list[posB]].EndTime, MinGapMin);
+      desiredStart := ApplyOverlayAndCalendar(desiredStart);
+      if MoveNodeKeepingDuration(ChangedIdx, desiredStart) then
       begin
         Result := True;
         SetLength(MovedNodes, MovedCount + 1);
-        MovedNodes[MovedCount] := list[i];
+        MovedNodes[MovedCount] := ChangedIdx;
         Inc(MovedCount);
+      end
+      else
+        Break;  // no se ha podido mover mas: evitar bucle infinito
+    until False;
+
+  // Reordenar la lista por inicio tras posibles saltos del nodo movido.
+  TArray.Sort<Integer>(list, TComparer<Integer>.Construct(
+    function(const L, R: Integer): Integer
+    begin
+      if Nodes[L].StartTime < Nodes[R].StartTime then Exit(-1);
+      if Nodes[L].StartTime > Nodes[R].StartTime then Exit(1);
+      if Nodes[L].Id < Nodes[R].Id then Exit(-1);
+      if Nodes[L].Id > Nodes[R].Id then Exit(1);
+      Result := 0;
+    end));
+  posC := FindPos(list, ChangedIdx);
+  if posC < 0 then Exit;
+
+  prevEnd := FNodes[list[posC]].EndTime;
+  for i := posC + 1 to High(list) do
+  begin
+    // Un nodo bloqueado (deshabilitado o consolidado antes de FechaBloqueo) NO
+    // se empuja: se respeta su posicion y el cursor de cascada salta tras el.
+    if IsNodeMovable(list[i]) then
+    begin
+      desiredStart := IncMinute(prevEnd, MinGapMin);
+      desiredStart := ApplyOverlayAndCalendar(desiredStart);
+
+      // Si al empujar este movil su intervalo trepitjaria un nodo BLOQUEADO
+      // situado mas adelante, saltarlo (el bloqueado no se toca). Se repite por
+      // si tras saltar choca con otro bloqueado. Converge: desiredStart crece.
+      repeat
+        candEnd := CalcEndTime(CentreId, desiredStart, FNodes[list[i]].DurationMin);
+        blocked := -1;
+        for k := 0 to High(list) do
+        begin
+          if k = i then Continue;
+          if IsNodeMovable(list[k]) then Continue;   // solo bloqueados
+          if (desiredStart < FNodes[list[k]].EndTime) and
+             (candEnd > FNodes[list[k]].StartTime) then
+            if (blocked < 0) or (FNodes[list[k]].EndTime > FNodes[list[blocked]].EndTime) then
+              blocked := k;
+        end;
+        if blocked < 0 then Break;
+        desiredStart := ApplyOverlayAndCalendar(
+          IncMinute(FNodes[list[blocked]].EndTime, MinGapMin));
+      until False;
+
+      if FNodes[list[i]].StartTime < desiredStart then
+      begin
+        if MoveNodeKeepingDuration(list[i], desiredStart) then
+        begin
+          Result := True;
+          SetLength(MovedNodes, MovedCount + 1);
+          MovedNodes[MovedCount] := list[i];
+          Inc(MovedCount);
+        end;
       end;
     end;
     prevEnd := FNodes[list[i]].EndTime;
@@ -9450,9 +9597,18 @@ var
   cal: TCentreCalendar;
   bAnyShift: Boolean;
   MovedNodes: TIdxArray;
+  DeltaDays: Double;
+  OtherIdxs: TArray<Integer>;
+  K, OIdx: Integer;
 begin
   idx := FMoveNodeIndex;
   if (idx < 0) or (idx > High(FNodes)) then Exit;
+
+  // Delta de tiempo INTENCIONADO por el usuario (lo que ha arrastrado), antes
+  // de correcciones de calendario/colisiones. Se aplicara a los demas nodos
+  // seleccionados para moverlos todos juntos el mismo desplazamiento.
+  DeltaDays := FMovePreviewStart - FMoveOrigStart;
+
   newStart := FMovePreviewStart;
   newCentreId := FMovePreviewCentreId;
   // restricció overlay
@@ -9503,6 +9659,34 @@ begin
       Screen.cursor := crHourGlass;
 
       CommitNodeMoveOrResize( idx );
+
+      // Drag multiple: si el nodo arrastrado forma parte de una seleccion de
+      // varios, mover todos el mismo delta de tiempo (cada uno en su centro),
+      // respetando las reglas. Si el nodo arrastrado NO esta seleccionado, solo
+      // se mueve el (comportamiento intuitivo).
+      if (FSelectedNodeIndexes <> nil) and (FSelectedNodeIndexes.Count > 1)
+         and (DeltaDays <> 0)
+         and FSelectedNodeIndexes.ContainsKey(idx) then
+      begin
+        // Copiamos los indices a un array porque ResolveAllConstraints puede
+        // disparar rebuilds; el set de seleccion no debe iterarse en vivo.
+        SetLength(OtherIdxs, FSelectedNodeIndexes.Count);
+        K := 0;
+        for OIdx in FSelectedNodeIndexes.Keys do
+        begin
+          OtherIdxs[K] := OIdx;
+          Inc(K);
+        end;
+        for K := 0 to High(OtherIdxs) do
+        begin
+          OIdx := OtherIdxs[K];
+          if OIdx = idx then Continue;                  // el arrastrado ya esta hecho
+          if (OIdx < 0) or (OIdx > High(FNodes)) then Continue;
+          if not FNodes[OIdx].Enabled then Continue;    // bloqueado: no se mueve
+          if MoveNodeKeepingDuration(OIdx, FNodes[OIdx].StartTime + DeltaDays) then
+            CommitNodeMoveOrResize(OIdx);
+        end;
+      end;
 
       FMoving := False;
       FDragMode := dmNone;

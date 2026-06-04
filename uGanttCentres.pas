@@ -614,14 +614,13 @@ var
   LeftTextWidth: Single;
   TextBrush: ID2D1Brush;
   NomCentre, NomMaquina: string;
-  RLabel1, RValue1: TRectF;
-  RLabel2, RValue2: TRectF;
+  RValue1: TRectF;
+  RValue2: TRectF;
   RCircle: TRectF;
   CircleBrush: ID2D1SolidColorBrush;
   CircleStroke: ID2D1SolidColorBrush;
   CircleColor: TColor;
   DXColor: TD2D1ColorF;
-  LabelW: Single;
   CircleSize: Single;
   PadX, PadY: Single;
 begin
@@ -648,7 +647,13 @@ begin
 
   if iCentreIdx >= 0 then
   begin
-    NomCentre := FCentres[iCentreIdx].Titulo;
+    // CENTRO = CodigoCentro - Titulo ; MAQUINA = (Subtitulo del centro)
+    NomCentre := FCentres[iCentreIdx].CodiCentre;
+    if Trim(FCentres[iCentreIdx].Titulo) <> '' then
+    begin
+      if Trim(NomCentre) <> '' then NomCentre := NomCentre + ' - ';
+      NomCentre := NomCentre + FCentres[iCentreIdx].Titulo;
+    end;
     NomMaquina := FCentres[iCentreIdx].Subtitulo;
     CircleColor := FCentres[iCentreIdx].BkColor;
   end
@@ -668,7 +673,6 @@ begin
 
   PadX := 8;
   PadY := 5;
-  LabelW := 68;
   CircleSize := 10;
 
   RCircle := RectF(
@@ -707,16 +711,11 @@ begin
     1.0
   );
 
-  RLabel1 := RectF(PadX, y1 + 3, PadX + LabelW, y1 + 18);
-  RValue1 := RectF(PadX + LabelW, y1 + 3, RCircle.Left - 6, y1 + 18);
+  // Sin literales "CENTRO:"/"MAQUINA:": los valores ocupan todo el ancho.
+  RValue1 := RectF(PadX, y1 + 3, RCircle.Left - 6, y1 + 18);
+  RValue2 := RectF(PadX, y1 + 19, LeftTextWidth - PadX, y1 + 34);
 
-  RLabel2 := RectF(PadX, y1 + 19, PadX + LabelW, y1 + 34);
-  RValue2 := RectF(PadX + LabelW, y1 + 19, LeftTextWidth - PadX, y1 + 34);
-
-  DrawTextD('CENTRO:', RLabel1, TextBrush, FTextFormat);
   DrawTextD(NomCentre, RValue1, TextBrush, FTextFormat);
-
-  DrawTextD('MAQUINA:', RLabel2, TextBrush, FTextFormat);
   DrawTextD(NomMaquina, RValue2, TextBrush, FTextFormat);
 
   if FVerIndicadores then

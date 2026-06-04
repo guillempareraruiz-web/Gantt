@@ -25,6 +25,9 @@ unit uBacklogScheduler;
   - Duracion = HorasEstimadas * 60 minutos. Si HorasEstimadas <= 0,
     se usa 60 min por defecto.
   - Calendarios de centro se respetan (AddWorkingMinutes / SubtractWorkingMinutes).
+  - Si el centro NO tiene calendario asignado, NO se descarta: se planifica
+    como tiempo continuo 24x7 (los nodos se encadenan uno detras de otro,
+    respetando lanes), y se anota en Observaciones.
   - Modo Forward: el nodo arranca en el "cursor" del centro (>= FechaBase)
     y se extiende hacia adelante.
   - Modo Backward: el nodo termina en la FechaCompromiso y se extiende
@@ -83,10 +86,32 @@ type
     Observaciones: string;
   end;
 
+  // Politica de colocacion frente a los nodos YA EXISTENTES en el centro:
+  //   ppFinCola      No buscar huecos: encolar siempre detras del ultimo nodo.
+  //   ppHueco        Rellenar huecos: colocar en el primer hueco VALIDO a partir
+  //                  de FechaBase (que cumpla los umbrales HuecoMinimoMin y
+  //                  PorcentajeMinNodo); si ninguno vale, al final.
+  //   ppHuecoShift   Rellenar huecos y desplazar: igual, pero si un hueco valido
+  //                  no cabe entero, coloca igualmente y empuja los nodos
+  //                  posteriores NO bloqueados para hacer sitio.
+  //
+  // Umbrales (alineados con APS PRO, evitan fragmentar el plan en microhuecos):
+  //   HuecoMinimoMin   Un hueco mas corto que esto (minutos de reloj) nunca se
+  //                    usa para insertar.
+  //   PorcentajeMinNodo  El hueco debe ser >= este % de la duracion del nodo
+  //                    para considerarse utilizable (0..100). Con 100 exige que
+  //                    el nodo quepa entero; con 50, al menos la mitad.
+  TPlacementPolicy = (ppFinCola, ppHueco, ppHuecoShift);
+
   TSchedParams = record
     Mode: TSchedMode;
     Order: TSchedOrder;
     FechaBase: TDateTime;     // usada en Forward o como fallback en Backward
+    Placement: TPlacementPolicy;
+    HuecoMinimoMin: Integer;     // hueco minimo en minutos (def. 30)
+    PorcentajeMinNodo: Integer;  // % minimo del nodo (def. 50)
+    DistanciaMinNodos: Integer;  // separacion minima entre nodos consecutivos
+                                 // en el mismo lane, en minutos (def. 0)
   end;
 
   TSchedResult = record
@@ -145,6 +170,7 @@ function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
   const AParams: TSchedParams): TSchedResult;
 
 function StatusToStr(AStatus: TSchedStatus): string;
+function PlacementToStr(P: TPlacementPolicy): string;
 
 // Ordena la cola segun un conjunto de reglas con desempate multinivel.
 // AFechaBase se usa como referencia para CriticalRatio y Slack.
@@ -155,7 +181,7 @@ procedure SortInputsByRuleSet(var AInputs: TArray<TSchedInput>;
 implementation
 
 uses
-  System.Generics.Defaults, System.Math,
+  System.Generics.Defaults, System.Math, Data.Win.ADODB,
   uDMPlanner, uCentresRepo, uCentreCalendar;
 
 function PriorityRuleToStr(R: TPriorityRule): string;
@@ -245,15 +271,36 @@ begin
   end;
 end;
 
+function PlacementToStr(P: TPlacementPolicy): string;
+begin
+  case P of
+    ppFinCola:    Result := 'A'#241'adir al final de la cola';
+    ppHueco:      Result := 'Rellenar huecos v'#225'lidos';
+    ppHuecoShift: Result := 'Rellenar huecos y desplazar';
+  else
+    Result := '?';
+  end;
+end;
+
 type
+  // Un intervalo ocupado en un lane (nodo existente o ya planificado en esta
+  // tanda). Bloqueado = anterior a FechaBloqueo del proyecto: no se desplaza.
+  TLaneSlot = record
+    StartDT: TDateTime;
+    EndDT: TDateTime;
+    Bloqueado: Boolean;
+  end;
+
+  TLaneOcc = TList<TLaneSlot>;  // ordenada por StartDT ascendente
+
   TCenterCursor = record
     CenterId: Integer;
     Code: string;
     Cal: TCentreCalendar;
     IsSequencial: Boolean;
     Lanes: Integer;
-    // Para apilar: por cada lane, fin actual en Forward o inicio actual en Backward
-    LaneCursors: TArray<TDateTime>;
+    // Ocupacion real por lane: intervalos ya ocupados (existentes + planificados).
+    LaneOcc: TArray<TLaneOcc>;
   end;
 
 function GetLanes(const C: TCentreTreball): Integer;
@@ -263,32 +310,178 @@ begin
   Result := C.MaxLaneCount;
 end;
 
-// Busca el lane con el cursor mas temprano (Forward) o mas tardio (Backward)
+// Inserta un slot en la lista del lane manteniendo orden por StartDT.
+procedure InsertSlotOrdered(AOcc: TLaneOcc; const ASlot: TLaneSlot);
+var
+  I: Integer;
+begin
+  I := 0;
+  while (I < AOcc.Count) and (AOcc[I].StartDT <= ASlot.StartDT) do
+    Inc(I);
+  AOcc.Insert(I, ASlot);
+end;
+
+// "Cursor" de un lane = fin del ultimo slot ocupado (Forward) o inicio del
+// primero (Backward). Si el lane esta vacio devuelve 0.
+function LaneEnd(AOcc: TLaneOcc): TDateTime;
+begin
+  if AOcc.Count = 0 then Result := 0
+  else Result := AOcc[AOcc.Count - 1].EndDT;
+end;
+
+function LaneStart(AOcc: TLaneOcc): TDateTime;
+begin
+  if AOcc.Count = 0 then Result := 0
+  else Result := AOcc[0].StartDT;
+end;
+
+// Wrappers de calendario: si el centro no tiene calendario (ACal=nil) se trata
+// como tiempo continuo 24x7; si lo tiene, se delega en el.
+function CalNext(ACal: TCentreCalendar; const T: TDateTime): TDateTime;
+begin
+  if ACal = nil then Result := T else Result := ACal.NextWorkingTime(T);
+end;
+
+function CalAdd(ACal: TCentreCalendar; const T: TDateTime; AMin: Integer): TDateTime;
+begin
+  if ACal = nil then Result := IncMinute(T, AMin)
+  else Result := ACal.AddWorkingMinutes(T, AMin);
+end;
+
+function CalPrev(ACal: TCentreCalendar; const T: TDateTime): TDateTime;
+begin
+  if ACal = nil then Result := T else Result := ACal.PrevWorkingTime(T);
+end;
+
+function CalSub(ACal: TCentreCalendar; const T: TDateTime; AMin: Integer): TDateTime;
+begin
+  if ACal = nil then Result := IncMinute(T, -AMin)
+  else Result := ACal.SubtractWorkingMinutes(T, AMin);
+end;
+
+// Comprueba si [AStart,AEnd) solapa algun slot ya ocupado del lane.
+function LaneCollides(AOcc: TLaneOcc; const AStart, AEnd: TDateTime): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to AOcc.Count - 1 do
+    if (AEnd > AOcc[I].StartDT) and (AStart < AOcc[I].EndDT) then
+      Exit(True);
+end;
+
+// Minutos de RELOJ entre dos instantes (no laborables; sirve para medir el
+// tamano bruto de un hueco contra el umbral HuecoMinimo).
+function ClockMinutes(const A, B: TDateTime): Integer;
+begin
+  Result := Round((B - A) * 24 * 60);
+end;
+
+// Coloca un nodo de AMin minutos en el lane, en modo Forward, segun la politica
+// y los umbrales de hueco. Devuelve el StartDT propuesto (alineado a calendario).
+// No modifica la ocupacion: el llamador inserta el slot resultante.
+//
+// Un hueco [GapStart, GapEnd) se considera VALIDO para insertar si:
+//   - dura >= AHuecoMinMin minutos de reloj, Y
+//   - dura >= (APctMinNodo% de AMin) minutos de reloj.
+// ppHueco: usa el primer hueco valido donde el nodo quepa entero; si no, final.
+// ppHuecoShift: usa el primer hueco valido aunque el nodo no quepa entero
+//   (marca shift para empujar lo posterior no bloqueado); si no hay valido, final.
+function PlaceForward(AOcc: TLaneOcc; ACal: TCentreCalendar;
+  const AFechaBase: TDateTime; AMin: Integer;
+  APolicy: TPlacementPolicy; AHuecoMinMin, APctMinNodo, ADistMin: Integer;
+  out ANeedsShift: Boolean): TDateTime;
+var
+  I, GapClock, MinPorPct: Integer;
+  Cursor, GapStart, GapEnd, S, E, LimiteFin: TDateTime;
+  HuecoValido: Boolean;
+
+  // Avanza T la distancia minima entre nodos (en minutos de reloj), respetando
+  // calendario. Si ADistMin<=0 no hace nada.
+  function AplicarDistancia(const T: TDateTime): TDateTime;
+  begin
+    if ADistMin > 0 then Result := CalAdd(ACal, T, ADistMin)
+    else Result := T;
+  end;
+
+begin
+  ANeedsShift := False;
+
+  // ppFinCola: detras del ultimo slot (+ distancia minima) o FechaBase si vacio.
+  if APolicy = ppFinCola then
+  begin
+    Cursor := LaneEnd(AOcc);
+    if Cursor > 0 then Cursor := AplicarDistancia(Cursor);
+    if Cursor < AFechaBase then Cursor := AFechaBase;
+    Exit(CalNext(ACal, Cursor));
+  end;
+
+  // Umbral por porcentaje del nodo (en minutos de reloj).
+  MinPorPct := Round(AMin * (APctMinNodo / 100.0));
+
+  // Politicas con busqueda de hueco. Recorremos los huecos entre slots a
+  // partir de FechaBase. El primer slot ya empieza ordenado por StartDT.
+  Cursor := AFechaBase;
+  for I := 0 to AOcc.Count - 1 do
+  begin
+    if AOcc[I].EndDT <= Cursor then Continue;  // slot ya pasado
+    GapStart := Cursor;
+    GapEnd := AOcc[I].StartDT;
+    if GapEnd > GapStart then
+    begin
+      GapClock := ClockMinutes(GapStart, GapEnd);
+      // El hueco es VALIDO si supera ambos umbrales.
+      HuecoValido := (GapClock >= AHuecoMinMin) and (GapClock >= MinPorPct);
+      if HuecoValido then
+      begin
+        S := CalNext(ACal, GapStart);
+        E := CalAdd(ACal, S, AMin);
+        // El nodo debe terminar dejando ADistMin de margen antes del slot
+        // siguiente (distancia minima entre nodos).
+        LimiteFin := AplicarDistancia(E);
+        if LimiteFin <= AOcc[I].StartDT then
+          Exit(S);  // cabe el nodo + distancia en este hueco valido
+
+        // No cabe entero pero el hueco es valido: en modo shift colocamos aqui
+        // y empujamos lo posterior (solo si el slot siguiente no esta bloqueado).
+        if (APolicy = ppHuecoShift) and (not AOcc[I].Bloqueado) then
+        begin
+          ANeedsShift := True;
+          Exit(S);
+        end;
+      end;
+    end;
+    // Hueco no valido / no cabe: avanzar el cursor tras este slot + distancia.
+    if AOcc[I].EndDT > Cursor then
+      Cursor := AplicarDistancia(AOcc[I].EndDT);
+  end;
+
+  // Sin hueco util: tras el ultimo slot (== al final de la cola).
+  Result := CalNext(ACal, Cursor);
+end;
+
+// Busca el lane con la cola mas temprana (Forward) o el inicio mas tardio
+// (Backward), para repartir la carga entre lanes paralelos.
 function PickLane(const Cursor: TCenterCursor; Forward: Boolean): Integer;
 var
   I: Integer;
-  Best: TDateTime;
+  Best, V: TDateTime;
 begin
   Result := 0;
-  if Length(Cursor.LaneCursors) = 0 then Exit;
-  Best := Cursor.LaneCursors[0];
-  for I := 1 to High(Cursor.LaneCursors) do
+  if Length(Cursor.LaneOcc) = 0 then Exit;
+  if Forward then Best := LaneEnd(Cursor.LaneOcc[0])
+  else Best := LaneStart(Cursor.LaneOcc[0]);
+  for I := 1 to High(Cursor.LaneOcc) do
   begin
     if Forward then
     begin
-      if Cursor.LaneCursors[I] < Best then
-      begin
-        Best := Cursor.LaneCursors[I];
-        Result := I;
-      end;
+      V := LaneEnd(Cursor.LaneOcc[I]);
+      if V < Best then begin Best := V; Result := I; end;
     end
     else
     begin
-      if Cursor.LaneCursors[I] > Best then
-      begin
-        Best := Cursor.LaneCursors[I];
-        Result := I;
-      end;
+      V := LaneStart(Cursor.LaneOcc[I]);
+      if V > Best then begin Best := V; Result := I; end;
     end;
   end;
 end;
@@ -446,6 +639,63 @@ begin
   TArray.Sort<TSchedInput>(AInputs, Comparer);
 end;
 
+// Inicio mas temprano de un slot que aun solapa [AStart,AEnd) (para Backward).
+function EarliestCollidingStart(AOcc: TLaneOcc; const AStart, AEnd: TDateTime): TDateTime;
+var
+  I: Integer;
+begin
+  Result := AEnd;
+  for I := 0 to AOcc.Count - 1 do
+    if (AEnd > AOcc[I].StartDT) and (AStart < AOcc[I].EndDT) then
+      if AOcc[I].StartDT < Result then
+        Result := AOcc[I].StartDT;
+end;
+
+// Carga los nodos existentes del centro (FS_PL_Node del proyecto activo) como
+// ocupacion en los lanes. Reparte por lanes con first-fit para no superponer.
+// Marca como Bloqueado los que terminan antes de AFechaBloqueo.
+procedure LoadExistingOccupancy(ACenterId: Integer; const AFechaBloqueo: TDateTime;
+  var ACursor: TCenterCursor);
+var
+  Q: TADOQuery;
+  Slot: TLaneSlot;
+  L, Placed: Integer;
+begin
+  if DMPlanner.ADOConnection = nil then Exit;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT FechaInicio, FechaFin FROM FS_PL_Node ' +
+      'WHERE CodigoEmpresa = :CE AND ProjectId = :PID AND CenterId = :CID ' +
+      '  AND ISNULL(Visible,1) = 1 ' +
+      'ORDER BY FechaInicio';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := DMPlanner.CurrentProjectId;
+    Q.Parameters.ParamByName('CID').Value := ACenterId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Slot.StartDT := Q.FieldByName('FechaInicio').AsDateTime;
+      Slot.EndDT := Q.FieldByName('FechaFin').AsDateTime;
+      Slot.Bloqueado := (AFechaBloqueo > 0) and (Slot.EndDT <= AFechaBloqueo);
+      // first-fit: primer lane donde no choque
+      Placed := -1;
+      for L := 0 to High(ACursor.LaneOcc) do
+        if not LaneCollides(ACursor.LaneOcc[L], Slot.StartDT, Slot.EndDT) then
+        begin
+          Placed := L;
+          Break;
+        end;
+      if Placed < 0 then Placed := 0;  // todos chocan: apilar en lane 0
+      InsertSlotOrdered(ACursor.LaneOcc[Placed], Slot);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
   const AParams: TSchedParams): TSchedResult;
 var
@@ -464,6 +714,13 @@ var
   OutList: TList<TSchedOutput>;
   Key: string;
   NowDT: TDateTime;
+  SinCalendario: Boolean;
+  NeedsShift: Boolean;
+  NewSlot: TLaneSlot;
+  FechaBloqueo: TDateTime;
+  J, DurSlotMin: Integer;
+  ShiftTo: TDateTime;
+
 begin
   Result := Default(TSchedResult);
   Inputs := Copy(AInputs);
@@ -478,6 +735,17 @@ begin
   NowDT := Now;
   if Trunc(Params.FechaBase) <= Trunc(NowDT) then
     Params.FechaBase := NowDT;
+
+  // Defaults defensivos de los umbrales de hueco (por si el caller no los puso).
+  if Params.HuecoMinimoMin <= 0 then Params.HuecoMinimoMin := 30;
+  if (Params.PorcentajeMinNodo < 0) or (Params.PorcentajeMinNodo > 100) then
+    Params.PorcentajeMinNodo := 50;
+  if Params.DistanciaMinNodos < 0 then Params.DistanciaMinNodos := 0;
+
+  if DMPlanner.CurrentProjectTieneBloqueo then
+    FechaBloqueo := DMPlanner.CurrentProjectFechaBloqueo
+  else
+    FechaBloqueo := 0;
 
   CentresMap := TDictionary<string, TCentreTreball>.Create;
   Cursors := TDictionary<Integer, TCenterCursor>.Create;
@@ -516,7 +784,8 @@ begin
         Continue;
       end;
 
-      // Inicializar cursor del centro si es la primera vez
+      // Inicializar cursor del centro si es la primera vez. Carga la ocupacion
+      // de los nodos YA EXISTENTES en el centro para no superponerse a ellos.
       if not Cursors.TryGetValue(C.Id, Cursor) then
       begin
         Cursor := Default(TCenterCursor);
@@ -525,20 +794,20 @@ begin
         Cursor.Cal := DMPlanner.CentresRepo.GetCalendarFor(C.Id);
         Cursor.IsSequencial := C.IsSequencial;
         Cursor.Lanes := GetLanes(C);
-        SetLength(Cursor.LaneCursors, Cursor.Lanes);
+        SetLength(Cursor.LaneOcc, Cursor.Lanes);
+        for J := 0 to Cursor.Lanes - 1 do
+          Cursor.LaneOcc[J] := TLaneOcc.Create;
+        // Registrar ANTES de cargar (las listas son por referencia): asi, si
+        // LoadExistingOccupancy lanza, el finally igualmente liberara las listas.
         Cursors.Add(C.Id, Cursor);
+        LoadExistingOccupancy(C.Id, FechaBloqueo, Cursor);
       end;
 
       Output.CenterId := C.Id;
 
-      if Cursor.Cal = nil then
-      begin
-        Output.Status := ssSinCalendario;
-        Output.Observaciones := 'Centro sin calendario asignado';
-        OutList.Add(Output);
-        Inc(Result.TotalNoPlanificados);
-        Continue;
-      end;
+      // Sin calendario ya no se descarta: se planifica como tiempo continuo
+      // 24x7, encadenando los nodos uno detras de otro (respetando lanes).
+      SinCalendario := Cursor.Cal = nil;
 
       if Input.HorasEstimadas > 0 then
         DurMin := Round(Input.HorasEstimadas * 60)
@@ -546,20 +815,19 @@ begin
         DurMin := 60;
       Output.DuracionMin := DurMin;
 
-      case AParams.Mode of
+      NeedsShift := False;
+      case Params.Mode of
         smBackward:
           begin
             if Input.FechaCompromiso = 0 then
             begin
-              // Fallback a Forward desde FechaBase
+              // Fallback a Forward desde FechaBase, con la politica elegida.
               Lane := PickLane(Cursor, True);
-              if Cursor.LaneCursors[Lane] = 0 then
-                Cursor.LaneCursors[Lane] := Params.FechaBase;
-              if Cursor.LaneCursors[Lane] < Params.FechaBase then
-                Cursor.LaneCursors[Lane] := Params.FechaBase;
-              StartDT := Cursor.Cal.NextWorkingTime(Cursor.LaneCursors[Lane]);
-              EndDT := Cursor.Cal.AddWorkingMinutes(StartDT, DurMin);
-              Cursor.LaneCursors[Lane] := EndDT;
+              StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
+                Params.FechaBase, DurMin, Params.Placement,
+                Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
+                Params.DistanciaMinNodos, NeedsShift);
+              EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
               Output.FechaInicio := StartDT;
               Output.FechaFin := EndDT;
               Output.Status := ssFueraPlazo;
@@ -568,15 +836,21 @@ begin
             end
             else
             begin
-              Lane := PickLane(Cursor, False);  // lane con cursor mas tardio
-              if Cursor.LaneCursors[Lane] = 0 then
-                Cursor.LaneCursors[Lane] := Input.FechaCompromiso
-              else if Cursor.LaneCursors[Lane] > Input.FechaCompromiso then
-                Cursor.LaneCursors[Lane] := Input.FechaCompromiso;
-
-              EndDT := Cursor.Cal.PrevWorkingTime(Cursor.LaneCursors[Lane]);
-              StartDT := Cursor.Cal.SubtractWorkingMinutes(EndDT, DurMin);
-              Cursor.LaneCursors[Lane] := StartDT;
+              // Backward: terminar lo mas tarde posible <= FechaCompromiso, sin
+              // pisar lo ya ocupado. Partimos del compromiso y retrocedemos
+              // mientras choque con algun slot del lane.
+              Lane := PickLane(Cursor, False);
+              EndDT := CalPrev(Cursor.Cal, Input.FechaCompromiso);
+              StartDT := CalSub(Cursor.Cal, EndDT, DurMin);
+              while LaneCollides(Cursor.LaneOcc[Lane], StartDT, EndDT) do
+              begin
+                // retroceder detras del slot que choca (el de inicio mas
+                // temprano que aun solapa): situamos el fin en su inicio.
+                EndDT := CalPrev(Cursor.Cal,
+                  EarliestCollidingStart(Cursor.LaneOcc[Lane], StartDT, EndDT));
+                StartDT := CalSub(Cursor.Cal, EndDT, DurMin);
+                if StartDT < Params.FechaBase then Break;
+              end;
 
               Output.FechaInicio := StartDT;
               Output.FechaFin := EndDT;
@@ -597,14 +871,11 @@ begin
         smForward:
           begin
             Lane := PickLane(Cursor, True);
-            if Cursor.LaneCursors[Lane] = 0 then
-              Cursor.LaneCursors[Lane] := Params.FechaBase;
-            if Cursor.LaneCursors[Lane] < Params.FechaBase then
-              Cursor.LaneCursors[Lane] := Params.FechaBase;
-
-            StartDT := Cursor.Cal.NextWorkingTime(Cursor.LaneCursors[Lane]);
-            EndDT := Cursor.Cal.AddWorkingMinutes(StartDT, DurMin);
-            Cursor.LaneCursors[Lane] := EndDT;
+            StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
+              Params.FechaBase, DurMin, Params.Placement,
+              Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
+              Params.DistanciaMinNodos, NeedsShift);
+            EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
 
             Output.FechaInicio := StartDT;
             Output.FechaFin := EndDT;
@@ -623,6 +894,77 @@ begin
           end;
       end;
 
+      // Registrar el nuevo nodo como ocupacion para que los siguientes de esta
+      // tanda no lo pisen.
+      if (Output.Status <> ssSaturado) and (Lane >= 0) and (Lane <= High(Cursor.LaneOcc)) then
+      begin
+        NewSlot.StartDT := StartDT;
+        NewSlot.EndDT := EndDT;
+        NewSlot.Bloqueado := False;
+        InsertSlotOrdered(Cursor.LaneOcc[Lane], NewSlot);
+
+        // Shift (solo politica ppHuecoShift): tras insertar el nuevo nodo,
+        // empujar en cascada los slots posteriores que solapen, en orden por
+        // inicio. ShiftTo arranca en el fin del nuevo nodo y va avanzando.
+        // Un slot bloqueado no se puede mover: si solapa, NO se toca (queda el
+        // solapamiento, pero respetamos lo consolidado) y el cursor salta tras el.
+        if NeedsShift then
+        begin
+          ShiftTo := EndDT;
+          for J := 0 to Cursor.LaneOcc[Lane].Count - 1 do
+          begin
+            NewSlot := Cursor.LaneOcc[Lane][J];
+            // Saltar los slots que terminan antes del cursor de shift (no
+            // solapan) y el propio nodo recien insertado.
+            if NewSlot.EndDT <= ShiftTo then Continue;
+            if NewSlot.StartDT >= ShiftTo then
+            begin
+              // Ya empieza despues del cursor: no hay solapamiento que resolver,
+              // y como la lista esta ordenada, los siguientes tampoco. Fin.
+              Break;
+            end;
+            if NewSlot.Bloqueado then
+            begin
+              // No se puede empujar (carga consolidada): respetamos su posicion,
+              // avisamos del solapamiento y avanzamos tras el.
+              if Output.Observaciones <> '' then
+                Output.Observaciones := Output.Observaciones + '. ';
+              Output.Observaciones := Output.Observaciones +
+                'Shift topo con nodo bloqueado (posible solape)';
+              ShiftTo := NewSlot.EndDT;
+              Continue;
+            end;
+            // Empujar este slot detras del cursor (+ distancia minima entre
+            // nodos), conservando su duracion.
+            DurSlotMin := Round((NewSlot.EndDT - NewSlot.StartDT) * 24 * 60);
+            if Params.DistanciaMinNodos > 0 then
+              NewSlot.StartDT := CalNext(Cursor.Cal,
+                CalAdd(Cursor.Cal, ShiftTo, Params.DistanciaMinNodos))
+            else
+              NewSlot.StartDT := CalNext(Cursor.Cal, ShiftTo);
+            NewSlot.EndDT := CalAdd(Cursor.Cal, NewSlot.StartDT, DurSlotMin);
+            Cursor.LaneOcc[Lane][J] := NewSlot;
+            ShiftTo := NewSlot.EndDT;
+          end;
+
+          // Tras los empujes la lista puede haber quedado desordenada: re-ordenar.
+          Cursor.LaneOcc[Lane].Sort(TComparer<TLaneSlot>.Construct(
+            function(const A, B: TLaneSlot): Integer
+            begin
+              Result := CompareDateTime(A.StartDT, B.StartDT);
+            end));
+        end;
+      end;
+
+      // Avisar en el preview de que se ha planificado sin calendario (24x7).
+      if SinCalendario then
+      begin
+        if Output.Observaciones <> '' then
+          Output.Observaciones := Output.Observaciones + '. ';
+        Output.Observaciones := Output.Observaciones +
+          'Centro sin calendario: planificado en continuo (24x7)';
+      end;
+
       // Guardar el cursor actualizado
       Cursors.AddOrSetValue(C.Id, Cursor);
 
@@ -631,6 +973,10 @@ begin
 
     Result.Items := OutList.ToArray;
   finally
+    // Liberar las listas de ocupacion de cada cursor.
+    for Cursor in Cursors.Values do
+      for J := 0 to High(Cursor.LaneOcc) do
+        Cursor.LaneOcc[J].Free;
     CentresMap.Free;
     Cursors.Free;
     OutList.Free;

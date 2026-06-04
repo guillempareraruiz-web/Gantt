@@ -248,6 +248,10 @@
             <Form>frmBacklogSchedParams</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uGanttConfig.pas">
+            <Form>frmGanttConfig</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uBacklogSchedPreview.pas">
             <Form>frmBacklogSchedPreview</Form>
             <FormType>dfm</FormType>

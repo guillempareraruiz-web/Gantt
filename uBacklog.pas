@@ -914,60 +914,10 @@ begin
 end;
 
 procedure TfrmBacklog.DoDesplanificar(const ANodeIds: TArray<Integer>);
-var
-  Cmd: TADOCommand;
-  IdList: string;
-  I: Integer;
-  CE: string;
 begin
-  if Length(ANodeIds) = 0 then Exit;
-
-  IdList := '';
-  for I := 0 to High(ANodeIds) do
-  begin
-    if IdList <> '' then IdList := IdList + ',';
-    IdList := IdList + IntToStr(ANodeIds[I]);
-  end;
-
-  CE := IntToStr(EmpresaCode);
-
-  DMPlanner.ADOConnection.BeginTrans;
-  try
-    Cmd := TADOCommand.Create(nil);
-    try
-      Cmd.Connection := DMPlanner.ADOConnection;
-
-      // Borrar dependencias que referencian estos nodos
-      Cmd.CommandText :=
-        'DELETE FROM FS_PL_Dependency WHERE CodigoEmpresa = ' + CE +
-        ' AND (FromNodeId IN (' + IdList + ') OR ToNodeId IN (' + IdList + '))';
-      Cmd.Execute;
-
-      // Borrar asignaciones de operarios
-      Cmd.CommandText :=
-        'DELETE FROM FS_PL_OperatorAssignment WHERE CodigoEmpresa = ' + CE +
-        ' AND NodeId IN (' + IdList + ')';
-      Cmd.Execute;
-
-      // Borrar NodeData
-      Cmd.CommandText :=
-        'DELETE FROM FS_PL_NodeData WHERE CodigoEmpresa = ' + CE +
-        ' AND NodeId IN (' + IdList + ')';
-      Cmd.Execute;
-
-      // Borrar nodos
-      Cmd.CommandText :=
-        'DELETE FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE +
-        ' AND NodeId IN (' + IdList + ')';
-      Cmd.Execute;
-    finally
-      Cmd.Free;
-    end;
-    DMPlanner.ADOConnection.CommitTrans;
-  except
-    DMPlanner.ADOConnection.RollbackTrans;
-    raise;
-  end;
+  // Logica compartida con el Gantt (uVistaGantt): borra Node + NodeData +
+  // dependencias + asignaciones en una transaccion.
+  DMPlanner.DesplanificarNodes(ANodeIds);
 end;
 
 procedure TfrmBacklog.btnDesplanificarSelClick(Sender: TObject);

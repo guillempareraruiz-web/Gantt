@@ -10,6 +10,7 @@ interface
 uses
   Winapi.Windows, System.SysUtils, System.Classes,
   Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls,
+  Vcl.Samples.Spin,
   uBacklogScheduler;
 
 type
@@ -30,6 +31,14 @@ type
     rbOrdenFecha: TRadioButton;
     rbOrdenPrio: TRadioButton;
     dtFechaBase: TDateTimePicker;
+    lblPlacement: TLabel;
+    cbPlacement: TComboBox;
+    lblHuecoMin: TLabel;
+    seHuecoMin: TSpinEdit;
+    lblPctNodo: TLabel;
+    sePctNodo: TSpinEdit;
+    lblDistMin: TLabel;
+    seDistMin: TSpinEdit;
     procedure FormCreate(Sender: TObject);
   private
     FParams: TSchedParams;
@@ -48,7 +57,7 @@ implementation
 
 uses
   System.DateUtils,
-  uUserPrefs;
+  uUserPrefs, uGanttConfig;
 
 const
   MOD_NAME = 'BACKLOG_SCHED';
@@ -59,7 +68,10 @@ var
 begin
   F := TfrmBacklogSchedParams.Create(Application);
   try
-    F.FParams := AParams;
+    // Cargar siempre los defaults desde la config del Gantt (BD). NO usamos
+    // AParams de entrada (suele venir vacio del caller); los valores guardados
+    // mandan. La FechaBase de la ultima tanda se recupera dentro de LoadLastParams.
+    F.LoadLastParams;
     F.ApplyToUI;
     Result := F.ShowModal = mrOk;
     if Result then
@@ -74,9 +86,14 @@ begin
 end;
 
 procedure TfrmBacklogSchedParams.FormCreate(Sender: TObject);
+var
+  P: TPlacementPolicy;
 begin
-  LoadLastParams;
-  ApplyToUI;
+  cbPlacement.Items.Clear;
+  for P := Low(TPlacementPolicy) to High(TPlacementPolicy) do
+    cbPlacement.Items.Add(PlacementToStr(P));
+  // LoadLastParams + ApplyToUI los invoca Execute tras crear el form, para que
+  // los defaults de la config (BD) no sean sobreescritos por el AParams vacio.
 end;
 
 procedure TfrmBacklogSchedParams.ApplyToUI;
@@ -89,6 +106,10 @@ begin
     dtFechaBase.Date := Date
   else
     dtFechaBase.Date := FParams.FechaBase;
+  cbPlacement.ItemIndex := Ord(FParams.Placement);
+  seHuecoMin.Value := FParams.HuecoMinimoMin;
+  sePctNodo.Value := FParams.PorcentajeMinNodo;
+  seDistMin.Value := FParams.DistanciaMinNodos;
 end;
 
 procedure TfrmBacklogSchedParams.ReadFromUI;
@@ -98,30 +119,30 @@ begin
   if rbOrdenPrio.Checked then FParams.Order := soPrioridad
   else FParams.Order := soFechaCompromiso;
   FParams.FechaBase := dtFechaBase.Date;
+  if cbPlacement.ItemIndex >= 0 then
+    FParams.Placement := TPlacementPolicy(cbPlacement.ItemIndex)
+  else
+    FParams.Placement := ppHueco;
+  FParams.HuecoMinimoMin := seHuecoMin.Value;
+  FParams.PorcentajeMinNodo := sePctNodo.Value;
+  FParams.DistanciaMinNodos := seDistMin.Value;
 end;
 
 procedure TfrmBacklogSchedParams.LoadLastParams;
 var
-  ModeVal, OrderVal: Integer;
+  Cfg: TGanttConfig;
   FechaStr: string;
   D: TDateTime;
 begin
-  ModeVal  := uUserPrefs.GetPrefInt(MOD_NAME, 'Mode',  Ord(smBackward));
-  OrderVal := uUserPrefs.GetPrefInt(MOD_NAME, 'Order', Ord(soFechaCompromiso));
-  FechaStr := uUserPrefs.GetPref(MOD_NAME, 'FechaBase', '');
+  // Los defaults (modo, orden, colocacion, umbrales) vienen de la configuracion
+  // central del Gantt (fuente unica de verdad). Aqui solo recordamos la
+  // FechaBase de la ultima tanda, que es puntual de cada planificacion.
+  Cfg := LoadGanttConfig;
+  ApplyConfigToSchedParams(Cfg, FParams);
+  FParams.Mode := Cfg.Mode;
+  FParams.Order := Cfg.Order;
 
-  case ModeVal of
-    0: FParams.Mode := smForward;
-    1: FParams.Mode := smBackward;
-  else
-    FParams.Mode := smBackward;
-  end;
-  case OrderVal of
-    0: FParams.Order := soFechaCompromiso;
-    1: FParams.Order := soPrioridad;
-  else
-    FParams.Order := soFechaCompromiso;
-  end;
+  FechaStr := uUserPrefs.GetPref(MOD_NAME, 'FechaBase', '');
   if TryStrToDate(FechaStr, D) then
     FParams.FechaBase := D
   else
@@ -130,8 +151,8 @@ end;
 
 procedure TfrmBacklogSchedParams.SaveLastParams;
 begin
-  uUserPrefs.SetPrefInt(MOD_NAME, 'Mode',  Ord(FParams.Mode));
-  uUserPrefs.SetPrefInt(MOD_NAME, 'Order', Ord(FParams.Order));
+  // Solo persistimos la FechaBase de la tanda. Modo/orden/colocacion/umbrales
+  // se gestionan en Preferencias del Gantt (no se sobreescriben desde aqui).
   uUserPrefs.SetPref(MOD_NAME, 'FechaBase',
     FormatDateTime('yyyy-mm-dd', FParams.FechaBase));
 end;

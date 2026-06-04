@@ -95,6 +95,7 @@ type
     Configuracion1: TMenuItem;
     Roles1: TMenuItem;
     Usuarios1: TMenuItem;
+    PreferenciasGantt1: TMenuItem;
     NDemo1: TMenuItem;
     InstalarDemos1: TMenuItem;
     Ayuda1: TMenuItem;
@@ -123,6 +124,7 @@ type
     procedure InstalarDemos1Click(Sender: TObject);
     procedure Proyectos1Click(Sender: TObject);
     procedure ConfigEmpresa1Click(Sender: TObject);
+    procedure PreferenciasGantt1Click(Sender: TObject);
     procedure SelectorErp1Click(Sender: TObject);
     procedure SincronizarERP1Click(Sender: TObject);
     procedure StockCockpit1Click(Sender: TObject);
@@ -264,7 +266,7 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uDemoBacklog,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
-  uBacklogScheduler, uPlanningEngine, uPlanningEngineRules,
+  uBacklogScheduler, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
   uReglasPlanParams, uReglasPlanPreview, uReglasPlanComparativa,
   uGestionOperacionHabilidades, uGestionOperationTypes,
   uCuadroPlanificacionDelDia, uGestionTurnos,
@@ -1634,6 +1636,31 @@ begin
     Exit;
   end;
   TfrmConfigEmpresa.Execute;
+end;
+
+procedure TForm1.PreferenciasGantt1Click(Sender: TObject);
+var
+  Cfg: TGanttConfig;
+  Gc: TGanttControl;
+begin
+  Cfg := LoadGanttConfig;
+  if not TfrmGanttConfig.Execute(Cfg) then Exit;
+
+  SaveGanttConfig(Cfg);
+
+  // Aplicar en caliente al Gantt activo (los parametros de planificacion
+  // actuan como defaults y se leen al planificar; los de visualizacion se
+  // aplican ya al control).
+  if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
+  begin
+    Gc := FVistaGantt.GanttControl;
+    Gc.HideWeekends := Cfg.HideWeekends;
+    Gc.LinksVisible := Cfg.LinksVisible;
+    Gc.AutoMarkersEnabled := Cfg.AutoMarkers;
+    if Cfg.PxPerMinute > 0 then
+      Gc.PxPerMinute := Cfg.PxPerMinute;
+    Gc.Invalidate;
+  end;
 end;
 
 procedure TForm1.SelectorErp1Click(Sender: TObject);
