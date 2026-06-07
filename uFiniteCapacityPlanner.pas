@@ -460,7 +460,12 @@ type
     // des-assignacions: si no apareixen al BuildAssignments final, cal posar
     // CenterId=NULL a FS_PL_Node).
     FInitiallyAssignedDataIds: TList<Integer>;
+    // DataIds que l'usuari ha mogut/reassignat DINS d'aquest form. Nomes aquests
+    // (mes els pendents nous del backlog) es reencadenen a RecalcCentreTimes; els
+    // que ja venien planificats i no s'han tocat conserven la seva FechaInicio.
+    FUserMovedDataIds: TList<Integer>;
 
+    procedure MarkUserMoved(const ADataId: Integer);
     procedure LoadBacklogPending;
     procedure PersistAssignments;
 
@@ -2791,6 +2796,7 @@ begin
   FCalculatedTimes := TDictionary<Integer, TAbsInterval>.Create;
   FBacklogRawItemIdByDataId := TDictionary<Integer, Integer>.Create;
   FInitiallyAssignedDataIds := TList<Integer>.Create;
+  FUserMovedDataIds := TList<Integer>.Create;
   FAutoScrollTimer := TTimer.Create(Self);
   FAutoScrollTimer.Interval := 50;
   FAutoScrollTimer.Enabled := False;
@@ -2820,6 +2826,7 @@ begin
   FCalculatedTimes.Free;
   FBacklogRawItemIdByDataId.Free;
   FInitiallyAssignedDataIds.Free;
+  FUserMovedDataIds.Free;
   FNodeTimesCache.Free;
   FOperacionFilter.Free;
   FreeAndNil(FLayoutRepo);
@@ -3351,12 +3358,16 @@ begin
       for K := 0 to High(FInterDragDataIds) do
       begin
         FCentreColumns.AssignItem(FInterDragDataIds[K], TargetCentreId, InsIdx);
+        MarkUserMoved(FInterDragDataIds[K]);
         Inc(InsIdx);
       end;
     end
     else
+    begin
       FCentreColumns.AssignItem(FInterDragDataId, TargetCentreId,
         FCentreColumns.DropTargetIdx);
+      MarkUserMoved(FInterDragDataId);
+    end;
 
     FCentreColumns.ClearDropTarget;
     FPendingList.SelectedIds.Clear;
@@ -4384,9 +4395,12 @@ begin
     for Pair in FCentreColumns.Assignments do
       Pair.Value.Clear;
 
-    // Aplicar assignacions simulades
+    // Aplicar assignacions simulades (replanificacio explicita: reencadenar).
     for var SimPair in SimAssign do
+    begin
       FCentreColumns.AssignItem(SimPair.Key, SimPair.Value);
+      MarkUserMoved(SimPair.Key);
+    end;
 
     BuildPendingList;
     UpdatePendingCount;
@@ -4494,8 +4508,9 @@ begin
             Continue;
         end;
 
-        // Asignar
+        // Asignar (accion explicita del usuario: reencadenar).
         FCentreColumns.AssignItem(D.DataId, CId);
+        MarkUserMoved(D.DataId);
         Assigned := True;
         Break;
       end;
@@ -4843,6 +4858,15 @@ begin
   end;
 end;
 
+procedure TfrmFiniteCapacityPlanner.MarkUserMoved(const ADataId: Integer);
+begin
+  // Marca un nodo como recolocado por el usuario dentro de este form, para que
+  // RecalcCentreTimes SI lo reencadene (a diferencia de los que solo se han
+  // cargado de la BD sin tocar, que conservan su FechaInicio original).
+  if (ADataId > 0) and (not FUserMovedDataIds.Contains(ADataId)) then
+    FUserMovedDataIds.Add(ADataId);
+end;
+
 procedure TfrmFiniteCapacityPlanner.RecalcCentreTimes(const CentreId: Integer);
 var
   Cal: TCentreCalendar;
@@ -4853,6 +4877,8 @@ var
   EndTime: TDateTime;
   Interval: TAbsInterval;
   DurMin: Integer;
+  OrigStart, OrigEnd: TDateTime;
+  KeepOriginal: Boolean;
 begin
   if not Assigned(FGetCalendar) then Exit;
   if FCentreColumns = nil then Exit;
@@ -4871,6 +4897,30 @@ begin
     if not FNodeRepo.TryGetById(L[I], D) then Continue;
 
     DurMin := Max(1, Ceil(D.DurationMin));
+
+    // Un nodo que YA venia planificado de la BD (no es un pendiente nuevo) y que
+    // NO ha sido recolocado por el usuario en este form conserva su FechaInicio
+    // original: no se reencadena. Asi abrir este planificador y seleccionar un
+    // card no destruye las fechas que el usuario fijo en el Gantt.
+    // Solo se reencadena lo que el usuario asigna/mueve aqui dentro.
+    KeepOriginal :=
+      FInitiallyAssignedDataIds.Contains(L[I]) and
+      (not FUserMovedDataIds.Contains(L[I])) and
+      Assigned(FGetNodeTimes) and
+      FGetNodeTimes(D.DataId, OrigStart, OrigEnd) and
+      (OrigStart > 0);
+
+    if KeepOriginal then
+    begin
+      Interval.S := OrigStart;
+      Interval.E := OrigEnd;
+      FCalculatedTimes.AddOrSetValue(L[I], Interval);
+      // El cursor avanza hasta el fin de este nodo para que los que se
+      // reencadenen despues no se solapen con el.
+      if OrigEnd > Cursor then
+        Cursor := OrigEnd;
+      Continue;
+    end;
 
     if Cal <> nil then
     begin

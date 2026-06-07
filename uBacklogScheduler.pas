@@ -68,6 +68,12 @@ type
     FechaEntrega: TDateTime;
     FechaNecesaria: TDateTime;
     TiempoUnidadFabSecs: Double;
+    // Tiempos reales de la operacion (Nivel 3) para el calculo de duracion.
+    // Misma cascada que FS_PL_fn_DuracionOpMin (V054). Ver CalcDuracionOpMin.
+    OpTiempoFabricacion: Double;   // dias, total operacion
+    OpUnidadesHora: Double;        // unidades/hora
+    OpTiempoPreparacion: Double;   // dias
+    Cantidad: Double;              // unidades de la OP
     // Link al modelo unificado FS_PL_Raw_Item (V016)
     RawItemClaveERP: string;     // ClaveERP del item planificado (Nivel 3 en el modelo PRO)
     RawItemTipoOrigen: string;   // 'OF ','PED','PRJ' (char(3) SQL)
@@ -166,6 +172,10 @@ function PriorityRuleToStr(R: TPriorityRule): string;
 function DefaultRuleSet: TPriorityRuleSet;
 function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
 
+// Duracion de una OP en minutos. Replica de FS_PL_fn_DuracionOpMin (V054):
+// unica fuente de verdad para "cuanto dura una operacion" antes de planificar.
+function CalcDuracionOpMin(const AInput: TSchedInput): Double;
+
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
   const AParams: TSchedParams): TSchedResult;
 
@@ -204,6 +214,31 @@ begin
   Result.Principal  := prEDD;
   Result.Desempate1 := prFIFO;
   Result.Desempate2 := prFIFO;
+end;
+
+function CalcDuracionOpMin(const AInput: TSchedInput): Double;
+var
+  PrepMin, FabMin: Double;
+begin
+  // Misma cascada que FS_PL_fn_DuracionOpMin (V054), validada contra datos
+  // reales del Sage (2026-06-07):
+  //   OpTiempoFabricacion / OpTiempoPreparacion vienen en DIAS y son el tiempo
+  //   TOTAL de la operacion (no por unidad) -> * 24 * 60 = minutos.
+  if AInput.OpTiempoPreparacion > 0 then
+    PrepMin := AInput.OpTiempoPreparacion * 24.0 * 60.0
+  else
+    PrepMin := 0;
+
+  if AInput.OpTiempoFabricacion > 0 then
+    FabMin := AInput.OpTiempoFabricacion * 24.0 * 60.0
+  else if (AInput.OpUnidadesHora > 0) and (AInput.Cantidad > 0) then
+    FabMin := (AInput.Cantidad / AInput.OpUnidadesHora) * 60.0
+  else if AInput.HorasEstimadas > 0 then
+    FabMin := AInput.HorasEstimadas * 60.0
+  else
+    FabMin := 60.0;
+
+  Result := PrepMin + FabMin;
 end;
 
 function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
@@ -809,9 +844,10 @@ begin
       // 24x7, encadenando los nodos uno detras de otro (respetando lanes).
       SinCalendario := Cursor.Cal = nil;
 
-      if Input.HorasEstimadas > 0 then
-        DurMin := Round(Input.HorasEstimadas * 60)
-      else
+      // Duracion via cascada canonica (V054): tiempos reales de la operacion
+      // con fallback a HorasEstimadas y default 60 min.
+      DurMin := Round(CalcDuracionOpMin(Input));
+      if DurMin <= 0 then
         DurMin := 60;
       Output.DuracionMin := DurMin;
 

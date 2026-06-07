@@ -103,12 +103,23 @@ type
     OpPctParaSigOperacion: Double;
     OpPctDedicacionOperario: Double;
     Extras: TDictionary<string, Variant>;
+    // Agregados de prevision (V055, FS_PL_vw_BacklogTree). Relevantes sobre todo
+    // a Nivel 1/2: suma de duracion y conteo de OP descendientes pendientes.
+    DuracionPrevistaMin: Double;
+    NumOpsTotal: Integer;
+    NumOpsPendientes: Integer;
+    FechaCompromisoMin: TDateTime;
     // Solo se rellenan en el tab Planificados (via FS_PL_vw_BacklogPlanned)
     NodeId: Integer;
     NodeInicio: TDateTime;
     NodeFin: TDateTime;
     NodeCodigoCentro: string;
     NodeCentroNombre: string;
+    // Agregados de progreso (V056, FS_PL_vw_BacklogPlannedTree). Relevantes a
+    // Nivel 1/2 del tab Planificados: cuantas OP del documento ya estan en el
+    // plan y en cuantos centros.
+    NumOpsPlan: Integer;
+    NumCentros: Integer;
   end;
 
   TCustomColumnDef = record
@@ -134,6 +145,8 @@ type
     lblFiltroFechaDesde: TLabel;
     lblFiltroFechaHasta: TLabel;
     cmbOrigen: TComboBox;
+    lblNivelVista: TLabel;
+    cmbNivelVista: TComboBox;
     edtCliente: TEdit;
     edtProyecto: TEdit;
     edtCentro: TEdit;
@@ -188,6 +201,17 @@ type
     cxButton1: TcxButton;
     btnRecargar: TcxButton;
     lblCountRegs: TLabel;
+    pnlKpiOF: TPanel;
+    lblKpiOFVal: TLabel;
+    lblKpiOFCap: TLabel;
+    pnlKpiOT: TPanel;
+    lblKpiOTVal: TLabel;
+    lblKpiOTCap: TLabel;
+    pnlKpiOP: TPanel;
+    lblKpiOPVal: TLabel;
+    lblKpiOPCap: TLabel;
+    Label28: TLabel;
+    cxButton9: TcxButton;
     procedure btnSyncErpClick(Sender: TObject);
     procedure btnVerOFClick(Sender: TObject);
     procedure RegenerarNodosDemo1Click(Sender: TObject);
@@ -211,6 +235,7 @@ type
       ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
       var ADone: Boolean);
     procedure tabModeChange(Sender: TObject);
+    procedure cmbNivelVistaChange(Sender: TObject);
     procedure btnDesplanificarSelClick(Sender: TObject);
     procedure btnDesplanificarTodoClick(Sender: TObject);
     procedure btnRecargarClick(Sender: TObject);
@@ -227,6 +252,7 @@ type
     FColKeyByTag: TDictionary<Integer, string>;
     FLoading: Boolean;
     FFirstShow: Boolean;
+    FNivelVista: Integer;   // 1=OF/PED/PRJ, 2=OT/LINEA/TAREA, 3=OP. Tab Pendientes.
 
     procedure VerOFActual;
     procedure BuildBaseColumns;
@@ -234,6 +260,7 @@ type
     procedure BuildCustomColumns;
     procedure LoadData;
     procedure ApplyRowsToGrid;
+    procedure LoadKpis;
     function BuildSQL: string;
     function ResolveExtraRawItemId(const Row: TBacklogRow;
       const ColDef: TCustomColumnDef): Int64;
@@ -254,12 +281,15 @@ type
     procedure ResetLayout;
 
     function CollectSelectedInputs: TArray<TSchedInput>;
+    function BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
+    function ExplodeToOpInputs(ARawId: Int64; ANivel: Integer): TArray<TSchedInput>;
     procedure CommitScheduling(const AResult: TSchedResult);
 
     procedure ApplyImpactoVisible(AVisible: Boolean);
     procedure ApplyTabMode;
     function IsPlanningTab: Boolean;
     function CollectSelectedNodeIds: TArray<Integer>;
+    function NodeIdsForAncestor(ARawId: Int64; ANivel: Integer): TArray<Integer>;
     procedure DoDesplanificar(const ANodeIds: TArray<Integer>);
 
     function UserLogin: string;
@@ -410,6 +440,15 @@ begin
     btnPlanificar.Visible := not IsPlanningTab;
     btnDesplanificarSel.Visible := IsPlanningTab;
     btnDesplanificarTodo.Visible := IsPlanningTab;
+
+    // Nivel de vista (1/2/3). Por defecto 3 (OP), comportamiento previo.
+    FNivelVista := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'NivelVista', 3);
+    if (FNivelVista < 1) or (FNivelVista > 3) then FNivelVista := 3;
+    cmbNivelVista.ItemIndex := FNivelVista - 1;
+    // El nivel de vista aplica a ambos tabs (Pendientes y Planificados).
+    cmbNivelVista.Visible := True;
+    lblNivelVista.Visible := True;
+
     Columnas1.Enabled := uLogin.IsAdmin;
 
     BuildBaseColumns;
@@ -428,14 +467,9 @@ begin
   if not FFirstShow then Exit;
   FFirstShow := False;
 
-  // El SELECT del backlog puede tardar varios segundos. Mostramos un dialogo
-  // generico "Cargando..." que se pinta antes de bloquear el thread con la
-  // query. El form se libera automaticamente al salir del bloque.
-  uBusyDialog.ShowBusy(Self, 'Cargando datos del backlog...',
-    procedure
-    begin
-      LoadData;
-    end);
+  // LoadData ya muestra su propio dialogo de carga (con spinner animado por
+  // thread); no hace falta envolverlo aqui.
+  LoadData;
 end;
 
 procedure TfrmBacklog.FormDestroy(Sender: TObject);
@@ -478,12 +512,158 @@ begin
   ApplyRowsToGrid;
 end;
 
+// Mapea una fila del backlog (cualquier nivel) a un TSchedInput. Para filas de
+// OP (Nivel 3) el input es planificable directamente. Para OF/OT (Nivel 1/2) el
+// input solo sirve de portador; quien planifica debe explosionarlo a OPs antes.
+function TfrmBacklog.BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
+begin
+  Result := Default(TSchedInput);
+  Result.RawId := Row.RawId;
+  Result.Origen := Row.Origen;
+  Result.CodigoDocumento := Row.CodigoDocumento;
+  Result.CentroPreferente := Row.CentroPreferente;
+  Result.HorasEstimadas := Row.HorasEstimadas;
+  Result.FechaCompromiso := Row.FechaCompromiso;
+  Result.Prioridad := Row.Prioridad;
+
+  Result.NumeroOF := 0;
+  Result.SerieOF := '';
+  Result.NumeroPedido := 0;
+  Result.SeriePedido := '';
+  // El check correcte es per familia ERP (TipoOrigen), no per nivell del leaf
+  // (Origen). Per a una operacio Nivel=3, Origen val 'OP' i la familia pot
+  // ser 'OF ', 'PED' o 'PRJ'. La view V048 ja propaga NumeroDoc/SerieDoc
+  // heredats del pare per a Nivel=3.
+  if Trim(Row.TipoOrigen) = 'OF' then
+  begin
+    Result.NumeroOF := Row.NumeroDoc;
+    Result.SerieOF := Row.SerieDoc;
+  end
+  else if Trim(Row.TipoOrigen) = 'PED' then
+  begin
+    Result.NumeroPedido := Row.NumeroDoc;
+    Result.SeriePedido := Row.SerieDoc;
+  end;
+
+  Result.CodigoCliente := Row.CodigoCliente;
+  Result.CodigoArticulo := Row.CodigoArticulo;
+  Result.DescripcionArticulo := Row.DescripcionArticulo;
+  Result.UnidadesAFabricar := Row.Cantidad;
+  Result.NumeroTrabajo := Row.CodigoProyecto;
+  Result.FechaEntrega := Row.FechaCompromiso;
+  Result.FechaNecesaria := Row.FechaNecesaria;
+  Result.TiempoUnidadFabSecs := Row.TiempoUnidadFabSecs;
+
+  // Tiempos reales de la operacion para CalcDuracionOpMin (cascada V054).
+  Result.OpTiempoFabricacion := Row.OpTiempoFabricacion;
+  Result.OpUnidadesHora := Row.OpUnidadesHora;
+  Result.OpTiempoPreparacion := Row.OpTiempoPreparacion;
+  Result.Cantidad := Row.Cantidad;
+
+  // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
+  Result.RawItemClaveERP := Row.ClaveERP;
+  Result.RawItemTipoOrigen := Row.TipoOrigen;
+end;
+
+// Explosiona un nodo Nivel 1 (OF/PED/PRJ) o Nivel 2 (OT/LINEA/TAREA) a la lista
+// de sus OP descendientes PENDIENTES (sin node), ordenadas por OT y luego por el
+// Orden de la operacion dentro de la OT (la ruta de fabricacion). Cada OP se
+// devuelve como un TSchedInput planificable. Reusa FS_PL_vw_Backlog (que ya solo
+// expone leafs sin node y propaga los campos heredados del padre/abuelo).
+function TfrmBacklog.ExplodeToOpInputs(ARawId: Int64;
+  ANivel: Integer): TArray<TSchedInput>;
+var
+  Q: TADOQuery;
+  L: TList<TSchedInput>;
+  Inp: TSchedInput;
+  AncestorJoin: string;
+begin
+  L := TList<TSchedInput>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    // Filtro de ancestro segun el nivel del nodo seleccionado:
+    //   Nivel 1 -> la OP cuelga de una OT cuyo padre es ARawId (abuelo).
+    //   Nivel 2 -> la OP cuelga directamente de ARawId (padre).
+    if ANivel <= 1 then
+      AncestorJoin :=
+        ' JOIN FS_PL_Raw_Item op ON op.RawItemId = b.RawId' +
+        '   AND op.CodigoEmpresa = b.CodigoEmpresa' +
+        ' JOIN FS_PL_Raw_Item ot ON ot.RawItemId = op.ParentRawItemId' +
+        ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+        '   AND b.Nivel = 3 AND ot.ParentRawItemId = ' + IntToStr(ARawId)
+    else
+      AncestorJoin :=
+        ' JOIN FS_PL_Raw_Item op ON op.RawItemId = b.RawId' +
+        '   AND op.CodigoEmpresa = b.CodigoEmpresa' +
+        ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+        '   AND b.Nivel = 3 AND op.ParentRawItemId = ' + IntToStr(ARawId);
+
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT b.* FROM FS_PL_vw_Backlog b' + AncestorJoin +
+      ' ORDER BY op.ParentRawItemId, b.Orden, b.RawId';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Inp := Default(TSchedInput);
+      Inp.RawId := Q.FieldByName('RawId').AsLargeInt;
+      Inp.Origen := Q.FieldByName('Origen').AsString;
+      Inp.CodigoDocumento := Q.FieldByName('CodigoDocumento').AsString;
+      Inp.CentroPreferente := Q.FieldByName('CentroPreferente').AsString;
+      Inp.HorasEstimadas := Q.FieldByName('HorasEstimadas').AsFloat;
+      if not Q.FieldByName('FechaCompromiso').IsNull then
+        Inp.FechaCompromiso := Q.FieldByName('FechaCompromiso').AsDateTime;
+      Inp.Prioridad := Q.FieldByName('Prioridad').AsInteger;
+
+      if Trim(Q.FieldByName('TipoOrigen').AsString) = 'OF' then
+      begin
+        Inp.NumeroOF := Q.FieldByName('NumeroDoc').AsInteger;
+        Inp.SerieOF := Q.FieldByName('SerieDoc').AsString;
+      end
+      else if Trim(Q.FieldByName('TipoOrigen').AsString) = 'PED' then
+      begin
+        Inp.NumeroPedido := Q.FieldByName('NumeroDoc').AsInteger;
+        Inp.SeriePedido := Q.FieldByName('SerieDoc').AsString;
+      end;
+
+      Inp.CodigoCliente := Q.FieldByName('CodigoCliente').AsString;
+      Inp.CodigoArticulo := Q.FieldByName('CodigoArticulo').AsString;
+      Inp.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
+      Inp.UnidadesAFabricar := Q.FieldByName('Cantidad').AsFloat;
+      Inp.NumeroTrabajo := Q.FieldByName('CodigoProyecto').AsString;
+      if not Q.FieldByName('FechaCompromiso').IsNull then
+        Inp.FechaEntrega := Q.FieldByName('FechaCompromiso').AsDateTime;
+      if not Q.FieldByName('FechaNecesaria').IsNull then
+        Inp.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
+      if Q.FindField('TiempoUnidadFabSecs') <> nil then
+        Inp.TiempoUnidadFabSecs := Q.FieldByName('TiempoUnidadFabSecs').AsFloat;
+
+      // Tiempos reales (cascada V054).
+      Inp.OpTiempoFabricacion := Q.FieldByName('OpTiempoFabricacion').AsFloat;
+      Inp.OpUnidadesHora := Q.FieldByName('OpUnidadesHora').AsFloat;
+      Inp.OpTiempoPreparacion := Q.FieldByName('OpTiempoPreparacion').AsFloat;
+      Inp.Cantidad := Q.FieldByName('Cantidad').AsFloat;
+
+      Inp.RawItemClaveERP := Q.FieldByName('ClaveERP').AsString;
+      Inp.RawItemTipoOrigen := Q.FieldByName('TipoOrigen').AsString;
+
+      L.Add(Inp);
+      Q.Next;
+    end;
+    Result := L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
 function TfrmBacklog.CollectSelectedInputs: TArray<TSchedInput>;
 var
   I, RecIdx, RowIdx: Integer;
   Row: TBacklogRow;
   L: TList<TSchedInput>;
-  Input: TSchedInput;
+  Exploded: TArray<TSchedInput>;
+  J: Integer;
 begin
   L := TList<TSchedInput>.Create;
   try
@@ -495,48 +675,18 @@ begin
       if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
 
       Row := FRows[RowIdx];
-      Input := Default(TSchedInput);
-      Input.RawId := Row.RawId;
-      Input.Origen := Row.Origen;
-      Input.CodigoDocumento := Row.CodigoDocumento;
-      Input.CentroPreferente := Row.CentroPreferente;
-      Input.HorasEstimadas := Row.HorasEstimadas;
-      Input.FechaCompromiso := Row.FechaCompromiso;
-      Input.Prioridad := Row.Prioridad;
 
-      Input.NumeroOF := 0;
-      Input.SerieOF := '';
-      Input.NumeroPedido := 0;
-      Input.SeriePedido := '';
-      // El check correcte es per familia ERP (TipoOrigen), no per nivell del leaf
-      // (Origen). Per a una operacio Nivel=3, Origen val 'OP' i la familia pot
-      // ser 'OF ', 'PED' o 'PRJ'. La view V048 ja propaga NumeroDoc/SerieDoc
-      // heredats del pare per a Nivel=3.
-      if Trim(Row.TipoOrigen) = 'OF' then
+      // Nivel 1/2 (OF / OT): explosionar a las OP descendientes pendientes.
+      // Cada OP se planifica como un nodo; el motor no cambia.
+      if Row.Nivel < 3 then
       begin
-        Input.NumeroOF := Row.NumeroDoc;
-        Input.SerieOF := Row.SerieDoc;
+        Exploded := ExplodeToOpInputs(Row.RawId, Row.Nivel);
+        for J := 0 to High(Exploded) do
+          L.Add(Exploded[J]);
       end
-      else if Trim(Row.TipoOrigen) = 'PED' then
-      begin
-        Input.NumeroPedido := Row.NumeroDoc;
-        Input.SeriePedido := Row.SerieDoc;
-      end;
-
-      Input.CodigoCliente := Row.CodigoCliente;
-      Input.CodigoArticulo := Row.CodigoArticulo;
-      Input.DescripcionArticulo := Row.DescripcionArticulo;
-      Input.UnidadesAFabricar := Row.Cantidad;
-      Input.NumeroTrabajo := Row.CodigoProyecto;
-      Input.FechaEntrega := Row.FechaCompromiso;
-      Input.FechaNecesaria := Row.FechaNecesaria;
-      Input.TiempoUnidadFabSecs := Row.TiempoUnidadFabSecs;
-
-      // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
-      Input.RawItemClaveERP := Row.ClaveERP;
-      Input.RawItemTipoOrigen := Row.TipoOrigen;
-
-      L.Add(Input);
+      else
+        // Nivel 3 (OP): planificable directamente.
+        L.Add(BuildInputFromRow(Row));
     end;
     Result := L.ToArray;
   finally
@@ -717,7 +867,14 @@ begin
   end;
 
   Inputs := CollectSelectedInputs;
-  if Length(Inputs) = 0 then Exit;
+  if Length(Inputs) = 0 then
+  begin
+    // A Nivel 1/2 puede pasar que la seleccion no tenga OP pendientes (todas ya
+    // planificadas). Damos feedback en vez de salir en silencio.
+    ShowMessage('La selecci'#243'n no tiene operaciones (OP) pendientes de ' +
+      'planificar.');
+    Exit;
+  end;
 
   Params := Default(TSchedParams);
   while True do
@@ -875,6 +1032,10 @@ begin
   btnDesplanificarSel.Visible := IsPlanningTab;
   btnDesplanificarTodo.Visible := IsPlanningTab;
 
+  // El nivel de vista aplica a ambos tabs (Pendientes y Planificados).
+  cmbNivelVista.Visible := True;
+  lblNivelVista.Visible := True;
+
   // Reconstruir columnas porque cambia el set base
   BuildBaseColumns;
   BuildCustomColumns;
@@ -891,10 +1052,65 @@ begin
   ApplyTabMode;
 end;
 
+procedure TfrmBacklog.cmbNivelVistaChange(Sender: TObject);
+begin
+  if FLoading then Exit;
+  FNivelVista := cmbNivelVista.ItemIndex + 1;
+  if (FNivelVista < 1) or (FNivelVista > 3) then FNivelVista := 3;
+  uUserPrefs.SetPrefInt(BACKLOG_MOD, 'NivelVista', FNivelVista);
+  LoadData;
+end;
+
+// Devuelve los NodeId de las OP planificadas que cuelgan de un nodo Nivel 1/2.
+// Usado para desplanificar una OF/OT entera (todos sus nodos a la vez).
+function TfrmBacklog.NodeIdsForAncestor(ARawId: Int64;
+  ANivel: Integer): TArray<Integer>;
+var
+  Q: TADOQuery;
+  L: TList<Integer>;
+  AncestorFilter: string;
+begin
+  L := TList<Integer>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    if ANivel <= 1 then
+      AncestorFilter :=
+        ' JOIN FS_PL_Raw_Item ot ON ot.RawItemId = op.ParentRawItemId' +
+        ' WHERE ot.ParentRawItemId = ' + IntToStr(ARawId)
+    else
+      AncestorFilter :=
+        ' WHERE op.ParentRawItemId = ' + IntToStr(ARawId);
+
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT n.NodeId FROM FS_PL_Raw_Item op' +
+      ' JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = op.CodigoEmpresa' +
+      '   AND nd.RawItemTipoOrigen = op.TipoOrigen' +
+      '   AND nd.RawItemClaveERP = op.ClaveERP' +
+      ' JOIN FS_PL_Node n ON n.CodigoEmpresa = nd.CodigoEmpresa' +
+      '   AND n.NodeId = nd.NodeId' +
+      AncestorFilter +
+      '   AND op.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+      '   AND op.Nivel = 3 AND op.Activo = 1';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      L.Add(Q.FieldByName('NodeId').AsInteger);
+      Q.Next;
+    end;
+    Result := L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
 function TfrmBacklog.CollectSelectedNodeIds: TArray<Integer>;
 var
-  I, RecIdx, RowIdx: Integer;
+  I, J, RecIdx, RowIdx: Integer;
   L: TList<Integer>;
+  Row: TBacklogRow;
+  NodeIds: TArray<Integer>;
 begin
   L := TList<Integer>.Create;
   try
@@ -904,8 +1120,16 @@ begin
       if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Continue;
       RowIdx := FFilteredIndices[RecIdx];
       if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
-      if FRows[RowIdx].NodeId > 0 then
-        L.Add(FRows[RowIdx].NodeId);
+      Row := FRows[RowIdx];
+      if Row.Nivel < 3 then
+      begin
+        // OF/OT: desplanificar todos los nodos de sus OP descendientes.
+        NodeIds := NodeIdsForAncestor(Row.RawId, Row.Nivel);
+        for J := 0 to High(NodeIds) do
+          L.Add(NodeIds[J]);
+      end
+      else if Row.NodeId > 0 then
+        L.Add(Row.NodeId);
     end;
     Result := L.ToArray;
   finally
@@ -1065,6 +1289,17 @@ begin
       Cols.Add(AddCol('HorasEstimadas',       'Horas est.',     80));
       Cols.Add(AddCol('EstadoERP',            'Estado',         90));
       Cols.Add(AddCol('Orden',                'Orden op.',      70));
+
+      // Prevision agregada (V055): solo aporta a Nivel 1/2 (cada fila resume
+      // sus OP descendientes pendientes). A Nivel 3 una fila ya es una OP.
+      if (not IsPlanningTab) and (FNivelVista < 3) then
+      begin
+        Cols.Add(AddCol('NumOpsPendientes',     'OP pend.',       70));
+        Cols.Add(AddCol('NumOpsTotal',          'OP total',       70));
+        Cols.Add(AddCol('DuracionPrevistaMin',  'Dur. prev. (h)', 100));
+        Cols.Add(AddCol('FechaCompromisoMin',   'F. Compr. min', 110));
+      end;
+
       // Bloque OP (Nivel 3): solo con valor en filas de operacion.
       Cols.Add(AddCol('OpTiempoPreparacion',  'T. Prep.',       70));
       Cols.Add(AddCol('OpTiempoFabricacion',  'T. Fab.',        70));
@@ -1087,9 +1322,18 @@ begin
       // Columnas extra visibles solo en el tab Planificados
       if IsPlanningTab then
       begin
+        // Rango/centro: a Nivel 3 es el del node; a Nivel 1/2 es agregado
+        // (rango inicio-fin del conjunto). Las cabeceras valen para ambos.
         Cols.Add(AddCol('NodeInicio',         'Inicio plan.',  130));
         Cols.Add(AddCol('NodeFin',            'Fin plan.',     130));
-        Cols.Add(AddCol('NodeCentroNombre',   'Centro plan.',  140));
+        if FNivelVista >= 3 then
+          Cols.Add(AddCol('NodeCentroNombre', 'Centro plan.',  140))
+        else
+        begin
+          // Indicador de progreso (V056): OP planificadas / total y nº centros.
+          Cols.Add(AddCol('Progreso',         'Progreso OP',   110));
+          Cols.Add(AddCol('NumCentros',       'Centros',        70));
+        end;
       end;
 
       // Columna "Ver" - dos botons: Pedido (boto 0) + Formula (boto 1)
@@ -1315,16 +1559,39 @@ begin
       '  AND b.TipoOrigen = ' + TipoFiltro;
   end;
 
-  if IsPlanningTab then
+  if IsPlanningTab and (FNivelVista >= 3) then
+    // Nivel 3 (OP): 1 fila por OP planificada, con su node. Vista ligera que ya
+    // filtra por ProjectId.
     Result :=
       'SELECT ' + Sel + ' FROM FS_PL_vw_BacklogPlanned b ' + Joins +
       ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
       '   AND b.ProjectId = ' + IntToStr(DMPlanner.CurrentProjectId) +
       ' ORDER BY b.NodeInicio'
-  else
+  else if IsPlanningTab then
+    // Nivel 1/2: vista multinivel de planificados con agregados de progreso
+    // (V056): rango NodeInicio/NodeFin, NumOpsPlan/Total, NumCentros.
+    Result :=
+      'SELECT ' + Sel + ' FROM FS_PL_vw_BacklogPlannedTree b ' + Joins +
+      ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+      '   AND b.Nivel = ' + IntToStr(FNivelVista) +
+      ' ORDER BY b.NodeInicio'
+  else if FNivelVista >= 3 then
+    // Nivel 3 (OP): no necesita los agregados de prevision, y FS_PL_vw_BacklogTree
+    // a este nivel es ~100x mas lenta (calcula agregados que no se usan). Usamos
+    // la vista ligera FS_PL_vw_Backlog (leafs sin node) filtrando Nivel=3.
     Result :=
       'SELECT ' + Sel + ' FROM FS_PL_vw_Backlog b ' + Joins +
       ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+      '   AND b.Nivel = 3' +
+      ' ORDER BY b.FechaCompromiso, b.Prioridad DESC'
+  else
+    // Nivel 1/2: vista multinivel con agregados de prevision (V055).
+    // FS_PL_vw_BacklogTree expone las mismas columnas que FS_PL_vw_Backlog mas
+    // DuracionPrevistaMin, NumOps*, FechaCompromisoMin.
+    Result :=
+      'SELECT ' + Sel + ' FROM FS_PL_vw_BacklogTree b ' + Joins +
+      ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+      '   AND b.Nivel = ' + IntToStr(FNivelVista) +
       ' ORDER BY b.FechaCompromiso, b.Prioridad DESC';
 end;
 
@@ -1338,13 +1605,41 @@ var
   I: Integer;
   FldName: string;
   V: Variant;
+  SQLText, ConnStr: string;
 begin
   ClearRows;
+  SQLText := BuildSQL;
+  ConnStr := DMPlanner.ADOConnection.ConnectionString;
+
+  // La query (parte lenta) se ejecuta en un thread con conexion ADO propia y
+  // cursor client-side: asi se desconecta y se puede leer desde el hilo
+  // principal, que mientras tanto anima el spinner del dialogo de carga.
   Q := TADOQuery.Create(nil);
   try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text := BuildSQL;
-    Q.Open;
+    uBusyDialog.RunBusy(Self, 'Cargando backlog...',
+      procedure
+      var
+        ThConn: TADOConnection;
+      begin
+        ThConn := TADOConnection.Create(nil);
+        try
+          ThConn.LoginPrompt := False;
+          ThConn.ConnectionString := ConnStr;
+          ThConn.Open;
+          Q.Connection := ThConn;
+          Q.CursorLocation := clUseClient;
+          Q.SQL.Text := SQLText;
+          Q.Open;
+          // Desconectar el recordset para poder leerlo en el hilo principal
+          // una vez cerrada la conexion del thread.
+          Q.Connection := nil;
+        finally
+          ThConn.Free;
+        end;
+      end);
+
+    // A partir de aqui, ya en el hilo principal, volcamos el recordset
+    // (desconectado) a las filas y al grid.
     while not Q.Eof do
     begin
       Row.Origen              := Q.FieldByName('Origen').AsString;
@@ -1440,12 +1735,27 @@ begin
       Row.OpPctParaSigOperacion   := FieldFloat(Q, 'OpPctParaSigOperacion');
       Row.OpPctDedicacionOperario := FieldFloat(Q, 'OpPctDedicacionOperario');
 
-      // Campos del nodo (solo vw_BacklogPlanned)
+      // Agregados de prevision (V055, solo vw_BacklogTree). FindField por
+      // robustez: vw_BacklogPlanned no los trae.
+      Row.DuracionPrevistaMin := FieldFloat(Q, 'DuracionPrevistaMin');
+      if Q.FindField('NumOpsTotal') <> nil then
+        Row.NumOpsTotal := Q.FieldByName('NumOpsTotal').AsInteger
+      else
+        Row.NumOpsTotal := 0;
+      if Q.FindField('NumOpsPendientes') <> nil then
+        Row.NumOpsPendientes := Q.FieldByName('NumOpsPendientes').AsInteger
+      else
+        Row.NumOpsPendientes := 0;
+      Row.FechaCompromisoMin := FieldDate(Q, 'FechaCompromisoMin');
+
+      // Campos del nodo (solo vw_BacklogPlanned / vw_BacklogPlannedTree)
       Row.NodeId := 0;
       Row.NodeInicio := 0;
       Row.NodeFin := 0;
       Row.NodeCodigoCentro := '';
       Row.NodeCentroNombre := '';
+      Row.NumOpsPlan := 0;
+      Row.NumCentros := 0;
       if IsPlanningTab then
       begin
         if Q.FindField('NodeId') <> nil then
@@ -1458,6 +1768,11 @@ begin
           Row.NodeCodigoCentro := Q.FieldByName('NodeCodigoCentro').AsString;
         if Q.FindField('NodeCentroNombre') <> nil then
           Row.NodeCentroNombre := Q.FieldByName('NodeCentroNombre').AsString;
+        // Agregados de progreso (V056, solo a Nivel 1/2 via vw_BacklogPlannedTree).
+        if Q.FindField('NumOpsPlan') <> nil then
+          Row.NumOpsPlan := Q.FieldByName('NumOpsPlan').AsInteger;
+        if Q.FindField('NumCentros') <> nil then
+          Row.NumCentros := Q.FieldByName('NumCentros').AsInteger;
       end;
 
       Row.Extras := TDictionary<string, Variant>.Create;
@@ -1485,6 +1800,81 @@ begin
     Q.Free;
   end;
   ApplyRowsToGrid;
+  LoadKpis;
+  // UpdateCountLabel (dins ApplyRowsToGrid) ya ha puesto el conteo real.
+end;
+
+// ---------------------------------------------------------------------------
+// KPIs de cabecera: OF / OT / OP pendientes vs planificadas (globales, no
+// afectados por los filtros de la barra lateral). Una OF/OT cuenta como
+// pendiente si tiene alguna OP sin node, y como planificada si tiene alguna OP
+// con node (puede contar en ambas si esta a medias).
+// ---------------------------------------------------------------------------
+procedure TfrmBacklog.LoadKpis;
+var
+  Q: TADOQuery;
+  ofP, ofPl, ofT, otP, otPl, otT, opP, opPl, opT: Integer;
+begin
+  ofP := 0; ofPl := 0; ofT := 0; otP := 0; otPl := 0; otT := 0;
+  opP := 0; opPl := 0; opT := 0;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    // Estado por OP (Nivel 3): planificada si tiene node, pendiente si no.
+    // OF/OT: pendientes/planificadas = documentos distintos con alguna OP en ese
+    // estado (una OF a medias cuenta en ambos). El total (Tot) es el numero de
+    // documentos DISTINTOS, sin doble conteo del solapamiento.
+    Q.SQL.Text :=
+      'WITH OpState AS ('#13#10 +
+      '  SELECT op.RawItemId, op.ParentRawItemId AS N2,'#13#10 +
+      '    (SELECT p1.ParentRawItemId FROM FS_PL_Raw_Item p1'#13#10 +
+      '      WHERE p1.RawItemId = op.ParentRawItemId) AS N1,'#13#10 +
+      '    CASE WHEN EXISTS (SELECT 1 FROM FS_PL_NodeData nd'#13#10 +
+      '          WHERE nd.CodigoEmpresa = op.CodigoEmpresa'#13#10 +
+      '            AND nd.RawItemTipoOrigen = op.TipoOrigen'#13#10 +
+      '            AND nd.RawItemClaveERP = op.ClaveERP)'#13#10 +
+      '         THEN 1 ELSE 0 END AS Planif'#13#10 +
+      '  FROM FS_PL_Raw_Item op'#13#10 +
+      '  WHERE op.Nivel = 3 AND op.Activo = 1'#13#10 +
+      '    AND op.CodigoEmpresa = ' + IntToStr(EmpresaCode) + #13#10 +
+      ')'#13#10 +
+      'SELECT'#13#10 +
+      '  COUNT(DISTINCT CASE WHEN Planif=0 THEN N1 END) AS OfPend,'#13#10 +
+      '  COUNT(DISTINCT CASE WHEN Planif=1 THEN N1 END) AS OfPlan,'#13#10 +
+      '  COUNT(DISTINCT N1)                             AS OfTot,'#13#10 +
+      '  COUNT(DISTINCT CASE WHEN Planif=0 THEN N2 END) AS OtPend,'#13#10 +
+      '  COUNT(DISTINCT CASE WHEN Planif=1 THEN N2 END) AS OtPlan,'#13#10 +
+      '  COUNT(DISTINCT N2)                             AS OtTot,'#13#10 +
+      '  SUM(CASE WHEN Planif=0 THEN 1 ELSE 0 END)      AS OpPend,'#13#10 +
+      '  SUM(CASE WHEN Planif=1 THEN 1 ELSE 0 END)      AS OpPlan,'#13#10 +
+      '  COUNT(*)                                       AS OpTot'#13#10 +
+      'FROM OpState';
+    Q.Open;
+    if not Q.Eof then
+    begin
+      ofP  := Q.FieldByName('OfPend').AsInteger;
+      ofPl := Q.FieldByName('OfPlan').AsInteger;
+      ofT  := Q.FieldByName('OfTot').AsInteger;
+      otP  := Q.FieldByName('OtPend').AsInteger;
+      otPl := Q.FieldByName('OtPlan').AsInteger;
+      otT  := Q.FieldByName('OtTot').AsInteger;
+      opP  := Q.FieldByName('OpPend').AsInteger;
+      opPl := Q.FieldByName('OpPlan').AsInteger;
+      opT  := Q.FieldByName('OpTot').AsInteger;
+    end;
+  except
+    // Si falla la consulta, dejamos los KPIs a 0 (no bloquea el Backlog).
+  end;
+  Q.Free;
+
+  // Valor grande = pendientes; caption = planificadas / total de documentos.
+  // Valor grande = pendientes; caption compacto = 'OF  plan/tot' (cabe en 95px).
+  lblKpiOFVal.Caption := IntToStr(ofP);
+  lblKpiOFCap.Caption := Format('OF  %d/%d', [ofPl, ofT]);
+  lblKpiOTVal.Caption := IntToStr(otP);
+  lblKpiOTCap.Caption := Format('OT  %d/%d', [otPl, otT]);
+  lblKpiOPVal.Caption := IntToStr(opP);
+  lblKpiOPCap.Caption := Format('OP  %d/%d', [opPl, opT]);
 end;
 
 // ---------------------------------------------------------------------------
@@ -1620,6 +2010,26 @@ begin
           else
             tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.Orden;
         end
+        else if Key = 'NumOpsPendientes' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NumOpsPendientes
+        else if Key = 'NumOpsTotal' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NumOpsTotal
+        else if Key = 'DuracionPrevistaMin' then
+        begin
+          // Se almacena en minutos; se muestra en horas (1 decimal).
+          if Row.DuracionPrevistaMin <= 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] :=
+              Round(Row.DuracionPrevistaMin / 6.0) / 10.0;
+        end
+        else if Key = 'FechaCompromisoMin' then
+        begin
+          if Row.FechaCompromisoMin = 0 then
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Null
+          else
+            tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.FechaCompromisoMin;
+        end
         else if Key = 'OpTiempoPreparacion' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := FloatOrNull(Row.OpTiempoPreparacion)
         else if Key = 'OpTiempoFabricacion' then
@@ -1680,6 +2090,12 @@ begin
         end
         else if Key = 'NodeCentroNombre' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NodeCentroNombre
+        else if Key = 'Progreso' then
+          // Indicador de progreso: OP planificadas / total del documento.
+          tvBacklog.DataController.Values[RowIdx, Col.Index] :=
+            Format('%d / %d', [Row.NumOpsPlan, Row.NumOpsTotal])
+        else if Key = 'NumCentros' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NumCentros
         else if Copy(Key, 1, 2) = 'X:' then
         begin
           if (Row.Extras <> nil) and Row.Extras.TryGetValue(Copy(Key, 3, MaxInt), V) then

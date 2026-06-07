@@ -56,25 +56,131 @@ object frmBacklog: TfrmBacklog
       Font.Style = []
       ParentFont = False
     end
-    object Label28: TLabel
-      Left = 1194
-      Top = 36
-      Width = 67
-      Height = 19
-      Alignment = taRightJustify
+    object pnlKpiOF: TPanel
+      Left = 996
+      Top = 10
+      Width = 95
+      Height = 50
       Anchors = [akTop, akRight]
-      AutoSize = False
-      Caption = 'Opciones'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWhite
-      Font.Height = -12
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-      Layout = tlCenter
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 5
+      object lblKpiOFVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 95
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiOFCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 95
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'OF pend.'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiOT: TPanel
+      Left = 1093
+      Top = 10
+      Width = 95
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 6
+      object lblKpiOTVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 95
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiOTCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 95
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'OT pend.'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiOP: TPanel
+      Left = 1190
+      Top = 10
+      Width = 95
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 7
+      object lblKpiOPVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 95
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiOPCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 95
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'OP pend.'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
     end
     object btnToggleImpacto: TButton
-      Left = 826
+      Left = 676
       Top = 11
       Width = 160
       Height = 28
@@ -84,76 +190,28 @@ object frmBacklog: TfrmBacklog
       OnClick = btnToggleImpactoClick
     end
     object btnSelectAll: TButton
-      Left = 646
+      Left = 494
       Top = 11
       Width = 80
       Height = 28
       Anchors = [akTop, akRight]
       Caption = 'Seleccionar'
-      TabOrder = 3
+      TabOrder = 2
       OnClick = btnSelectAllClick
     end
     object btnDeselectAll: TButton
-      Left = 730
+      Left = 580
       Top = 11
       Width = 90
       Height = 28
       Anchors = [akTop, akRight]
       Caption = 'Deseleccionar'
-      TabOrder = 4
+      TabOrder = 3
       OnClick = btnDeselectAllClick
     end
-    object cxButton9: TcxButton
-      Left = 1266
-      Top = 38
-      Width = 18
-      Height = 18
-      Cursor = crHandPoint
-      Anchors = [akTop, akRight]
-      DropDownMenu = PopupMenu2
-      Kind = cxbkDropDown
-      LookAndFeel.NativeStyle = False
-      OptionsImage.Glyph.SourceDPI = 96
-      OptionsImage.Glyph.SourceHeight = 16
-      OptionsImage.Glyph.SourceWidth = 16
-      OptionsImage.Glyph.Data = {
-        3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
-        462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
-        617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
-        2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
-        77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
-        22307078222076696577426F783D2230203020333220333222207374796C653D
-        22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
-        3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
-        303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
-        63653D227072657365727665223E2E59656C6C6F777B66696C6C3A2346464231
-        31353B7D262331333B262331303B2623393B2E5265647B66696C6C3A23443131
-        4331433B7D262331333B262331303B2623393B2E426C75657B66696C6C3A2331
-        31373744373B7D262331333B262331303B2623393B2E477265656E7B66696C6C
-        3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
-        696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
-        657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
-        74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
-        74317B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B2E
-        7374327B646973706C61793A696E6C696E653B66696C6C3A233033394332333B
-        7D262331333B262331303B2623393B2E7374337B646973706C61793A696E6C69
-        6E653B66696C6C3A234431314331433B7D262331333B262331303B2623393B2E
-        7374347B646973706C61793A696E6C696E653B66696C6C3A233732373237323B
-        7D3C2F7374796C653E0D0A3C672069643D22416C69676E4A757374696679223E
-        0D0A09093C7061746820636C6173733D22426C61636B2220643D224D32382C38
-        4834563668323456387A204D32382C3130483476326832345631307A204D3238
-        2C3134483476326832345631347A204D32382C3232483476326832345632327A
-        204D32382C3138483476326832345631387A222F3E0D0A093C2F673E0D0A3C2F
-        7376673E0D0A}
-      PaintStyle = bpsGlyph
-      SpeedButtonOptions.CanBeFocused = False
-      SpeedButtonOptions.Flat = True
-      SpeedButtonOptions.Transparent = True
-      TabOrder = 1
-    end
     object cxButton2: TcxButton
-      Left = 1018
-      Top = 12
+      Left = 676
+      Top = 39
       Width = 90
       Height = 25
       Anchors = [akTop, akRight]
@@ -167,7 +225,7 @@ object frmBacklog: TfrmBacklog
       Kind = cxbkOfficeDropDown
       LookAndFeel.SkinName = ''
       SpeedButtonOptions.CanBeFocused = False
-      TabOrder = 2
+      TabOrder = 1
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
       Font.Height = -11
@@ -203,7 +261,7 @@ object frmBacklog: TfrmBacklog
       Properties.ReadOnly = True
       Properties.ShowFocusRect = False
       Style.BorderStyle = ebsNone
-      TabOrder = 5
+      TabOrder = 4
       Transparent = True
       Height = 52
       Width = 56
@@ -600,6 +658,30 @@ object frmBacklog: TfrmBacklog
     DesignSize = (
       1296
       44)
+    object lblNivelVista: TLabel
+      Left = 480
+      Top = 12
+      Width = 27
+      Height = 15
+      Caption = 'Nivel'
+    end
+    object Label28: TLabel
+      Left = 1194
+      Top = 11
+      Width = 67
+      Height = 19
+      Alignment = taRightJustify
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = 'Opciones'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWhite
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+      Layout = tlCenter
+    end
     object btnDesplanificarSel: TButton
       Left = 702
       Top = 6
@@ -610,6 +692,19 @@ object frmBacklog: TfrmBacklog
       TabOrder = 0
       Visible = False
       OnClick = btnDesplanificarSelClick
+    end
+    object cmbNivelVista: TComboBox
+      Left = 514
+      Top = 8
+      Width = 170
+      Height = 23
+      Style = csDropDownList
+      TabOrder = 7
+      OnChange = cmbNivelVistaChange
+      Items.Strings = (
+        'Nivel 1 (OF / Pedido / Proyecto)'
+        'Nivel 2 (OT / L'#237'nea / Tarea)'
+        'Nivel 3 (OP)')
     end
     object btnPlanificar: TButton
       Left = 16
@@ -622,7 +717,7 @@ object frmBacklog: TfrmBacklog
       OnClick = btnPlanificarClick
     end
     object btnSyncErp: TcxButton
-      Left = 220
+      Left = 155
       Top = 6
       Width = 140
       Height = 28
@@ -631,7 +726,7 @@ object frmBacklog: TfrmBacklog
       OnClick = btnSyncErpClick
     end
     object btnVerOF: TcxButton
-      Left = 366
+      Left = 301
       Top = 6
       Width = 100
       Height = 28
@@ -651,7 +746,7 @@ object frmBacklog: TfrmBacklog
       OnClick = btnDesplanificarTodoClick
     end
     object cxButton1: TcxButton
-      Left = 1144
+      Left = 1007
       Top = 6
       Width = 67
       Height = 25
@@ -672,7 +767,7 @@ object frmBacklog: TfrmBacklog
       ParentFont = False
     end
     object btnRecargar: TcxButton
-      Left = 1217
+      Left = 1080
       Top = 6
       Width = 67
       Height = 25
@@ -692,6 +787,54 @@ object frmBacklog: TfrmBacklog
       Font.Style = []
       ParentFont = False
       OnClick = btnRecargarClick
+    end
+    object cxButton9: TcxButton
+      Left = 1266
+      Top = 12
+      Width = 18
+      Height = 18
+      Cursor = crHandPoint
+      Anchors = [akTop, akRight]
+      DropDownMenu = PopupMenu2
+      Kind = cxbkDropDown
+      LookAndFeel.NativeStyle = False
+      OptionsImage.Glyph.SourceDPI = 96
+      OptionsImage.Glyph.SourceHeight = 16
+      OptionsImage.Glyph.SourceWidth = 16
+      OptionsImage.Glyph.Data = {
+        3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+        462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+        617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+        2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+        77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+        22307078222076696577426F783D2230203020333220333222207374796C653D
+        22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+        3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+        303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+        63653D227072657365727665223E2E59656C6C6F777B66696C6C3A2346464231
+        31353B7D262331333B262331303B2623393B2E5265647B66696C6C3A23443131
+        4331433B7D262331333B262331303B2623393B2E426C75657B66696C6C3A2331
+        31373744373B7D262331333B262331303B2623393B2E477265656E7B66696C6C
+        3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
+        696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
+        657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
+        74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
+        74317B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B2E
+        7374327B646973706C61793A696E6C696E653B66696C6C3A233033394332333B
+        7D262331333B262331303B2623393B2E7374337B646973706C61793A696E6C69
+        6E653B66696C6C3A234431314331433B7D262331333B262331303B2623393B2E
+        7374347B646973706C61793A696E6C696E653B66696C6C3A233732373237323B
+        7D3C2F7374796C653E0D0A3C672069643D22416C69676E4A757374696679223E
+        0D0A09093C7061746820636C6173733D22426C61636B2220643D224D32382C38
+        4834563668323456387A204D32382C3130483476326832345631307A204D3238
+        2C3134483476326832345631347A204D32382C3232483476326832345632327A
+        204D32382C3138483476326832345631387A222F3E0D0A093C2F673E0D0A3C2F
+        7376673E0D0A}
+      PaintStyle = bpsGlyph
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      SpeedButtonOptions.Transparent = True
+      TabOrder = 8
     end
   end
   object PopupMenu1: TPopupMenu

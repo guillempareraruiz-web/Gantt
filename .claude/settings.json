@@ -23,7 +23,24 @@
       "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -d RP -E -C -W -s '|' -Q ' *)",
       "Bash('/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/180/Tools/Binn/sqlcmd' -S 'localhost\\\\SQLEXPRESS' -d RP -E -C -W -s '|' -b -Q ' *)",
       "Bash([ -f \"$F\" ])",
-      "Read(//c//**)"
+      "Read(//c//**)",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT COUNT\\(*\\) AS TotalOP, SUM\\(CASE WHEN HorasEstimadas>0 THEN 1 ELSE 0 END\\) AS ConHoras, SUM\\(CASE WHEN OpTiempoFabricacion>0 THEN 1 ELSE 0 END\\) AS ConTFab, SUM\\(CASE WHEN OpTiempoPreparacion>0 THEN 1 ELSE 0 END\\) AS ConTPrep, SUM\\(CASE WHEN OpUnidadesHora>0 THEN 1 ELSE 0 END\\) AS ConUxH, SUM\\(CASE WHEN Cantidad>0 THEN 1 ELSE 0 END\\) AS ConCant FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1;\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT COUNT\\(*\\) AS TotalOP, SUM\\(CASE WHEN HorasEstimadas>0 THEN 1 ELSE 0 END\\) AS ConHoras, SUM\\(CASE WHEN OpTiempoFabricacion>0 THEN 1 ELSE 0 END\\) AS ConTFab, SUM\\(CASE WHEN OpTiempoPreparacion>0 THEN 1 ELSE 0 END\\) AS ConTPrep, SUM\\(CASE WHEN OpUnidadesHora>0 THEN 1 ELSE 0 END\\) AS ConUxH, SUM\\(CASE WHEN Cantidad>0 THEN 1 ELSE 0 END\\) AS ConCant FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1;\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT TOP 15 RawItemId AS Id, Cantidad AS Cant, OpUnidadesHora AS UxH, OpTiempoFabricacion AS TFabDias, CAST\\(OpTiempoFabricacion*24.0 AS DECIMAL\\(10,4\\)\\) AS TFab_h, CAST\\(\\(1.0/NULLIF\\(OpUnidadesHora,0\\)\\) AS DECIMAL\\(10,4\\)\\) AS Inv_UxH_h, CAST\\(OpTiempoFabricacion*24.0*60.0*Cantidad AS DECIMAL\\(12,2\\)\\) AS DurMin_via_TFab, CAST\\(\\(Cantidad/NULLIF\\(OpUnidadesHora,0\\)\\)*60.0 AS DECIMAL\\(12,2\\)\\) AS DurMin_via_UxH FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1 AND OpTiempoFabricacion>0 AND OpUnidadesHora>0 AND Cantidad>0 ORDER BY RawItemId;\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT 'solo_horas' AS Caso, COUNT\\(*\\) AS N FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1 AND \\(OpTiempoFabricacion IS NULL OR OpTiempoFabricacion=0\\) AND \\(OpUnidadesHora IS NULL OR OpUnidadesHora=0\\) AND HorasEstimadas>0 UNION ALL SELECT 'sin_nada', COUNT\\(*\\) FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1 AND \\(OpTiempoFabricacion IS NULL OR OpTiempoFabricacion=0\\) AND \\(OpUnidadesHora IS NULL OR OpUnidadesHora=0\\) AND \\(HorasEstimadas IS NULL OR HorasEstimadas=0\\) UNION ALL SELECT 'tfab_pero_no_uxh', COUNT\\(*\\) FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1 AND OpTiempoFabricacion>0 AND \\(OpUnidadesHora IS NULL OR OpUnidadesHora=0\\) UNION ALL SELECT 'max_prep', MAX\\(CAST\\(OpTiempoPreparacion*100000 AS INT\\)\\) FROM FS_PL_Raw_Item WHERE Nivel=3 AND Activo=1;\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -b -i \"V054__fn_duracion_op.sql\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT TOP 8 RawItemId AS Id, Cantidad AS Cant, OpUnidadesHora AS UxH, OpTiempoFabricacion AS TFab, CAST\\(dbo.FS_PL_fn_DuracionOpMin\\(Cantidad,OpTiempoFabricacion,OpUnidadesHora,OpTiempoPreparacion,HorasEstimadas\\) AS DECIMAL\\(12,2\\)\\) AS DurMin FROM FS_PL_Raw_Item WHERE RawItemId IN \\(2980,2986,2989,2997,2999,2974\\) OR \\(Nivel=3 AND Activo=1 AND OpTiempoFabricacion IS NULL AND OpUnidadesHora IS NULL AND HorasEstimadas IS NULL\\) ORDER BY RawItemId;\")",
+      "Bash(sqlcmd -S 'localhost\\\\SQLEXPRESS' -d FS -E -C -h -1 -W -Q 'SET NOCOUNT ON; *)",
+      "Bash(cp \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\SQL\\\\migrations\\\\V055__backlog_tree_view.sql\" \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\Despliegue\\\\SQL\\\\migrations\\\\V055__backlog_tree_view.sql\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -b -i \"V055__backlog_tree_view.sql\")",
+      "Bash(sqlcmd -S 'localhost\\\\SQLEXPRESS' -d FS -E -C -h -1 -W -Q 'SET STATISTICS TIME ON; SET NOCOUNT ON; *)",
+      "Bash(findstr /C:\"CPU\" /C:\"tiempo\" /C:\"elapsed\")",
+      "Bash(findstr /C:\"==\" /C:\"Elapsed\" /C:\"transcurrido\")",
+      "Bash(cp \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\SQL\\\\migrations\\\\V056__backlog_planned_tree_view.sql\" \"d:\\\\PROJECTES\\\\GANTT\\\\GANTT\\\\Despliegue\\\\SQL\\\\migrations\\\\V056__backlog_planned_tree_view.sql\")",
+      "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -b -i \"V056__backlog_planned_tree_view.sql\")",
+      "Bash(xargs wc -l)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/System/loader-4-line.svg\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Business/time-line.svg\")"
     ],
     "additionalDirectories": [
       "d:\\PROJECTES\\GANTT\\GANTT"
