@@ -37,7 +37,8 @@ uses
   uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttCentres, uGanttTypes, uErpTypes,
   System.Generics.Collections, System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
-  dxGDIPlusClasses, cxImage;
+  dxGDIPlusClasses, cxImage, System.ImageList, Vcl.ImgList, cxImageList,
+  Vcl.Buttons;
 type
   // Items agregados de nodos usados para calculo de KPIs por centro.
   TNodeKPIItem = record
@@ -68,7 +69,6 @@ type
     Label3: TLabel;
     Label4: TLabel;
     Label5: TLabel;
-    Label6: TLabel;
     Label7: TLabel;
     lblUndoCount: TLabel;
     lblRedoCount: TLabel;
@@ -88,14 +88,11 @@ type
     Button4: TButton;
     Button5: TButton;
     Button6: TButton;
-    cxDateEdit1: TcxDateEdit;
-    Button7: TButton;
     Button8: TButton;
     Button9: TButton;
     Button10: TButton;
     Button11: TButton;
     ComboBox1: TComboBox;
-    Button1: TButton;
     btnUndo: TButton;
     btnRedo: TButton;
     Button12: TButton;
@@ -107,12 +104,6 @@ type
     Panel3: TPanel;
     Label12: TLabel;
     Label18: TLabel;
-    Panel4: TPanel;
-    Label9: TLabel;
-    lblNodes: TLabel;
-    Panel5: TPanel;
-    Label10: TLabel;
-    lblVisible: TLabel;
     Panel6: TPanel;
     Label11: TLabel;
     lblModified: TLabel;
@@ -142,29 +133,6 @@ type
     Button24: TButton;
     btnResaltarOF: TcxButton;
     btnResaltarOT: TcxButton;
-    pnlBuscar: TPanel;
-    cxScrollBox1: TcxScrollBox;
-    Label20: TLabel;
-    Label21: TLabel;
-    Label22: TLabel;
-    Label23: TLabel;
-    Label24: TLabel;
-    Label25: TLabel;
-    Label26: TLabel;
-    Label27: TLabel;
-    cxButtonEdit1: TcxButtonEdit;
-    cxButtonEdit2: TcxButtonEdit;
-    cxButtonEdit3: TcxButtonEdit;
-    cxButtonEdit4: TcxButtonEdit;
-    cxButtonEdit5: TcxButtonEdit;
-    cxButtonEdit6: TcxButtonEdit;
-    cxButtonEdit7: TcxButtonEdit;
-    cxButtonEdit8: TcxButtonEdit;
-    cxButton1: TcxButton;
-    cxButton2: TcxButton;
-    cxButton3: TcxButton;
-    cxButton4: TcxButton;
-    cxButton5: TcxButton;
     pnlCentros: TPanel;
     pnlGanttContainer: TPanel;
     Panel2: TPanel;
@@ -196,6 +164,10 @@ type
     MenuItem2: TMenuItem;
     popNode: TPopupMenu;
     MenuItem3: TMenuItem;
+    NLote1: TMenuItem;
+    AgruparEnLote1: TMenuItem;
+    VerLote1: TMenuItem;
+    DesagruparLote1: TMenuItem;
     LibreMovimiento1: TMenuItem;
     Resetduracinoriginal1: TMenuItem;
     CompactarOF1: TMenuItem;
@@ -234,10 +206,8 @@ type
     Label31: TLabel;
     Panel13: TPanel;
     Label32: TLabel;
-    Label33: TLabel;
     Panel14: TPanel;
     Label34: TLabel;
-    Label35: TLabel;
     Panel15: TPanel;
     Label36: TLabel;
     Label37: TLabel;
@@ -248,6 +218,22 @@ type
     cxButton9: TcxButton;
     Label38: TLabel;
     imgSection: TcxImage;
+    lblNodes: TLabel;
+    lblVisible: TLabel;
+    cxImageList1: TcxImageList;
+    Panel4: TPanel;
+    Label9: TLabel;
+    Label10: TLabel;
+    cxDateEdit1: TcxDateEdit;
+    Label6: TLabel;
+    btnIr: TcxButton;
+    btnHoy: TcxButton;
+    Panel5: TPanel;
+    Panel16: TPanel;
+    Panel17: TPanel;
+    Panel18: TPanel;
+    Panel19: TPanel;
+    Panel20: TPanel;
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
@@ -270,6 +256,9 @@ type
     procedure miGestionOperariosClick(Sender: TObject);
     procedure miEditarLinksClick(Sender: TObject);
     procedure miDesplanificarClick(Sender: TObject);
+    procedure AgruparEnLote1Click(Sender: TObject);
+    procedure VerLote1Click(Sender: TObject);
+    procedure DesagruparLote1Click(Sender: TObject);
     procedure CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
     procedure Button27Click(Sender: TObject);
 
@@ -308,8 +297,6 @@ type
     procedure Button8Click(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure Button24Click(Sender: TObject);
-    procedure Button7Click(Sender: TObject);
-    procedure Button1Click(Sender: TObject);
     procedure ComboBox1Change(Sender: TObject);
     procedure SearchBox1InvokeSearch(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -318,12 +305,15 @@ type
     procedure Button5Click(Sender: TObject);
     procedure LibreMovimiento1Click(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
+    procedure popNodePopup(Sender: TObject);
     procedure Resetduracinoriginal1Click(Sender: TObject);
     procedure ShiftRow2Click(Sender: TObject);
     procedure Colordelnode1Click(Sender: TObject);
     procedure odalaOF1Click(Sender: TObject);
     procedure otalaOT1Click(Sender: TObject);
     procedure ResaltarOF1Click(Sender: TObject);
+    procedure btnIrClick(Sender: TObject);
+    procedure btnHoyClick(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -351,6 +341,10 @@ type
       const AWindowStart, AWindowEnd: TDateTime): TCentreKPI;
     function BuildKPIRanges: TCentresKPIRanges;
     function GetCentreKPIValue(const CentreId: Integer): TCentreKPI;
+    // Resuelve el LoteId del nodo actualmente seleccionado en el Gantt (0 si no
+    // hay seleccion o el nodo no pertenece a ningun lote). Compartido por las
+    // acciones Ver lote / Desagrupar lote.
+    function LoteIdDelNodoSel: Integer;
   public
     FGanttControl: TGanttControl;
     FTimelineControl: TGanttTimelineControl;
@@ -384,7 +378,7 @@ type
 implementation
 {$R *.dfm}
 uses
-  uDMPlanner, Vcl.Dialogs, Data.Win.ADODB, Data.DB,
+  uDMPlanner, Vcl.Dialogs, Data.Win.ADODB, Data.DB, uLoteViewer,
   uGestionMarkers, uCentreInspector, uSampleDataGenerator,
   uCentresKPI, uGestionCentres, uNodeInspector, uMarkerEditor,
   uGanttDatesDialog, uUserPrefs, System.JSON,
@@ -517,6 +511,13 @@ begin
   FGanttControl.OnFechaBloqueoChanged := GanttFechaBloqueoChanged;
 
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
+  // Centros clampa su scroll al MISMO maximo que el Gantt (evita desalineacion
+  // al llegar al final por diferencia de ClientHeight entre ambos controles).
+  FCentrosControl.GetMaxScrollYFunc :=
+    function: Single
+    begin
+      Result := FGanttControl.GetMaxScrollY;
+    end;
 
 end;
 
@@ -569,6 +570,17 @@ begin
   dtFechaFinGantt.Date := FFin;
   Inicializar(FIni, FFin);
   SaveViewportPrefs;
+end;
+
+procedure TfrmVistaGantt.btnHoyClick(Sender: TObject);
+begin
+   GoToDate( Now );
+end;
+
+procedure TfrmVistaGantt.btnIrClick(Sender: TObject);
+begin
+  if not varisnull(cxDateEdit1.EditValue) then
+   GoToDate( cxDateEdit1.Date );
 end;
 
 procedure TfrmVistaGantt.Desactivarfechabloqueo1Click(Sender: TObject);
@@ -759,11 +771,6 @@ end;
 procedure TfrmVistaGantt.Button19Click(Sender: TObject);
 begin
     FGanttControl.GoToNextNode;
-end;
-
-procedure TfrmVistaGantt.Button1Click(Sender: TObject);
-begin
- GoToDate( Now );
 end;
 
 procedure TfrmVistaGantt.Inicializar(const AFechaInicio, AFechaFin: TDateTime);
@@ -1086,12 +1093,6 @@ begin
   FGanttControl.SearchNext(True);
 end;
 
-procedure TfrmVistaGantt.Button7Click(Sender: TObject);
-begin
-  if not varisnull(cxDateEdit1.EditValue) then
-   GoToDate( cxDateEdit1.Date );
-end;
-
 procedure TfrmVistaGantt.Button8Click(Sender: TObject);
 var
  iTag: Integer;
@@ -1369,6 +1370,26 @@ begin
     FGanttControl.Invalidate;
 end;
 
+procedure TfrmVistaGantt.popNodePopup(Sender: TObject);
+var
+  idx: Integer;
+  n: TNode;
+  d: TNodeData;
+begin
+  // Sincronizar los checks del menu con el estado REAL del nodo seleccionado
+  // ANTES de mostrarlo. Sin esto, AutoCheck arranca del valor de la vez anterior
+  // y el toggle parte de un estado erroneo (por eso "Libre Movimiento" no
+  // persistia bien). "Bloqueado" = NOT Enabled (Enabled True = activo, no bloqueado).
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+  n := FGanttControl.SelectedNode;
+
+  MenuItem3.Checked := not n.Enabled;   // marcado = bloqueado
+
+  if DMPlanner.NodeDataRepo.TryGetById(n.DataId, D) then
+    LibreMovimiento1.Checked := D.LibreMoviment;
+end;
+
 procedure TfrmVistaGantt.LibreMovimiento1Click(Sender: TObject);
 var
   idx: Integer;
@@ -1382,6 +1403,7 @@ begin
 
   if DMPlanner.NodeDataRepo.TryGetById(n.DataId, D) then
   begin
+    // AutoCheck ya togleo LibreMovimiento1.Checked antes de este OnClick.
     D.LibreMoviment := LibreMovimiento1.Checked;
     D.Modified := True;   // marcar dirty para que el AutoSaver lo persista
     DMPlanner.NodeDataRepo.AddOrUpdate(D);
@@ -1622,7 +1644,13 @@ procedure TfrmVistaGantt.GanttScrollYChanged(Sender: TObject;
   const ScrollY: Single);
 begin
   if Assigned(FCentrosControl) then
+  begin
     FCentrosControl.ScrollY := ScrollY;
+    // Repintar Centros YA, no diferido: el Gantt fuerza su WM_PAINT con Update
+    // durante el arrastre del thumb; si Centros solo hace Invalidate, se queda un
+    // frame por detras y se ve un desfase feo entre ambas columnas.
+    FCentrosControl.Update;
+  end;
 end;
 
 procedure TfrmVistaGantt.GanttStatsChanged(Sender: TObject);
@@ -1688,6 +1716,17 @@ var
 begin
   if NodeIndex < 0 then Exit;
   node := FGanttControl.SelectedNode;
+
+  // Si el nodo pertenece a un lote, el doble-clic abre el visor de lote (su
+  // contenido) en vez del inspector de un solo nodo. Si el visor hizo cambios
+  // (quitar/desplanificar OP, recalcular setup...), recargar el plan.
+  if node.LoteId > 0 then
+  begin
+    if TfrmLoteViewer.Execute(node.LoteId) and Assigned(Form1) then
+      Form1.LoadActivePlan;
+    Exit;
+  end;
+
   if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, ANodeData) then Exit;
 
   if TfrmNodeInspector.Execute(ANodeData, False, FCustomFieldDefs) then
@@ -2424,6 +2463,119 @@ begin
     Form1.LoadActivePlan;
 
   ShowMessage(Format('%d nodo(s) desplanificados.', [Borrados]));
+end;
+
+// Agrupa los nodos seleccionados en un lote (batch). Validacion de mismo centro
+// la hace DMPlanner.CrearLote; aqui solo recogemos los NodeId de la seleccion.
+procedure TfrmVistaGantt.AgruparEnLote1Click(Sender: TObject);
+var
+  SelIndexes, Ids: TArray<Integer>;
+  I, LoteId: Integer;
+  L: TList<Integer>;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) < 2 then
+  begin
+    ShowMessage('Selecciona al menos dos nodos del mismo centro para agruparlos '
+      + 'en un lote.');
+    Exit;
+  end;
+
+  L := TList<Integer>.Create;
+  try
+    for I := 0 to High(SelIndexes) do
+      L.Add(FGanttControl.GetNodeAt(SelIndexes[I]).DataId);
+    Ids := L.ToArray;
+  finally
+    L.Free;
+  end;
+
+  try
+    LoteId := DMPlanner.CrearLote(Ids);
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Error al crear el lote: ' + E.Message);
+      Exit;
+    end;
+  end;
+
+  if LoteId <= 0 then
+  begin
+    ShowMessage('No se pudo crear el lote. Los nodos deben ser del mismo centro '
+      + 'y tener fechas asignadas.');
+    Exit;
+  end;
+
+  if Assigned(Form1) then
+    Form1.LoadActivePlan;
+end;
+
+// Desagrupa el lote al que pertenece el nodo seleccionado (libera sus miembros
+// y borra el lote). Resuelve el LoteId del nodo consultando la BD por DataId.
+function TfrmVistaGantt.LoteIdDelNodoSel: Integer;
+var
+  Idx, NodeId: Integer;
+  Q: TADOQuery;
+begin
+  Result := 0;
+  if FGanttControl = nil then Exit;
+  Idx := FGanttControl.SelectedNodeIndex;
+  if Idx < 0 then Exit;
+  NodeId := FGanttControl.GetNodeAt(Idx).DataId;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT LoteId FROM FS_PL_Node WHERE CodigoEmpresa = ' +
+      IntToStr(DMPlanner.CodigoEmpresa) + ' AND NodeId = ' + IntToStr(NodeId);
+    Q.Open;
+    if not Q.Eof and not Q.FieldByName('LoteId').IsNull then
+      Result := Q.FieldByName('LoteId').AsInteger;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TfrmVistaGantt.VerLote1Click(Sender: TObject);
+var
+  LoteId: Integer;
+begin
+  LoteId := LoteIdDelNodoSel;
+  if LoteId <= 0 then
+  begin
+    ShowMessage('Selecciona un nodo que pertenezca a un lote.');
+    Exit;
+  end;
+  if TfrmLoteViewer.Execute(LoteId) and Assigned(Form1) then
+    Form1.LoadActivePlan;
+end;
+
+procedure TfrmVistaGantt.DesagruparLote1Click(Sender: TObject);
+var
+  LoteId: Integer;
+begin
+  LoteId := LoteIdDelNodoSel;
+  if LoteId <= 0 then
+  begin
+    ShowMessage('Selecciona un nodo que pertenezca a un lote.');
+    Exit;
+  end;
+
+  try
+    DMPlanner.DesagruparLote(LoteId);
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Error al desagrupar el lote: ' + E.Message);
+      Exit;
+    end;
+  end;
+
+  if Assigned(Form1) then
+    Form1.LoadActivePlan;
 end;
 
 end.

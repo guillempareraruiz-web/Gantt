@@ -43,6 +43,7 @@ type
   end;
 
   TCentreKPIFunc  = reference to function(const CentreId: Integer): TCentreKPI;
+  TMaxScrollYFunc = reference to function: Single;
 
   TGanttCentresControl = class(TCustomControl)
   private
@@ -51,6 +52,9 @@ type
     FScrollY: Single;
     FOnScrollYChanged: TScrollYChangedEvent;
     FGetCentreName: TCentreNameFunc;
+    // Si esta asignado, GetMaxScrollY delega en el Gantt (referencia comun) en
+    // vez de calcularlo localmente, para que ambos clampen al MISMO maximo.
+    FGetMaxScrollY: TMaxScrollYFunc;
 
 
     // pan (drag vertical)
@@ -93,6 +97,9 @@ type
     FTextFormatSmall: IDWriteTextFormat;
     FTextFormatBadgeTitle: IDWriteTextFormat;
     FTextFormatBadgeValue: IDWriteTextFormat;
+    FTextFormatLeft: IDWriteTextFormat;       // nom centre/maquina: izquierda + elipsis
+    FTextFormatCircle: IDWriteTextFormat;     // numero de lanes dentro del circulo
+    FEllipsisSign: IDWriteInlineObject;       // signo "..." para el trimming
 
     procedure SetVerIndicadores(const Value: Boolean);
     procedure UpdateControlWidth;
@@ -164,6 +171,7 @@ type
 
     // per resoldre el text sense acoblar-te al model
     property GetCentreName: TCentreNameFunc read FGetCentreName write FGetCentreName;
+    property GetMaxScrollYFunc: TMaxScrollYFunc read FGetMaxScrollY write FGetMaxScrollY;
     property SelectedCentreId: Integer read FSelectedCentreId;
     property OnScrollYChanged: TScrollYChangedEvent read FOnScrollYChanged write FOnScrollYChanged;
   published
@@ -283,6 +291,9 @@ begin
   FTextFormatSmall := nil;
   FTextFormatBadgeTitle := nil;
   FTextFormatBadgeValue := nil;
+  FTextFormatLeft := nil;
+  FTextFormatCircle := nil;
+  FEllipsisSign := nil;
   FDWriteFactory := nil;
   FD2DFactory := nil;
   inherited;
@@ -490,6 +501,59 @@ begin
     FTextFormatBadgeValue.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
   end;
 
+  // Nombre de centro/maquina: alineado a la IZQUIERDA, sin wrap, con elipsis
+  // (...) cuando el texto no cabe en el ancho disponible.
+  if not Assigned(FTextFormatLeft) then
+  begin
+    var Trimming: TDwriteTrimming;
+    CheckHR(
+      FDWriteFactory.CreateTextFormat(
+        'Segoe UI',
+        nil,
+        DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        10.0,
+        'es-ES',
+        FTextFormatLeft
+      ),
+      'CreateTextFormat FTextFormatLeft'
+    );
+
+    FTextFormatLeft.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    FTextFormatLeft.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    FTextFormatLeft.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+    // Signo de recorte "..." + politica de trimming por caracter.
+    FDWriteFactory.CreateEllipsisTrimmingSign(FTextFormatLeft, FEllipsisSign);
+    Trimming.granularity := DWRITE_TRIMMING_GRANULARITY_CHARACTER;
+    Trimming.delimiter := 0;
+    Trimming.delimiterCount := 0;
+    FTextFormatLeft.SetTrimming(Trimming, FEllipsisSign);
+  end;
+
+  // Numero de lanes dentro del circulo indicador.
+  if not Assigned(FTextFormatCircle) then
+  begin
+    CheckHR(
+      FDWriteFactory.CreateTextFormat(
+        'Segoe UI',
+        nil,
+        DWRITE_FONT_WEIGHT_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        8.0,
+        'es-ES',
+        FTextFormatCircle
+      ),
+      'CreateTextFormat FTextFormatCircle'
+    );
+
+    FTextFormatCircle.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    FTextFormatCircle.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    FTextFormatCircle.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+  end;
+
 end;
 
 
@@ -623,6 +687,10 @@ var
   DXColor: TD2D1ColorF;
   CircleSize: Single;
   PadX, PadY: Single;
+  EsSeq: Boolean;
+  MaxLanes: Integer;
+  CircleText: string;
+  TextCircleBrush: ID2D1SolidColorBrush;
 begin
   iCentreId := Row.CentreId;
   iCentreIdx := FindCentreIndexById(iCentreId);
@@ -645,6 +713,12 @@ begin
   else
     LeftTextWidth := ClientWidth;
 
+  // El circulo de arriba a la derecha indica la POLITICA de carriles del centro:
+  //  - Secuencial (1 carril): verde, con "1".
+  //  - Paralelo con limite N: azul, con el numero N de carriles.
+  //  - Paralelo sin limite (MaxLaneCount=0): azul, con simbolo infinito.
+  EsSeq := True;
+  MaxLanes := 1;
   if iCentreIdx >= 0 then
   begin
     // CENTRO = CodigoCentro - Titulo ; MAQUINA = (Subtitulo del centro)
@@ -655,7 +729,8 @@ begin
       NomCentre := NomCentre + FCentres[iCentreIdx].Titulo;
     end;
     NomMaquina := FCentres[iCentreIdx].Subtitulo;
-    CircleColor := FCentres[iCentreIdx].BkColor;
+    EsSeq := FCentres[iCentreIdx].IsSequencial;
+    MaxLanes := FCentres[iCentreIdx].MaxLaneCount;
   end
   else
   begin
@@ -665,7 +740,6 @@ begin
       NomCentre := Format('Centre %d', [iCentreId]);
 
     NomMaquina := '';
-    CircleColor := clGray;
   end;
 
   if Trim(NomMaquina) = '' then
@@ -673,50 +747,70 @@ begin
 
   PadX := 8;
   PadY := 5;
-  CircleSize := 10;
+  CircleSize := 13;   // 1 solo digito: circulo pequeno
 
-  RCircle := RectF(
-    LeftTextWidth - PadX - CircleSize,
-    y1 + PadY,
-    LeftTextWidth - PadX,
-    y1 + PadY + CircleSize
-  );
+  // Solo pintamos el circulo indicador en centros NO secuenciales (paralelos):
+  // muestra el numero de carriles (o infinito si no hay limite). El secuencial
+  // es el caso normal y no necesita marca (mas limpio).
+  if not EsSeq then
+  begin
+    CircleColor := RGB(33, 150, 243);   // azul: paralelo
+    if MaxLanes > 0 then
+      CircleText := IntToStr(MaxLanes)
+    else
+      CircleText := #$221E;             // simbolo infinito (sin limite)
 
-  DXColor := D2D1ColorF(
-    GetRValue(ColorToRGB(CircleColor)) / 255,
-    GetGValue(ColorToRGB(CircleColor)) / 255,
-    GetBValue(ColorToRGB(CircleColor)) / 255,
-    1.0
-  );
+    RCircle := RectF(
+      LeftTextWidth - PadX - CircleSize,
+      y1 + PadY,
+      LeftTextWidth - PadX,
+      y1 + PadY + CircleSize
+    );
 
-  FHwndRT.CreateSolidColorBrush(DXColor, nil, CircleBrush);
-  FHwndRT.CreateSolidColorBrush(D2D1ColorF(0.45, 0.45, 0.45, 1.0), nil, CircleStroke);
+    DXColor := D2D1ColorF(
+      GetRValue(ColorToRGB(CircleColor)) / 255,
+      GetGValue(ColorToRGB(CircleColor)) / 255,
+      GetBValue(ColorToRGB(CircleColor)) / 255,
+      1.0
+    );
 
-  FHwndRT.FillEllipse(
-    D2D1Ellipse(
-      D2D1PointF((RCircle.Left + RCircle.Right) * 0.5, (RCircle.Top + RCircle.Bottom) * 0.5),
-      (RCircle.Right - RCircle.Left) * 0.5,
-      (RCircle.Bottom - RCircle.Top) * 0.5
-    ),
-    CircleBrush
-  );
+    FHwndRT.CreateSolidColorBrush(DXColor, nil, CircleBrush);
+    FHwndRT.CreateSolidColorBrush(D2D1ColorF(0.45, 0.45, 0.45, 1.0), nil, CircleStroke);
 
-  FHwndRT.DrawEllipse(
-    D2D1Ellipse(
-      D2D1PointF((RCircle.Left + RCircle.Right) * 0.5, (RCircle.Top + RCircle.Bottom) * 0.5),
-      (RCircle.Right - RCircle.Left) * 0.5,
-      (RCircle.Bottom - RCircle.Top) * 0.5
-    ),
-    CircleStroke,
-    1.0
-  );
+    FHwndRT.FillEllipse(
+      D2D1Ellipse(
+        D2D1PointF((RCircle.Left + RCircle.Right) * 0.5, (RCircle.Top + RCircle.Bottom) * 0.5),
+        (RCircle.Right - RCircle.Left) * 0.5,
+        (RCircle.Bottom - RCircle.Top) * 0.5
+      ),
+      CircleBrush
+    );
 
-  // Sin literales "CENTRO:"/"MAQUINA:": los valores ocupan todo el ancho.
-  RValue1 := RectF(PadX, y1 + 3, RCircle.Left - 6, y1 + 18);
+    FHwndRT.DrawEllipse(
+      D2D1Ellipse(
+        D2D1PointF((RCircle.Left + RCircle.Right) * 0.5, (RCircle.Top + RCircle.Bottom) * 0.5),
+        (RCircle.Right - RCircle.Left) * 0.5,
+        (RCircle.Bottom - RCircle.Top) * 0.5
+      ),
+      CircleStroke,
+      1.0
+    );
+
+    // Numero de carriles (o infinito) centrado dentro del circulo, en blanco.
+    FHwndRT.CreateSolidColorBrush(D2D1ColorF(1.0, 1.0, 1.0, 1.0), nil, TextCircleBrush);
+    DrawTextD(CircleText, RCircle, TextCircleBrush, FTextFormatCircle);
+  end;
+
+  // Nombre de centro y maquina: alineados a la IZQUIERDA con elipsis si no caben.
+  // La 1a linea (centro) deja hueco para el circulo solo si existe (no secuencial).
+  if EsSeq then
+    RValue1 := RectF(PadX, y1 + 3, LeftTextWidth - PadX, y1 + 18)
+  else
+    RValue1 := RectF(PadX, y1 + 3, LeftTextWidth - PadX - CircleSize - 6, y1 + 18);
   RValue2 := RectF(PadX, y1 + 19, LeftTextWidth - PadX, y1 + 34);
 
-  DrawTextD(NomCentre, RValue1, TextBrush, FTextFormat);
-  DrawTextD(NomMaquina, RValue2, TextBrush, FTextFormat);
+  DrawTextD(NomCentre, RValue1, TextBrush, FTextFormatLeft);
+  DrawTextD(NomMaquina, RValue2, TextBrush, FTextFormatLeft);
 
   if FVerIndicadores then
     PaintIndicatorsD2D(RowIndex, Row, LeftTextWidth);
@@ -1006,6 +1100,12 @@ var
   contentH: Single;
   i: Integer;
 begin
+  // Delegar en el Gantt si hay callback: ambos deben clampar al MISMO maximo, o
+  // al llegar al final quedan desalineados (el ClientHeight del Gantt difiere por
+  // su scrollbar horizontal).
+  if Assigned(FGetMaxScrollY) then
+    Exit(FGetMaxScrollY());
+
   contentH := 0;
   if Length(FRows) > 0 then
   begin
@@ -1237,7 +1337,9 @@ begin
   // Si no estamos draggeando, pan vertical como antes (si se activ�)
   if FIsPanning then
   begin
-    FScrollY := Max(0, FScrollStartY - (Y - FPanStartY));
+    // Clampar al mismo maximo (GetMaxScrollY -> delega en el Gantt) para no pasarse
+    // del final y quedar desalineado con el Gantt.
+    FScrollY := Max(0, Min(FScrollStartY - (Y - FPanStartY), GetMaxScrollY));
     NotifyScrollYChanged;
     Invalidate;
   end;

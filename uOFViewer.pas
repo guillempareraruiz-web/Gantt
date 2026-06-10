@@ -24,7 +24,23 @@ uses
   Data.Win.ADODB, Data.DB,
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters, cxStyles,
   cxCustomData, cxClasses, cxEdit, cxInplaceContainer, cxVGrid,
-  cxTL, cxTLData, cxTextEdit;
+  cxTL, cxTLData, cxTextEdit, dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
+  dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
+  dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
+  dxSkinLiquidSky, dxSkinLondonLiquidSky, dxSkinMcSkin, dxSkinMetropolis,
+  dxSkinMetropolisDark, dxSkinMoneyTwins, dxSkinOffice2007Black,
+  dxSkinOffice2007Blue, dxSkinOffice2007Green, dxSkinOffice2007Pink,
+  dxSkinOffice2007Silver, dxSkinOffice2010Black, dxSkinOffice2010Blue,
+  dxSkinOffice2010Silver, dxSkinOffice2013DarkGray, dxSkinOffice2013LightGray,
+  dxSkinOffice2013White, dxSkinOffice2016Colorful, dxSkinOffice2016Dark,
+  dxSkinOffice2019Black, dxSkinOffice2019Colorful, dxSkinOffice2019DarkGray,
+  dxSkinOffice2019White, dxSkinPumpkin, dxSkinSeven, dxSkinSevenClassic,
+  dxSkinSharp, dxSkinSharpPlus, dxSkinSilver, dxSkinSpringtime, dxSkinStardust,
+  dxSkinSummer2008, dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
+  dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
+  dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
+  dxSkinXmas2008Blue, cxFilter, dxScrollbarAnnotations, cxTLdxBarBuiltInMenu;
 
 type
   // Un item de la jerarquia leido de FS_PL_Raw_Item. Guardamos todos los campos
@@ -49,24 +65,33 @@ type
     colEstado: TcxTreeListColumn;
     splMain: TSplitter;
     pnlDetalle: TPanel;
-    lblDetalle: TLabel;
     vgDetalle: TcxVerticalGrid;
-    pnlBottom: TPanel;
-    btnCerrar: TButton;
+    pnlTop: TPanel;
+    lblDetalle: TLabel;
+    Label1: TLabel;
+    Panel1: TPanel;
+    LblKPIS: TLabel;
+    LblOF: TLabel;
+    btnExpand: TLabel;
+    Label3: TLabel;
+    LblOTOP: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnCerrarClick(Sender: TObject);
+    procedure btnExpandClick(Sender: TObject);
     procedure tlOFFocusedNodeChanged(Sender: TcxCustomTreeList;
       APrevFocusedNode, AFocusedNode: TcxTreeListNode);
   private
     FConn: TADOConnection;
     FEmpresa: SmallInt;
+    FExpandido: Boolean;
     FNodos: TObjectList<TOFViewerNode>;
     function FindRootRawItemId(ARawItemId: Int64): Int64;
     procedure LoadHierarchy(ARootRawItemId: Int64);
     procedure BuildTree;
     procedure AddChildren(AParentNode: TcxTreeListNode; AParentRawId: Int64);
     procedure ShowDetail(AData: TOFViewerNode);
+    procedure UpdateKpis(ARootData: TOFViewerNode);
     function NivelLabel(ANivel: Integer; const ATipoOrigen: string): string;
     function FieldCaption(const AName: string): string;
   public
@@ -172,11 +197,18 @@ begin
 end;
 
 procedure TfrmOFViewer.FormCreate(Sender: TObject);
+var
+  StHeader: TcxStyle;
 begin
   FConn := DMPlanner.ADOConnection;
   FEmpresa := DMPlanner.CodigoEmpresa;
   FNodos := TObjectList<TOFViewerNode>.Create(True);
   THelpViewer.InstallHelp(Self, 'uOFViewer', 'Visor de OF');
+
+  // Columna izquierda (cabeceras de fila) del VerticalGrid con fondo gris claro.
+  StHeader := TcxStyle.Create(Self);
+  StHeader.Color := $00F2F2F2;   // gris claro
+  vgDetalle.Styles.Header := StHeader;
 end;
 
 procedure TfrmOFViewer.FormDestroy(Sender: TObject);
@@ -186,7 +218,17 @@ end;
 
 procedure TfrmOFViewer.btnCerrarClick(Sender: TObject);
 begin
-  Close;
+
+end;
+
+// Compactar/Expandir todo el arbol. Toggle segun el estado actual.
+procedure TfrmOFViewer.btnExpandClick(Sender: TObject);
+begin
+  if FExpandido then
+    tlOF.FullCollapse
+  else
+    tlOF.FullExpand;
+  FExpandido := not FExpandido;
 end;
 
 // Sube por ParentRawItemId hasta la raiz (ParentRawItemId NULL = Nivel 1).
@@ -325,11 +367,51 @@ begin
 
     AddChildren(RootNode, RootData.RawItemId);
     tlOF.FullExpand;
+    FExpandido := True;
   finally
     tlOF.EndUpdate;
   end;
+  UpdateKpis(RootData);
   if tlOF.Root.Count > 0 then
     tlOF.Root.Items[0].Focused := True;
+end;
+
+// Rellena la cabecera de KPIs: LblOF con SerieOF.NumeroOF de la OF raiz y
+// LblOTOP con el conteo de OF/OT/OP de toda la jerarquia cargada en FNodos.
+procedure TfrmOFViewer.UpdateKpis(ARootData: TOFViewerNode);
+var
+  D: TOFViewerNode;
+  NumOF, NumOT, NumOP: Integer;
+  Serie, Numero: string;
+
+  function Plural(N: Integer; const Sing, Plur: string): string;
+  begin
+    if N = 1 then Result := Sing else Result := Plur;
+  end;
+
+begin
+  NumOF := 0; NumOT := 0; NumOP := 0;
+  for D in FNodos do
+    case D.Nivel of
+      1: Inc(NumOF);
+      2: Inc(NumOT);
+      3: Inc(NumOP);
+    end;
+
+  LblOTOP.Caption := Format('%d %s   %d %s   %d %s',
+    [NumOF, Plural(NumOF, 'Orden de fabricaci'#243'n', 'Ordenes de fabricaci'#243'n'),
+     NumOT, Plural(NumOT, 'Orden de trabajo',        'Ordenes de trabajo'),
+     NumOP, Plural(NumOP, 'Operaci'#243'n',              'Operaciones')]);
+
+  // LblOF: SerieOF.NumeroOF de la OF raiz (sin ejercicio: la tabla no lo expone).
+  Serie  := Trim(ARootData.Fields.Values['SerieDoc']);
+  Numero := Trim(ARootData.Fields.Values['NumeroDoc']);
+  if (Serie <> '') and (Numero <> '') then
+    LblOF.Caption := Serie + '.' + Numero
+  else if Numero <> '' then
+    LblOF.Caption := Numero
+  else
+    LblOF.Caption := Trim(ARootData.Fields.Values['ClaveERP']);
 end;
 
 procedure TfrmOFViewer.AddChildren(AParentNode: TcxTreeListNode;

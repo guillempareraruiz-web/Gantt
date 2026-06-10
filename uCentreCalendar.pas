@@ -109,6 +109,25 @@ const
   COneMinute = 1 / 1440;
   COneMs     = 1 / MSecsPerDay;
 
+// Log de depuracion del calendario, al mismo fichero que LogLote (C:\lote_debug.log).
+procedure LogCal(const AMsg: string);
+var
+  F: TextFile;
+  Path: string;
+begin
+  Path := 'C:\lote_debug.log';
+  try
+    AssignFile(F, Path);
+    if FileExists(Path) then Append(F) else Rewrite(F);
+    try
+      Writeln(F, FormatDateTime('hh:nn:ss.zzz', Now) + '  ' + AMsg);
+    finally
+      CloseFile(F);
+    end;
+  except
+  end;
+end;
+
 function IsAlmostEndOfDay(const T: TDateTime): Boolean;
 const
   OneSecond = 1 / SecsPerDay;
@@ -499,8 +518,13 @@ begin
 
   for I := 1 to High(Sorted) do
   begin
-    // Fusiona si se solapen o toquen
-    if Sorted[I].S <= Result[C - 1].E + COneMs then
+    // Fusiona si se solapan o se TOCAN. Tolerancia = 1 minuto (+1ms): dos tramos
+    // non-working consecutivos (p.ej. sabado que acaba a 23:59 y domingo que
+    // empieza a 00:00) deben fusionarse en uno solo; el "hueco" de hasta 1 minuto
+    // entre ellos NO es tiempo laborable real, es solo como se representan los
+    // limites de dia. Sin esta tolerancia los tramos quedan separados y los
+    // saltos de calendario (NextWorkingTime) se paran en medio del fin de semana.
+    if Sorted[I].S <= Result[C - 1].E + COneMinute + COneMs then
     begin
       if Sorted[I].E > Result[C - 1].E then
         Result[C - 1].E := Sorted[I].E;
@@ -567,14 +591,35 @@ function TCentreCalendar.NextWorkingTime(const T: TDateTime): TDateTime;
 var
   Cur: TDateTime;
   Ints: TArray<TAbsInterval>;
-  I: Integer;
+  I, Guard: Integer;
+  Jumped: Boolean;
 begin
   Cur := FloorToMinute(T);
-  Ints := GetMergedIntervalsAround(Cur);
 
-  for I := 0 to High(Ints) do
-    if IsInInterval(Cur, Ints[I]) then
-      Exit(FloorToMinute(Ints[I].E));
+  // ITERATIVO: tras saltar al final de un tramo non-working, hay que volver a
+  // comprobar si el nuevo punto cae DENTRO de OTRO tramo non-working correlativo
+  // (p.ej. sabado seguido de domingo). Si los tramos no quedaron fusionados (o
+  // el siguiente vive en otra ventana de cache), un unico salto dejaria el
+  // resultado todavia en non-working. Reobtenemos la ventana alrededor del nuevo
+  // Cur en cada vuelta para cruzar limites de cache. Guard evita bucle infinito.
+  Guard := 0;
+  repeat
+    Jumped := False;
+    Ints := GetMergedIntervalsAround(Cur);
+    for I := 0 to High(Ints) do
+      if IsInInterval(Cur, Ints[I]) then
+      begin
+        LogCal(Format('  NextWT salto: Cur=%s dentro de [%s .. %s] -> %s',
+          [FormatDateTime('dd/mm hh:nn:ss.zzz', Cur),
+           FormatDateTime('dd/mm hh:nn:ss.zzz', Ints[I].S),
+           FormatDateTime('dd/mm hh:nn:ss.zzz', Ints[I].E),
+           FormatDateTime('dd/mm hh:nn:ss.zzz', FloorToMinute(Ints[I].E))]));
+        Cur := FloorToMinute(Ints[I].E);
+        Jumped := True;
+        Break;
+      end;
+    Inc(Guard);
+  until (not Jumped) or (Guard > 3660);  // 3660 saltos ~ holgura > 10 años de dias
 
   Result := Cur;
 end;
@@ -583,17 +628,28 @@ function TCentreCalendar.PrevWorkingTime(const T: TDateTime): TDateTime;
 var
   Cur: TDateTime;
   Ints: TArray<TAbsInterval>;
-  I: Integer;
+  I, Guard: Integer;
+  Jumped: Boolean;
 begin
   Cur := FloorToMinute(T);
-  Ints := GetMergedIntervalsAround(Cur);
 
-  for I := 0 to High(Ints) do
-  begin
-    // dins del tram non-working o just al seu final
-    if (Cur > Ints[I].S) and (Cur <= Ints[I].E) then
-      Exit(FloorToMinute(Ints[I].S - COneMinute));
-  end;
+  // ITERATIVO (simetrico a NextWorkingTime): tras retroceder al inicio de un
+  // tramo non-working, comprobar si el nuevo punto cae en OTRO tramo correlativo
+  // anterior (domingo precedido de sabado, etc.).
+  Guard := 0;
+  repeat
+    Jumped := False;
+    Ints := GetMergedIntervalsAround(Cur);
+    for I := 0 to High(Ints) do
+      // dins del tram non-working o just al seu final
+      if (Cur > Ints[I].S) and (Cur <= Ints[I].E) then
+      begin
+        Cur := FloorToMinute(Ints[I].S - COneMinute);
+        Jumped := True;
+        Break;
+      end;
+    Inc(Guard);
+  until (not Jumped) or (Guard > 3660);
 
   Result := Cur;
 end;

@@ -42,6 +42,8 @@ type
     Enabled: Boolean;
 
     DataId: Integer; // clau cap a les dades de domini
+
+    LoteId: Integer; // lote (batch) al que pertany el node; 0 = node lliure
   end;
 
   TNodoTipo   = (ntOF, ntPedido, ntProyecto, ntOferta);
@@ -177,6 +179,11 @@ type
     CentreId: Integer;
     LaneIndex: Integer;
     Rect: TRectF;
+    // Si > 0, este layout representa un LOTE entero (barra contenedora que
+    // abarca [min inicio, max fin] de sus miembros). NodeIndex apunta al primer
+    // miembro (para hit-test / seleccion / drag del lote). LoteCount = nº de op.
+    LoteId: Integer;
+    LoteCount: Integer;
   end;
 
   TTurno = record

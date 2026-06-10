@@ -16,6 +16,9 @@ object frmBacklog: TfrmBacklog
   OnDestroy = FormDestroy
   OnShow = FormShow
   PixelsPerInch = 96
+  DesignSize = (
+    1296
+    719)
   TextHeight = 15
   object pnlHeader: TPanel
     Left = 0
@@ -56,6 +59,129 @@ object frmBacklog: TfrmBacklog
       Font.Style = []
       ParentFont = False
     end
+    object pnlKpiVenc: TPanel
+      Left = 700
+      Top = 10
+      Width = 95
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 4276680
+      ParentBackground = False
+      TabOrder = 4
+      object lblKpiVencVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 95
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiVencCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 95
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Vencidas'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiPron: TPanel
+      Left = 797
+      Top = 10
+      Width = 95
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 2202336
+      ParentBackground = False
+      TabOrder = 5
+      object lblKpiPronVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 95
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiPronCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 95
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Vencen 7d'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiSinF: TPanel
+      Left = 894
+      Top = 10
+      Width = 95
+      Height = 50
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = clGray
+      ParentBackground = False
+      TabOrder = 6
+      object lblKpiSinFVal: TLabel
+        Left = 0
+        Top = 4
+        Width = 95
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiSinFCap: TLabel
+        Left = 0
+        Top = 28
+        Width = 95
+        Height = 16
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Sin fecha'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
     object pnlKpiOF: TPanel
       Left = 996
       Top = 10
@@ -65,7 +191,7 @@ object frmBacklog: TfrmBacklog
       BevelOuter = bvNone
       Color = 5526612
       ParentBackground = False
-      TabOrder = 5
+      TabOrder = 1
       object lblKpiOFVal: TLabel
         Left = 0
         Top = 4
@@ -106,7 +232,7 @@ object frmBacklog: TfrmBacklog
       BevelOuter = bvNone
       Color = 5526612
       ParentBackground = False
-      TabOrder = 6
+      TabOrder = 2
       object lblKpiOTVal: TLabel
         Left = 0
         Top = 4
@@ -147,7 +273,7 @@ object frmBacklog: TfrmBacklog
       BevelOuter = bvNone
       Color = 5526612
       ParentBackground = False
-      TabOrder = 7
+      TabOrder = 3
       object lblKpiOPVal: TLabel
         Left = 0
         Top = 4
@@ -179,60 +305,6 @@ object frmBacklog: TfrmBacklog
         ParentFont = False
       end
     end
-    object btnToggleImpacto: TButton
-      Left = 676
-      Top = 11
-      Width = 160
-      Height = 28
-      Anchors = [akTop, akRight]
-      Caption = 'Ocultar panel impacto'
-      TabOrder = 0
-      OnClick = btnToggleImpactoClick
-    end
-    object btnSelectAll: TButton
-      Left = 494
-      Top = 11
-      Width = 80
-      Height = 28
-      Anchors = [akTop, akRight]
-      Caption = 'Seleccionar'
-      TabOrder = 2
-      OnClick = btnSelectAllClick
-    end
-    object btnDeselectAll: TButton
-      Left = 580
-      Top = 11
-      Width = 90
-      Height = 28
-      Anchors = [akTop, akRight]
-      Caption = 'Deseleccionar'
-      TabOrder = 3
-      OnClick = btnDeselectAllClick
-    end
-    object cxButton2: TcxButton
-      Left = 676
-      Top = 39
-      Width = 90
-      Height = 25
-      Anchors = [akTop, akRight]
-      Caption = 'Opciones'
-      Colors.Normal = 14145497
-      Colors.Hot = 11522481
-      Colors.Disabled = 14737632
-      Colors.DisabledText = clSilver
-      DropDownMenu = PopupMenu1
-      Enabled = False
-      Kind = cxbkOfficeDropDown
-      LookAndFeel.SkinName = ''
-      SpeedButtonOptions.CanBeFocused = False
-      TabOrder = 1
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWindowText
-      Font.Height = -11
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-    end
     object imgSection: TcxImage
       AlignWithMargins = True
       Left = 3
@@ -261,7 +333,7 @@ object frmBacklog: TfrmBacklog
       Properties.ReadOnly = True
       Properties.ShowFocusRect = False
       Style.BorderStyle = ebsNone
-      TabOrder = 4
+      TabOrder = 0
       Transparent = True
       Height = 52
       Width = 56
@@ -340,10 +412,11 @@ object frmBacklog: TfrmBacklog
       Caption = 'Fecha compromiso <='
     end
     object lblCountRegs: TLabel
-      Left = 16
-      Top = 502
+      Left = 174
+      Top = 13
       Width = 54
       Height = 13
+      Alignment = taRightJustify
       Caption = '0 registros'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGray
@@ -505,6 +578,7 @@ object frmBacklog: TfrmBacklog
       Top = 44
       Width = 320
       Height = 180
+      BorderStyle = cxcbsNone
       Align = alTop
       OptionsView.PaintStyle = psDelphi
       OptionsView.RowHeaderWidth = 150
@@ -699,7 +773,7 @@ object frmBacklog: TfrmBacklog
       Width = 170
       Height = 23
       Style = csDropDownList
-      TabOrder = 7
+      TabOrder = 5
       OnChange = cmbNivelVistaChange
       Items.Strings = (
         'Nivel 1 (OF / Pedido / Proyecto)'
@@ -707,7 +781,7 @@ object frmBacklog: TfrmBacklog
         'Nivel 3 (OP)')
     end
     object btnPlanificar: TButton
-      Left = 16
+      Left = 107
       Top = 6
       Width = 133
       Height = 28
@@ -717,22 +791,13 @@ object frmBacklog: TfrmBacklog
       OnClick = btnPlanificarClick
     end
     object btnSyncErp: TcxButton
-      Left = 155
+      Left = 286
       Top = 6
-      Width = 140
+      Width = 121
       Height = 28
       Caption = 'Sincronizar ERP...'
       TabOrder = 2
       OnClick = btnSyncErpClick
-    end
-    object btnVerOF: TcxButton
-      Left = 301
-      Top = 6
-      Width = 100
-      Height = 28
-      Caption = 'Ver OF...'
-      TabOrder = 6
-      OnClick = btnVerOFClick
     end
     object btnDesplanificarTodo: TButton
       Left = 856
@@ -745,33 +810,11 @@ object frmBacklog: TfrmBacklog
       Visible = False
       OnClick = btnDesplanificarTodoClick
     end
-    object cxButton1: TcxButton
-      Left = 1007
-      Top = 6
-      Width = 67
-      Height = 25
-      Anchors = [akTop, akRight]
-      Caption = 'Planificar'
-      Colors.Normal = 15395526
-      Colors.Hot = 14540196
-      Colors.Disabled = 14737632
-      Colors.DisabledText = clSilver
-      LookAndFeel.SkinName = ''
-      SpeedButtonOptions.CanBeFocused = False
-      TabOrder = 4
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWindowText
-      Font.Height = -11
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-    end
     object btnRecargar: TcxButton
-      Left = 1080
+      Left = 12
       Top = 6
       Width = 67
       Height = 25
-      Anchors = [akTop, akRight]
       Caption = 'Refrescar'
       Colors.Normal = 13492942
       Colors.Hot = 11522481
@@ -779,7 +822,7 @@ object frmBacklog: TfrmBacklog
       Colors.DisabledText = clSilver
       LookAndFeel.SkinName = ''
       SpeedButtonOptions.CanBeFocused = False
-      TabOrder = 5
+      TabOrder = 4
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
       Font.Height = -11
@@ -807,35 +850,87 @@ object frmBacklog: TfrmBacklog
         617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
         2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
         77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
-        22307078222076696577426F783D2230203020333220333222207374796C653D
-        22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
-        3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
-        303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
-        63653D227072657365727665223E2E59656C6C6F777B66696C6C3A2346464231
-        31353B7D262331333B262331303B2623393B2E5265647B66696C6C3A23443131
-        4331433B7D262331333B262331303B2623393B2E426C75657B66696C6C3A2331
-        31373744373B7D262331333B262331303B2623393B2E477265656E7B66696C6C
-        3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
-        696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
-        657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
-        74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
-        74317B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B2E
-        7374327B646973706C61793A696E6C696E653B66696C6C3A233033394332333B
-        7D262331333B262331303B2623393B2E7374337B646973706C61793A696E6C69
-        6E653B66696C6C3A234431314331433B7D262331333B262331303B2623393B2E
-        7374347B646973706C61793A696E6C696E653B66696C6C3A233732373237323B
-        7D3C2F7374796C653E0D0A3C672069643D22416C69676E4A757374696679223E
-        0D0A09093C7061746820636C6173733D22426C61636B2220643D224D32382C38
-        4834563668323456387A204D32382C3130483476326832345631307A204D3238
-        2C3134483476326832345631347A204D32382C3232483476326832345632327A
-        204D32382C3138483476326832345631387A222F3E0D0A093C2F673E0D0A3C2F
-        7376673E0D0A}
+        22307078222076696577426F783D223020302033322033322220656E61626C65
+        2D6261636B67726F756E643D226E6577203020302033322033322220786D6C3A
+        73706163653D227072657365727665223E262331333B262331303B3C67206F70
+        61636974793D22302E36223E0D0A09093C7265637420783D22362220793D2238
+        222066696C6C3D2223303130313031222077696474683D223230222068656967
+        68743D2232222F3E0D0A09093C7265637420783D22362220793D223132222066
+        696C6C3D2223303130313031222077696474683D22323022206865696768743D
+        2232222F3E0D0A09093C7265637420783D22362220793D223136222066696C6C
+        3D2223303130313031222077696474683D22323022206865696768743D223222
+        2F3E0D0A09093C7265637420783D22362220793D223230222066696C6C3D2223
+        303130313031222077696474683D22323022206865696768743D2232222F3E0D
+        0A09093C7265637420783D22362220793D223234222066696C6C3D2223303130
+        313031222077696474683D22323022206865696768743D2232222F3E0D0A093C
+        2F673E0D0A3C2F7376673E0D0A}
       PaintStyle = bpsGlyph
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
       SpeedButtonOptions.Transparent = True
+      TabOrder = 6
+    end
+    object chkVerImpacto: TcxCheckBox
+      Left = 996
+      Top = 12
+      Anchors = [akTop, akRight]
+      Caption = 'Panel impacto'
+      Properties.OnChange = chkVerImpactoPropertiesChange
+      Style.LookAndFeel.NativeStyle = False
+      Style.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      Style.TextColor = clWhite
+      Style.TransparentBorder = False
+      StyleDisabled.LookAndFeel.NativeStyle = False
+      StyleDisabled.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      StyleFocused.LookAndFeel.NativeStyle = False
+      StyleFocused.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      StyleHot.LookAndFeel.NativeStyle = False
+      StyleHot.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      StyleReadOnly.LookAndFeel.NativeStyle = False
+      StyleReadOnly.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      TabOrder = 7
+    end
+    object chkVerFiltros: TcxCheckBox
+      Left = 1108
+      Top = 12
+      Anchors = [akTop, akRight]
+      Caption = 'Filtros'
+      Properties.OnChange = chkVerFiltrosPropertiesChange
+      State = cbsChecked
+      Style.LookAndFeel.NativeStyle = False
+      Style.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      Style.TextColor = clWhite
+      Style.TransparentBorder = False
+      StyleDisabled.LookAndFeel.NativeStyle = False
+      StyleDisabled.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      StyleFocused.LookAndFeel.NativeStyle = False
+      StyleFocused.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      StyleHot.LookAndFeel.NativeStyle = False
+      StyleHot.LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      StyleReadOnly.LookAndFeel.NativeStyle = False
+      StyleReadOnly.LookAndFeel.SkinName = 'DevExpressDarkStyle'
       TabOrder = 8
     end
+  end
+  object btnSelectAll: TButton
+    Left = 1065
+    Top = 116
+    Width = 102
+    Height = 26
+    Anchors = [akTop, akRight]
+    Caption = 'Seleccionar todo'
+    TabOrder = 6
+    OnClick = btnSelectAllClick
+  end
+  object btnDeselectAll: TButton
+    Left = 1173
+    Top = 116
+    Width = 114
+    Height = 26
+    Anchors = [akTop, akRight]
+    Caption = 'Deseleccionar todo'
+    TabOrder = 7
+    OnClick = btnDeselectAllClick
   end
   object PopupMenu1: TPopupMenu
     Left = 528
@@ -868,6 +963,13 @@ object frmBacklog: TfrmBacklog
       end
     end
     object N3: TMenuItem
+      Caption = '-'
+    end
+    object ConfigurarVencimiento1: TMenuItem
+      Caption = 'Configurar aviso de vencimiento...'
+      OnClick = ConfigurarVencimiento1Click
+    end
+    object N4: TMenuItem
       Caption = '-'
     end
     object Vaciarylimpiartodalaplanificacin2: TMenuItem

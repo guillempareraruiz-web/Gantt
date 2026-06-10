@@ -3,7 +3,8 @@
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, Data.DB, Data.Win.ADODB,
+  System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
+  Data.DB, Data.Win.ADODB,
   uDataConnector, uSQLServerConnector, uDBMigrations, uUserPreferencesRepo,
   uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo;
 
@@ -13,6 +14,25 @@ type
   TEstructuraNodos = (enSimple, enCompleja);
     // enSimple   : 1 OF = 1 OT = 1 OP
     // enCompleja : 1 OF = N OT = N OP
+
+  // Resumen de un lote para el visor (cabecera + KPIs).
+  TLoteInfo = record
+    LoteId: Integer;
+    Caption: string;
+    CenterId: Integer;
+    CentroNombre: string;
+    Modo: Integer;            // 0=secuencial (suma), 1=paralelo (max)
+    SetupMin: Double;         // setup compartido, en minutos
+    FechaInicio: TDateTime;
+    FechaFin: TDateTime;
+    NumOps: Integer;          // nº de operaciones (miembros)
+    DuracionOriginalTotal: Double;  // suma de DuracionMinOriginal (sin agrupar)
+    DuracionOriginalMax: Double;    // maximo de DuracionMinOriginal
+    function DuracionBase: Double;     // base segun Modo (suma o max)
+    function DuracionEfectiva: Double; // base + SetupMin = duracion teorica del lote
+    function AhorroMin: Double;        // DuracionOriginalTotal - DuracionEfectiva
+    function AhorroPct: Double;        // % de ahorro sobre el total original
+  end;
 
   TDMPlanner = class(TDataModule)
     ADOConnection: TADOConnection;
@@ -70,6 +90,27 @@ type
     // No comprueba bloqueo (eso es responsabilidad del llamador). Devuelve el
     // numero de nodos borrados. Compartida por Backlog y Gantt.
     function DesplanificarNodes(const ANodeIds: TArray<Integer>): Integer;
+
+    // --- Lotes (batch) de planificacion (V057) -----------------------------
+    // Agrupa varios nodos en un lote: valida mismo centro, crea el lote, asigna
+    // LoteId a los nodos y alinea su ventana (inicio=min, fin=max de miembros).
+    // Devuelve el LoteId creado, o 0 si no se pudo (centros distintos, <2 nodos).
+    function CrearLote(const ANodeIds: TArray<Integer>): Integer;
+    // Deshace un lote: pone LoteId NULL a sus miembros y borra el lote.
+    procedure DesagruparLote(ALoteId: Integer);
+    // Saca un solo nodo del lote (LoteId NULL). No borra el lote aunque quede
+    // con un solo miembro (el llamador decide si desagrupar del todo).
+    procedure QuitarNodoDeLote(ANodeId: Integer);
+    // Lee la cabecera + KPIs de un lote (para el visor). Devuelve True si existe.
+    function GetLoteInfo(ALoteId: Integer; out AInfo: TLoteInfo): Boolean;
+    // Actualiza modo y setup de un lote y RECALCULA su duracion efectiva,
+    // repartiendola como ventana compartida: DuracionMin de cada miembro = la
+    // efectiva (base+setup); FechaFin de miembros y lote = FechaInicio + efectiva.
+    // DuracionMinOriginal NO se toca. Recalculo de calendario lo hace el reflow al
+    // recargar; aqui se hace en tiempo natural (la recarga lo afina).
+    procedure ActualizarLote(ALoteId, AModo: Integer; ASetupMin: Double);
+    // Cuenta los miembros de un lote (para auto-desagrupar si quedan <2).
+    function ContarMiembrosLote(ALoteId: Integer): Integer;
 
     property CalendarsRepo: TCalendarsRepo read FCalendarsRepo;
     property CentresRepo: TCentresRepo read FCentresRepo;
@@ -293,6 +334,382 @@ begin
   except
     ADOConnection.RollbackTrans;
     raise;
+  end;
+end;
+
+// --- Lotes (batch) ---------------------------------------------------------
+
+function TDMPlanner.CrearLote(const ANodeIds: TArray<Integer>): Integer;
+var
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  IdList, CE, PID: string;
+  I, CenterId: Integer;
+  FIni, FFin: TDateTime;
+begin
+  Result := 0;
+  if Length(ANodeIds) < 2 then Exit;   // un lote tiene sentido con >=2 nodos
+  if not IsConnected then Exit;
+
+  IdList := '';
+  for I := 0 to High(ANodeIds) do
+  begin
+    if IdList <> '' then IdList := IdList + ',';
+    IdList := IdList + IntToStr(ANodeIds[I]);
+  end;
+  CE := IntToStr(FCodigoEmpresa);
+  PID := IntToStr(FCurrentProjectId);
+
+  // Validar: todos del mismo centro + recoger la ventana (min/max) y el centro.
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text :=
+      'SELECT COUNT(DISTINCT CenterId) AS NumCentros, MIN(CenterId) AS Centro, ' +
+      '  MIN(FechaInicio) AS FIni, MAX(FechaFin) AS FFin ' +
+      'FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE +
+      '  AND NodeId IN (' + IdList + ')';
+    Q.Open;
+    if Q.Eof or (Q.FieldByName('NumCentros').AsInteger <> 1) then
+      Exit;   // centros distintos o sin centro -> no se puede agrupar
+    CenterId := Q.FieldByName('Centro').AsInteger;
+    if Q.FieldByName('FIni').IsNull or Q.FieldByName('FFin').IsNull then
+      Exit;
+    FIni := Q.FieldByName('FIni').AsDateTime;
+    FFin := Q.FieldByName('FFin').AsDateTime;
+  finally
+    Q.Free;
+  end;
+
+  ADOConnection.BeginTrans;
+  try
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+
+      // Crear el lote con la ventana comun.
+      Cmd.CommandText :=
+        'INSERT INTO FS_PL_Lote (CodigoEmpresa, ProjectId, CenterId, Caption, ' +
+        '  FechaInicio, FechaFin) VALUES (' + CE + ', ' + PID + ', ' +
+        IntToStr(CenterId) + ', ' +
+        'N''Lote '' + CONVERT(NVARCHAR(20), ' + IntToStr(Length(ANodeIds)) + ') + N'' op.'', ' +
+        '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FIni) + ''', ' +
+        '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FFin) + ''')';
+      Cmd.Execute;
+
+      // Recuperar el LoteId recien creado.
+      Q := TADOQuery.Create(nil);
+      try
+        Q.Connection := ADOConnection;
+        Q.SQL.Text :=
+          'SELECT MAX(LoteId) AS NewId FROM FS_PL_Lote ' +
+          'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+        Q.Open;
+        Result := Q.FieldByName('NewId').AsInteger;
+      finally
+        Q.Free;
+      end;
+
+      // Asignar el lote a los nodos y alinear su ventana a la del lote.
+      Cmd.CommandText :=
+        'UPDATE FS_PL_Node SET LoteId = ' + IntToStr(Result) + ', ' +
+        '  FechaInicio = ''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FIni) + ''', ' +
+        '  FechaFin = ''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FFin) + ''' ' +
+        'WHERE CodigoEmpresa = ' + CE + ' AND NodeId IN (' + IdList + ')';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+    ADOConnection.CommitTrans;
+  except
+    ADOConnection.RollbackTrans;
+    raise;
+  end;
+end;
+
+procedure TDMPlanner.DesagruparLote(ALoteId: Integer);
+var
+  Cmd: TADOCommand;
+  CE: string;
+begin
+  if ALoteId <= 0 then Exit;
+  if not IsConnected then Exit;
+  CE := IntToStr(FCodigoEmpresa);
+
+  ADOConnection.BeginTrans;
+  try
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+      // RESTAURAR la duracion real de cada OP del lote: dentro del lote
+      // DuracionMin (en FS_PL_NodeData) guardaba el ancho de la ventana
+      // compartida; al salir, cada OP vuelve a su duracion real
+      // (DuracionMinOriginal). FechaFin se recalcula al recargar el plan.
+      Cmd.CommandText :=
+        'UPDATE nd SET nd.DuracionMin = nd.DuracionMinOriginal ' +
+        'FROM FS_PL_NodeData nd ' +
+        'INNER JOIN FS_PL_Node n ON n.CodigoEmpresa = nd.CodigoEmpresa ' +
+        '  AND n.NodeId = nd.NodeId ' +
+        'WHERE nd.CodigoEmpresa = ' + CE +
+        ' AND n.LoteId = ' + IntToStr(ALoteId) +
+        ' AND nd.DuracionMinOriginal IS NOT NULL AND nd.DuracionMinOriginal > 0';
+      Cmd.Execute;
+      // Liberar los nodos del lote (FK), luego se borra el lote.
+      Cmd.CommandText :=
+        'UPDATE FS_PL_Node SET LoteId = NULL WHERE CodigoEmpresa = ' + CE +
+        ' AND LoteId = ' + IntToStr(ALoteId);
+      Cmd.Execute;
+      Cmd.CommandText :=
+        'DELETE FROM FS_PL_Lote WHERE CodigoEmpresa = ' + CE +
+        ' AND LoteId = ' + IntToStr(ALoteId);
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+    ADOConnection.CommitTrans;
+  except
+    ADOConnection.RollbackTrans;
+    raise;
+  end;
+end;
+
+procedure TDMPlanner.QuitarNodoDeLote(ANodeId: Integer);
+var
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  CE, NID: string;
+  LoteId: Integer;
+  FinLote: TDateTime;
+  TeFinLote: Boolean;
+  DurReal: Double;
+begin
+  if ANodeId <= 0 then Exit;
+  if not IsConnected then Exit;
+  CE := IntToStr(FCodigoEmpresa);
+  NID := IntToStr(ANodeId);
+
+  // Leer el lote del nodo, el fin de su ventana y la duracion real del nodo,
+  // para recolocar el nodo JUSTO detras del lote al salir (si no, quedaria
+  // solapado con la barra del lote). Calculo en Delphi -> SQL simple con literales.
+  LoteId := 0; FinLote := 0; TeFinLote := False; DurReal := 0;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text :=
+      'SELECT n.LoteId, l.FechaFin, ' +
+      '  ISNULL(NULLIF(nd.DuracionMinOriginal,0), ISNULL(nd.DuracionMin, ISNULL(n.DuracionMin,1))) AS Dur ' +
+      'FROM FS_PL_Node n ' +
+      'LEFT JOIN FS_PL_Lote l ON l.CodigoEmpresa = n.CodigoEmpresa AND l.LoteId = n.LoteId ' +
+      'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa AND nd.NodeId = n.NodeId ' +
+      'WHERE n.CodigoEmpresa = ' + CE + ' AND n.NodeId = ' + NID;
+    Q.Open;
+    if not Q.Eof and not Q.FieldByName('LoteId').IsNull then
+    begin
+      LoteId := Q.FieldByName('LoteId').AsInteger;
+      DurReal := Q.FieldByName('Dur').AsFloat;
+      if not Q.FieldByName('FechaFin').IsNull then
+      begin
+        FinLote := Q.FieldByName('FechaFin').AsDateTime;
+        TeFinLote := True;
+      end;
+    end;
+  finally
+    Q.Free;
+  end;
+  if DurReal < 1 then DurReal := 1;
+
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := ADOConnection;
+    // Restaurar duracion real del nodo que sale del lote (ver DesagruparLote).
+    Cmd.CommandText :=
+      'UPDATE FS_PL_NodeData SET DuracionMin = DuracionMinOriginal ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND NodeId = ' + NID +
+      ' AND DuracionMinOriginal IS NOT NULL AND DuracionMinOriginal > 0';
+    Cmd.Execute;
+
+    // Sacar del lote y, si tenemos el fin del lote, recolocar el nodo justo
+    // detras: FechaInicio = fin del lote; FechaFin = inicio + duracion real
+    // (tiempo natural; el reflow del Gantt al recargar lo ajusta al calendario
+    // y resuelve colisiones con otros nodos del centro).
+    if TeFinLote then
+      Cmd.CommandText :=
+        'UPDATE FS_PL_Node SET LoteId = NULL, FechaInicio = ''' +
+          FormatDateTime('yyyy-mm-dd hh:nn:ss', FinLote) + ''', FechaFin = ''' +
+          FormatDateTime('yyyy-mm-dd hh:nn:ss', IncMinute(FinLote, Round(DurReal))) + ''' ' +
+        'WHERE CodigoEmpresa = ' + CE + ' AND NodeId = ' + NID
+    else
+      Cmd.CommandText :=
+        'UPDATE FS_PL_Node SET LoteId = NULL WHERE CodigoEmpresa = ' + CE +
+        ' AND NodeId = ' + NID;
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+end;
+
+// --- TLoteInfo: KPIs derivados ----------------------------------------------
+function TLoteInfo.DuracionBase: Double;
+begin
+  if Modo = 1 then            // paralelo (hornada): la duracion la marca la OP mas larga
+    Result := DuracionOriginalMax
+  else                        // secuencial: una tras otra -> suma
+    Result := DuracionOriginalTotal;
+end;
+
+function TLoteInfo.DuracionEfectiva: Double;
+begin
+  Result := DuracionBase + SetupMin;
+end;
+
+function TLoteInfo.AhorroMin: Double;
+begin
+  // Cuanto se ahorra frente a hacerlas sueltas (suma de reales).
+  Result := DuracionOriginalTotal - DuracionEfectiva;
+end;
+
+function TLoteInfo.AhorroPct: Double;
+begin
+  if DuracionOriginalTotal > 0 then
+    Result := AhorroMin / DuracionOriginalTotal * 100.0
+  else
+    Result := 0;
+end;
+
+function TDMPlanner.GetLoteInfo(ALoteId: Integer; out AInfo: TLoteInfo): Boolean;
+var
+  Q: TADOQuery;
+begin
+  Result := False;
+  AInfo := Default(TLoteInfo);
+  if (ALoteId <= 0) or not IsConnected then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    // Cabecera del lote + nombre del centro + agregados de duracion de miembros.
+    Q.SQL.Text :=
+      'SELECT l.LoteId, ISNULL(l.Caption,'''') AS Caption, l.CenterId, ' +
+      '  ISNULL(c.Titulo,'''') AS Centro, ISNULL(l.Modo,0) AS Modo, ' +
+      '  ISNULL(l.SetupMin,0) AS SetupMin, l.FechaInicio, l.FechaFin, ' +
+      '  (SELECT COUNT(*) FROM FS_PL_Node n ' +
+      '     WHERE n.CodigoEmpresa = l.CodigoEmpresa AND n.LoteId = l.LoteId) AS NumOps, ' +
+      '  (SELECT ISNULL(SUM(nd.DuracionMinOriginal),0) FROM FS_PL_Node n ' +
+      '     JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa=n.CodigoEmpresa AND nd.NodeId=n.NodeId ' +
+      '     WHERE n.CodigoEmpresa = l.CodigoEmpresa AND n.LoteId = l.LoteId) AS SumOrig, ' +
+      '  (SELECT ISNULL(MAX(nd.DuracionMinOriginal),0) FROM FS_PL_Node n ' +
+      '     JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa=n.CodigoEmpresa AND nd.NodeId=n.NodeId ' +
+      '     WHERE n.CodigoEmpresa = l.CodigoEmpresa AND n.LoteId = l.LoteId) AS MaxOrig ' +
+      'FROM FS_PL_Lote l ' +
+      'LEFT JOIN FS_PL_Center c ON c.CodigoEmpresa = l.CodigoEmpresa AND c.CenterId = l.CenterId ' +
+      'WHERE l.CodigoEmpresa = :Emp AND l.LoteId = :Lote';
+    Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
+    Q.Parameters.ParamByName('Lote').Value := ALoteId;
+    Q.Open;
+    if Q.Eof then Exit;
+
+    AInfo.LoteId       := Q.FieldByName('LoteId').AsInteger;
+    AInfo.Caption      := Q.FieldByName('Caption').AsString;
+    AInfo.CenterId     := Q.FieldByName('CenterId').AsInteger;
+    AInfo.CentroNombre := Q.FieldByName('Centro').AsString;
+    AInfo.Modo         := Q.FieldByName('Modo').AsInteger;
+    AInfo.SetupMin     := Q.FieldByName('SetupMin').AsFloat;
+    if not Q.FieldByName('FechaInicio').IsNull then
+      AInfo.FechaInicio := Q.FieldByName('FechaInicio').AsDateTime;
+    if not Q.FieldByName('FechaFin').IsNull then
+      AInfo.FechaFin := Q.FieldByName('FechaFin').AsDateTime;
+    AInfo.NumOps                := Q.FieldByName('NumOps').AsInteger;
+    AInfo.DuracionOriginalTotal := Q.FieldByName('SumOrig').AsFloat;
+    AInfo.DuracionOriginalMax   := Q.FieldByName('MaxOrig').AsFloat;
+    Result := True;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TDMPlanner.ActualizarLote(ALoteId, AModo: Integer; ASetupMin: Double);
+var
+  Cmd: TADOCommand;
+  CE, LID: string;
+  Info: TLoteInfo;
+  Efectiva: Double;
+begin
+  if (ALoteId <= 0) or not IsConnected then Exit;
+  CE := IntToStr(FCodigoEmpresa);
+  LID := IntToStr(ALoteId);
+
+  ADOConnection.BeginTrans;
+  try
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+
+      // 1) Guardar modo + setup.
+      Cmd.CommandText :=
+        'UPDATE FS_PL_Lote SET Modo = ' + IntToStr(AModo) +
+        ', SetupMin = ' + StringReplace(FloatToStr(ASetupMin), ',', '.', [rfReplaceAll]) +
+        ' WHERE CodigoEmpresa = ' + CE + ' AND LoteId = ' + LID;
+      Cmd.Execute;
+
+      // 2) Recalcular la duracion efectiva con los nuevos valores y repartirla
+      //    como ventana compartida. Releemos info DESPUES del update de modo/setup.
+      if GetLoteInfo(ALoteId, Info) then
+      begin
+        Efectiva := Info.DuracionEfectiva;
+        if Efectiva < 1 then Efectiva := 1;
+
+        // Todos los miembros: DuracionMin = efectiva (ancho de la ventana del lote).
+        // DuracionMinOriginal queda intacto (duracion real de cada OP).
+        Cmd.CommandText :=
+          'UPDATE nd SET nd.DuracionMin = ' +
+          StringReplace(FloatToStr(Efectiva), ',', '.', [rfReplaceAll]) + ' ' +
+          'FROM FS_PL_NodeData nd ' +
+          'JOIN FS_PL_Node n ON n.CodigoEmpresa = nd.CodigoEmpresa AND n.NodeId = nd.NodeId ' +
+          'WHERE nd.CodigoEmpresa = ' + CE + ' AND n.LoteId = ' + LID;
+        Cmd.Execute;
+
+        // FechaFin (miembros + lote) = FechaInicio + efectiva (tiempo natural; el
+        // reflow del Gantt al recargar lo ajusta al calendario laboral).
+        Cmd.CommandText :=
+          'UPDATE FS_PL_Node SET FechaFin = DATEADD(MINUTE, ' +
+          IntToStr(Round(Efectiva)) + ', FechaInicio) ' +
+          'WHERE CodigoEmpresa = ' + CE + ' AND LoteId = ' + LID +
+          ' AND FechaInicio IS NOT NULL';
+        Cmd.Execute;
+
+        Cmd.CommandText :=
+          'UPDATE FS_PL_Lote SET FechaFin = DATEADD(MINUTE, ' +
+          IntToStr(Round(Efectiva)) + ', FechaInicio) ' +
+          'WHERE CodigoEmpresa = ' + CE + ' AND LoteId = ' + LID +
+          ' AND FechaInicio IS NOT NULL';
+        Cmd.Execute;
+      end;
+    finally
+      Cmd.Free;
+    end;
+    ADOConnection.CommitTrans;
+  except
+    ADOConnection.RollbackTrans;
+    raise;
+  end;
+end;
+
+function TDMPlanner.ContarMiembrosLote(ALoteId: Integer): Integer;
+var
+  Q: TADOQuery;
+begin
+  Result := 0;
+  if (ALoteId <= 0) or not IsConnected then Exit;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text :=
+      'SELECT COUNT(*) AS N FROM FS_PL_Node WHERE CodigoEmpresa = ' +
+      IntToStr(FCodigoEmpresa) + ' AND LoteId = ' + IntToStr(ALoteId);
+    Q.Open;
+    Result := Q.FieldByName('N').AsInteger;
+  finally
+    Q.Free;
   end;
 end;
 

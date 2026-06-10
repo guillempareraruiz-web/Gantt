@@ -40,7 +40,12 @@
       "Bash(sqlcmd -S \"localhost\\\\SQLEXPRESS\" -d FS -E -C -b -i \"V056__backlog_planned_tree_view.sql\")",
       "Bash(xargs wc -l)",
       "Bash(curl -s \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/System/loader-4-line.svg\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Business/time-line.svg\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/Remix-Design/RemixIcon/master/icons/Business/time-line.svg\")",
+      "Bash(find /c /d -iname \"cxGridStrs.pas\" 2>/dev/null | head; echo \"===\"; ls \"C:/Users/Public/Documents/Embarcadero\" 2>/dev/null; ls \"D:/\" 2>/dev/null | head)",
+      "Read(//d//**)",
+      "Bash(reg query *)",
+      "Bash(grep -nA 20 \"function TGanttControl.IsNodeMovable\" \"d:/PROJECTES/GANTT/GANTT/uGanttControl.pas\")",
+      "Bash(awk '/RebuildLayout/{found=1} found')"
     ],
     "additionalDirectories": [
       "d:\\PROJECTES\\GANTT\\GANTT"

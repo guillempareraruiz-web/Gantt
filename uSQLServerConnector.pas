@@ -1464,7 +1464,12 @@ begin
           'Habilitado = ' + IfThen(N.Enabled, '1', '0') +
         ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
         '   AND NodeId = ' + IntToStr(N.Id) + ' ' +
-        'ELSE ' +
+        // El ELSE necesita BEGIN...END: sin el bloque, T-SQL solo asocia la
+        // PRIMERA sentencia (SET IDENTITY_INSERT ON) al ELSE, y el INSERT +
+        // SET OFF se ejecutaban SIEMPRE -> al ir por la rama UPDATE (nodo ya
+        // existe), el INSERT con NodeId explicito saltaba con IDENTITY_INSERT
+        // OFF. Con BEGIN...END las tres sentencias quedan dentro del ELSE.
+        'ELSE BEGIN ' +
         'SET IDENTITY_INSERT FS_PL_Node ON; ' +
         'INSERT INTO FS_PL_Node (CodigoEmpresa, NodeId, ProjectId, CenterId, FechaInicio, FechaFin, ' +
           'DuracionMin, Caption, ColorFondo, ColorBorde, Visible, Habilitado) VALUES (' +
@@ -1480,7 +1485,7 @@ begin
           ColorToSQL(N.BorderColor) + ', ' +
           IfThen(N.Visible, '1', '0') + ', ' +
           IfThen(N.Enabled, '1', '0') + '); ' +
-        'SET IDENTITY_INSERT FS_PL_Node OFF;'
+        'SET IDENTITY_INSERT FS_PL_Node OFF; END;'
       );
 
       // NodeData (si existeix). Clave (CodigoEmpresa, NodeId)

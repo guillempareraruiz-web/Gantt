@@ -30,7 +30,7 @@ uses
   dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
-  cxInplaceContainer, cxVGrid,
+  cxInplaceContainer, cxVGrid, cxGridStrs, dxCore,
   Data.Win.ADODB, Data.DB,
   uBacklogScheduler, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
   dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
@@ -48,7 +48,8 @@ uses
   dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, Vcl.Menus, cxButtons, dxGDIPlusClasses, cxImage;
+  dxSkinXmas2008Blue, Vcl.Menus, cxButtons, dxGDIPlusClasses, cxImage,
+  Vcl.WinXCtrls;
 
 const
   BACKLOG_GRID_ID = 'BACKLOG';
@@ -178,17 +179,13 @@ type
     grdBacklog: TcxGrid;
     tvBacklog: TcxGridTableView;
     lvBacklog: TcxGridLevel;
-    btnToggleImpacto: TButton;
     PopupMenu1: TPopupMenu;
     RegenerarNodosDemo1: TMenuItem;
     RegenerarBacklogDemo1: TMenuItem;
-    btnSelectAll: TButton;
-    btnDeselectAll: TButton;
     pnlSubTitulo: TPanel;
     btnDesplanificarSel: TButton;
     btnPlanificar: TButton;
     btnSyncErp: TcxButton;
-    btnVerOF: TcxButton;
     btnDesplanificarTodo: TButton;
     PopupMenu2: TPopupMenu;
     Columnas1: TMenuItem;
@@ -196,9 +193,10 @@ type
     Guardar1: TMenuItem;
     Restablecer1: TMenuItem;
     N3: TMenuItem;
+    ConfigurarVencimiento1: TMenuItem;
+    N4: TMenuItem;
     Vaciarylimpiartodalaplanificacin2: TMenuItem;
     imgSection: TcxImage;
-    cxButton1: TcxButton;
     btnRecargar: TcxButton;
     lblCountRegs: TLabel;
     pnlKpiOF: TPanel;
@@ -210,10 +208,22 @@ type
     pnlKpiOP: TPanel;
     lblKpiOPVal: TLabel;
     lblKpiOPCap: TLabel;
+    pnlKpiVenc: TPanel;
+    lblKpiVencVal: TLabel;
+    lblKpiVencCap: TLabel;
+    pnlKpiPron: TPanel;
+    lblKpiPronVal: TLabel;
+    lblKpiPronCap: TLabel;
+    pnlKpiSinF: TPanel;
+    lblKpiSinFVal: TLabel;
+    lblKpiSinFCap: TLabel;
     Label28: TLabel;
     cxButton9: TcxButton;
+    chkVerImpacto: TcxCheckBox;
+    chkVerFiltros: TcxCheckBox;
+    btnSelectAll: TButton;
+    btnDeselectAll: TButton;
     procedure btnSyncErpClick(Sender: TObject);
-    procedure btnVerOFClick(Sender: TObject);
     procedure RegenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarBacklogDemo1Click(Sender: TObject);
     procedure btnSelectAllClick(Sender: TObject);
@@ -222,7 +232,6 @@ type
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnPlanificarClick(Sender: TObject);
-    procedure btnToggleImpactoClick(Sender: TObject);
     procedure btnLimpiarFiltrosClick(Sender: TObject);
     procedure FiltroChanged(Sender: TObject);
     procedure tvBacklogSelectionChanged(Sender: TcxCustomGridTableView);
@@ -243,6 +252,9 @@ type
     procedure Restablecer1Click(Sender: TObject);
     procedure Guardar1Click(Sender: TObject);
     procedure Vaciarylimpiartodalaplanificacin2Click(Sender: TObject);
+    procedure chkVerImpactoPropertiesChange(Sender: TObject);
+    procedure chkVerFiltrosPropertiesChange(Sender: TObject);
+    procedure ConfigurarVencimiento1Click(Sender: TObject);
   private
     FRows: TList<TBacklogRow>;
     FFilteredIndices: TArray<Integer>;   // FRows index per cada fila del grid
@@ -286,6 +298,7 @@ type
     procedure CommitScheduling(const AResult: TSchedResult);
 
     procedure ApplyImpactoVisible(AVisible: Boolean);
+    procedure ApplyFiltrosVisible(AVisible: Boolean);
     procedure ApplyTabMode;
     function IsPlanningTab: Boolean;
     function CollectSelectedNodeIds: TArray<Integer>;
@@ -451,11 +464,18 @@ begin
 
     Columnas1.Enabled := uLogin.IsAdmin;
 
+    // Traduccion al castellano de los textos por defecto del cxGrid (afectan a
+    // todos los grids de la app; basta hacerlo una vez).
+    cxSetResourceString(@scxGridGroupByBoxCaption,
+      'Arrastre aqu'#237' una columna para agrupar por ella');
+    cxSetResourceString(@scxGridNoDataInfoText, '<Sin datos que mostrar>');
+
     BuildBaseColumns;
     LoadCustomColumnDefs;
     BuildCustomColumns;
     LoadUserLayout;
     ApplyImpactoVisible(uUserPrefs.GetPrefBool(BACKLOG_MOD, 'ImpactoVisible', True));
+    ApplyFiltrosVisible(uUserPrefs.GetPrefBool(BACKLOG_MOD, 'FiltrosVisible', True));
   finally
     FLoading := False;
   end;
@@ -928,11 +948,6 @@ begin
   LoadData;
 end;
 
-procedure TfrmBacklog.btnVerOFClick(Sender: TObject);
-begin
-  VerOFActual;
-end;
-
 procedure TfrmBacklog.btnSyncErpClick(Sender: TObject);
 var
   Reader: IErpReader;
@@ -1005,19 +1020,39 @@ end;
 procedure TfrmBacklog.ApplyImpactoVisible(AVisible: Boolean);
 begin
   pnlImpacto.Visible := AVisible;
-  if AVisible then
-    btnToggleImpacto.Caption := 'Ocultar panel impacto'
-  else
-    btnToggleImpacto.Caption := 'Mostrar panel impacto';
+
+  // Mantener el checkbox sincronizado (sin redisparar su OnChange).
+  if chkVerImpacto.Checked <> AVisible then
+  begin
+    chkVerImpacto.Properties.OnChange := nil;
+    chkVerImpacto.Checked := AVisible;
+    chkVerImpacto.Properties.OnChange := chkVerImpactoPropertiesChange;
+  end;
 end;
 
-procedure TfrmBacklog.btnToggleImpactoClick(Sender: TObject);
-var
-  NewVis: Boolean;
+procedure TfrmBacklog.ApplyFiltrosVisible(AVisible: Boolean);
 begin
-  NewVis := not pnlImpacto.Visible;
-  ApplyImpactoVisible(NewVis);
-  uUserPrefs.SetPrefBool(BACKLOG_MOD, 'ImpactoVisible', NewVis);
+  pnlFiltros.Visible := AVisible;
+  if chkVerFiltros.Checked <> AVisible then
+  begin
+    chkVerFiltros.Properties.OnChange := nil;
+    chkVerFiltros.Checked := AVisible;
+    chkVerFiltros.Properties.OnChange := chkVerFiltrosPropertiesChange;
+  end;
+end;
+
+procedure TfrmBacklog.chkVerImpactoPropertiesChange(Sender: TObject);
+begin
+  if FLoading then Exit;
+  ApplyImpactoVisible(chkVerImpacto.Checked);
+  uUserPrefs.SetPrefBool(BACKLOG_MOD, 'ImpactoVisible', chkVerImpacto.Checked);
+end;
+
+procedure TfrmBacklog.chkVerFiltrosPropertiesChange(Sender: TObject);
+begin
+  if FLoading then Exit;
+  ApplyFiltrosVisible(chkVerFiltros.Checked);
+  uUserPrefs.SetPrefBool(BACKLOG_MOD, 'FiltrosVisible', chkVerFiltros.Checked);
 end;
 
 function TfrmBacklog.IsPlanningTab: Boolean;
@@ -1570,9 +1605,12 @@ begin
   else if IsPlanningTab then
     // Nivel 1/2: vista multinivel de planificados con agregados de progreso
     // (V056): rango NodeInicio/NodeFin, NumOpsPlan/Total, NumCentros.
+    // Filtramos por ProjectId igual que la rama Nivel 3, para no mezclar el
+    // progreso de OP planificadas en otros proyectos (la vista expone ProjectId).
     Result :=
       'SELECT ' + Sel + ' FROM FS_PL_vw_BacklogPlannedTree b ' + Joins +
       ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+      '   AND b.ProjectId = ' + IntToStr(DMPlanner.CurrentProjectId) +
       '   AND b.Nivel = ' + IntToStr(FNivelVista) +
       ' ORDER BY b.NodeInicio'
   else if FNivelVista >= 3 then
@@ -1810,13 +1848,43 @@ end;
 // pendiente si tiene alguna OP sin node, y como planificada si tiene alguna OP
 // con node (puede contar en ambas si esta a medias).
 // ---------------------------------------------------------------------------
+// Configura el umbral de dias de la franja 'a punto de vencer' (KPI ambar
+// 'Vencen Nd'). NO afecta a 'Vencidas' (siempre = FechaCompromiso < hoy).
+procedure TfrmBacklog.ConfigurarVencimiento1Click(Sender: TObject);
+var
+  S: string;
+  Dias, Actual: Integer;
+begin
+  Actual := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'DiasVencimiento', 7);
+  if Actual <= 0 then Actual := 7;
+  S := IntToStr(Actual);
+  if not InputQuery('Aviso de vencimiento',
+       'Marcar como '#39'pr'#243'ximas a vencer'#39' las operaciones cuya fecha de ' +
+       'compromiso est'#233' dentro de los pr'#243'ximos N d'#237'as:', S) then
+    Exit;
+
+  if not TryStrToInt(Trim(S), Dias) or (Dias <= 0) or (Dias > 365) then
+  begin
+    ShowMessage('Introduce un n'#250'mero de d'#237'as v'#225'lido (entre 1 y 365).');
+    Exit;
+  end;
+
+  uUserPrefs.SetPrefInt(BACKLOG_MOD, 'DiasVencimiento', Dias);
+  LoadKpis;   // recalcula el semaforo con el nuevo umbral
+end;
+
 procedure TfrmBacklog.LoadKpis;
 var
   Q: TADOQuery;
   ofP, ofPl, ofT, otP, otPl, otT, opP, opPl, opT: Integer;
+  vencidas, proximas, sinFecha, diasVenc: Integer;
 begin
   ofP := 0; ofPl := 0; ofT := 0; otP := 0; otPl := 0; otT := 0;
   opP := 0; opPl := 0; opT := 0;
+  vencidas := 0; proximas := 0; sinFecha := 0;
+  // Umbral 'a punto de vencer' en dias (configurable por usuario; default 7).
+  diasVenc := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'DiasVencimiento', 7);
+  if diasVenc <= 0 then diasVenc := 7;
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := DMPlanner.ADOConnection;
@@ -1824,9 +1892,12 @@ begin
     // OF/OT: pendientes/planificadas = documentos distintos con alguna OP en ese
     // estado (una OF a medias cuenta en ambos). El total (Tot) es el numero de
     // documentos DISTINTOS, sin doble conteo del solapamiento.
+    // Ademas, sobre las OP PENDIENTES, clasificamos por FechaCompromiso en tres
+    // franjas: vencidas (< hoy), proximas (hoy..hoy+N) y sin fecha (NULL).
     Q.SQL.Text :=
       'WITH OpState AS ('#13#10 +
       '  SELECT op.RawItemId, op.ParentRawItemId AS N2,'#13#10 +
+      '    op.FechaCompromiso AS FCompromiso,'#13#10 +
       '    (SELECT p1.ParentRawItemId FROM FS_PL_Raw_Item p1'#13#10 +
       '      WHERE p1.RawItemId = op.ParentRawItemId) AS N1,'#13#10 +
       '    CASE WHEN EXISTS (SELECT 1 FROM FS_PL_NodeData nd'#13#10 +
@@ -1847,7 +1918,16 @@ begin
       '  COUNT(DISTINCT N2)                             AS OtTot,'#13#10 +
       '  SUM(CASE WHEN Planif=0 THEN 1 ELSE 0 END)      AS OpPend,'#13#10 +
       '  SUM(CASE WHEN Planif=1 THEN 1 ELSE 0 END)      AS OpPlan,'#13#10 +
-      '  COUNT(*)                                       AS OpTot'#13#10 +
+      '  COUNT(*)                                       AS OpTot,'#13#10 +
+      '  SUM(CASE WHEN Planif=0 AND FCompromiso IS NOT NULL'#13#10 +
+      '            AND CAST(FCompromiso AS DATE) < CAST(GETDATE() AS DATE)'#13#10 +
+      '           THEN 1 ELSE 0 END)                    AS Vencidas,'#13#10 +
+      '  SUM(CASE WHEN Planif=0 AND FCompromiso IS NOT NULL'#13#10 +
+      '            AND CAST(FCompromiso AS DATE) >= CAST(GETDATE() AS DATE)'#13#10 +
+      '            AND CAST(FCompromiso AS DATE) <= DATEADD(DAY, ' + IntToStr(diasVenc) + ', CAST(GETDATE() AS DATE))'#13#10 +
+      '           THEN 1 ELSE 0 END)                    AS Proximas,'#13#10 +
+      '  SUM(CASE WHEN Planif=0 AND FCompromiso IS NULL'#13#10 +
+      '           THEN 1 ELSE 0 END)                    AS SinFecha'#13#10 +
       'FROM OpState';
     Q.Open;
     if not Q.Eof then
@@ -1861,6 +1941,9 @@ begin
       opP  := Q.FieldByName('OpPend').AsInteger;
       opPl := Q.FieldByName('OpPlan').AsInteger;
       opT  := Q.FieldByName('OpTot').AsInteger;
+      vencidas := Q.FieldByName('Vencidas').AsInteger;
+      proximas := Q.FieldByName('Proximas').AsInteger;
+      sinFecha := Q.FieldByName('SinFecha').AsInteger;
     end;
   except
     // Si falla la consulta, dejamos los KPIs a 0 (no bloquea el Backlog).
@@ -1875,6 +1958,14 @@ begin
   lblKpiOTCap.Caption := Format('OT  %d/%d', [otPl, otT]);
   lblKpiOPVal.Caption := IntToStr(opP);
   lblKpiOPCap.Caption := Format('OP  %d/%d', [opPl, opT]);
+
+  // Semaforo de vencimiento sobre las OP pendientes (rojo / ambar / gris).
+  lblKpiVencVal.Caption := IntToStr(vencidas);
+  lblKpiVencCap.Caption := 'Vencidas';
+  lblKpiPronVal.Caption := IntToStr(proximas);
+  lblKpiPronCap.Caption := Format('Vencen %dd', [diasVenc]);
+  lblKpiSinFVal.Caption := IntToStr(sinFecha);
+  lblKpiSinFCap.Caption := 'Sin fecha';
 end;
 
 // ---------------------------------------------------------------------------

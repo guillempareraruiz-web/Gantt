@@ -3,7 +3,7 @@
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.DateUtils, System.Math,
+  Winapi.Windows, Winapi.Messages, System.DateUtils, System.Math, System.StrUtils,
   System.Classes, System.SysUtils, System.Types, System.UITypes,
   Vcl.Controls, Vcl.Graphics, System.Generics.Collections, System.Generics.Defaults,
   uGanttTypes, uCentreCalendar, Vcl.Menus, uNodeDataRepo, uGanttNodeHint,
@@ -318,11 +318,25 @@ type
                 const LaneCount: Integer
               ): Integer;
 
+    // True si soltar el nodo arrastrado en el centro del preview NO esta permitido
+    // (LibreMovimiento=False y el centro destino no esta en CentresPermesos). Se usa
+    // para pintar el preview en rojo como feedback visual durante el drag.
+    function IsMovePreviewCentreForbidden: Boolean;
+
     function ClampNodeToPredecessors( const NodeIdx: Integer): Boolean;
     // Un nodo es "movible" si NO esta bloqueado: ni deshabilitado por el usuario
     // (Enabled=False) ni consolidado antes de la fecha de bloqueo del proyecto.
     // La resolucion de colisiones nunca debe empujar un nodo no-movible.
     function IsNodeMovable(const NodeIdx: Integer): Boolean;
+    // Iguala la ventana de TODOS los miembros de cada lote a una ventana comun,
+    // para que el motor los trate como un solo nodo. True si cambio algo.
+    // APreferIdx: si es un miembro de lote, ESE nodo manda (su ventana se copia
+    // al resto de su lote); el resto de lotes usan la ventana de su primer
+    // miembro. -1 = todos los lotes usan su primer miembro.
+    function IgualarFinestrasLotes(const APreferIdx: Integer = -1): Boolean;
+    // Persiste (Modified + OnPlanModified) todos los miembros de lote tras
+    // mover el lote como bloque.
+    procedure PersistLotesModificados;
     procedure CommitNodeMoveOrResize(const NodeIdx: Integer);
 
     procedure DrawDependenciesD2D(
@@ -687,6 +701,12 @@ type
     function NodeCount: Integer;
     function GetNodeAt(const Index: Integer): TNode;
 
+    // Desplazamiento vertical maximo del Gantt (px). Es la referencia: el control
+    // de Centros debe usar ESTE valor para clampar su scroll, no calcular el suyo,
+    // porque el ClientHeight de ambos difiere (el Gantt resta la scrollbar horizontal)
+    // y al llegar al maximo quedaban desalineados.
+    function GetMaxScrollY: Single;
+
     property OnScrollYChanged: TGanttScrollYChangedEvent read FOnScrollYChanged write FOnScrollYChanged;
     property OnFechaBloqueoChanged: TNotifyEvent read FOnFechaBloqueoChanged write FOnFechaBloqueoChanged;
     property NodePopupMenu: TPopupMenu read FNodePopupMenu write FNodePopupMenu;
@@ -802,6 +822,85 @@ const
 implementation
 
 uses uGanttHelpers, uErpSampleBuilder, uGanttTimeline, Main, System.Diagnostics;
+
+// ===== LOG DEBUG LOTE (permanente, util para futuras depuraciones) =====
+// Escribe en C:\lote_debug.log. Es a prueba de fallos (no rompe nada si no
+// puede escribir). Para activar/seguir el flujo de lotes, mirar ese fichero.
+procedure LogLote(const AMsg: string);
+var
+  F: TextFile;
+  Path: string;
+begin
+  Path := 'C:\lote_debug.log';
+  try
+    AssignFile(F, Path);
+    if FileExists(Path) then
+      Append(F)
+    else
+      Rewrite(F);
+    try
+      Writeln(F, FormatDateTime('hh:nn:ss.zzz', Now) + '  ' + AMsg);
+    finally
+      CloseFile(F);
+    end;
+  except
+    // silenciar: el log no debe romper nada
+  end;
+end;
+
+// Vacia el log al arrancar la sesion, para que cada depuracion quede limpia.
+procedure ResetLogLote;
+var
+  F: TextFile;
+begin
+  try
+    AssignFile(F, 'C:\lote_debug.log');
+    Rewrite(F);  // trunca a 0
+    CloseFile(F);
+  except
+  end;
+end;
+
+// Vuelca el estado [Start..End] (y ancho en min) de todos los miembros de un lote.
+function DumpLote(const ANodes: TArray<TNode>; const ALoteId: Integer): string;
+var
+  I: Integer;
+  w: Double;
+begin
+  Result := Format('Lote %d:', [ALoteId]);
+  for I := 0 to High(ANodes) do
+    if ANodes[I].LoteId = ALoteId then
+    begin
+      w := (ANodes[I].EndTime - ANodes[I].StartTime) * 24 * 60;
+      Result := Result + sLineBreak +
+        Format('   [idx=%d DataId=%d] %s .. %s  (ancho=%.1f min)',
+          [I, ANodes[I].DataId,
+           FormatDateTime('dd/mm hh:nn', ANodes[I].StartTime),
+           FormatDateTime('dd/mm hh:nn', ANodes[I].EndTime),
+           w]);
+    end;
+end;
+
+// Color estable y distinguible para un lote, derivado de su LoteId. Paleta fija
+// de tonos saturados (BGR); se cicla con modulo para que cada lote tenga su
+// color consistente entre repintados.
+function ColorDeLote(ALoteId: Integer): TColor;
+const
+  PALETA: array[0..7] of TColor = (
+    $00D2691E,  // chocolate/azul (BGR)
+    $002D8CFF,  // naranja
+    $00228B22,  // verde
+    $009314FF,  // rosa fuerte
+    $00B48246,  // acero
+    $001478DC,  // ambar
+    $00808000,  // teal
+    $004763FF); // rojo-naranja
+begin
+  if ALoteId <= 0 then
+    Result := clGray
+  else
+    Result := PALETA[ALoteId mod Length(PALETA)];
+end;
 
 { ── TLaneOccupancy: registre temporal d'ocupació per lanes (centres no-seqüencials) ── }
 
@@ -1636,6 +1735,13 @@ var
   hr: HRESULT;
 begin
   inherited;
+
+  // Log de lotes: se VACIA en cada arranque para que cada depuracion quede limpia.
+  ResetLogLote;
+  LogLote('==================================================================');
+  LogLote('=== NUEVA SESION GANTT  ' + FormatDateTime('dd/mm/yyyy hh:nn:ss', Now) + ' ===');
+  LogLote('==================================================================');
+
   ControlStyle := ControlStyle + [csOpaque, csDoubleClicks];
   DoubleBuffered := True;
 
@@ -2960,6 +3066,10 @@ begin
   FNodes := Copy(ANodes);
   FStartTime := AStartTime;
 
+  // Igualar la ventana de los miembros de cada lote nada mas cargar, para que
+  // se vean y se comporten como un solo nodo desde el inicio.
+  IgualarFinestrasLotes;
+
   FScrollX := 0;
   FScrollY := 0;
 
@@ -3929,10 +4039,11 @@ function TGanttControl.MoveNodeKeepingDuration(
   const NewStart: TDateTime): Boolean;
 var
   AdjStart: TDateTime;
-  NewEnd: TDateTime;
+  NewEnd, OldStart, Delta: TDateTime;
 begin
   Result := False;
   if (NodeIdx < 0) or (NodeIdx > High(FNodes)) then Exit;
+  OldStart := FNodes[NodeIdx].StartTime;
   AdjStart := ApplyNodeCalendarAndOverlay(FNodes[NodeIdx].CentreId, NewStart);
   NewEnd   := CalcEndTime(FNodes[NodeIdx].CentreId, AdjStart, FNodes[NodeIdx].DurationMin);
   if (FNodes[NodeIdx].StartTime <> AdjStart) or (FNodes[NodeIdx].EndTime <> NewEnd) then
@@ -5216,13 +5327,12 @@ var
   si: TScrollInfo;
   NewPos: Integer;
   MaxY: Integer;
-  isTracking: Boolean;
 begin
   if ClientHeight <= 0 then Exit;
 
   FillChar(si, SizeOf(si), 0);
   si.cbSize := SizeOf(si);
-  si.fMask := SIF_ALL;
+  si.fMask := SIF_ALL or SIF_TRACKPOS;
   GetScrollInfo(Handle, SB_VERT, si);
 
   NewPos := si.nPos;
@@ -5246,17 +5356,18 @@ begin
   si.nPos := Round(FScrollY);
   SetScrollInfo(Handle, SB_VERT, si, True);
 
-  isTracking := (Message.ScrollCode = SB_THUMBTRACK);
+  // NUNCA FastPaint: el thumb pinta los nodos completos (con texto/progress/
+  // badges), igual que la rueda. El FastPaint era parte del "efecto raro".
+  FFastPaint := False;
 
-  FFastPaint := isTracking and (FCNT_TotalVisibleNodes > 50);
-
-  if isTracking then
-    StartScrollInvalidateTimer
-  else
-  begin
-    StopScrollInvalidateTimer;
-    Invalidate;
-  end;
+  // Repintado INMEDIATO y forzado (Invalidate + Update) en cada mensaje, incluido
+  // el SB_THUMBTRACK. Antes, durante el arrastre del thumb Windows entra en su
+  // bucle modal interno y los WM_TIMER (de baja prioridad) no se entregaban -> el
+  // contenido no se repintaba hasta soltar -> "salto". Update fuerza el WM_PAINT
+  // ya, sin esperar al timer. Con pocos nodos es barato y queda suave como la rueda.
+  StopScrollInvalidateTimer;
+  Invalidate;
+  Update;
 end;
 
 
@@ -5314,6 +5425,14 @@ begin
   end;
 end;
 
+
+function TGanttControl.GetMaxScrollY: Single;
+begin
+  if ClientHeight <= 0 then
+    Result := 0
+  else
+    Result := Max(0, FContentHeight - ClientHeight);
+end;
 
 procedure TGanttControl.ApplyScrollYFromCentres(const AScrollY: Single);
 var
@@ -5377,6 +5496,10 @@ var
   centreIdxs: TArray<Integer>;
   ci: Integer;
 
+  // Lotes del centre actual: por LoteId -> ventana [min,max], conteo y primer idx.
+  LoteMin, LoteMax: TDictionary<Integer, TDateTime>;
+  LoteCount, LotePrimerIdx: TDictionary<Integer, Integer>;
+
   function TimeToXWorld(const T: TDateTime): Single;
   begin
     // WORLD coords: no scroll, respecta HideWeekends
@@ -5400,7 +5523,11 @@ begin
   y := RowTopMargin;
   maxEndTime := FStartTime;
 
-
+  LoteMin := TDictionary<Integer, TDateTime>.Create;
+  LoteMax := TDictionary<Integer, TDateTime>.Create;
+  LoteCount := TDictionary<Integer, Integer>.Create;
+  LotePrimerIdx := TDictionary<Integer, Integer>.Create;
+  try
 
   SetLength(centreIdxs, Length(FCentres));
   for ci := 0 to High(FCentres) do
@@ -5431,6 +5558,28 @@ begin
             if Result = 0 then
               Result := CompareDateTime(FNodes[L].EndTime, FNodes[R].EndTime);
           end));
+
+    // Pre-calcular ventana de cada lote presente en este centre (los miembros
+    // del lote se pintan como UNA barra contenedora que abarca [min,max]).
+    LoteMin.Clear; LoteMax.Clear; LoteCount.Clear; LotePrimerIdx.Clear;
+    for idx in idxs do
+    begin
+      if FNodes[idx].LoteId <= 0 then Continue;
+      var lid := FNodes[idx].LoteId;
+      if not LoteMin.ContainsKey(lid) then
+      begin
+        LoteMin.Add(lid, FNodes[idx].StartTime);
+        LoteMax.Add(lid, FNodes[idx].EndTime);
+        LoteCount.Add(lid, 1);
+        LotePrimerIdx.Add(lid, idx);  // idxs ya ordenado por StartTime
+      end
+      else
+      begin
+        if FNodes[idx].StartTime < LoteMin[lid] then LoteMin[lid] := FNodes[idx].StartTime;
+        if FNodes[idx].EndTime   > LoteMax[lid] then LoteMax[lid] := FNodes[idx].EndTime;
+        LoteCount[lid] := LoteCount[lid] + 1;
+      end;
+    end;
 
     // ===== Lane count =====
     if centre.IsSequencial then
@@ -5502,10 +5651,37 @@ begin
         if not node.Visible then
           Continue;
 
+        // Miembros de lote: se pinta UNA sola barra contenedora por lote, en el
+        // primer miembro (idxs esta ordenado). Los demas miembros se omiten.
+        if node.LoteId > 0 then
+        begin
+          if LotePrimerIdx[node.LoteId] <> idx then
+            Continue;  // no es el representante: no genera layout
+
+          nl.NodeIndex := idx;
+          nl.CentreId := node.CentreId;
+          nl.LaneIndex := 0;
+          nl.LoteId := node.LoteId;
+          nl.LoteCount := LoteCount[node.LoteId];
+          // Barra que abarca toda la ventana del lote [min, max].
+          nl.Rect := TRectF.Create(
+            TimeToXWorld(LoteMin[node.LoteId]),
+            y + NODE_INNER_PAD_TOP,
+            TimeToXWorld(LoteMax[node.LoteId]),
+            y + NODE_INNER_PAD_TOP + laneH);
+          nl.Rect.Bottom := nl.Rect.Top + NodeMinHeight;
+          AddNodeLayout(nl);
+          if LoteMax[node.LoteId] > maxEndTime then
+            maxEndTime := LoteMax[node.LoteId];
+          Continue;
+        end;
+
         //nl.NodeId := node.Id;
         nl.NodeIndex := idx;
         nl.CentreId := node.CentreId;
         nl.LaneIndex := 0;
+        nl.LoteId := 0;
+        nl.LoteCount := 0;
 
         nl.Rect := TRectF.Create(
           TimeToXWorld(node.StartTime),
@@ -5532,6 +5708,41 @@ begin
       begin
         node := FNodes[idx];
 
+        // Lote: una sola barra contenedora en el primer miembro; resto omitido.
+        if node.LoteId > 0 then
+        begin
+          if LotePrimerIdx[node.LoteId] <> idx then
+            Continue;
+          laneIdx := TryFindLane(TimeToXWorld(LoteMin[node.LoteId]));
+          if laneIdx < 0 then
+          begin
+            if (centre.MaxLaneCount > 0) and (Length(laneRight) >= centre.MaxLaneCount) then
+              laneIdx := centre.MaxLaneCount - 1
+            else
+            begin
+              laneIdx := Length(laneRight);
+              SetLength(laneRight, laneIdx + 1);
+              laneRight[laneIdx] := 0;
+            end;
+          end;
+          nl.NodeIndex := idx;
+          nl.CentreId := node.CentreId;
+          nl.LaneIndex := laneIdx;
+          nl.LoteId := node.LoteId;
+          nl.LoteCount := LoteCount[node.LoteId];
+          nl.Rect := TRectF.Create(
+            TimeToXWorld(LoteMin[node.LoteId]),
+            y + NODE_INNER_PAD_TOP + laneIdx * (laneH + LaneGap),
+            TimeToXWorld(LoteMax[node.LoteId]),
+            y + NODE_INNER_PAD_TOP + laneIdx * (laneH + LaneGap) + laneH);
+          nl.Rect.Bottom := nl.Rect.Top + NodeMinHeight;
+          AddNodeLayout(nl);
+          laneRight[laneIdx] := TimeToXWorld(LoteMax[node.LoteId]);
+          if LoteMax[node.LoteId] > maxEndTime then
+            maxEndTime := LoteMax[node.LoteId];
+          Continue;
+        end;
+
         laneIdx := TryFindLane(TimeToXWorld(node.StartTime));
         if laneIdx < 0 then
         begin
@@ -5550,6 +5761,8 @@ begin
         nl.NodeIndex := idx;
         nl.CentreId := node.CentreId;
         nl.LaneIndex := laneIdx;
+        nl.LoteId := 0;
+        nl.LoteCount := 0;
 
         nl.Rect := TRectF.Create(
           TimeToXWorld(node.StartTime),
@@ -5610,6 +5823,13 @@ begin
 
   if Assigned(FOnLayoutChanged) then
     FOnLayoutChanged(Self);
+
+  finally
+    LoteMin.Free;
+    LoteMax.Free;
+    LoteCount.Free;
+    LotePrimerIdx.Free;
+  end;
 end;
 
 
@@ -6755,6 +6975,27 @@ var
     end;
   end;
 
+  // Pinta un texto arbitrario centrado verticalmente en el rect (para la barra
+  // de lote, que no tiene un TNode/TNodeData individual que mostrar).
+  procedure DrawNodeTextStr(const ARect: TRectF; const AText: string);
+  begin
+    if FFastPaint then Exit;
+    if (ARect.Right - ARect.Left) <= (PAD_X * 2 + 4) then Exit;
+
+    D2D.Brush.Style := bsClear;
+    D2D.Font.Color := clWhite;
+    RT.PushAxisAlignedClip(
+      D2D1RectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom),
+      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE
+    );
+    try
+      D2D.TextOut(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y, AText);
+    finally
+      RT.PopAxisAlignedClip;
+      D2D.Brush.Style := bsSolid;
+    end;
+  end;
+
   procedure PaintNodeRect(const ANodeLayout: TNodeLayout; var ARectS: TRectF; const ANode: TNode);
   var
     inflate: Single;
@@ -6790,6 +7031,15 @@ var
       Style.Text   := $00222288;
     end;
 
+    // Un LOTE se pinta como UNA barra contenedora: relleno con el color del lote
+    // (mas claro) y borde del color del lote, abarcando toda su ventana.
+    if ANodeLayout.LoteId > 0 then
+    begin
+      Style.Fill   := AdjustColorBrightness(ColorDeLote(ANodeLayout.LoteId), 60);
+      Style.Border := ColorDeLote(ANodeLayout.LoteId);
+      Style.Alpha  := 1.0;
+    end;
+
     SetBrushColor(FillBrush, Style.Fill, Style.Alpha);
     SetBrushColor(StrokeBrush, Style.Border, 1.0);
 
@@ -6818,6 +7068,13 @@ var
     else
       borderWidth := 1.0;
 
+    // Lote: borde grueso del color del lote (salvo seleccion, mas prioritaria).
+    if (ANodeLayout.LoteId > 0) and (not IsSel) then
+    begin
+      SetBrushColor(StrokeBrush, ColorDeLote(ANodeLayout.LoteId), 1.0);
+      borderWidth := 2.5;
+    end;
+
     if FFastPaint then
       RT.DrawRectangle(RectFToD2D(ARectS), StrokeBrush, borderWidth)
     else
@@ -6827,16 +7084,21 @@ var
         borderWidth
       );
 
-    if (Style.Progress >= 0) and (not FFastPaint) then
+    if (Style.Progress >= 0) and (not FFastPaint) and (ANodeLayout.LoteId = 0) then
       DrawProgressBarD2D(RT, FillBrush, ARectS, Style.Progress);
 
-    if (Style.BadgeText <> '') and (not FFastPaint) then
+    if (Style.BadgeText <> '') and (not FFastPaint) and (ANodeLayout.LoteId = 0) then
       DrawBadgeD2D(
         D2D, RT, FillBrush, TextBrush, ARectS,
         Style.BadgeText, Style.BadgeFill, Style.BadgeTextColor
       );
 
-    DrawNodeText(ARectS, ANode, D);
+    // Texto del lote: 'Lote N (X op)' en vez del texto de nodo individual.
+    if ANodeLayout.LoteId > 0 then
+      DrawNodeTextStr(ARectS,
+        Format('Lote %d (%d op)', [ANodeLayout.LoteId, ANodeLayout.LoteCount]))
+    else
+      DrawNodeText(ARectS, ANode, D);
   end;
 
 begin
@@ -7146,8 +7408,19 @@ begin
 
       if FHasMoveNode then
       begin
-        SetBrushColor(FillBrush, MoveNode.FillColor, 0.55);
-        SetBrushColor(StrokeBrush, MoveNode.BorderColor, 1.0);
+        // Feedback de restriccion: si el centro destino no esta permitido para
+        // este nodo (LibreMovimiento=False), pintar el preview en ROJO para
+        // avisar de que al soltarlo volvera a su centro original.
+        if IsMovePreviewCentreForbidden then
+        begin
+          SetBrushColor(FillBrush, clRed, 0.40);
+          SetBrushColor(StrokeBrush, clRed, 1.0);
+        end
+        else
+        begin
+          SetBrushColor(FillBrush, MoveNode.FillColor, 0.55);
+          SetBrushColor(StrokeBrush, MoveNode.BorderColor, 1.0);
+        end;
         RT.FillRectangle(RectFToD2D(FMoveRectS), FillBrush);
         RT.DrawRoundedRectangle(RoundedRectToD2D(FMoveRectS, 3), StrokeBrush, 2.0);
       end;
@@ -7682,9 +7955,19 @@ begin
 
       if FHasMoveNode then
       begin
-          // Transparència mentre mous
-          SetBrushColor(FillBrush, MoveNode.FillColor, 0.55);      // alpha (0.4..0.7 segons gust)
-          SetBrushColor(StrokeBrush, MoveNode.BorderColor, 1.0);
+          // Feedback de restriccion: rojo si el centro destino no esta permitido
+          // para este nodo (LibreMovimiento=False y centro fuera de CentresPermesos).
+          if IsMovePreviewCentreForbidden then
+          begin
+            SetBrushColor(FillBrush, clRed, 0.40);
+            SetBrushColor(StrokeBrush, clRed, 1.0);
+          end
+          else
+          begin
+            // Transparència mentre mous
+            SetBrushColor(FillBrush, MoveNode.FillColor, 0.55);      // alpha (0.4..0.7 segons gust)
+            SetBrushColor(StrokeBrush, MoveNode.BorderColor, 1.0);
+          end;
           RT.FillRectangle(RectFToD2D(FMoveRectS), FillBrush);
           RT.DrawRoundedRectangle(RoundedRectToD2D(FMoveRectS, 3), StrokeBrush, 2.0);
           //Si vols, afegeix un overlay suau per “ghost”
@@ -8360,6 +8643,7 @@ var
   newStart, newEnd: TDateTime;
   newDurMins: Integer;
   MovedNodes: TIdxArray;
+  K: Integer;
 
   function ClampToOverlay(const T: TDateTime): TDateTime;
   begin
@@ -8456,13 +8740,40 @@ begin
   //FNodes[idx].EndTime     := newEnd;
 
   //...actualitzem start, end, duration del Node i del TNodeData
-  ApplyResizeToModel( idx, newStart, newEnd, newDurMins);
+  if FNodes[idx].LoteId > 0 then
+  begin
+    LogLote(Format('--- CommitResize INICIO lote (idx=%d edge=%s newStart=%s newEnd=%s newDur=%d) ---',
+      [idx, IfThen(FResizeEdge = reLeft, 'LEFT', 'RIGHT'),
+       FormatDateTime('dd/mm hh:nn', newStart), FormatDateTime('dd/mm hh:nn', newEnd), newDurMins]));
+    LogLote('ANTES de propagar: ' + DumpLote(FNodes, FNodes[idx].LoteId));
 
+    // Redimensionar un miembro de lote = redimensionar la VENTANA COMPARTIDA del
+    // lote entero, una sola vez. Aplicamos a TODOS los miembros (incluido idx) la
+    // misma ventana [newStart,newEnd] Y el mismo DurationMin = ancho de ventana.
+    // DurationMin guarda el ancho EFECTIVO (el redimensionado), igual que un nodo
+    // normal; DurationMinOriginal (la duracion real de cada OP) NO se toca via
+    // ApplyResizeToModel. Asi el lote conserva su tamano al moverlo despues (el
+    // move recalcula End desde DurationMin, que ya es el ancho redimensionado).
+    for K := 0 to High(FNodes) do
+      if FNodes[K].LoteId = FNodes[idx].LoteId then
+        ApplyResizeToModel(K, newStart, newEnd, newDurMins);
+
+    LogLote('DESPUES de propagar: ' + DumpLote(FNodes, FNodes[idx].LoteId));
+  end
+  else
+    ApplyResizeToModel( idx, newStart, newEnd, newDurMins);
 
   // aquí: col·lisions (push-right) si el centre és seqüencial
   //bAnyShift := ResolveSequentialCollisionsFromNode(centreId, idx, FMinGapBetweenNodes, MovedNodes); //{gap minuts entre nodes});
 
   CommitNodeMoveOrResize( idx );
+
+  if FNodes[idx].LoteId > 0 then
+    LogLote('DESPUES de CommitNodeMoveOrResize (reflow+igualar): ' + DumpLote(FNodes, FNodes[idx].LoteId));
+
+  // Persistir todos los miembros del lote (han cambiado ventana).
+  if FNodes[idx].LoteId > 0 then
+    PersistLotesModificados;
 
   // sortir de mode resize
   MouseCapture := False;
@@ -8473,6 +8784,10 @@ begin
   Screen.Cursor := crDefault;
 
   RebuildAfterModelChange(False);
+
+  if (idx >= 0) and (idx <= High(FNodes)) and (FNodes[idx].LoteId > 0) then
+    LogLote('DESPUES de RebuildAfterModelChange (FIN): ' + DumpLote(FNodes, FNodes[idx].LoteId) + sLineBreak);
+
   Invalidate;
 end;
 
@@ -8523,7 +8838,7 @@ var
   prevEnd, desiredStart: TDateTime;
   cal: TCentreCalendar;
   Nodes: TArray<TNode>;
-  k, blocked: Integer;
+  k, blocked, prevIdx: Integer;
   candEnd: TDateTime;
 
   function FindPos(const A: TIdxArray; const NodeIdx: Integer): Integer;
@@ -8591,6 +8906,13 @@ begin
   for i := 0 to High(list) do
   begin
     if list[i] = ChangedIdx then Continue;
+    // Dos nodos del MISMO lote NO colisionan entre si: comparten ventana (van
+    // juntos en la misma hornada/pasada). Si no se excluye aqui, este bloque
+    // empujaria el ChangedIdx detras de su propio compañero de lote (que solapa
+    // por definicion), desplazando todo el lote hacia adelante. Mismo criterio
+    // que el bucle de cascada de mas abajo.
+    if (Nodes[ChangedIdx].LoteId > 0) and
+       (Nodes[list[i]].LoteId = Nodes[ChangedIdx].LoteId) then Continue;
     if (Nodes[ChangedIdx].StartTime >= Nodes[list[i]].StartTime) and
        (Nodes[ChangedIdx].StartTime <  Nodes[list[i]].EndTime) then
     begin
@@ -8641,6 +8963,9 @@ begin
       begin
         if list[i] = ChangedIdx then Continue;
         if IsNodeMovable(list[i]) then Continue;   // solo bloqueados
+        // Companeros del mismo lote nunca cuentan como colision (comparten ventana).
+        if (FNodes[ChangedIdx].LoteId > 0) and
+           (FNodes[list[i]].LoteId = FNodes[ChangedIdx].LoteId) then Continue;
         // solapa [start,end) del movido con el bloqueado?
         if (FNodes[ChangedIdx].StartTime < FNodes[list[i]].EndTime) and
            (FNodes[ChangedIdx].EndTime   > FNodes[list[i]].StartTime) then
@@ -8677,8 +9002,22 @@ begin
   if posC < 0 then Exit;
 
   prevEnd := FNodes[list[posC]].EndTime;
+  prevIdx := list[posC];
   for i := posC + 1 to High(list) do
   begin
+    // Dos nodos del MISMO lote NO colisionan entre si: deben solaparse en la
+    // misma ventana (van juntos en la misma pasada/hornada). Si list[i] y el
+    // nodo que definio prevEnd son del mismo lote, no se empuja; pero prevEnd
+    // avanza al maximo de los finales para que lo de fuera del lote vaya detras.
+    if (FNodes[list[i]].LoteId > 0) and
+       (FNodes[list[i]].LoteId = FNodes[prevIdx].LoteId) then
+    begin
+      if FNodes[list[i]].EndTime > prevEnd then
+        prevEnd := FNodes[list[i]].EndTime;
+      prevIdx := list[i];
+      Continue;
+    end;
+
     // Un nodo bloqueado (deshabilitado o consolidado antes de FechaBloqueo) NO
     // se empuja: se respeta su posicion y el cursor de cascada salta tras el.
     if IsNodeMovable(list[i]) then
@@ -8718,6 +9057,7 @@ begin
       end;
     end;
     prevEnd := FNodes[list[i]].EndTime;
+    prevIdx := list[i];
   end;
 end;
 
@@ -9136,6 +9476,100 @@ begin
 end;
 
 
+// Iguala la ventana de TODOS los miembros de cada lote. Premisa del modelo: "un
+// lote es un solo nodo": todos sus miembros comparten EXACTAMENTE la misma
+// ventana [inicio,fin] en el plan (la duracion real de cada OP se preserva en
+// BD/detalle). Por tanto basta con tomar la ventana del PRIMER miembro de cada
+// lote y copiarla al resto. No hay que calcular max(inicio) ni max(ancho): el
+// reflow seqüencial NUNCA separa miembros del mismo lote (los excluye como
+// colision entre si en ResolveSequentialCollisionsFromNode, los 3 bloques), asi
+// que cuando se llega aqui los miembros ya estan alineados o, si alguno se ha
+// tocado por otra via, esta copia los vuelve a unificar. Se llama al FINAL del
+// gesto (tras todo el reflow), nunca dentro de la cascada. Devuelve True si toco
+// algo. Quien persiste el cambio es PersistLotesModificados/OnPlanModified.
+function TGanttControl.IgualarFinestrasLotes(const APreferIdx: Integer): Boolean;
+var
+  LoteStart, LoteEnd: TDictionary<Integer, TDateTime>;
+  I, L, PreferLote: Integer;
+begin
+  Result := False;
+  LoteStart := TDictionary<Integer, TDateTime>.Create;
+  LoteEnd   := TDictionary<Integer, TDateTime>.Create;
+  try
+    // Si nos dan un nodo preferente (el que el usuario acaba de mover/redimensionar),
+    // ESE manda en su lote: su ventana es la de referencia, no la del primer indice.
+    PreferLote := -1;
+    if (APreferIdx >= 0) and (APreferIdx <= High(FNodes)) and (FNodes[APreferIdx].LoteId > 0) then
+      PreferLote := FNodes[APreferIdx].LoteId;
+
+    // Ventana de referencia = la del PRIMER miembro encontrado de cada lote...
+    for I := 0 to High(FNodes) do
+    begin
+      L := FNodes[I].LoteId;
+      if L <= 0 then Continue;
+      if not LoteStart.ContainsKey(L) then
+      begin
+        LoteStart.Add(L, FNodes[I].StartTime);
+        LoteEnd.Add(L, FNodes[I].EndTime);
+      end;
+    end;
+    // ...salvo el lote preferente, cuya referencia es el nodo movido (APreferIdx).
+    if PreferLote > 0 then
+    begin
+      LoteStart[PreferLote] := FNodes[APreferIdx].StartTime;
+      LoteEnd[PreferLote]   := FNodes[APreferIdx].EndTime;
+    end;
+
+    if LoteStart.Count = 0 then Exit;
+
+    for L in LoteStart.Keys do
+      LogLote(Format('IgualarFinestrasLotes: lote %d -> ventana comun %s .. %s',
+        [L, FormatDateTime('dd/mm hh:nn', LoteStart[L]),
+         FormatDateTime('dd/mm hh:nn', LoteEnd[L])]));
+
+    for I := 0 to High(FNodes) do
+    begin
+      L := FNodes[I].LoteId;
+      if L <= 0 then Continue;
+      if (FNodes[I].StartTime <> LoteStart[L]) or (FNodes[I].EndTime <> LoteEnd[L]) then
+      begin
+        FNodes[I].StartTime := LoteStart[L];
+        FNodes[I].EndTime   := LoteEnd[L];
+        Result := True;
+      end;
+    end;
+  finally
+    LoteStart.Free;
+    LoteEnd.Free;
+  end;
+end;
+
+procedure TGanttControl.PersistLotesModificados;
+var
+  I: Integer;
+  D: TNodeData;
+  Ids: TList<Integer>;
+begin
+  Ids := TList<Integer>.Create;
+  try
+    for I := 0 to High(FNodes) do
+    begin
+      if FNodes[I].LoteId <= 0 then Continue;
+      if FNodes[I].DataId <= 0 then Continue;
+      Ids.Add(FNodes[I].DataId);
+      if Assigned(FNodeRepo) and FNodeRepo.TryGetById(FNodes[I].DataId, D) then
+      begin
+        D.Modified := True;
+        FNodeRepo.AddOrUpdate(D);
+      end;
+    end;
+    if (Ids.Count > 0) and Assigned(FOnPlanModified) then
+      FOnPlanModified(Self, Ids.ToArray);
+  finally
+    Ids.Free;
+  end;
+end;
+
 procedure TGanttControl.CommitNodeMoveOrResize(const NodeIdx: Integer);
 var
   BeforeSnaps, AfterSnaps: TArray<TNodePlanSnapshot>;
@@ -9153,6 +9587,13 @@ begin
   ClampNodeToPredecessors(NodeIdx);
 
   ResolveAllConstraintsFromNode(NodeIdx, 0);
+
+  // 2b) Igualar la ventana de los lotes: si el reflow ha empujado/acortado un
+  // miembro, todos los miembros del lote vuelven a una ventana comun (el lote se
+  // comporta como un solo nodo). Pasamos NodeIdx como preferente: el nodo que el
+  // usuario acaba de mover/redimensionar MANDA en su lote (su ventana se copia al
+  // resto), aunque el reflow lo haya tocado o no sea el primero por indice.
+  IgualarFinestrasLotes(NodeIdx);
 
   // 3) estat després
   AfterSnaps := CaptureSnapshotsFromNodePropagation(NodeIdx);
@@ -9264,6 +9705,16 @@ var
   DurMin: Double;
   Attempt: Integer;
 
+  // Los miembros del MISMO lote comparten exactamente la misma ventana [min,max]
+  // y se mueven juntos: ocupan UNA sola lane (1 unidad), no N. Por eso NO deben
+  // contarse entre si como solapamientos (mismo guard que en la rama secuencial,
+  // ver ResolveSequentialCollisionsFromNode).
+  function MismoLote(AIdx: Integer): Boolean;
+  begin
+    Result := (FNodes[ChangedIdx].LoteId > 0) and
+              (FNodes[AIdx].LoteId = FNodes[ChangedIdx].LoteId);
+  end;
+
   function CountOverlapsAt(AStart, AEnd: TDateTime): Integer;
   var J: Integer;
   begin
@@ -9271,6 +9722,7 @@ var
     for J := 0 to IdxCount - 1 do
     begin
       if Idxs[J] = ChangedIdx then Continue;
+      if MismoLote(Idxs[J]) then Continue;
       if (AStart < FNodes[Idxs[J]].EndTime) and (AEnd > FNodes[Idxs[J]].StartTime) then
         Inc(Result);
     end;
@@ -9283,6 +9735,7 @@ var
     for J := 0 to IdxCount - 1 do
     begin
       if Idxs[J] = ChangedIdx then Continue;
+      if MismoLote(Idxs[J]) then Continue;
       if (AStart < FNodes[Idxs[J]].EndTime) and (AEnd > FNodes[Idxs[J]].StartTime) then
         if FNodes[Idxs[J]].EndTime < Result then
           Result := FNodes[Idxs[J]].EndTime;
@@ -9588,6 +10041,26 @@ begin
 end;
 
 
+function TGanttControl.IsMovePreviewCentreForbidden: Boolean;
+var
+  D: TNodeData;
+  permId: Integer;
+begin
+  Result := False;
+  if not FMoving then Exit;
+  if (FMoveNodeIndex < 0) or (FMoveNodeIndex > High(FNodes)) then Exit;
+  // Solo importa si el destino cambia de centro respecto al original.
+  if FMovePreviewCentreId = FMoveOrigCentreId then Exit;
+  if not (Assigned(FNodeRepo) and
+          FNodeRepo.TryGetById(FNodes[FMoveNodeIndex].DataId, D)) then Exit;
+  // Misma regla que CommitMove: si NO es libre y tiene centros permitidos,
+  // el destino debe estar entre ellos; si no, esta prohibido.
+  if D.LibreMoviment or (Length(D.CentresPermesos) = 0) then Exit;
+  for permId in D.CentresPermesos do
+    if permId = FMovePreviewCentreId then Exit;  // permitido
+  Result := True;  // no encontrado -> prohibido
+end;
+
 procedure TGanttControl.CommitMove;
 var
   idx: Integer;
@@ -9618,8 +10091,17 @@ begin
   cal := GetCalendar(newCentreId);
   if cal <> nil then
     newStart := cal.NextWorkingTime(newStart);
-  // EndTime derivat de DurationMin
+
+  // EndTime derivat de DurationMin. Para miembros de lote, DurationMin guarda el
+  // ancho EFECTIVO de la ventana compartida (modificado en el resize); el ancho
+  // real de cada OP se conserva en DurationMinOriginal. Asi el lote conserva su
+  // tamano redimensionado al moverlo (mismo patron que los nodos normales).
   newEnd := CalcEndTime(newCentreId, newStart, FNodes[idx].DurationMin);
+
+  LogLote(Format('CommitMove idx=%d centre=%d: preview=%s -> startWorking=%s end=%s (dur=%.0f min)',
+    [idx, newCentreId, FormatDateTime('dd/mm hh:nn', FMovePreviewStart),
+     FormatDateTime('dd/mm hh:nn', newStart), FormatDateTime('dd/mm hh:nn', newEnd),
+     FNodes[idx].DurationMin]));
 
   // Restricció CentresPermesos: si el node no té LibreMoviment,
   // només es pot moure a centres de CentresPermesos.
@@ -9658,6 +10140,27 @@ begin
   try
       Screen.cursor := crHourGlass;
 
+      // Si el nodo arrastrado pertenece a un lote, copiar su ventana FINAL exacta
+      // [newStart,newEnd] (ya corregida por el calendario) al RESTO de miembros,
+      // para que el lote se desplace como un bloque y comparta ventana. NO sumamos
+      // DeltaDays crudo: el calendario puede haber corregido newStart/newEnd del
+      // nodo arrastrado, y sumar el delta a los demas los dejaria desalineados
+      // respecto al arrastrado (la ventana del lote quedaba mal). El nodo
+      // arrastrado MANDA. Se hace antes del reflow para que el bloque entero
+      // llegue a la cascada en su posicion nueva. (El motor ya no separa miembros
+      // del mismo lote entre si.)
+      if FNodes[idx].LoteId > 0 then
+        for K := 0 to High(FNodes) do
+          if (K <> idx) and (FNodes[K].LoteId = FNodes[idx].LoteId) then
+          begin
+            FNodes[K].CentreId    := newCentreId;
+            FNodes[K].StartTime   := newStart;
+            FNodes[K].EndTime     := newEnd;
+            // Compartir tambien el ancho efectivo (la ventana compartida), por si
+            // un miembro tenia DurationMin distinto: el lote es un solo bloque.
+            FNodes[K].DurationMin := FNodes[idx].DurationMin;
+          end;
+
       CommitNodeMoveOrResize( idx );
 
       // Drag multiple: si el nodo arrastrado forma parte de una seleccion de
@@ -9687,6 +10190,11 @@ begin
             CommitNodeMoveOrResize(OIdx);
         end;
       end;
+
+      // Si se ha movido un lote, persistir todos sus miembros (se desplazaron
+      // junto al nodo arrastrado).
+      if FNodes[idx].LoteId > 0 then
+        PersistLotesModificados;
 
       FMoving := False;
       FDragMode := dmNone;

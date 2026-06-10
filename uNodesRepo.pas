@@ -74,6 +74,7 @@ begin
     Q.Connection := FConnection;
     Q.SQL.Text :=
       'SELECT n.NodeId, n.CenterId, n.FechaInicio, n.FechaFin, n.DuracionMin, ' +
+      '  ISNULL(n.LoteId, 0) AS LoteId, ' +
       '  ISNULL(n.Caption, '''') AS Caption, ' +
       '  ISNULL(n.ColorFondo, 0) AS ColorFondo, ' +
       '  ISNULL(n.ColorBorde, 0) AS ColorBorde, ' +
@@ -127,6 +128,7 @@ begin
       // ── TNode ──
       N.Id := Q.FieldByName('NodeId').AsInteger;
       N.DataId := N.Id; // usamos el mismo ID para el lookup a NodeData
+      N.LoteId := Q.FieldByName('LoteId').AsInteger;
 
       if Q.FieldByName('CenterId').IsNull then
         N.CentreId := -1
@@ -214,6 +216,42 @@ begin
     end;
   finally
     Q.Free;
+  end;
+
+  // Centros permitidos por nodo (FS_PL_NodeCenterAllowed). Sin esto, los nodos
+  // cargados en el Gantt tienen CentresPermesos vacio y la restriccion de
+  // movimiento (LibreMovimiento=False -> solo CentresPermesos) NUNCA se aplica.
+  // Una sola query para todo el proyecto, agrupando por NodeId.
+  if AFillNodeDataRepo <> nil then
+  begin
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := FConnection;
+      Q.SQL.Text :=
+        'SELECT nca.NodeId, nca.CenterId ' +
+        'FROM FS_PL_NodeCenterAllowed nca ' +
+        'INNER JOIN FS_PL_Node n ON n.CodigoEmpresa = nca.CodigoEmpresa ' +
+        '  AND n.NodeId = nca.NodeId ' +
+        'WHERE n.CodigoEmpresa = :CodigoEmpresa AND n.ProjectId = :ProjectId ' +
+        'ORDER BY nca.NodeId';
+      Q.Parameters.ParamByName('CodigoEmpresa').Value := ACodigoEmpresa;
+      Q.Parameters.ParamByName('ProjectId').Value := AProjectId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        var NId := Q.FieldByName('NodeId').AsInteger;
+        var CId := Q.FieldByName('CenterId').AsInteger;
+        if AFillNodeDataRepo.TryGetById(NId, D) then
+        begin
+          SetLength(D.CentresPermesos, Length(D.CentresPermesos) + 1);
+          D.CentresPermesos[High(D.CentresPermesos)] := CId;
+          AFillNodeDataRepo.AddOrUpdate(D);
+        end;
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
   end;
 end;
 

@@ -456,6 +456,9 @@
         <DCCReference Include="uOFViewer.pas">
             <Form>frmOFViewer</Form>
         </DCCReference>
+        <DCCReference Include="uLoteViewer.pas">
+            <Form>frmLoteViewer</Form>
+        </DCCReference>
         <DCCReference Include="uErpReader.pas"/>
         <DCCReference Include="uErpReaderFactory.pas"/>
         <DCCReference Include="uSage200Reader.pas"/>
