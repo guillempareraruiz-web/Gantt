@@ -49,6 +49,23 @@ type
   TNodoTipo   = (ntOF, ntPedido, ntProyecto, ntOferta);
   TNodoEstado = (nePendiente, neEnCurso, neFinalizado, neBloqueado);
 
+  // Modos de Vista del Gantt. Vive aqui (tipo de dominio) para que lo puedan usar
+  // unidades de modelo (ej. uNodeCardLayout) sin depender de uGanttControl.
+  TGanttViewMode = (
+    gvmNormal,
+    gvmOptimitzacio,
+    gvmFabricacio,
+    gvmFechaEntrega,
+    gvmStock,
+    gvmOperarios,   // extra
+    gvmCarga,       // extra (temps total segons unitats)
+    gvmEstado,      // estado OF (Pendiente, EnCurso, Finalizado, Bloqueado)
+    gvmPrioridad,   // prioritats A/B/C o 1..5
+    gvmRendimiento,
+    gvmColores,
+    gvmModificaciones
+  );
+
   // ── Campos personalizados ──
   TCustomFieldType = (cftString, cftInteger, cftFloat, cftDate, cftBoolean, cftList);
 

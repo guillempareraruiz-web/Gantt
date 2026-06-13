@@ -1,0 +1,2 @@
+[2026-06-13 10:05:12] Render=GDI/bitmap  nodos=500  frames=300  min=10,70  avg=12,90  max=20,15 ms  ~78 fps
+[2026-06-13 10:05:35] Render=D2D nativo  nodos=500  frames=300  min=10,83  avg=13,28  max=19,39 ms  ~75 fps

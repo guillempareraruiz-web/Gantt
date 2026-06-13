@@ -1,6 +1,8 @@
 object frmGestionMarkers: TfrmGestionMarkers
   Left = 0
   Top = 0
+  BorderIcons = [biSystemMenu, biHelp]
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Marcadores'
   ClientHeight = 500
   ClientWidth = 900
@@ -51,25 +53,6 @@ object frmGestionMarkers: TfrmGestionMarkers
       ParentFont = False
     end
   end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 460
-    Width = 900
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 1
-    object btnClose: TButton
-      Left = 792
-      Top = 6
-      Width = 100
-      Height = 28
-      Cancel = True
-      Caption = 'Cerrar'
-      TabOrder = 0
-      OnClick = btnCloseClick
-    end
-  end
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
@@ -77,7 +60,7 @@ object frmGestionMarkers: TfrmGestionMarkers
     Height = 40
     Align = alTop
     BevelOuter = bvNone
-    TabOrder = 2
+    TabOrder = 1
     object btnAdd: TButton
       Left = 4
       Top = 6
@@ -87,22 +70,31 @@ object frmGestionMarkers: TfrmGestionMarkers
       TabOrder = 0
       OnClick = btnAddClick
     end
-    object btnDel: TButton
+    object btnEdit: TButton
       Left = 88
       Top = 6
       Width = 80
       Height = 28
-      Caption = 'Eliminar'
+      Caption = 'Editar'
       TabOrder = 1
+      OnClick = btnEditClick
+    end
+    object btnDel: TButton
+      Left = 172
+      Top = 6
+      Width = 80
+      Height = 28
+      Caption = 'Eliminar'
+      TabOrder = 2
       OnClick = btnDelClick
     end
     object btnSave: TButton
-      Left = 174
+      Left = 258
       Top = 6
       Width = 120
       Height = 28
       Caption = 'Guardar cambios'
-      TabOrder = 2
+      TabOrder = 3
       OnClick = btnSaveClick
     end
   end
@@ -110,10 +102,12 @@ object frmGestionMarkers: TfrmGestionMarkers
     Left = 0
     Top = 100
     Width = 900
-    Height = 360
+    Height = 400
     Align = alClient
-    TabOrder = 3
+    TabOrder = 2
+    ExplicitHeight = 360
     object tvMarkers: TcxGridTableView
+      OnDblClick = tvMarkersDblClick
       Navigator.Buttons.CustomButtons = <>
       ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>

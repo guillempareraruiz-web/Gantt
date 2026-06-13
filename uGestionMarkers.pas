@@ -37,10 +37,9 @@ type
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     pnlToolbar: TPanel;
     btnAdd: TButton;
+    btnEdit: TButton;
     btnDel: TButton;
     btnSave: TButton;
     gridMarkers: TcxGrid;
@@ -55,10 +54,11 @@ type
     LookAndFeel: TcxLookAndFeelController;
     ColorDialog: TColorDialog;
     procedure FormCreate(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
+    procedure btnEditClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnSaveClick(Sender: TObject);
+    procedure tvMarkersDblClick(Sender: TObject);
     procedure colColorCustomDrawCell(Sender: TcxCustomGridTableView;
       ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
       var ADone: Boolean);
@@ -78,7 +78,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uDMPlanner;
+  uDMPlanner, uMarkerEditor, uGanttTypes, uHelpViewer;
 
 function TfrmGestionMarkers.QStr(const S: string): string;
 begin
@@ -112,11 +112,9 @@ begin
   if DMPlanner.CurrentProjectName <> '' then
     lblSubtitle.Caption := 'Proyecto: ' + DMPlanner.CurrentProjectName;
   LoadMarkers;
-end;
-
-procedure TfrmGestionMarkers.btnCloseClick(Sender: TObject);
-begin
-  Close;
+  // Boton '?' en el caption + F1 = ayuda contextual (mismo patron que el resto
+  // de pantallas). Requiere BorderStyle = bsDialog para que el icono se muestre.
+  THelpViewer.InstallHelp(Self, 'uGestionMarkers', 'Gesti'#243'n de Marcadores');
 end;
 
 procedure TfrmGestionMarkers.LoadMarkers;
@@ -252,6 +250,96 @@ begin
   FIds[Cnt] := NewId;
   FColors[Cnt] := 0;
   tvMarkers.Controller.FocusedRecordIndex := Cnt;
+end;
+
+procedure TfrmGestionMarkers.tvMarkersDblClick(Sender: TObject);
+begin
+  btnEditClick(Sender);
+end;
+
+procedure TfrmGestionMarkers.btnEditClick(Sender: TObject);
+var
+  Idx, MarkerId: Integer;
+  M: TGanttMarker;
+  Q: TADOQuery;
+  res: TMarkerEditorResult;
+  CE: string;
+  FontStyleByte: Integer;
+begin
+  Idx := GetSelectedIdx;
+  if (Idx < 0) or (Idx > High(FIds)) then
+  begin
+    ShowMessage('Selecciona un marcador.');
+    Exit;
+  end;
+  MarkerId := FIds[Idx];
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+
+  // Cargar el marcador COMPLETO desde BD (la grid solo muestra 6 campos; el
+  // editor edita todos: estilo, grosor, fuente, orientacion/alineacion texto...).
+  M := Default(TGanttMarker);
+  Q := OpenQuery(
+    'SELECT MarkerId, ISNULL(Caption, '''') AS Caption, FechaHora, ' +
+    '  ISNULL(Color, 0) AS Color, ISNULL(Estilo, 0) AS Estilo, ' +
+    '  ISNULL(GrosorLinea, 1) AS GrosorLinea, Movible, Visible, ISNULL(Tag, 0) AS Tag, ' +
+    '  ISNULL(FontName, '''') AS FontName, ISNULL(FontSize, 9) AS FontSize, ' +
+    '  ISNULL(FontColor, 0) AS FontColor, ISNULL(FontStyle, 0) AS FontStyle, ' +
+    '  ISNULL(OrientacionTexto, 0) AS OrientacionTexto, ' +
+    '  ISNULL(AlineacionTexto, 0) AS AlineacionTexto ' +
+    'FROM FS_PL_Marker ' +
+    'WHERE CodigoEmpresa = ' + CE + ' AND MarkerId = ' + IntToStr(MarkerId));
+  try
+    if Q.Eof then Exit;
+    M.Id := Q.FieldByName('MarkerId').AsInteger;
+    M.Caption := Q.FieldByName('Caption').AsString;
+    M.DateTime := Q.FieldByName('FechaHora').AsDateTime;
+    M.Color := TColor(Q.FieldByName('Color').AsInteger);
+    M.Style := TMarkerStyle(Q.FieldByName('Estilo').AsInteger);
+    M.StrokeWidth := Q.FieldByName('GrosorLinea').AsFloat;
+    if M.StrokeWidth <= 0 then M.StrokeWidth := 1;
+    M.Moveable := Q.FieldByName('Movible').AsBoolean;
+    M.Visible := Q.FieldByName('Visible').AsBoolean;
+    M.Tag := Q.FieldByName('Tag').AsInteger;
+    M.FontName := Q.FieldByName('FontName').AsString;
+    M.FontSize := Q.FieldByName('FontSize').AsInteger;
+    M.FontColor := TColor(Q.FieldByName('FontColor').AsInteger);
+    M.FontStyle := TFontStyles(Byte(Q.FieldByName('FontStyle').AsInteger));
+    M.TextOrientation := TMarkerTextOrientation(Q.FieldByName('OrientacionTexto').AsInteger);
+    M.TextAlign := TMarkerTextAlign(Q.FieldByName('AlineacionTexto').AsInteger);
+  finally
+    Q.Free;
+  end;
+
+  res := TfrmMarkerEditor.Execute(M);
+  case res of
+    merOK:
+    begin
+      FontStyleByte := Byte(M.FontStyle);
+      Exec('UPDATE FS_PL_Marker SET ' +
+        'Caption = ' + QStr(M.Caption) + ', ' +
+        'FechaHora = ''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', M.DateTime) + ''', ' +
+        'Color = ' + IntToStr(Integer(M.Color)) + ', ' +
+        'Estilo = ' + IntToStr(Ord(M.Style)) + ', ' +
+        'GrosorLinea = ' + FloatToStr(M.StrokeWidth, TFormatSettings.Invariant) + ', ' +
+        'Movible = ' + IntToStr(Ord(M.Moveable)) + ', ' +
+        'Visible = ' + IntToStr(Ord(M.Visible)) + ', ' +
+        'Tag = ' + IntToStr(M.Tag) + ', ' +
+        'FontName = ' + QStr(M.FontName) + ', ' +
+        'FontSize = ' + IntToStr(M.FontSize) + ', ' +
+        'FontColor = ' + IntToStr(Integer(M.FontColor)) + ', ' +
+        'FontStyle = ' + IntToStr(FontStyleByte) + ', ' +
+        'OrientacionTexto = ' + IntToStr(Ord(M.TextOrientation)) + ', ' +
+        'AlineacionTexto = ' + IntToStr(Ord(M.TextAlign)) +
+        ' WHERE CodigoEmpresa = ' + CE + ' AND MarkerId = ' + IntToStr(MarkerId));
+      LoadMarkers;
+    end;
+    merDelete:
+    begin
+      Exec('DELETE FROM FS_PL_Marker WHERE CodigoEmpresa = ' + CE +
+        ' AND MarkerId = ' + IntToStr(MarkerId));
+      LoadMarkers;
+    end;
+  end;
 end;
 
 procedure TfrmGestionMarkers.btnDelClick(Sender: TObject);

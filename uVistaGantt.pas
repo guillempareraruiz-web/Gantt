@@ -34,8 +34,9 @@ uses
   cxDateUtils, cxCheckBox, Vcl.Menus, dxCoreGraphics, cxButtonEdit, cxScrollBox,
   cxButtons, cxDropDownEdit, cxCheckComboBox, Vcl.StdCtrls, Vcl.WinXCtrls,
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
-  uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttCentres, uGanttTypes, uErpTypes,
-  System.Generics.Collections, System.Threading, System.Math, uHelpGuide,
+  uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uErpTypes,
+  System.Generics.Collections, System.Generics.Defaults,
+  System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
   dxGDIPlusClasses, cxImage, System.ImageList, Vcl.ImgList, cxImageList,
   Vcl.Buttons;
@@ -72,7 +73,6 @@ type
     Label7: TLabel;
     lblUndoCount: TLabel;
     lblRedoCount: TLabel;
-    Label19: TLabel;
     btnRefresh: TButton;
     btnAutoPlanSel: TButton;
     btnAutoPlanAll: TButton;
@@ -96,13 +96,9 @@ type
     btnUndo: TButton;
     btnRedo: TButton;
     Button12: TButton;
-    Button13: TButton;
-    FcxFilterOperarios: TcxCheckComboBox;
-    FchkSoloFiltrados: TcxCheckBox;
     Button25: TButton;
     Button26: TButton;
     Panel3: TPanel;
-    Label12: TLabel;
     Label18: TLabel;
     Panel6: TPanel;
     Label11: TLabel;
@@ -122,10 +118,6 @@ type
     Panel11: TPanel;
     Label17: TLabel;
     lblGreen: TLabel;
-    Button16: TButton;
-    Button17: TButton;
-    Button19: TButton;
-    Button18: TButton;
     Button21: TButton;
     Button22: TButton;
     Button2: TButton;
@@ -138,10 +130,6 @@ type
     Panel2: TPanel;
     Shape1: TShape;
     Shape2: TShape;
-    Button14: TButton;
-    Button15: TButton;
-    chkShowKPIs: TCheckBox;
-    Button20: TButton;
     pnlTitulo: TPanel;
     lblTitulo: TLabel;
     lblSubtitulo: TLabel;
@@ -160,6 +148,8 @@ type
     Aadirmarcador1: TMenuItem;
     Gestionmarcadores1: TMenuItem;
     Marcadoresautomaticos1: TMenuItem;
+    N4: TMenuItem;
+    RestaurarVistaDefecto1: TMenuItem;
     popTimeline: TPopupMenu;
     MenuItem2: TMenuItem;
     popNode: TPopupMenu;
@@ -199,33 +189,11 @@ type
     miDesplanificar: TMenuItem;
     N3: TMenuItem;
     Indicadores1: TMenuItem;
-    Label28: TLabel;
-    Label29: TLabel;
-    Panel12: TPanel;
-    Label30: TLabel;
-    Label31: TLabel;
-    Panel13: TPanel;
-    Label32: TLabel;
-    Panel14: TPanel;
-    Label34: TLabel;
-    Panel15: TPanel;
-    Label36: TLabel;
-    Label37: TLabel;
-    Label8: TLabel;
     cbVistas: TcxComboBox;
     btnFocus: TButton;
-    btnGanttDates: TcxButton;
-    cxButton9: TcxButton;
-    Label38: TLabel;
     imgSection: TcxImage;
-    lblNodes: TLabel;
-    lblVisible: TLabel;
     cxImageList1: TcxImageList;
-    Panel4: TPanel;
-    Label9: TLabel;
-    Label10: TLabel;
     cxDateEdit1: TcxDateEdit;
-    Label6: TLabel;
     btnIr: TcxButton;
     btnHoy: TcxButton;
     Panel5: TPanel;
@@ -234,10 +202,69 @@ type
     Panel18: TPanel;
     Panel19: TPanel;
     Panel20: TPanel;
+    btnNodeGoToLast: TcxButton;
+    btnNodeGoToNext: TcxButton;
+    btnNodeGoToFirst: TcxButton;
+    btnNodeGoToPrev: TcxButton;
+    Label20: TLabel;
+    btnKPIVisible: TcxButton;
+    btnKPIAll: TcxButton;
+    btnShowCentrosKPI: TcxButton;
+    Label12: TLabel;
+    btnConfigCentros: TcxButton;
+    LblIndicadores: TLabel;
+    Label21: TLabel;
+    Label6: TLabel;
+    btnGanttDates: TcxButton;
+    btnShowWeekends: TcxButton;
+    Panel12: TPanel;
+    Label30: TLabel;
+    Label31: TLabel;
+    Panel4: TPanel;
+    Label9: TLabel;
+    Label10: TLabel;
+    Panel15: TPanel;
+    Label36: TLabel;
+    Label37: TLabel;
+    Panel14: TPanel;
+    Label34: TLabel;
+    lblVisible: TLabel;
+    Panel13: TPanel;
+    Label32: TLabel;
+    lblNodes: TLabel;
+    pnlOperarios: TPanel;
+    Label23: TLabel;
+    Shape3: TShape;
+    Label19: TLabel;
+    cxButton2: TcxButton;
+    cxButton3: TcxButton;
+    FcxFilterOperarios: TcxCheckComboBox;
+    cbDepartamentos: TcxCheckComboBox;
+    cxButton4: TcxButton;
+    pnlSummary: TPanel;
+    pnlSummaryToolbar: TPanel;
+    Shape4: TShape;
+    Shape5: TShape;
+    Label22: TLabel;
+    btnS3: TcxButton;
+    btnS4: TcxButton;
+    btnS1: TcxButton;
+    btnS2: TcxButton;
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
     procedure TimelineInteraction(Sender: TObject; const Interacting: Boolean);
+    procedure SummaryViewportChanged(Sender: TObject;
+      const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
+    // Resum/KPIs per dia
+    procedure SummaryDayKPI(Sender: TObject; const ADate: TDateTime;
+      out ALine1, ALine2: string; out AHighlight: Boolean);
+    procedure RebuildSummaryData;
+    procedure SetSummaryView(const AView: TSummaryView);
+    procedure btnS1Click(Sender: TObject);
+    procedure btnS2Click(Sender: TObject);
+    procedure btnS3Click(Sender: TObject);
+    procedure btnS4Click(Sender: TObject);
     procedure GanttViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
     procedure GanttScrollYChanged(Sender: TObject; const ScrollY: Single);
@@ -249,6 +276,9 @@ type
     procedure GuardarFechaBloqueo(const ADate: TDateTime);
     procedure GanttNodeDblClick(Sender: TObject; const NodeIndex: Integer);
     procedure GanttMarkerDblClick(Sender: TObject; const MarkerId: Integer);
+    procedure GanttMarkerMoved(Sender: TObject; const MarkerId: Integer;
+      const NewDateTime: TDateTime);
+    procedure PersistMarcadores;
     procedure miAsignarOperariosClick(Sender: TObject);
     procedure btnAutoPlanSelClick(Sender: TObject);
     procedure btnAutoPlanAllClick(Sender: TObject);
@@ -261,8 +291,6 @@ type
     procedure DesagruparLote1Click(Sender: TObject);
     procedure CentresScrollYChanged(Sender: TObject; const ScrollY: Single);
     procedure Button27Click(Sender: TObject);
-
-    procedure Button14Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure MenuItem1Click(Sender: TObject);
     procedure Desactivarfechabloqueo1Click(Sender: TObject);
@@ -270,17 +298,11 @@ type
     procedure Aadirmarcador1Click(Sender: TObject);
     procedure Gestionmarcadores1Click(Sender: TObject);
     procedure Marcadoresautomaticos1Click(Sender: TObject);
+    procedure RestaurarVistaDefecto1Click(Sender: TObject);
     procedure ShiftRow1Click(Sender: TObject);
     procedure ShiftRowallimpact1Click(Sender: TObject);
     procedure INFO3Click(Sender: TObject);
-    procedure Button15Click(Sender: TObject);
-    procedure chkShowKPIsClick(Sender: TObject);
     procedure Indicadores1Click(Sender: TObject);
-    procedure Button20Click(Sender: TObject);
-    procedure Button16Click(Sender: TObject);
-    procedure Button17Click(Sender: TObject);
-    procedure Button19Click(Sender: TObject);
-    procedure Button18Click(Sender: TObject);
     procedure lblModifiedClick(Sender: TObject);
     procedure btnResaltarOFClick(Sender: TObject);
     procedure Button2Click(Sender: TObject);
@@ -288,12 +310,10 @@ type
     procedure Button21Click(Sender: TObject);
     procedure Button22Click(Sender: TObject);
     procedure cbVistasPropertiesChange(Sender: TObject);
-    procedure cxButton9Click(Sender: TObject);
     procedure btnGanttDatesClick(Sender: TObject);
     procedure btnUndoClick(Sender: TObject);
     procedure btnRedoClick(Sender: TObject);
     procedure Button12Click(Sender: TObject);
-    procedure Button13Click(Sender: TObject);
     procedure Button8Click(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure Button24Click(Sender: TObject);
@@ -314,6 +334,16 @@ type
     procedure ResaltarOF1Click(Sender: TObject);
     procedure btnIrClick(Sender: TObject);
     procedure btnHoyClick(Sender: TObject);
+    procedure btnNodeGoToLastClick(Sender: TObject);
+    procedure btnNodeGoToNextClick(Sender: TObject);
+    procedure btnNodeGoToPrevClick(Sender: TObject);
+    procedure btnNodeGoToFirstClick(Sender: TObject);
+    procedure btnShowCentrosKPIClick(Sender: TObject);
+    procedure btnConfigCentrosClick(Sender: TObject);
+    procedure btnKPIVisibleClick(Sender: TObject);
+    procedure btnKPIAllClick(Sender: TObject);
+    procedure btnShowWeekendsClick(Sender: TObject);
+    procedure lblTituloClick(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -324,6 +354,7 @@ type
     FLoadingFechaBloqueo: Boolean;
     FPendingPxPerMin: Double;
     FPendingScrollX: Double;
+    FPendingScrollY: Double;
     FHasPendingViewport: Boolean;
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
@@ -348,11 +379,26 @@ type
   public
     FGanttControl: TGanttControl;
     FTimelineControl: TGanttTimelineControl;
+    FSummaryControl: TGanttSummaryControl;
     FCentrosControl: TGanttCentresControl;
     FOperariosRepo: TOperariosRepo;
     FMoldeRepo: TMoldeRepo;
 
+    // Cache de KPIs per dia per a la banda de resum (reconstruit en canviar
+    // viewport/dades/vista). Clau = DateOf(dia).
+    FSummaryNodeCountByDay: TDictionary<TDate, Integer>;
+
     procedure GoToDate(const ADate: TDateTime);
+    // Iguala l'amplada de la columna esquerra del resum (pnlSummaryToolbar) amb
+    // pnlCentros, perque la banda de KPIs quedi alineada amb el Gantt tambe quan
+    // s'amaga/mostra el KPI de Centres.
+    procedure SyncSummaryToolbarWidth;
+    // Carrega el Node Layout Set actiu i l'aplica al FGanttControl actual. Cal
+    // cridar-lo cada cop que es (re)crea el control (Inicializar el recrea segons
+    // RowMode), sino el control nou no te layout i cau al render per defecte.
+    procedure AplicarNodeLayoutSet;
+    // Llena los combos de filtro (operarios y departamentos) desde el repo.
+    procedure CargarFiltros;
 
     constructor CreateVista(AOwner: TComponent;
       AOperariosRepo: TOperariosRepo;
@@ -374,6 +420,10 @@ type
     procedure CargarMarcadores;
     procedure AplicarCalendariosAGantt;
     procedure IrAFecha(const ADate: TDateTime);
+    // Restablece la vista del Gantt a un estado seguro: borra las prefs de
+    // viewport (rango/zoom/scroll) y reinicializa con valores por defecto. Es la
+    // red de seguridad si un viewport guardado deja el Gantt inservible.
+    procedure RestaurarVistaPorDefecto;
   end;
 implementation
 {$R *.dfm}
@@ -382,6 +432,7 @@ uses
   uGestionMarkers, uCentreInspector, uSampleDataGenerator,
   uCentresKPI, uGestionCentres, uNodeInspector, uMarkerEditor,
   uGanttDatesDialog, uUserPrefs, System.JSON,
+  uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,  Main;
 
 
@@ -469,6 +520,22 @@ begin
   FTimelineControl.Align := alTop;
   FTimelineControl.LeftWidth := 0;
   FTimelineControl.PopupMenu := popTimeline;
+
+  // Banda de RESUMEN/KPIs por dia: alineada al client de pnlSummary (la columna
+  // izquierda Panel21 hace de etiqueta). Comparte coordenadas con el timeline.
+  FSummaryControl := TGanttSummaryControl.Create(Self);
+  FSummaryControl.Parent := pnlSummary;
+  FSummaryControl.Align := alClient;
+  FSummaryControl.LeftWidth := 0;
+  FSummaryControl.OnViewportChanged := SummaryViewportChanged;
+  FSummaryControl.OnInteraction := TimelineInteraction;
+  FSummaryControl.OnDayKPI := SummaryDayKPI;
+
+  // Botons de vista de resum (toggle en grup). btnS4 = num. de nodos por dia.
+  btnS1.OnClick := btnS1Click;
+  btnS2.OnClick := btnS2Click;
+  btnS3.OnClick := btnS3Click;
+  btnS4.OnClick := btnS4Click;
   // Instanciar el control segun el RowMode del proyecto activo.
   // TGanttControlGrupo hereda de TGanttControl (fase 6.2 decision Z) asi que
   // el resto del uVistaGantt trabaja con FGanttControl: TGanttControl sin saber
@@ -489,6 +556,7 @@ begin
   // Importante: el Gantt necesita el repo para resolver NodeData al pintar.
   // Sin esto, BuildDataIdIndex/RebuildLayout acceden a puntero nil.
   FGanttControl.SetNodeRepo(DMPlanner.NodeDataRepo);
+  AplicarNodeLayoutSet;   // el render dels nodes per Vista necessita el set
 
   FCentrosControl := TGanttCentresControl.Create(Self);
   FCentrosControl.Parent := pnlCentros;
@@ -496,6 +564,7 @@ begin
   FCentrosControl.PopupMenu := popCentros;
   pnlCentros.Width := FCentrosControl.BaseWidth;
   FCentrosControl.VerIndicadores := False;
+  SyncSummaryToolbarWidth;
   // Cablear eventos (stubs por ahora — lógica real en pasos siguientes)
   FTimelineControl.OnViewportChanged := TimelineViewportChanged;
   FTimelineControl.OnInteraction := TimelineInteraction;
@@ -504,6 +573,7 @@ begin
   FGanttControl.OnScrollYChanged := GanttScrollYChanged;
   FGanttControl.OnNodeDblClick := GanttNodeDblClick;
   FGanttControl.OnMarkerDblClick := GanttMarkerDblClick;
+  FGanttControl.OnMarkerMoved := GanttMarkerMoved;
   FGanttControl.OnStatsChanged := GanttStatsChanged;
   FGanttControl.OnLayoutChanged := GanttLayoutChanged;
   FGanttControl.OnNodeSelected := GanttNodeSelected;
@@ -522,12 +592,59 @@ begin
 end;
 
 
-procedure TfrmVistaGantt.cxButton9Click(Sender: TObject);
+procedure TfrmVistaGantt.btnShowWeekendsClick(Sender: TObject);
+var
+  bHide: Boolean;
 begin
-  Form1.Proyectos1Click(Self);
+  bHide := not FGanttControl.HideWeekends;
+
+  // El timeline debe conocer el MISMO flag que el Gantt: ambos mapean tiempo->X
+  // con VisibleMinutesBetween, que depende de HideWeekends. Si solo lo cambia el
+  // Gantt, el timeline sigue dibujando los dias con findes y queda desplazado.
+  // Propagamos el flag al timeline PRIMERO (sin que dispare su propio viewport;
+  // el guard FUpdatingViewport lo evita) y luego al Gantt, que al normalizar su
+  // FStartTime/FScrollX emitira OnViewportChanged -> el timeline se re-sincroniza
+  // ya con el flag correcto.
+  FUpdatingViewport := True;
+  try
+    FTimelineControl.HideWeekends := bHide;
+    if Assigned(FSummaryControl) then
+      FSummaryControl.HideWeekends := bHide;
+  finally
+    FUpdatingViewport := False;
+  end;
+
+  FGanttControl.HideWeekends := bHide;
 end;
 
+procedure TfrmVistaGantt.btnShowCentrosKPIClick(Sender: TObject);
+var
+  bShow: Boolean;
+begin
 
+  bShow := not CentrosControl.VerIndicadores;
+
+  CentrosControl.VerIndicadores := bShow;
+
+  // Ajustar el panell al nou Width del control (BaseWidth + IndicadoresWidth o BaseWidth)
+  pnlCentros.Width := FCentrosControl.Width;
+  // La columna esquerra de la banda de resum segueix l'amplada de Centros.
+  SyncSummaryToolbarWidth;
+
+  FGanttControl.NotifyViewportChanged;
+
+  btnKPIVisible.Visible := bShow;
+  btnKPIAll.Visible := bShow;
+  LblIndicadores.Visible := bShow;
+
+  if FCentrosControl.VerIndicadores then
+    RebuildCentreKPIs_Parallel( FALSE );
+
+  FCentrosControl.Repaint;
+
+  if bShow then
+   btnKPIVisibleClick( btnKPIVisible );
+end;
 
 procedure TfrmVistaGantt.GoToDate(const ADate: TDateTime);
 var
@@ -570,6 +687,7 @@ begin
   dtFechaFinGantt.Date := FFin;
   Inicializar(FIni, FFin);
   SaveViewportPrefs;
+
 end;
 
 procedure TfrmVistaGantt.btnHoyClick(Sender: TObject);
@@ -581,6 +699,26 @@ procedure TfrmVistaGantt.btnIrClick(Sender: TObject);
 begin
   if not varisnull(cxDateEdit1.EditValue) then
    GoToDate( cxDateEdit1.Date );
+end;
+
+procedure TfrmVistaGantt.btnNodeGoToFirstClick(Sender: TObject);
+begin
+  FGanttControl.GoToFirstNode;
+end;
+
+procedure TfrmVistaGantt.btnNodeGoToLastClick(Sender: TObject);
+begin
+ FGanttControl.GoToLastNode;
+end;
+
+procedure TfrmVistaGantt.btnNodeGoToNextClick(Sender: TObject);
+begin
+  FGanttControl.GoToNextNode;
+end;
+
+procedure TfrmVistaGantt.btnNodeGoToPrevClick(Sender: TObject);
+begin
+  FGanttControl.GoToPreviousNode;
 end;
 
 procedure TfrmVistaGantt.Desactivarfechabloqueo1Click(Sender: TObject);
@@ -735,44 +873,6 @@ begin
   UpdateHistoryButtons;
 end;
 
-procedure TfrmVistaGantt.Button13Click(Sender: TObject);
-begin
-   FGanttControl.HideWeekends := not FGanttControl.HideWeekends;
-end;
-
-procedure TfrmVistaGantt.Button14Click(Sender: TObject);
-begin
-  if FCentrosControl.VerIndicadores then
-    RebuildCentreKPIs_Parallel( FALSE );
-end;
-
-
-procedure TfrmVistaGantt.Button15Click(Sender: TObject);
-begin
-   if FCentrosControl.VerIndicadores then
-    RebuildCentreKPIs_Parallel( TRUE );
-end;
-
-procedure TfrmVistaGantt.Button16Click(Sender: TObject);
-begin
-    FGanttControl.GoToFirstNode;
-end;
-
-procedure TfrmVistaGantt.Button17Click(Sender: TObject);
-begin
-    FGanttControl.GoToPreviousNode;
-end;
-
-procedure TfrmVistaGantt.Button18Click(Sender: TObject);
-begin
-    FGanttControl.GoToLastNode;
-end;
-
-procedure TfrmVistaGantt.Button19Click(Sender: TObject);
-begin
-    FGanttControl.GoToNextNode;
-end;
-
 procedure TfrmVistaGantt.Inicializar(const AFechaInicio, AFechaFin: TDateTime);
 var
   T0, T1: TDateTime;
@@ -807,11 +907,13 @@ begin
     FGanttControl.OnScrollYChanged := GanttScrollYChanged;
     FGanttControl.OnNodeDblClick := GanttNodeDblClick;
     FGanttControl.OnMarkerDblClick := GanttMarkerDblClick;
+    FGanttControl.OnMarkerMoved := GanttMarkerMoved;
     FGanttControl.OnStatsChanged := GanttStatsChanged;
     FGanttControl.OnLayoutChanged := GanttLayoutChanged;
     FGanttControl.OnNodeSelected := GanttNodeSelected;
     FGanttControl.OnVoid := GanttVoidClick;
     FGanttControl.OnFechaBloqueoChanged := GanttFechaBloqueoChanged;
+    AplicarNodeLayoutSet;   // control recreat -> reaplicar el set de layout
   end
   else if NecesitaGrupo then
   begin
@@ -827,12 +929,25 @@ begin
   if T1 < T0 then
     T1 := DayEnd(T0);
   FTimelineControl.SetTimeRange(T0, T1);
+  if Assigned(FSummaryControl) then
+    FSummaryControl.SetTimeRange(T0, T1);
   // También el Gantt: sin esto, FContentWidth queda limitado a ClientWidth
   // y el panning del timeline no puede desplazar el Gantt (MaxScrollX = 0).
   FGanttControl.SetTimeRange(T0, T1);
   CargarCentros;
   // Centrar la vista en la fecha actual al abrir.
   IrAFecha(Now);
+  // Sincronizar la banda de resumen con el viewport inicial del timeline y
+  // forzar el repintado (SetViewport puede salir por valores iguales y dejar la
+  // banda sin pintar hasta el primer scroll/zoom).
+  if Assigned(FSummaryControl) then
+  begin
+    FSummaryControl.SetTimeRange(T0, T1);
+    FSummaryControl.SetViewport(FTimelineControl.StartTime,
+      FTimelineControl.PxPerMinute, FTimelineControl.ScrollX);
+    RebuildSummaryData;
+    FSummaryControl.Invalidate;
+  end;
 end;
 
 const
@@ -847,15 +962,87 @@ begin
   Result.ShortDateFormat := ISO_DATE;
 end;
 
+procedure TfrmVistaGantt.CargarFiltros;
+var
+  Ops: TArray<TOperario>;
+  Depts: TArray<TDepartamento>;
+  I: Integer;
+  Lbl: string;
+  Item: TcxCheckComboBoxItem;
+begin
+  if FOperariosRepo = nil then Exit;
+
+  // Por defecto el TcxCheckComboBox usa EditValueFormat = cvfInteger, que
+  // codifica la seleccion como mascara de bits -> limite de 64 items. Con muchos
+  // operarios eso revienta ("number of items cannot be greater than 64"). Con
+  // cvfIndices la seleccion se guarda como lista de indices, sin ese limite.
+  FcxFilterOperarios.Properties.EditValueFormat := cvfIndices;
+  cbDepartamentos.Properties.EditValueFormat := cvfIndices;
+
+  // --- Operarios ---
+  Ops := FOperariosRepo.GetOperarios;
+  TArray.Sort<TOperario>(Ops, TComparer<TOperario>.Construct(
+    function(const A, B: TOperario): Integer
+    begin
+      Result := CompareText(A.Nombre, B.Nombre);
+    end));
+
+  FcxFilterOperarios.Properties.Items.Clear;
+  Item := FcxFilterOperarios.Properties.Items.Add;
+  Item.Description := '(Todos)';
+  Item.Tag := -1;
+  for I := 0 to High(Ops) do
+  begin
+    Lbl := Trim(Ops[I].Nombre);
+    if Lbl = '' then Lbl := '#' + IntToStr(Ops[I].Id);
+    Item := FcxFilterOperarios.Properties.Items.Add;
+    Item.Description := Lbl;
+    Item.Tag := Ops[I].Id;
+  end;
+  FcxFilterOperarios.Properties.EmptySelectionText := 'Todos los operarios';
+
+  // --- Departamentos ---
+  Depts := FOperariosRepo.GetDepartamentos;
+  TArray.Sort<TDepartamento>(Depts, TComparer<TDepartamento>.Construct(
+    function(const A, B: TDepartamento): Integer
+    begin
+      Result := CompareText(A.Nombre, B.Nombre);
+    end));
+
+  cbDepartamentos.Properties.Items.Clear;
+  Item := cbDepartamentos.Properties.Items.Add;
+  Item.Description := '(Todos)';
+  Item.Tag := -1;
+  for I := 0 to High(Depts) do
+  begin
+    Lbl := Trim(Depts[I].Nombre);
+    if Lbl = '' then Lbl := '#' + IntToStr(Depts[I].Id);
+    Item := cbDepartamentos.Properties.Items.Add;
+    Item.Description := Lbl;
+    Item.Tag := Depts[I].Id;
+  end;
+  cbDepartamentos.Properties.EmptySelectionText := 'Todos los departamentos';
+end;
+
 procedure TfrmVistaGantt.Inicializar;
 var
   Js, S: string;
   Root: TJSONObject;
   GanttStart, GanttEnd: TDateTime;
-  PxPerMin, ScrollX: Double;
+  PxPerMin, ScrollX, ScrollY: Double;
   VistaIndex: Integer;
+  HideWeekends: Boolean;
   HasGanttRange, HasViewport, HasVista: Boolean;
 begin
+  // Llenar los combos de filtro (operarios / departamentos). Va FUERA del flujo
+  // de prefs/viewport y protegido: si fallara, no debe impedir que el Gantt
+  // aplique su scroll/zoom.
+  try
+    CargarFiltros;
+  except
+    // no critico para la vista
+  end;
+
   FLoadingPrefs := True;
   try
     HasGanttRange := False;
@@ -865,7 +1052,9 @@ begin
     GanttEnd := 0;
     PxPerMin := 0;
     ScrollX := 0;
+    ScrollY := 0;
     VistaIndex := 0;
+    HideWeekends := False;
 
     Js := DMPlanner.UserPrefs.Load(SCREEN_KEY_VISTA_GANTT);
     if Js <> '' then
@@ -877,19 +1066,31 @@ begin
           TryStrToDate(S, GanttStart, IsoFormatSettings);
         if Root.TryGetValue<string>('ganttEnd', S) then
           TryStrToDate(S, GanttEnd, IsoFormatSettings);
-        HasGanttRange := (GanttStart > 0) and (GanttEnd > GanttStart);
+        // Rango valido = fechas reales y separacion sensata (>=1 dia, <= ~10
+        // anos). Un rango degenerado (guardado durante un crash) colapsaria el
+        // ancho de contenido y haria desaparecer el scrollbar horizontal.
+        HasGanttRange := (GanttStart > 0) and (GanttEnd > GanttStart) and
+          ((GanttEnd - GanttStart) >= 1) and ((GanttEnd - GanttStart) <= 3700);
 
+        // pxPerMinute: solo se restaura si cae en un rango razonable.
         if Root.TryGetValue<Double>('pxPerMinute', PxPerMin) and
            (PxPerMin > 0) and (PxPerMin <= 100) then
         begin
           if not Root.TryGetValue<Double>('scrollX', ScrollX) then
             ScrollX := 0;
+          if not Root.TryGetValue<Double>('scrollY', ScrollY) then
+            ScrollY := 0;
+          // Descartar valores no finitos / negativos.
+          if (ScrollX < 0) or (ScrollX <> ScrollX) then ScrollX := 0;
+          if (ScrollY < 0) or (ScrollY <> ScrollY) then ScrollY := 0;
           HasViewport := True;
         end;
 
         if Root.TryGetValue<Integer>('vistaIndex', VistaIndex) and
            (VistaIndex >= 0) and (VistaIndex < cbVistas.Properties.Items.Count) then
           HasVista := True;
+
+        Root.TryGetValue<Boolean>('hideWeekends', HideWeekends);
       finally
         Root.Free;
       end;
@@ -900,6 +1101,23 @@ begin
     else
       Inicializar(Now - 4, Now + 4);
 
+    // Restaurar HideWeekends ANTES de aplicar el viewport: cambiar el flag
+    // renormaliza FStartTime/FScrollX en ambos controles, asi que debe quedar
+    // fijado antes de que ApplyPendingViewport restaure zoom+scroll. Propagamos
+    // a timeline y Gantt igual que btnShowWeekendsClick (FUpdatingViewport evita
+    // que el timeline dispare su propio viewport; FLoadingPrefs evita re-guardar).
+    if HideWeekends and Assigned(FGanttControl) then
+    begin
+      FUpdatingViewport := True;
+      try
+        if Assigned(FTimelineControl) then
+          FTimelineControl.HideWeekends := True;
+      finally
+        FUpdatingViewport := False;
+      end;
+      FGanttControl.HideWeekends := True;
+    end;
+
     // Inicializar(...) deja IrAFecha(Now) como default. Si tenemos viewport
     // guardado (zoom + scroll), lo aplicamos diferido vía TThread.ForceQueue
     // porque en este punto el form aún no es visible y los controles no tienen
@@ -908,6 +1126,7 @@ begin
     begin
       FPendingPxPerMin := PxPerMin;
       FPendingScrollX := Max(0, ScrollX);
+      FPendingScrollY := Max(0, ScrollY);
       FHasPendingViewport := True;
       TThread.ForceQueue(nil, ApplyPendingViewport);
     end;
@@ -946,6 +1165,23 @@ begin
   FUpdatingViewport := True;
   FLoadingPrefs := True;
   try
+    // Guardia del bug "sin scrollbar horizontal en maximizado": aqui el form ya
+    // es visible y FGanttControl.ClientWidth es el definitivo. Si el zoom
+    // guardado (FPendingPxPerMin) es tan alejado que TODO el rango del Gantt cabe
+    // en el ancho visible, no habria nada que scrollar y el scrollbar no
+    // aparece. Eso pasaba al guardar el viewport con la ventana pequena y luego
+    // abrir maximizado. Si el contenido no llena el ancho, subimos px para que el
+    // rango ocupe ~1.2x el ancho actual (siempre habra scroll). El zoom-out
+    // legitimo sobre rangos largos no se ve afectado (ahi ya llena de sobra).
+    var DaysRange: Double := FGanttControl.EndTime - FGanttControl.StartTime;
+    if (DaysRange > 0) and (FGanttControl.ClientWidth > 0) then
+    begin
+      var ContentPx: Double := DaysRange * 24 * 60 * FPendingPxPerMin;
+      if ContentPx < FGanttControl.ClientWidth then
+        FPendingPxPerMin := (FGanttControl.ClientWidth * 1.2) /
+                            (DaysRange * 24 * 60);
+    end;
+
     // Usamos SetViewport (no el setter PxPerMinute) porque SetPxPerMinute
     // tiene un EnsureRange(0.2, 40.0) hard-coded que descartaría valores
     // legítimos (ej. 0.04 px/min cuando el usuario zoomea a mes completo).
@@ -953,6 +1189,16 @@ begin
     FGanttControl.SetViewport(FGanttControl.StartTime, FPendingPxPerMin, FPendingScrollX);
     if Assigned(FTimelineControl) then
       FTimelineControl.SetViewport(FTimelineControl.StartTime, FPendingPxPerMin, FPendingScrollX);
+
+    // Scroll vertical: aplicar al Gantt (clampa contra GetMaxScrollY, que ya es
+    // valido porque el form es visible y FContentHeight esta calculado) y
+    // sincronizar la columna de Centros para que ambos arranquen a la misma altura.
+    if FPendingScrollY > 0 then
+    begin
+      FGanttControl.ApplyScrollYFromCentres(FPendingScrollY);
+      if Assigned(FCentrosControl) then
+        FCentrosControl.ScrollY := FGanttControl.ScrollY;
+    end;
   finally
     FLoadingPrefs := False;
     FUpdatingViewport := False;
@@ -963,6 +1209,7 @@ procedure TfrmVistaGantt.SaveViewportPrefs;
 var
   Root: TJSONObject;
   GanttIni, GanttFin: TDateTime;
+  Px: Double;
 begin
   if FLoadingPrefs then Exit;
   if FGanttControl = nil then Exit;
@@ -970,14 +1217,23 @@ begin
   GanttIni := dtFechaInicioGantt.Date;
   GanttFin := dtFechaFinGantt.Date;
 
+  // No persistir un rango/zoom claramente corrupto: dejaria la vista inservible
+  // en la proxima apertura. Si algo no cuadra, no guardamos (se conserva lo
+  // anterior valido o, en su defecto, se usaran los defaults al cargar).
+  if (GanttIni <= 0) or (GanttFin <= GanttIni) then Exit;
+  Px := FGanttControl.PxPerMinute;
+  if (Px <> Px) or (Px <= 0) or (Px > 100) then Exit;  // NaN / fuera de rango
+
   Root := TJSONObject.Create;
   try
     Root.AddPair('version', TJSONNumber.Create(PREFS_VERSION));
     Root.AddPair('ganttStart', FormatDateTime(ISO_DATE, GanttIni));
     Root.AddPair('ganttEnd', FormatDateTime(ISO_DATE, GanttFin));
-    Root.AddPair('pxPerMinute', TJSONNumber.Create(FGanttControl.PxPerMinute));
+    Root.AddPair('pxPerMinute', TJSONNumber.Create(Px));
     Root.AddPair('scrollX', TJSONNumber.Create(FGanttControl.ScrollX));
+    Root.AddPair('scrollY', TJSONNumber.Create(FGanttControl.ScrollY));
     Root.AddPair('vistaIndex', TJSONNumber.Create(cbVistas.ItemIndex));
+    Root.AddPair('hideWeekends', TJSONBool.Create(FGanttControl.HideWeekends));
     DMPlanner.UserPrefs.Save(SCREEN_KEY_VISTA_GANTT, Root.ToJSON);
   finally
     Root.Free;
@@ -1006,20 +1262,6 @@ begin
 
   FGanttControl.SetSearchResults(nodes, True);
   FGanttControl.SelectNodeByIndex(nodes[0], True);
-end;
-
-procedure TfrmVistaGantt.Button20Click(Sender: TObject);
-var
-  Frm: TfrmGestionCentres;
-begin
-  Frm := TfrmGestionCentres.Create(Self);
-  try
-    Frm.ShowModal;
-  finally
-    Frm.Free;
-  end;
-  DMPlanner.LoadCentres;
-
 end;
 
 procedure TfrmVistaGantt.Button21Click(Sender: TObject);
@@ -1229,6 +1471,8 @@ begin
   // Así ambos controles comparten las mismas filas y el scroll/zoom las mantiene.
   FCentrosControl.SetRows(FGanttControl.GetRowsCopy);
   FCentrosControl.Invalidate;
+  // Recalcular la banda de resum amb les noves dades (si hi ha vista activa).
+  RebuildSummaryData;
 end;
 procedure TfrmVistaGantt.CargarDependencias;
 var
@@ -1269,6 +1513,34 @@ begin
   end;
   FGanttControl.SetLinks(Links);
 end;
+procedure TfrmVistaGantt.PersistMarcadores;
+begin
+  // Persistencia atomica de TODOS los marcadores del proyecto activo: el
+  // connector hace DELETE+INSERT por ProjectId, asi que tras cualquier cambio
+  // (alta/edicion/borrado/movimiento) basta con volcar el estado actual del
+  // control. Como el INSERT regenera los IDENTITY, recargamos despues desde BD
+  // para que los marcadores en memoria queden con su MarkerId real (necesario
+  // para que un segundo doble-clic o arrastre los identifique correctamente).
+  if (FGanttControl = nil) or (not DMPlanner.IsConnected) or
+     (DMPlanner.CurrentProjectId <= 0) or (DMPlanner.Connector = nil) then
+    Exit;
+
+  DMPlanner.Connector.SaveMarkers(
+    DMPlanner.CurrentProjectId, FGanttControl.GetMarkers);
+
+  // Recargar para re-sincronizar IDs (CargarMarcadores filtra Visible=1, igual
+  // que el alta normal; un marcador con Visible=False no se vuelve a pintar).
+  CargarMarcadores;
+end;
+
+procedure TfrmVistaGantt.GanttMarkerMoved(Sender: TObject;
+  const MarkerId: Integer; const NewDateTime: TDateTime);
+begin
+  // El control ya actualizo la fecha del marcador en memoria al soltar el drag;
+  // solo hay que persistir el nuevo estado completo.
+  PersistMarcadores;
+end;
+
 procedure TfrmVistaGantt.CargarMarcadores;
 var
   Q: TADOQuery;
@@ -1324,6 +1596,7 @@ begin
     Q.Free;
   end;
 end;
+
 procedure TfrmVistaGantt.cbVistasPropertiesChange(Sender: TObject);
 var
   idx: Integer;
@@ -1363,11 +1636,61 @@ begin
   FTimelineControl.ScrollX := SX;
   FGanttControl.ScrollX := SX;
 end;
+
+procedure TfrmVistaGantt.RestaurarVistaPorDefecto;
+begin
+  if FGanttControl = nil then Exit;
+
+  // 1) Borrar la pref de viewport para que no se vuelva a restaurar el estado
+  //    malo en la proxima apertura.
+  try
+    DMPlanner.UserPrefs.Delete(SCREEN_KEY_VISTA_GANTT);
+  except
+    // si falla el borrado no es critico; igualmente reseteamos en memoria
+  end;
+
+  // 2) Cancelar cualquier viewport pendiente y resetear estado en memoria.
+  FHasPendingViewport := False;
+  FLoadingPrefs := False;
+  FUpdatingViewport := False;
+
+  // 3) Rango por defecto (Now +/- 4 dias) y zoom seguro. Usamos el setter
+  //    PxPerMinute (que clampa a 0.2..40) en vez de SetViewport para garantizar
+  //    un zoom util: con 2 px/min y ~10 dias hay contenido de sobra y el
+  //    scrollbar aparece siempre.
+  FLoadingPrefs := True;   // evita que el reset se vuelva a guardar a medias
+  try
+    Inicializar(Now - 4, Now + 4);
+    FGanttControl.PxPerMinute := 2.0;
+    if Assigned(FTimelineControl) then
+      FTimelineControl.PxPerMinute := 2.0;
+    IrAFecha(Now);
+    FGanttControl.RebuildLayout;
+    FGanttControl.Invalidate;
+  finally
+    FLoadingPrefs := False;
+  end;
+
+  // 4) Guardar ya el estado limpio para dejar la BD coherente.
+  SaveViewportPrefs;
+end;
+
+procedure TfrmVistaGantt.RestaurarVistaDefecto1Click(Sender: TObject);
+begin
+  RestaurarVistaPorDefecto;
+end;
 procedure TfrmVistaGantt.lblModifiedClick(Sender: TObject);
 begin
     FGanttControl.MarkAllNodesModified( False );
     FGanttControl.RebuildLayout;
     FGanttControl.Invalidate;
+end;
+
+procedure TfrmVistaGantt.lblTituloClick(Sender: TObject);
+begin
+  pnlOperarios.Visible := true;
+  pnlOperarios.BringTofront;
+
 end;
 
 procedure TfrmVistaGantt.popNodePopup(Sender: TObject);
@@ -1503,6 +1826,9 @@ begin
 
   FGanttControl.AddMarker(M);
 
+  // Persistir de inmediato: el alta debe quedar guardada en BD y reasignarse
+  // su MarkerId real (PersistMarcadores recarga tras el INSERT).
+  PersistMarcadores;
 end;
 
 procedure TfrmVistaGantt.AplicarCalendariosAGantt;
@@ -1616,6 +1942,8 @@ begin
   try
     if Assigned(FGanttControl) then
       FGanttControl.SetViewport(StartTime, PxPerMinute, ScrollX);
+    if Assigned(FSummaryControl) then
+      FSummaryControl.SetViewport(StartTime, PxPerMinute, ScrollX);
   finally
     FUpdatingViewport := False;
   end;
@@ -1627,6 +1955,125 @@ begin
   if Assigned(FGanttControl) then
     FGanttControl.TimelineInteraction(Sender, Interacting);
 end;
+procedure TfrmVistaGantt.SyncSummaryToolbarWidth;
+begin
+  if Assigned(pnlSummaryToolbar) and Assigned(pnlCentros) then
+    pnlSummaryToolbar.Width := pnlCentros.Width;
+end;
+
+procedure TfrmVistaGantt.AplicarNodeLayoutSet;
+var
+  Repo: TNodeLayoutSetRepo;
+  ASet: TNodeLayoutSet;
+begin
+  if not Assigned(FGanttControl) then Exit;
+  if (DMPlanner = nil) or (not DMPlanner.IsConnected) then Exit;
+
+  Repo := TNodeLayoutSetRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Repo.LoadActive(ASet);
+    FGanttControl.SetNodeLayoutSet(ASet);
+  finally
+    Repo.Free;
+  end;
+end;
+
+procedure TfrmVistaGantt.SummaryViewportChanged(Sender: TObject;
+  const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
+begin
+  if FUpdatingViewport then Exit;
+  FUpdatingViewport := True;
+  try
+    if Assigned(FGanttControl) then
+      FGanttControl.SetViewport(StartTime, PxPerMinute, ScrollX);
+    if Assigned(FTimelineControl) then
+      FTimelineControl.SetViewport(StartTime, PxPerMinute, ScrollX);
+  finally
+    FUpdatingViewport := False;
+  end;
+  SaveViewportPrefs;
+end;
+
+procedure TfrmVistaGantt.RebuildSummaryData;
+var
+  vStart, vEnd: TDateTime;
+begin
+  if not Assigned(FSummaryControl) then Exit;
+
+  FreeAndNil(FSummaryNodeCountByDay);
+
+  if (FSummaryControl.View = svNone) or (not Assigned(FGanttControl)) then
+  begin
+    FSummaryControl.Invalidate;
+    Exit;
+  end;
+
+  // Calculem sobre TOT el rang del pla (no nomes el visible): el compte per dia
+  // no depen de l'scroll horitzontal, aixi el pan/zoom NO necessita recalcular
+  // (lookup O(1) per dia). Marge ampli per cobrir nodes fora del rang nominal.
+  vStart := FGanttControl.StartTime - 2;
+  vEnd := FGanttControl.EndTime + 2;
+
+  case FSummaryControl.View of
+    svNodeCount:
+      FSummaryNodeCountByDay := FGanttControl.GetVisibleNodeCountByDay(vStart, vEnd);
+  end;
+
+  FSummaryControl.Invalidate;
+end;
+
+procedure TfrmVistaGantt.SummaryDayKPI(Sender: TObject; const ADate: TDateTime;
+  out ALine1, ALine2: string; out AHighlight: Boolean);
+var
+  n: Integer;
+begin
+  ALine1 := '';
+  ALine2 := '';
+  AHighlight := False;
+
+  case FSummaryControl.View of
+    svNodeCount:
+      begin
+        n := 0;
+        if Assigned(FSummaryNodeCountByDay) then
+          FSummaryNodeCountByDay.TryGetValue(DateOf(ADate), n);
+        if n > 0 then
+        begin
+          ALine1 := IntToStr(n);
+          ALine2 := 'nodos';
+        end;
+      end;
+  end;
+end;
+
+procedure TfrmVistaGantt.SetSummaryView(const AView: TSummaryView);
+begin
+  if not Assigned(FSummaryControl) then Exit;
+  FSummaryControl.View := AView;
+  RebuildSummaryData;  // recalcula el cache i repinta
+end;
+
+procedure TfrmVistaGantt.btnS1Click(Sender: TObject);
+begin
+  if btnS1.Down then SetSummaryView(svS1) else SetSummaryView(svNone);
+end;
+
+procedure TfrmVistaGantt.btnS2Click(Sender: TObject);
+begin
+  if btnS2.Down then SetSummaryView(svS2) else SetSummaryView(svNone);
+end;
+
+procedure TfrmVistaGantt.btnS3Click(Sender: TObject);
+begin
+  if btnS3.Down then SetSummaryView(svS3) else SetSummaryView(svNone);
+end;
+
+procedure TfrmVistaGantt.btnS4Click(Sender: TObject);
+begin
+  // btnS4 = vista 'Nodos': numero de nodos visibles que tocan cada dia.
+  if btnS4.Down then SetSummaryView(svNodeCount) else SetSummaryView(svNone);
+end;
+
 procedure TfrmVistaGantt.GanttViewportChanged(Sender: TObject;
   const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
 begin
@@ -1635,9 +2082,17 @@ begin
   FUpdatingViewport := True;
   try
     FTimelineControl.SetViewport(StartTime, PxPerMinute, ScrollX);
+    if Assigned(FSummaryControl) then
+      FSummaryControl.SetViewport(StartTime, PxPerMinute, ScrollX);
   finally
     FUpdatingViewport := False;
   end;
+  // El compte per dia no depen de l'scroll/zoom (map complet del pla) -> no cal
+  // recalcular aqui. Repaint IMMEDIAT de timeline i summary perque segueixin el
+  // pan/zoom del Gantt sense moviment "a blocs".
+  FTimelineControl.Update;
+  if Assigned(FSummaryControl) then
+    FSummaryControl.Update;
   SaveViewportPrefs;
 end;
 procedure TfrmVistaGantt.GanttScrollYChanged(Sender: TObject;
@@ -1651,6 +2106,10 @@ begin
     // frame por detras y se ve un desfase feo entre ambas columnas.
     FCentrosControl.Update;
   end;
+  // Persistir el scroll vertical igual que el horizontal/zoom (GanttViewportChanged):
+  // asi el Gantt reabre exactamente a la misma altura. FLoadingPrefs evita
+  // re-guardar mientras restauramos el viewport al arrancar.
+  SaveViewportPrefs;
 end;
 
 procedure TfrmVistaGantt.GanttStatsChanged(Sender: TObject);
@@ -1677,6 +2136,13 @@ begin
   begin
     FCentrosControl.SetRows(FGanttControl.GetRowsCopy);
     FCentrosControl.Invalidate;
+  end;
+  // El Gantt ja te layout (mida/dades correctes): refresquem la banda de resum,
+  // que pot haver-se pintat abans de tenir la mida final.
+  if Assigned(FSummaryControl) then
+  begin
+    RebuildSummaryData;
+    FSummaryControl.Invalidate;
   end;
 end;
 
@@ -1706,6 +2172,12 @@ begin
     Frm.Free;
   end;
 
+  // Refrescar el Gantt: el gestor escribe directamente en BD (altas, ediciones,
+  // borrados), asi que recargamos los marcadores del control para que reflejen
+  // los cambios sin reabrir la vista.
+  CargarMarcadores;
+  if Assigned(FGanttControl) then
+    FGanttControl.Invalidate;
 end;
 
 procedure TfrmVistaGantt.GanttNodeDblClick(Sender: TObject;
@@ -1761,9 +2233,13 @@ begin
         begin
           FGanttControl.RemoveMarker(MarkerId);
           FGanttControl.AddMarker(M);
+          PersistMarcadores;   // guardar edicion
         end;
         merDelete:
+        begin
           FGanttControl.RemoveMarker(MarkerId);
+          PersistMarcadores;   // guardar borrado
+        end;
       end;
       Exit;
     end;
@@ -1777,24 +2253,10 @@ begin
     FGanttControl.ApplyScrollYFromCentres(ScrollY);
 end;
 
-procedure TfrmVistaGantt.chkShowKPIsClick(Sender: TObject);
-begin
-  FCentrosControl.VerIndicadores := chkShowKPIs.Checked;
-
-  // Ajustar el panell al nou Width del control (BaseWidth + IndicadoresWidth o BaseWidth)
-  pnlCentros.Width := FCentrosControl.Width;
-
-  FGanttControl.NotifyViewportChanged;
-
-  if FCentrosControl.VerIndicadores then
-    RebuildCentreKPIs_Parallel( FALSE );
-
-  FCentrosControl.Repaint;
-end;
-
 destructor TfrmVistaGantt.Destroy;
 begin
   FreeAndNil(FCentreKPIs);
+  FreeAndNil(FSummaryNodeCountByDay);
   inherited;
 end;
 
@@ -2340,6 +2802,32 @@ begin
   if Assigned(Form1) then
     Form1.LaunchAutoPlanificacion(Ids);
   FGanttControl.Invalidate;
+end;
+
+procedure TfrmVistaGantt.btnConfigCentrosClick(Sender: TObject);
+var
+  Frm: TfrmGestionCentres;
+begin
+  Frm := TfrmGestionCentres.Create(Self);
+  try
+    Frm.ShowModal;
+  finally
+    Frm.Free;
+  end;
+  DMPlanner.LoadCentres;
+
+end;
+
+procedure TfrmVistaGantt.btnKPIAllClick(Sender: TObject);
+begin
+   if FCentrosControl.VerIndicadores then
+    RebuildCentreKPIs_Parallel( TRUE );
+end;
+
+procedure TfrmVistaGantt.btnKPIVisibleClick(Sender: TObject);
+begin
+ if FCentrosControl.VerIndicadores then
+    RebuildCentreKPIs_Parallel( FALSE );
 end;
 
 procedure TfrmVistaGantt.btnAutoPlanAllClick(Sender: TObject);

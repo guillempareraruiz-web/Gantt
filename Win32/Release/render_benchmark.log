@@ -1,0 +1,42 @@
+[2026-06-13 10:05:12] Render=GDI/bitmap  nodos=500  frames=300  min=10,70  avg=12,90  max=20,15 ms  ~78 fps
+[2026-06-13 10:05:35] Render=D2D nativo  nodos=500  frames=300  min=10,83  avg=13,28  max=19,39 ms  ~75 fps
+[2026-06-13 10:11:49] Render=D2D nativo  nodos=1000  frames=300  min=11,64  avg=13,62  max=20,92 ms  ~73 fps
+   fases ms/frame: create+brushes=4,88  fondo=0,41  nodos=3,69  overlays=0,01  endDraw=4,61
+[2026-06-13 10:12:13] Render=GDI/bitmap  nodos=1000  frames=300  min=11,64  avg=13,66  max=20,62 ms  ~73 fps
+   fases ms/frame: create+brushes=4,98  fondo=0,41  nodos=3,60  overlays=0,01  endDraw=4,63
+[2026-06-13 10:15:45] Render=D2D nativo  nodos=1000  frames=112  min=43,21  avg=46,04  max=60,39 ms  ~22 fps
+   fases ms/frame: create+brushes=4,98  fondo=0,37  nodos=34,05  overlays=0,00  endDraw=6,60
+[2026-06-13 10:16:12] Render=D2D nativo  nodos=1000  frames=300  min=42,93  avg=48,20  max=82,79 ms  ~21 fps
+   fases ms/frame: create+brushes=5,59  fondo=0,38  nodos=34,91  overlays=0,00  endDraw=7,28
+[2026-06-13 10:16:34] Render=GDI/bitmap  nodos=1000  frames=300  min=43,16  avg=48,37  max=71,51 ms  ~21 fps
+   fases ms/frame: create+brushes=5,96  fondo=0,39  nodos=34,24  overlays=0,00  endDraw=7,73
+[2026-06-13 10:25:49] Render=D2D nativo  nodos=1000  frames=300  min=43,17  avg=49,49  max=75,73 ms  ~20 fps
+   fases ms/frame: create+brushes=6,09  fondo=0,41  nodos=35,10  overlays=0,00  endDraw=7,85
+[2026-06-13 10:31:41] Render=D2D nativo  nodos=1000  frames=300  min=44,62  avg=50,21  max=74,53 ms  ~20 fps
+   fases ms/frame: create+brushes=6,55  fondo=0,38  nodos=34,98  overlays=0,00  endDraw=8,25
+   por frame: nodos_pintados=300  text_calls=0  (us/nodo=116,6)
+[2026-06-13 10:39:16] Render=D2D nativo  nodos=1000  frames=300  min=39,69  avg=44,40  max=62,01 ms  ~23 fps
+   fases ms/frame: create+brushes=5,66  fondo=0,02  nodos=34,18  overlays=0,00  endDraw=4,50
+   por frame: nodos_pintados=270  text_calls=540  clips=270  (us/nodo=126,6)
+[2026-06-13 10:42:11] BENCHMARK nodos=1000 frames=300
+   completo       avg=48,24 ms  ~21 fps   nodos_fase=34,80  nodos_pint=300  text=600  clips=300
+   sin texto      avg=32,99 ms  ~30 fps   nodos_fase=16,61  nodos_pint=300  text=0  clips=300
+   sin clip+texto avg=17,08 ms  ~59 fps   nodos_fase=1,70  nodos_pint=300  text=0  clips=0
+[2026-06-13 10:50:58] BENCHMARK nodos=1000 frames=300
+   completo       avg=35,22 ms  ~28 fps   nodos_fase=19,93  nodos_pint=264  text=264  clips=234
+   sin texto      avg=16,37 ms  ~61 fps   nodos_fase=1,77  nodos_pint=264  text=0  clips=0
+   sin clip+texto avg=15,95 ms  ~63 fps   nodos_fase=1,65  nodos_pint=264  text=0  clips=0
+[2026-06-13 11:14:58] BENCHMARK nodos=1000 frames=300
+   GDI TextOut    avg=30,91 ms  ~32 fps   nodos_fase=18,88  nodos_pint=210  text=306  clips=210
+   DirectWrite    avg=36,66 ms  ~27 fps   nodos_fase=19,73  nodos_pint=210  text=306  clips=210
+   sin texto      avg=15,58 ms  ~64 fps   nodos_fase=1,69  nodos_pint=210  text=0  clips=0
+   sin clip+texto avg=15,20 ms  ~66 fps   nodos_fase=1,55  nodos_pint=210  text=0  clips=0
+[2026-06-13 11:28:12] BENCHMARK nodos=1000 frames=300
+   GDI TextOut    avg=32,96 ms  ~30 fps   nodos_fase=19,55  nodos_pint=270  text=270  clips=240
+   DirectWrite    avg=37,84 ms  ~26 fps   nodos_fase=19,75  nodos_pint=270  text=270  clips=240
+   sin texto      avg=15,76 ms  ~63 fps   nodos_fase=1,72  nodos_pint=270  text=0  clips=0
+   sin clip+texto avg=15,76 ms  ~63 fps   nodos_fase=1,72  nodos_pint=270  text=0  clips=0
+[2026-06-13 11:53:27] BENCHMARK nodos=1000 frames=300
+   completo       avg=37,39 ms  ~27 fps   nodos_fase=20,82  nodos_pint=240  text=310  clips=236
+   sin texto      avg=15,59 ms  ~64 fps   nodos_fase=1,60  nodos_pint=240  text=0  clips=0
+   sin clip+texto avg=15,57 ms  ~64 fps   nodos_fase=1,62  nodos_pint=240  text=0  clips=0

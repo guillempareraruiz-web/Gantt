@@ -20,6 +20,8 @@ uses
   uCustomFieldDefs, uCustomFieldEditor, uCustomColsManager,
   uPlanningRules, uPlanningRulesEditor,
   uCardLayoutSetRepo, uCardLayoutSetManager,
+  uNodeCardLayout, uNodeLayoutSetRepo, uNodeLayoutEditor,
+  uGanttHintConfig, uGanttHintConfigRepo, uGanttHintConfigEditor,
   uDashBoard, uVistaGantt, uFiniteCapacityPlanner,
   uBacklog, uFiniteCapacityOperaris, dxGDIPlusClasses,
   dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
@@ -77,6 +79,8 @@ type
     ReglasPlanificacion1: TMenuItem;
     NCards1: TMenuItem;
     GestionCardLayouts1: TMenuItem;
+    DisenadorNodos1: TMenuItem;
+    ConfigHint1: TMenuItem;
     Vistas1: TMenuItem;
     Kanban1: TMenuItem;
     DispatchList1: TMenuItem;
@@ -115,9 +119,11 @@ type
     btnTB_BackLog: TcxButton;
     btnTB_PlaniCentros: TcxButton;
     cxButton1: TcxButton;
-    btnTB_PlaniOperarios: TcxButton;
+
+    Label28: TLabel;  btnTB_PlaniOperarios: TcxButton;
     btnTB_PlaniGantt: TcxButton;
     btnTB_Help: TcxButton;
+    Label29: TLabel;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -187,6 +193,8 @@ type
     procedure ColumnasPersonalizadas1Click(Sender: TObject);
     procedure ReglasPlanificacion1Click(Sender: TObject);
     procedure GestionCardLayouts1Click(Sender: TObject);
+    procedure DisenadorNodos1Click(Sender: TObject);
+    procedure ConfigHint1Click(Sender: TObject);
     procedure Kanban1Click(Sender: TObject);
     procedure DispatchList1Click(Sender: TObject);
     procedure Backlog1Click(Sender: TObject);
@@ -732,6 +740,62 @@ begin
   try
     Repo.SeedDefaultIfEmpty;
     ShowCardLayoutSetManager(Self, Repo, FCustomFieldDefs);
+  finally
+    Repo.Free;
+  end;
+end;
+
+procedure TForm1.DisenadorNodos1Click(Sender: TObject);
+var
+  Repo: TNodeLayoutSetRepo;
+  ASet: TNodeLayoutSet;
+begin
+  if not DMPlanner.IsConnected then
+  begin
+    ShowMessage('No hay conexi'#243'n a BD.');
+    Exit;
+  end;
+  Repo := TNodeLayoutSetRepo.Create(
+    DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Repo.SeedDefaultIfEmpty;
+    // Editar/guardar el set de layout de nodos por Vista y, al cerrar, recargar
+    // el set activo y aplicarlo al Gantt en caliente (render real, Fase 2).
+    if ShowNodeLayoutEditor(Self, Repo) then
+    begin
+      Repo.LoadActive(ASet);
+      if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
+        FVistaGantt.GanttControl.SetNodeLayoutSet(ASet);
+    end;
+  finally
+    Repo.Free;
+  end;
+end;
+
+procedure TForm1.ConfigHint1Click(Sender: TObject);
+var
+  Repo: THintConfigSetRepo;
+  ASet: THintConfigSet;
+begin
+  if not DMPlanner.IsConnected then
+  begin
+    ShowMessage('No hay conexi'#243'n a BD.');
+    Exit;
+  end;
+  Repo := THintConfigSetRepo.Create(
+    DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Repo.SeedDefaultIfEmpty;
+    if ShowGanttHintConfigEditor(Self, Repo) then
+    begin
+      // Recarga la config activa y la aplica al Gantt en caliente.
+      Repo.LoadActive(ASet);
+      if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
+      begin
+        FVistaGantt.GanttControl.SetHintConfigSet(ASet);
+        FVistaGantt.GanttControl.Invalidate;
+      end;
+    end;
   finally
     Repo.Free;
   end;
@@ -1401,6 +1465,37 @@ begin
 
   // Inicializar / re-cablear el auto-saver para el plan recien cargado
   InitAutoSaver;
+
+  // Cargar la config del hint (que campos y orden por Vista) y aplicarla al
+  // Gantt, para que el hover muestre lo que el usuario eligio.
+  if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
+  begin
+    var HintRepo := THintConfigSetRepo.Create(
+      DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    try
+      var HintSet: THintConfigSet;
+      HintRepo.LoadActive(HintSet);
+      FVistaGantt.GanttControl.SetHintConfigSet(HintSet);
+    finally
+      HintRepo.Free;
+    end;
+  end;
+
+  // Cargar el Node Layout Set (contenido visual de los nodos por Vista) y
+  // aplicarlo al Gantt, para que el render pinte cada nodo segun el diseno
+  // elegido en el "Disenador de Nodos del Gantt".
+  if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
+  begin
+    var NodeLayoutRepo := TNodeLayoutSetRepo.Create(
+      DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    try
+      var NodeLayoutSet: TNodeLayoutSet;
+      NodeLayoutRepo.LoadActive(NodeLayoutSet);
+      FVistaGantt.GanttControl.SetNodeLayoutSet(NodeLayoutSet);
+    finally
+      NodeLayoutRepo.Free;
+    end;
+  end;
 
   // Si la VistaGantt ya existe, refrescarla con los nuevos datos
   if Assigned(FVistaGantt) and FVistaGantt.Visible then

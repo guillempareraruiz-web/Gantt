@@ -151,7 +151,9 @@ uses
   uCardLayoutEditor in 'uCardLayoutEditor.pas' {frmCardLayoutEditor},
   uModalOverlayAuto in 'uModalOverlayAuto.pas',
   uHelpAutoInstall in 'uHelpAutoInstall.pas',
-  uKPICard in 'uKPICard.pas';
+  uKPICard in 'uKPICard.pas',
+  uNodeLayoutEditor in 'uNodeLayoutEditor.pas' {frmNodeLayoutEditor},
+  uNodeLayoutSetRepo in 'uNodeLayoutSetRepo.pas';
 
 {$R *.res}
 

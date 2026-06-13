@@ -4,11 +4,12 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.DateUtils, System.Math, System.StrUtils,
+  System.Variants,
   System.Classes, System.SysUtils, System.Types, System.UITypes,
   Vcl.Controls, Vcl.Graphics, System.Generics.Collections, System.Generics.Defaults,
   uGanttTypes, uCentreCalendar, Vcl.Menus, uNodeDataRepo, uGanttNodeHint,
   Vcl.Forms, Vcl.Direct2D, Winapi.D2D1, Winapi.DXGIFormat, uErpTypes, uGanttHistory,
-  Vcl.ExtCtrls;
+  Vcl.ExtCtrls, uCardLayout, uNodeCardLayout, uGanttHintConfig;
 
 type
   TGanttViewportChangedEvent = procedure(Sender: TObject; const StartTime: TDateTime;
@@ -37,21 +38,8 @@ type
 
   TNodeHandle = (nhNone, nhLeft, nhRight, nhMove);
 
-
-  TGanttViewMode = (
-    gvmNormal,
-    gvmOptimitzacio,
-    gvmFabricacio,
-    gvmFechaEntrega,
-    gvmStock,
-    gvmOperarios,   // extra
-    gvmCarga,          // extra (temps total segons unitats)
-    gvmEstado,  //...estado OF (esPendiente, esEnCurso, esFinalizado, esBloqueado);
-    gvmPrioridad,  //... Si tens prioritats A/B/C o 1..5:
-    gvmRendimiento,
-    gvmColores,
-    gvmModificaciones
-  );
+  // TGanttViewMode s'ha mogut a uGanttTypes (tipus de domini) perque unitats de
+  // model com uNodeCardLayout el puguin usar sense dependre de uGanttControl.
 
   // 0=només el node, 1=per NumeroTrabajo, 2=per NumeroFabricacion+Serie
   TOpColorApplyType = (octOnlyNode, octByTrabajo, octByFabricacionSerie);
@@ -117,6 +105,11 @@ type
 
     FScrollInvalidateTimer: UINT_PTR;
     FPendingInvalidate: Boolean;
+    // Throttle del pan: el MouseMove nomes guarda el target; un timer (~16ms)
+    // aplica i repinta els 4 controls junts (Gantt + Centros + timeline + summary).
+    FPanTimer: UINT_PTR;
+    FPendingPan: Boolean;
+    FPanTargetX, FPanTargetY: Single;
     FFastPaint: Boolean;
     FTimelineInteracting: Boolean;
 
@@ -188,6 +181,7 @@ type
     FLinkPreviewEnd: TPointF;     // posició actual del cursor (screen)
 
     FMarqueeSelecting: Boolean;
+    FSuppressContextMenu: Boolean;  // True si el dret ha estat un marquee (no menu)
     FMarqueeStartPt: TPoint;
     FMarqueeCurrentPt: TPoint;
     FDashOffset: Single;
@@ -196,6 +190,27 @@ type
     FHintWnd: TGanttNodeHintWindow;
     FHintNodeIndex: Integer;
     FHintShown: Boolean;
+    // Hint amb delay: en lloc de mostrar-lo a l'instant en entrar a un node,
+    // arrenquem un timer; si el cursor segueix sobre el mateix node quan salta,
+    // el mostrem. Aixi s'evita el parpelleig en passar per sobre rapidament.
+    FHintTimer: TTimer;
+    FHintPendingNode: Integer;
+    FHintPendingScreen: TPoint;
+    // Config del hint per Vista (que camps i en quin ordre). Si no s'assigna,
+    // BuildNodeHintText cau al text per defecte hardcoded.
+    FHintConfigSet: THintConfigSet;
+    FHintConfigSet_Set: Boolean;
+
+    // Layout visual dels nodes per Vista (Disenador de Nodos del Gantt). Si no
+    // s'assigna, DrawNodeText cau al render per defecte (Caption + Articulo).
+    FNodeLayoutSet: TNodeLayoutSet;
+    FNodeLayoutSet_Set: Boolean;
+
+    // --- Frame cache: pintem D2D a un bitmap off-screen i el reusem mentre res
+    // no canvii (FFrameValid). Invalidate l'invalida. En estatic -> nomes blit.
+    FFrameBmp: TBitmap;
+    FFrameValid: Boolean;
+
     FRenderMode: TGanttRenderMode;
 
     FLinks: TArray<TErpLink>;
@@ -279,6 +294,12 @@ type
     procedure HideNodeHint;
     procedure ShowNodeHint(const NodeIndex: Integer; const MouseScreen: TPoint);
     function BuildNodeHintText(const NodeIndex: Integer): string;
+    function BuildNodeHintTextFromConfig(const NodeIndex: Integer;
+      out AText: string): Boolean;
+    // Programa la mostra del hint amb delay (cancel·la qualsevol pendent).
+    procedure ScheduleNodeHint(const NodeIndex: Integer; const MouseScreen: TPoint);
+    procedure CancelPendingHint;
+    procedure HintTimerTick(Sender: TObject);
 
     procedure ClearDataIdIndex;
     procedure BuildDataIdIndex;
@@ -288,6 +309,7 @@ type
     procedure StartScrollInvalidateTimer;
     procedure StopScrollInvalidateTimer;
     procedure WMTimer(var Message: TWMTimer); message WM_TIMER;
+    procedure ApplyPendingPan;
 
     procedure ScrollByPixels(const dx, dy: Integer; const ScrollRect: TRect);
 
@@ -506,6 +528,7 @@ type
 
     procedure Paint; override;
     procedure PaintD2D; virtual;
+    procedure Invalidate; override;   // invalida tambe el frame cache
     procedure Resize; override;
 
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
@@ -584,6 +607,13 @@ type
 
     procedure RebuildOpIdIndex;
     procedure RebuildNodeLayoutIndex;
+    // Assigna la config del hint (que camps i ordre per Vista). Si no es crida,
+    // el hint usa el text per defecte.
+    procedure SetHintConfigSet(const ASet: THintConfigSet);
+    // Assigna el layout visual dels nodes (contingut per Vista). Si no es crida,
+    // el render cau al text per defecte (Caption + CodigoArticulo).
+    procedure SetNodeLayoutSet(const ASet: TNodeLayoutSet);
+
     procedure RebuildAfterModelChange(const RebuildNodeIndexMap: Boolean);
     procedure ResetNodeDuration(const ANodeIndex: Integer);
 
@@ -701,6 +731,13 @@ type
     function NodeCount: Integer;
     function GetNodeAt(const Index: Integer): TNode;
 
+    // Compta, per cada dia dins [AFrom..ATo], quants nodes de FILES VISIBLES
+    // (centre visible/habilitat, respectant el filtre d'operaris en mode ocultar)
+    // toquen aquell dia (interval StartTime..EndTime intersecta el dia). El caller
+    // es responsable d'alliberar el diccionari resultant. Clau = DateOf(dia).
+    function GetVisibleNodeCountByDay(const AFrom, ATo: TDateTime):
+      TDictionary<TDate, Integer>;
+
     // Desplazamiento vertical maximo del Gantt (px). Es la referencia: el control
     // de Centros debe usar ESTE valor para clampar su scroll, no calcular el suyo,
     // porque el ClientHeight de ambos difiere (el Gantt resta la scrollbar horizontal)
@@ -712,6 +749,9 @@ type
     property NodePopupMenu: TPopupMenu read FNodePopupMenu write FNodePopupMenu;
     property GanttPopupMenu: TPopupMenu read FGanttPopupMenu write FGanttPopupMenu;
     property ScrollX: Single read FScrollX write SetScrollX;
+    // Lectura del scroll vertical actual (para persistir el viewport). La
+    // escritura se hace via ApplyScrollYFromCentres (clampa contra GetMaxScrollY).
+    property ScrollY: Single read FScrollY;
     property FechaBloqueo: TDateTime read FFechaBloqueo write SetFechaBloqueo;
 
     procedure ClearSearch;
@@ -1799,6 +1839,13 @@ begin
   FHintWnd := TGanttNodeHintWindow.Create(Self);
   FHintNodeIndex := -1;
   FHintShown := False;
+  FHintPendingNode := -1;
+  FHintConfigSet_Set := False;
+  FNodeLayoutSet_Set := False;
+  FHintTimer := TTimer.Create(Self);
+  FHintTimer.Interval := 450; // delay abans de mostrar el hint (ms)
+  FHintTimer.Enabled := False;
+  FHintTimer.OnTimer := HintTimerTick;
 
   FDraggingBloqueo := False;
 
@@ -1824,6 +1871,7 @@ begin
   FOpFilterDataIds.Free;
 
   FSelectedNodeIndexes.Free;
+  FFrameBmp.Free;
 
   HideNodeHint;
 
@@ -1958,6 +2006,11 @@ begin
   if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
   if FNodeRepo = nil then Exit;
 
+  // Si hi ha config de hint per Vista assignada, la fem servir (camps i ordre
+  // triats per l'usuari). Si no, caiem al text per defecte d'aquesta funcio.
+  if BuildNodeHintTextFromConfig(NodeIndex, Result) then
+    Exit;
+
   n := FNodes[NodeIndex];
 
   if (n.DataId = 0) or (not FNodeRepo.TryGetById(n.DataId, d)) then
@@ -1990,8 +2043,45 @@ begin
     'Dependencia: ' + FormatFloat('0.##', d.PorcentajeDependencia) + '%';
 end;
 
+function TGanttControl.BuildNodeHintTextFromConfig(const NodeIndex: Integer;
+  out AText: string): Boolean;
+var
+  n: TNode;
+  d: TNodeData;
+  Layout: THintLayout;
+  Resolver: TCardFieldResolver;
+begin
+  Result := False;
+  AText := '';
+  if not FHintConfigSet_Set then Exit;
+  if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
+  if FNodeRepo = nil then Exit;
+
+  n := FNodes[NodeIndex];
+  if (n.DataId = 0) or (not FNodeRepo.TryGetById(n.DataId, d)) then Exit;
+
+  Layout := FHintConfigSet.Layouts[FVista];
+  Resolver := MakeNodeDataResolver(d);
+  AText := BuildHintText(Layout, Resolver);
+  Result := True; // hem usat la config (encara que el text quedi buit)
+end;
+
+procedure TGanttControl.SetHintConfigSet(const ASet: THintConfigSet);
+begin
+  FHintConfigSet := ASet;
+  FHintConfigSet_Set := True;
+end;
+
+procedure TGanttControl.SetNodeLayoutSet(const ASet: TNodeLayoutSet);
+begin
+  FNodeLayoutSet := ASet;
+  FNodeLayoutSet_Set := True;
+  Invalidate;
+end;
+
 procedure TGanttControl.HideNodeHint;
 begin
+  CancelPendingHint;
   if FHintShown and Assigned(FHintWnd) then
   begin
     ShowWindow(FHintWnd.Handle, SW_HIDE);
@@ -1999,6 +2089,49 @@ begin
     FHintShown := False;
     FHintNodeIndex := -1;
   end;
+end;
+
+procedure TGanttControl.CancelPendingHint;
+begin
+  if Assigned(FHintTimer) then
+    FHintTimer.Enabled := False;
+  FHintPendingNode := -1;
+end;
+
+procedure TGanttControl.ScheduleNodeHint(const NodeIndex: Integer;
+  const MouseScreen: TPoint);
+begin
+  // Si ja s'esta mostrant aquest mateix node, no cal reprogramar res.
+  if FHintShown and (FHintNodeIndex = NodeIndex) then
+  begin
+    FHintPendingNode := -1;
+    Exit;
+  end;
+  FHintPendingNode := NodeIndex;
+  FHintPendingScreen := MouseScreen;
+  if Assigned(FHintTimer) then
+  begin
+    FHintTimer.Enabled := False; // reinicia el compte enrere
+    FHintTimer.Enabled := True;
+  end;
+end;
+
+procedure TGanttControl.HintTimerTick(Sender: TObject);
+var
+  idx: Integer;
+  ptClient: TPoint;
+begin
+  FHintTimer.Enabled := False;
+  idx := FHintPendingNode;
+  FHintPendingNode := -1;
+  if idx < 0 then Exit;
+
+  // Nomes mostrem si el cursor segueix realment sobre el mateix node: aixi
+  // evitem que aparegui despres d'haver-ne sortit.
+  ptClient := ScreenToClient(Mouse.CursorPos);
+  if HitTestNodeIndex(ptClient.X, ptClient.Y) <> idx then Exit;
+
+  ShowNodeHint(idx, FHintPendingScreen);
 end;
 
 procedure TGanttControl.ShowNodeHint(const NodeIndex: Integer; const MouseScreen: TPoint);
@@ -2331,6 +2464,34 @@ begin
   FPendingInvalidate := False;
 end;
 
+procedure TGanttControl.ApplyPendingPan;
+var
+  siPan: TScrollInfo;
+begin
+  if not FPendingPan then Exit;
+  FPendingPan := False;
+
+  FScrollX := FPanTargetX;
+  FScrollY := FPanTargetY;
+
+  // ORDRE: el Gantt (el mes lent de pintar) PRIMER, despres els acompanyants,
+  // tots dins del mateix tick del timer -> es mouen sincronitzats.
+  Invalidate;
+  Update;
+
+  // VERTICAL: thumb + Centros (GanttScrollYChanged repinta Centros).
+  FillChar(siPan, SizeOf(siPan), 0);
+  siPan.cbSize := SizeOf(siPan);
+  siPan.fMask := SIF_POS;
+  siPan.nPos := Round(FScrollY);
+  SetScrollInfo(Handle, SB_VERT, siPan, True);
+  if Assigned(FOnScrollYChanged) then
+    FOnScrollYChanged(Self, FScrollY);
+
+  // HORITZONTAL: timeline + summary (GanttViewportChanged els repinta).
+  NotifyViewportChanged;
+end;
+
 procedure TGanttControl.WMTimer(var Message: TWMTimer);
 begin
   inherited;
@@ -2342,7 +2503,9 @@ begin
       FPendingInvalidate := False;
       Invalidate; // 1 repintat cada ~20ms màxim
     end;
-  end;
+  end
+  else if (Message.TimerID = 2) then
+    ApplyPendingPan;
 end;
 
 
@@ -2819,21 +2982,9 @@ begin
   FScrollX := EnsureRange(FScrollX, 0, MaxX);
   FScrollY := EnsureRange(FScrollY, 0, MaxY);
 
-  // HORZ
-  FillChar(si, SizeOf(si), 0);
-  si.cbSize := SizeOf(si);
-  si.fMask := SIF_RANGE or SIF_PAGE or SIF_POS;
-  si.nMin := 0;
-  si.nPage := ClientWidth;
-
-  // nMax ha de ser "MaxX + page - 1" perquè el thumb pugui arribar a MaxX
-  if MaxX = 0 then
-    si.nMax := 0
-  else
-    si.nMax := MaxX + Integer(si.nPage) - 1;
-
-  si.nPos := Round(FScrollX);
-  SetScrollInfo(Handle, SB_HORZ, si, True);
+  // HORZ: amagada. La navegacio horitzontal es fa per PAN (drag al fons) i el
+  // wheel fa zoom; no mostrem barra de scroll horitzontal al Gantt.
+  ShowScrollBar(Handle, SB_HORZ, False);
 
   // VERT
   FillChar(si, SizeOf(si), 0);
@@ -2884,8 +3035,8 @@ var
   newScroll: Single;
   zoomFactor: Single;
 begin
- Exit;
- //Pendent;
+  // Wheel = zoom al voltant del cursor (com el timeline). Emet OnViewportChanged
+  // -> uVistaGantt sincronitza timeline i banda de resum.
   pt := ScreenToClient(Message.Pos);
   xClient := pt.X;
 
@@ -2905,6 +3056,11 @@ begin
   newScroll := (VisibleMinutesBetween(FStartTime, tUnderCursor) * FPxPerMinute) - xClient;
   //FScrollX := Max(0, newScroll);
   FScrollX := ClampScrollX(newScroll);
+
+  // IMPORTANT: en canviar el zoom (FPxPerMinute) cal recalcular els rectangles
+  // dels nodes (FNodeLayouts.Rect son WORLD precalculats amb el px/min). Sense
+  // aixo el fons (grid/dies) es reescalava pero els nodes quedaven al lloc antic.
+  RebuildLayout;
 
   NotifyViewportChanged;
   Invalidate;
@@ -2932,6 +3088,14 @@ var
   nodeIdx: Integer;
   ptScreen: TPoint;
 begin
+  // Si el botó dret ha estat un marquee (drag), no mostrem cap menu.
+  if FSuppressContextMenu then
+  begin
+    FSuppressContextMenu := False;
+    Handled := True;
+    Exit;
+  end;
+
   // MousePos ve en coords client. Quan és teclat (Shift+F10), pot venir (-1,-1)
   if (MousePos.X < 0) or (MousePos.Y < 0) then
     MousePos := Point(ClientWidth div 2, ClientHeight div 2);
@@ -3867,6 +4031,45 @@ function TGanttControl.GetNodeAt(const Index: Integer): TNode;
 begin
   if (Index > 0) and (Index <= High(FNodes)) then
    Result := FNodes[Index];
+end;
+
+function TGanttControl.GetVisibleNodeCountByDay(const AFrom, ATo: TDateTime):
+  TDictionary<TDate, Integer>;
+var
+  i: Integer;
+  N: TNode;
+  d, dEnd, lo, hi: TDate;
+  cur: Integer;
+begin
+  Result := TDictionary<TDate, Integer>.Create;
+  lo := DateOf(AFrom);
+  hi := DateOf(ATo);
+
+  for i := 0 to High(FNodes) do
+  begin
+    N := FNodes[i];
+    if not N.Visible then Continue;
+    if not IsCentreVisible(N.CentreId) then Continue;
+    if not IsCentreEnabled(N.CentreId) then Continue;
+    // Filtre d'operaris en mode ocultar: no comptar els no filtrats.
+    if FOpFilterActive and FOpFilterHideMode and (N.DataId > 0) and
+       (not IsNodeOperarioFiltered(N.DataId)) then Continue;
+
+    // Dies que toca el node (interval StartTime..EndTime), retallat al rang.
+    d := DateOf(N.StartTime);
+    dEnd := DateOf(N.EndTime);
+    if d < lo then d := lo;
+    if dEnd > hi then dEnd := hi;
+
+    while d <= dEnd do
+    begin
+      if Result.TryGetValue(d, cur) then
+        Result[d] := cur + 1
+      else
+        Result.Add(d, 1);
+      d := d + 1;  // dia seguent (TDate enter = 1 dia)
+    end;
+  end;
 end;
 
 
@@ -6262,12 +6465,63 @@ begin
   end;
 end;
 
+procedure TGanttControl.Invalidate;
+begin
+  FFrameValid := False;   // qualsevol canvi que repinta invalida el frame cache
+  inherited;
+end;
+
 procedure TGanttControl.Paint;
 begin
-  // Decideix el pipeline de pintat
-  if (FRenderMode = grmAdvancedD2D) and TDirect2DCanvas.Supported then
-    PaintD2D
+  if not ((FRenderMode = grmAdvancedD2D) and TDirect2DCanvas.Supported) then
+    Exit;
 
+  // Assegurem el bitmap off-screen a la mida del client.
+  if FFrameBmp = nil then
+  begin
+    FFrameBmp := TBitmap.Create;
+    FFrameBmp.PixelFormat := pf32bit;
+  end;
+  if (FFrameBmp.Width <> ClientWidth) or (FFrameBmp.Height <> ClientHeight) then
+  begin
+    FFrameBmp.SetSize(Max(1, ClientWidth), Max(1, ClientHeight));
+    FFrameValid := False;
+  end;
+
+  // Frame cache: nomes re-renderitzem si alguna cosa ha invalidat el frame.
+  // En estatic (WM_PAINT espuri del SO) reusem el bitmap -> nomes el blit.
+  if not FFrameValid then
+  begin
+    PaintD2D;                 // pinta sobre FFrameBmp (off-screen)
+    FFrameValid := True;
+  end;
+
+  Canvas.Draw(0, 0, FFrameBmp);
+
+  // ===== DIAGNOSTIC TEMPORAL: vista actual + layout carregat per aquesta vista.
+  // (treure quan es resolgui el tema del NodeLayout per vista)
+  if FNodeLayoutSet_Set then
+  begin
+    var dbgL := FNodeLayoutSet.Layouts[FVista];
+    var dbg := Format('Vista=%s  Layout="%s"  files=%d  set=%d',
+      [GanttViewModeToStr(FVista), dbgL.Name, Length(dbgL.Rows),
+       Ord(FNodeLayoutSet_Set)]);
+    Canvas.Brush.Style := bsSolid;
+    Canvas.Brush.Color := $00203020;
+    Canvas.Font.Name := 'Consolas';
+    Canvas.Font.Size := 8;
+    Canvas.Font.Color := clYellow;
+    Canvas.TextOut(6, ClientHeight - 20, dbg);
+  end
+  else
+  begin
+    Canvas.Brush.Style := bsSolid;
+    Canvas.Brush.Color := $00203020;
+    Canvas.Font.Name := 'Consolas';
+    Canvas.Font.Size := 8;
+    Canvas.Font.Color := clRed;
+    Canvas.TextOut(6, ClientHeight - 20, 'NodeLayoutSet NO assignat (fallback)');
+  end;
 end;
 
 
@@ -6857,6 +7111,12 @@ procedure TGanttControl.PaintD2D;
 const
   PAD_X = 4;
   PAD_Y = 2;
+  // Nivell de detall (LOD) per amplada de node, en px:
+  //  < LOD_MIN_W  -> nomes barra de color (cap text/contingut, cap clip)
+  //  < LOD_FULL_W -> nomes 1a linia (1 sola crida de text)
+  //  >= LOD_FULL_W-> contingut complet
+  LOD_MIN_W  = 30;
+  LOD_FULL_W = 90;
 var
   i, j, StartIdx: Integer;
   Row: TRowLayout;
@@ -6939,36 +7199,281 @@ var
     end;
   end;
 
+  // --- Via A: render NATIU Direct2D del contingut del node (sense GDI/flush) ---
+  // Mateixa matematica de layout que RenderCard (files, amfles fixes/auto,
+  // condicions, regles d'estil) pero dibuixant amb primitives D2D. Reutilitza
+  // els helpers publics ResolveExpr/EvaluateStyleRules/ResolveFieldBgColor de
+  // uCardLayout perque la part fragil (resolucio i regles) no divergeixi.
+  procedure RenderNodeLayoutD2D(const ARect: TRectF; const ANode: TNode;
+    const AData: TNodeData; const ALodMaxRows: Integer);
+  var
+    NodeL: TNodeCardLayout;
+    Resolver: TCardFieldResolver;
+    RowIdx, ElemIdx: Integer;
+    Row: TNodeCardRow;
+    Elem: TNodeCardElement;
+    Yf, Xf, ElemW, AvailW, FixedW: Single;
+    AutoCount, Spacing: Integer;
+    S: string;
+    CondVal: Variant;
+    fc, bg: TColor;
+    bold, italic: Boolean;
+    fs: TFontStyles;
+    ElemFc, ElemBg: TColor;
+    DefFc: TColor;
+    rr: TD2D1RoundedRect;
+    Pct: Double;
+    barW: Single;
+    txtR: TRect;
+
+    function ElemEffSize(const E: TNodeCardElement): Integer;
+    begin
+      if E.FontSize > 0 then Result := E.FontSize
+      else if NodeL.FontSize > 0 then Result := NodeL.FontSize
+      else Result := 8;
+    end;
+
+    // Pinta text dins R amb D2D.TextOut, gestionant a ma: centrat vertical,
+    // alineacio horitzontal i truncat amb el·lipsi per estimacio (no char-a-char).
+    procedure DrawAlignedText(const R: TRect; const AText: string;
+      const AHAlign: TCardHAlign);
+    var
+      T: string;
+      tw, th, availW, tx, ty, keep: Integer;
+    begin
+      if AText = '' then Exit;
+      availW := R.Right - R.Left;
+      if availW <= 0 then Exit;
+
+      T := AText;
+      tw := D2D.TextWidth(T);
+      if tw > availW then
+      begin
+        keep := Max(1, (Length(T) * (availW - 12)) div Max(1, tw));
+        if keep < Length(T) then SetLength(T, keep);
+        tw := D2D.TextWidth(T + '...');
+        while (Length(T) > 1) and (tw > availW) do
+        begin
+          SetLength(T, Length(T) - 1);
+          tw := D2D.TextWidth(T + '...');
+        end;
+        T := T + '...';
+      end;
+
+      th := D2D.TextHeight(T);
+      ty := R.Top + (R.Bottom - R.Top - th) div 2;
+      if ty < R.Top then ty := R.Top;
+
+      case AHAlign of
+        chaCenter: tx := R.Left + (availW - tw) div 2;
+        chaRight:  tx := R.Right - tw;
+      else         tx := R.Left;
+      end;
+      if tx < R.Left then tx := R.Left;
+
+      D2D.TextOut(tx, ty, T);
+    end;
+
+  begin
+    NodeL := FNodeLayoutSet.Layouts[FVista];
+    Resolver := MakeNodeDataResolver(AData);
+
+    // Color de font per defecte del layout (0 = negre). El node disabled fa gris.
+    if NodeL.FontColor <> 0 then DefFc := NodeL.FontColor
+    else if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then DefFc := $00555555
+    else DefFc := clBlack;
+
+    if NodeL.FontName <> '' then D2D.Font.Name := NodeL.FontName;
+
+    Yf := ARect.Top + NodeL.PaddingV;
+    AvailW := (ARect.Right - ARect.Left) - NodeL.PaddingH * 2;
+    if AvailW <= 0 then Exit;
+
+    for RowIdx := 0 to High(NodeL.Rows) do
+    begin
+      if RowIdx >= ALodMaxRows then Break;  // LOD: limita files segons el zoom
+      Row := NodeL.Rows[RowIdx];
+      if Row.HeightPx <= 0 then Continue;
+      if Yf >= ARect.Bottom then Break;  // fila fora del node: res a pintar
+      Spacing := Row.Spacing;
+      if Spacing <= 0 then Spacing := 4;
+
+      // Primera passada: amples fixos i compte d'autos (respectant condicions).
+      FixedW := 0; AutoCount := 0;
+      for ElemIdx := 0 to High(Row.Elements) do
+      begin
+        Elem := Row.Elements[ElemIdx];
+        if not Elem.Visible then Continue;
+        if Elem.ConditionField <> '' then
+        begin
+          CondVal := Resolver(Elem.ConditionField);
+          if VarIsNull(CondVal) or (VarToStr(CondVal) = '') or (VarToStr(CondVal) = '0') then
+            Continue;
+        end;
+        if Elem.WidthPct > 0 then
+          FixedW := FixedW + (AvailW * Elem.WidthPct / 100) + Spacing
+        else
+          Inc(AutoCount);
+      end;
+
+      Xf := ARect.Left + NodeL.PaddingH;
+
+      for ElemIdx := 0 to High(Row.Elements) do
+      begin
+        Elem := Row.Elements[ElemIdx];
+        if not Elem.Visible then Continue;
+        if Elem.ConditionField <> '' then
+        begin
+          CondVal := Resolver(Elem.ConditionField);
+          if VarIsNull(CondVal) or (VarToStr(CondVal) = '') or (VarToStr(CondVal) = '0') then
+            Continue;
+        end;
+
+        if Elem.WidthPct > 0 then
+          ElemW := AvailW * Elem.WidthPct / 100
+        else if AutoCount > 0 then
+          ElemW := Max(20, (AvailW - FixedW) / AutoCount)
+        else
+          ElemW := AvailW;
+
+        S := ResolveExpr(Elem.FieldExpr, Resolver);
+        if (S = '') and (Elem.Kind <> ceSpacer) then
+        begin
+          Xf := Xf + ElemW + Spacing;
+          Continue;
+        end;
+
+        // Estil base de l'element + overrides de regles condicionals.
+        fs := [];
+        if Elem.FontBold or NodeL.FontBold then Include(fs, fsBold);
+        if Elem.FontItalic or NodeL.FontItalic then Include(fs, fsItalic);
+        if Elem.FontColor <> 0 then ElemFc := Elem.FontColor else ElemFc := DefFc;
+        ElemBg := Elem.BgColor;
+        if EvaluateStyleRules(Elem.StyleRules, Resolver, fc, bg, bold, italic) then
+        begin
+          if fc <> 0 then ElemFc := fc;
+          if bg <> 0 then ElemBg := bg;
+          if bold then Include(fs, fsBold);
+          if italic then Include(fs, fsItalic);
+        end;
+
+        txtR := Rect(Round(Xf), Round(Yf), Round(Xf + ElemW), Round(Yf + Row.HeightPx));
+
+        case Elem.Kind of
+          ceText:
+            begin
+              D2D.Font.Size := ElemEffSize(Elem);
+              D2D.Font.Style := fs;
+              D2D.Font.Color := ElemFc;
+              D2D.Brush.Style := bsClear;
+              DrawAlignedText(txtR, S, Elem.HAlign);
+            end;
+
+          ceBadge:
+            begin
+              if ElemBg <> 0 then bg := ElemBg
+              else if Elem.BgColorField <> '' then bg := ResolveFieldBgColor(Elem.BgColorField, Resolver)
+              else if Elem.BgColor <> 0 then bg := Elem.BgColor
+              else bg := $00808080;
+              SetBrushColor(FillBrush, bg, 1.0);
+              rr := RoundedRectToD2D(
+                TRectF.Create(txtR.Left, txtR.Top, txtR.Right, txtR.Bottom),
+                IfThen(Elem.RoundRadius > 0, Elem.RoundRadius, 4));
+              RT.FillRoundedRectangle(rr, FillBrush);
+              D2D.Font.Size := ElemEffSize(Elem);
+              D2D.Font.Style := fs;
+              D2D.Font.Color := ElemFc;
+              D2D.Brush.Style := bsClear;
+              DrawAlignedText(txtR, S, chaCenter);
+            end;
+
+          ceProgressBar:
+            begin
+              Pct := StrToFloatDef(S, 0);
+              if Pct > 100 then Pct := 100;
+              if Pct < 0 then Pct := 0;
+              SetBrushColor(FillBrush, $00E0E0E0, 1.0);
+              rr := RoundedRectToD2D(
+                TRectF.Create(txtR.Left, txtR.Top + 2, txtR.Right, txtR.Bottom - 2), 4);
+              RT.FillRoundedRectangle(rr, FillBrush);
+              if Pct > 0 then
+              begin
+                barW := (txtR.Right - txtR.Left) * Pct / 100;
+                if Elem.BgColor <> 0 then SetBrushColor(FillBrush, Elem.BgColor, 1.0)
+                else SetBrushColor(FillBrush, $00FF8000, 1.0);
+                rr := RoundedRectToD2D(
+                  TRectF.Create(txtR.Left, txtR.Top + 2, txtR.Left + barW, txtR.Bottom - 2), 4);
+                RT.FillRoundedRectangle(rr, FillBrush);
+              end;
+            end;
+
+          ceSpacer: ;
+        end;
+
+        Xf := Xf + ElemW + Spacing;
+      end;
+
+      Yf := Yf + Row.HeightPx;
+    end;
+
+    D2D.Brush.Style := bsSolid;
+  end;
+
+  // Pinta una linia del fallback amb D2D.TextOut.
+  procedure FallbackLine(AX, AY, ARight: Integer; const AText: string; AColor: TColor);
+  begin
+    if AText = '' then Exit;
+    D2D.TextOut(AX, AY, AText);
+  end;
+
   procedure DrawNodeText(const ARect: TRectF; const ANode: TNode; const AData: TNodeData);
+  var
+    NodeW: Single;
+    LodMax: Integer;   // max files de contingut a pintar segons el zoom
   begin
     if FFastPaint then Exit;
-    if (ARect.Right - ARect.Left) <= (PAD_X * 2 + 4) then Exit;
 
-    D2D.Brush.Style := bsClear;
-    if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then
-      D2D.Font.Color := $00555555
+    NodeW := ARect.Right - ARect.Left;
+    if NodeW <= (PAD_X * 2 + 4) then Exit;
+
+    // Nivell de detall per amplada: nodes estrets no mostren text (no es
+    // llegiria i cada crida de text forca un flush del batch D2D).
+    if NodeW < LOD_MIN_W then
+      Exit                          // nomes la barra de color (ja pintada)
+    else if NodeW < LOD_FULL_W then
+      LodMax := 1                   // nomes 1a linia
     else
-      D2D.Font.Color := clBlack;
+      LodMax := MaxInt;             // contingut complet
 
+    // Clip per retallar el contingut que desbordi el node.
     RT.PushAxisAlignedClip(
       D2D1RectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom),
       D2D1_ANTIALIAS_MODE_PER_PRIMITIVE
     );
     try
-      D2D.TextOut(
-        Round(ARect.Left) + PAD_X,
-        Round(ARect.Top) + PAD_Y,
-        ANode.Caption
-      );
-
-      if AData.DataId > 0 then
+      // Render PRO: contingut del node segons el Node Layout Set (Direct2D natiu).
+      if FNodeLayoutSet_Set then
       begin
-        D2D.TextOut(
-          Round(ARect.Left) + PAD_X,
-          Round(ARect.Top) + PAD_Y + 9,
-          AData.CodigoArticulo
-        );
+        RenderNodeLayoutD2D(ARect, ANode, AData, LodMax);
+        Exit;
       end;
+
+      // Fallback (sense Node Layout Set): render per defecte Caption + Articulo.
+      var FbColor: TColor;
+      if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then
+        FbColor := $00555555
+      else
+        FbColor := clBlack;
+      D2D.Font.Color := FbColor;
+      D2D.Brush.Style := bsClear;
+
+      FallbackLine(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y,
+        Round(ARect.Right) - PAD_X, ANode.Caption, FbColor);
+
+      // 2a linia (article) nomes amb detall complet.
+      if (LodMax > 1) and (AData.DataId > 0) then
+        FallbackLine(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y + 9,
+          Round(ARect.Right) - PAD_X, AData.CodigoArticulo, FbColor);
     finally
       RT.PopAxisAlignedClip;
       D2D.Brush.Style := bsSolid;
@@ -7116,7 +7621,15 @@ begin
   VisibleEndTime   := XToTime(ClientWidth);
 
 
-  D2D := TDirect2DCanvas.Create(Canvas, ClientRect);
+  // Pintem sobre el bitmap off-screen (frame cache). El Paint el bolca al control.
+  if FFrameBmp = nil then
+  begin
+    FFrameBmp := TBitmap.Create;
+    FFrameBmp.PixelFormat := pf32bit;
+    FFrameBmp.SetSize(Max(1, ClientWidth), Max(1, ClientHeight));
+  end;
+
+  D2D := TDirect2DCanvas.Create(FFrameBmp.Canvas, Rect(0, 0, ClientWidth, ClientHeight));
   try
     D2D.BeginDraw;
     try
@@ -7337,6 +7850,7 @@ begin
         SetBrushColor(StrokeBrush, $00E0E0E0, 1.0);
         RT.DrawLine(D2D1PointF(0, Y2), D2D1PointF(ClientWidth, Y2), StrokeBrush, 1.0);
       end;
+
 
       DrawDependenciesD2D(VisibleXLeft, VisibleXRight, VisibleYTop, VisibleYBottom, RT, StrokeBrush, FillBrush);
 
@@ -8070,7 +8584,13 @@ begin
     begin
       HasExc := Cal.TryGetException(Day, Exc);
 
-      // Linea vertical al canvi de dia
+      // Linea vertical al canvi de dia. IMPORTANTE: fijar SIEMPRE el color gris
+      // ANTES de pintarla. FillBrush es compartido y en la iteracion anterior
+      // pudo quedar con el rosa/rojo del shade de festivo (Capa 2, $008087FF);
+      // si no lo reseteamos aqui, la linea de cambio de dia hereda ese rojo y
+      // aparecen lineas verticales rojas parasitas (visible al activar HideWeekends,
+      // donde viernes-festivo y lunes quedan contiguos).
+      FillBrush.SetColor(D2DColorFromTColor($00E0E0E0, 1.0));
       X1 := TimeToX(Day);
       RT.DrawLine(D2D1PointF(X1, GanttRectS.Top), D2D1PointF(X1, GanttRectS.Bottom), FillBrush, 1.0);
 
@@ -9715,17 +10235,73 @@ var
               (FNodes[AIdx].LoteId = FNodes[ChangedIdx].LoteId);
   end;
 
+  // Cuenta cuantos OTROS nodos comparten EXACTAMENTE lane con el nodo movido
+  // en EL INSTANTE de mayor concurrencia dentro de [AStart,AEnd]. NO es el total
+  // de nodos que tocan el intervalo: dos nodos que tocan el intervalo del movido
+  // pero NO se solapan entre si ocupan la MISMA lane en momentos distintos, asi
+  // que solo cuentan como 1 a efectos de lanes ocupadas. Hacer un barrido por los
+  // instantes de inicio relevantes y quedarnos con el maximo solapamiento puntual.
+  // Los miembros de un mismo lote comparten ventana y ocupan 1 sola lane: se
+  // colapsan a una unica unidad por LoteId (los nodos sueltos cuentan cada uno).
   function CountOverlapsAt(AStart, AEnd: TDateTime): Integer;
-  var J: Integer;
+  var
+    J, Cnt, MaxCnt, K: Integer;
+    T: TDateTime;
+    Sweep: TArray<TDateTime>;
+    SeenLote: TArray<Integer>;
+
+    function ActiveAt( At: TDateTime): Integer;
+    var M, P: Integer; Dup: Boolean;
+    begin
+      Result := 0;
+      SetLength(SeenLote, 0);
+      for M := 0 to IdxCount - 1 do
+      begin
+        if Idxs[M] = ChangedIdx then Continue;
+        if MismoLote(Idxs[M]) then Continue;
+        // activo en el instante At (semiabierto [Start,End)) y dentro del rango del movido
+        if (At < FNodes[Idxs[M]].EndTime) and (At >= FNodes[Idxs[M]].StartTime)
+           and (AStart < FNodes[Idxs[M]].EndTime) and (AEnd > FNodes[Idxs[M]].StartTime) then
+        begin
+          if FNodes[Idxs[M]].LoteId > 0 then
+          begin
+            Dup := False;
+            for P := 0 to High(SeenLote) do
+              if SeenLote[P] = FNodes[Idxs[M]].LoteId then begin Dup := True; Break; end;
+            if Dup then Continue;
+            SetLength(SeenLote, Length(SeenLote) + 1);
+            SeenLote[High(SeenLote)] := FNodes[Idxs[M]].LoteId;
+          end;
+          Inc(Result);
+        end;
+      end;
+    end;
+
   begin
-    Result := 0;
+    // Instantes candidatos: el inicio del nodo movido + el inicio de cada otro
+    // nodo que caiga dentro de [AStart,AEnd]. El maximo solapamiento siempre
+    // ocurre en uno de estos puntos.
+    SetLength(Sweep, 1);
+    Sweep[0] := AStart;
     for J := 0 to IdxCount - 1 do
     begin
       if Idxs[J] = ChangedIdx then Continue;
       if MismoLote(Idxs[J]) then Continue;
-      if (AStart < FNodes[Idxs[J]].EndTime) and (AEnd > FNodes[Idxs[J]].StartTime) then
-        Inc(Result);
+      T := FNodes[Idxs[J]].StartTime;
+      if (T >= AStart) and (T < AEnd) then
+      begin
+        SetLength(Sweep, Length(Sweep) + 1);
+        Sweep[High(Sweep)] := T;
+      end;
     end;
+
+    MaxCnt := 0;
+    for K := 0 to High(Sweep) do
+    begin
+      Cnt := ActiveAt(Sweep[K]);
+      if Cnt > MaxCnt then MaxCnt := Cnt;
+    end;
+    Result := MaxCnt;
   end;
 
   function FindEarliestEndAt(AStart, AEnd: TDateTime): TDateTime;
@@ -9942,6 +10518,13 @@ begin
 
   FHideWeekends := Value;
 
+  // Al activar HideWeekends, FStartTime NO puede caer en fin de semana: si lo
+  // hiciera, VisibleMinutesBetween(FStartTime, ...) lo saltaria y todo el mapeo
+  // tiempo->X quedaria desplazado respecto al timeline (que SI normaliza su
+  // StartTime). Normalizamos aqui ANTES de recalcular FScrollX para que ambos
+  // controles partan del mismo origen.
+  NormalizeStartTime;
+
   // Recalculem FScrollX perquè CenterTime quedi al centre
   // screenX(t) = VisibleMinutesBetween(FStartTime, t) * FPxPerMinute - FScrollX
   // volem screenX(CenterTime) = xCenter =>
@@ -9952,13 +10535,14 @@ begin
 
   RebuildLayout;
 
-  // Nota: la sincronización HideWeekends con el timeline asociado
-  // la gestiona ahora la vista (uVistaGantt / Main). El control Gantt
-  // no debe conocer al timeline directamente.
-
   UpdateScrollBars;
 
- // NotifyViewportChanged;
+  // El control Gantt no conoce al timeline directamente, pero SI debe avisar a
+  // la vista (via OnViewportChanged) del nuevo FStartTime/FScrollX ya
+  // normalizados. La vista es quien propaga el flag HideWeekends al timeline y
+  // re-sincroniza ambos. Sin esta notificacion el timeline se queda con el
+  // estado anterior (dias con findes) y aparece desplazado.
+  NotifyViewportChanged;
 
   Invalidate;
 end;
@@ -10241,12 +10825,29 @@ begin
   // Si estàs fent panning: amaga el hint i surt
   if FIsPanning then
   begin
-    HideNodeHint;
+    // Nomes considerem "drag" (i mostrem cursor de mà) un cop superat el llindar,
+    // perque un clic simple sense moviment segueixi deseleccionant a MouseUp.
+    if (not FDidDrag) and
+       ((Abs(X - FPanStart.X) >= DRAG_THRESHOLD) or
+        (Abs(Y - FPanStart.Y) >= DRAG_THRESHOLD)) then
+    begin
+      FDidDrag := True;
+      SetGanttCursor(crSizeAll);
+    end;
 
-    FScrollX := Max(0, FScrollStartX - (X - FPanStart.X));
-    FScrollY := Max(0, FScrollStartY - (Y - FPanStart.Y));
-    Invalidate;
-    NotifyViewportChanged;
+    if FDidDrag then
+    begin
+      HideNodeHint;
+      // THROTTLE: nomes guardem el target i armem el timer. L'aplicacio real i
+      // el repaint sincronitzat dels 4 controls es fa a WMTimer (~16ms), evitant
+      // acumular repaints a cada WM_MOUSEMOVE i mantenint-los tots al mateix tick.
+      var MaxYpan: Single := Max(0, FContentHeight - ClientHeight);
+      FPanTargetX := Max(0, FScrollStartX - (X - FPanStart.X));
+      FPanTargetY := EnsureRange(FScrollStartY - (Y - FPanStart.Y), 0, MaxYpan);
+      FPendingPan := True;
+      if FPanTimer = 0 then
+        FPanTimer := SetTimer(Handle, 2, 16, nil);  // ~60fps
+    end;
     Exit;
   end;
 
@@ -10266,6 +10867,10 @@ begin
     FDashOffset := FDashOffset + 0.5;
     if FDashOffset > 100 then
      FDashOffset := 0;
+    // Si el marquee s'ha mogut (dret), suprimim el menu contextual posterior.
+    if (Abs(X - FMarqueeStartPt.X) >= DRAG_THRESHOLD) or
+       (Abs(Y - FMarqueeStartPt.Y) >= DRAG_THRESHOLD) then
+      FSuppressContextMenu := True;
     Invalidate;
     Exit;
   end;
@@ -10464,8 +11069,11 @@ begin
   begin
     FHoverNodeIndex := hit;
     Invalidate;
-    if (Shift=[]) then
-     ShowNodeHint(hit, ptScreen);
+    // Hint amb delay: el mostrem nomes si el cursor s'atura sobre el node.
+    if (Shift = []) then
+      ScheduleNodeHint(hit, ptScreen)
+    else
+      HideNodeHint;
   end;
 
 
@@ -12304,6 +12912,22 @@ begin
     Exit;
   end;
 
+  // Botó DRET al fons buit (sense node) -> recuadre de selecció (marquee).
+  if Button = mbRight then
+  begin
+    FMouseDownNodeIndex := HitTestNodeIndex(X, Y);
+    if FMouseDownNodeIndex < 0 then
+    begin
+      FMarqueeSelecting := True;
+      FMarqueeStartPt := Point(X, Y);
+      FMarqueeCurrentPt := FMarqueeStartPt;
+      FDidDrag := False;
+      MouseCapture := True;
+      Invalidate;
+    end;
+    Exit;  // si hi ha node sota, deixem passar el menu contextual
+  end;
+
   if Button <> mbLeft then
    Exit;
 
@@ -12342,8 +12966,7 @@ begin
   FDidDrag := False;
   FMouseDownNodeIndex := HitTestNodeIndex(X, Y);
 
-
-   //fem recuadre de selecció
+  // Recuadre de selecció amb Shift+esquerra (compatibilitat).
   if (FMouseDownNodeIndex < 0) and (ssShift in Shift) then
   begin
     FMarqueeSelecting := True;
@@ -12351,6 +12974,26 @@ begin
     FMarqueeCurrentPt := FMarqueeStartPt;
     Invalidate;
     Exit;
+  end;
+
+  // Esquerra al fons buit (sense node, sense handle) -> PAN per arrossegar.
+  // El pan nomes "compta" si supera el threshold (a MouseMove); aixi un clic
+  // simple segueix deseleccionant (logica de MouseUp 'not FDidDrag').
+  if FMouseDownNodeIndex < 0 then
+  begin
+    var EdgeBg: TResizeEdge;
+    var OnHandleBg: TNodeHandle := nhNone;
+    if FFocusedNodeIndex >= 0 then
+      OnHandleBg := HitTestSelectedNodeHandle(X, Y, EdgeBg);
+    if OnHandleBg = nhNone then
+    begin
+      FIsPanning := True;
+      FPanStart := Point(X, Y);
+      FScrollStartX := FScrollX;
+      FScrollStartY := FScrollY;
+      MouseCapture := True;
+      // no Exit: deixem que segueixi i posi focus si calia; pero el pan ja esta armat
+    end;
   end;
 
   // primer: handle?
@@ -12489,6 +13132,46 @@ begin
   begin
     FIsPanning := False;
     Exit;
+  end;
+
+  // Botó DRET: finalitzar el recuadre de selecció (marquee).
+  if Button = mbRight then
+  begin
+    if FMarqueeSelecting then
+    begin
+      FMarqueeCurrentPt := Point(X, Y);
+      if IsMarqueeLargeEnough then
+        SelectNodesInMarquee(True);
+      FMarqueeSelecting := False;
+      MouseCapture := False;
+      Invalidate;
+    end;
+    Exit;
+  end;
+
+  // Botó ESQUERRE en mode pan (drag al fons): finalitzar el pan.
+  if FIsPanning then
+  begin
+    FIsPanning := False;
+    MouseCapture := False;
+    SetGanttCursor(crDefault);
+    // Aturem el throttle i apliquem l'ultim target perque la posicio final sigui
+    // exacta (sense quedar-se al penultim tick).
+    if FPanTimer <> 0 then
+    begin
+      KillTimer(Handle, FPanTimer);
+      FPanTimer := 0;
+    end;
+    if FPendingPan then
+      ApplyPendingPan;
+
+    if FDidDrag then
+    begin
+      // ha estat navegacio: no deseleccionem ni fem res mes.
+      NotifyViewportChanged;
+      Exit;
+    end;
+    // si no ha arrossegat -> clic simple al fons: continua avall (deselecciona).
   end;
 
   if Button <> mbLeft then

@@ -31,7 +31,7 @@ object frmReglasPlanComparativa: TfrmReglasPlanComparativa
     object lblTitle: TLabel
       Left = 20
       Top = 10
-      Width = 400
+      Width = 216
       Height = 30
       Caption = 'Comparativa de reglas'
       Font.Charset = DEFAULT_CHARSET
@@ -44,9 +44,11 @@ object frmReglasPlanComparativa: TfrmReglasPlanComparativa
     object lblSubtitle: TLabel
       Left = 20
       Top = 42
-      Width = 500
+      Width = 374
       Height = 15
-      Caption = 'Mismo plan ordenado con cada regla. Compara los indicadores y elige.'
+      Caption = 
+        'Mismo plan ordenado con cada regla. Compara los indicadores y el' +
+        'ige.'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -62,7 +64,10 @@ object frmReglasPlanComparativa: TfrmReglasPlanComparativa
     Height = 636
     Align = alClient
     TabOrder = 1
-    Properties.ActivePage = nil
     Properties.CustomButtons.Buttons = <>
+    ClientRectBottom = 632
+    ClientRectLeft = 4
+    ClientRectRight = 1136
+    ClientRectTop = 4
   end
 end

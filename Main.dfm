@@ -27,6 +27,43 @@ object Form1: TForm1
     Color = 14869218
     ParentBackground = False
     TabOrder = 0
+    DesignSize = (
+      1092
+      33)
+    object Label28: TLabel
+      Left = 810
+      Top = 2
+      Width = 240
+      Height = 19
+      Alignment = taRightJustify
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = 'PROJECT NAME'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 6313290
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      Layout = tlCenter
+    end
+    object Label29: TLabel
+      Left = 954
+      Top = 12
+      Width = 96
+      Height = 19
+      Alignment = taRightJustify
+      Anchors = [akTop, akRight]
+      AutoSize = False
+      Caption = 'MASTER'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 12037284
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      Layout = tlCenter
+    end
     object btnTB_Dashboard: TcxButton
       AlignWithMargins = True
       Left = 6
@@ -95,7 +132,7 @@ object Form1: TForm1
       Margins.Top = 5
       Margins.Bottom = 5
       Align = alLeft
-      Caption = 'Others...'
+      Caption = 'mas...'
       Enabled = False
       LookAndFeel.Kind = lfOffice11
       LookAndFeel.NativeStyle = False
@@ -358,6 +395,14 @@ object Form1: TForm1
       object GestionCardLayouts1: TMenuItem
         Caption = 'Gesti'#243'n de Card Layouts'
         OnClick = GestionCardLayouts1Click
+      end
+      object DisenadorNodos1: TMenuItem
+        Caption = 'Dise'#241'ador de Nodos del Gantt'
+        OnClick = DisenadorNodos1Click
+      end
+      object ConfigHint1: TMenuItem
+        Caption = 'Configurar informaci'#243'n emergente (hint)'
+        OnClick = ConfigHint1Click
       end
     end
     object Funcionalidades1: TMenuItem

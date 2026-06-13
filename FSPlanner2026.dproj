@@ -110,6 +110,7 @@
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>
+        <DCCReference Include="uGanttSummary.pas"/>
         <DCCReference Include="uGanttCentres.pas"/>
         <DCCReference Include="uNodeHelpers.pas"/>
         <DCCReference Include="uNodeDataRepo.pas"/>
@@ -242,43 +243,17 @@
         <DCCReference Include="uBacklogScheduler.pas"/>
         <DCCReference Include="uPlanningEngineTypes.pas"/>
         <DCCReference Include="uPlanningEngineFCS.pas"/>
-        <DCCReference Include="uPlanningEngineRules.pas"/>
         <DCCReference Include="uPlanningEngine.pas"/>
         <DCCReference Include="uBacklogSchedParams.pas">
             <Form>frmBacklogSchedParams</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uGanttConfig.pas">
-            <Form>frmGanttConfig</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="uBacklogSchedPreview.pas">
             <Form>frmBacklogSchedPreview</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uReglasPlanParams.pas">
-            <Form>frmReglasPlanParams</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uReglasPlanPreview.pas">
-            <Form>frmReglasPlanPreview</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uReglasPlanComparativa.pas">
-            <Form>frmReglasPlanComparativa</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
         <DCCReference Include="uBacklogCustomCols.pas">
             <Form>frmBacklogCustomCols</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uCustomColsManager.pas">
-            <Form>frmCustomColsManager</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uErpFieldMapRepo.pas"/>
-        <DCCReference Include="uErpFieldMapping.pas">
-            <Form>frmErpFieldMapping</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="uBacklogCustomColEdit.pas">
@@ -456,9 +431,6 @@
         <DCCReference Include="uOFViewer.pas">
             <Form>frmOFViewer</Form>
         </DCCReference>
-        <DCCReference Include="uLoteViewer.pas">
-            <Form>frmLoteViewer</Form>
-        </DCCReference>
         <DCCReference Include="uErpReader.pas"/>
         <DCCReference Include="uErpReaderFactory.pas"/>
         <DCCReference Include="uSage200Reader.pas"/>
@@ -497,6 +469,17 @@
         <DCCReference Include="uModalOverlayAuto.pas"/>
         <DCCReference Include="uHelpAutoInstall.pas"/>
         <DCCReference Include="uKPICard.pas"/>
+        <DCCReference Include="uNodeLayoutEditor.pas">
+            <Form>frmNodeLayoutEditor</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uNodeLayoutSetRepo.pas"/>
+        <DCCReference Include="uGanttHintConfig.pas"/>
+        <DCCReference Include="uGanttHintConfigRepo.pas"/>
+        <DCCReference Include="uGanttHintConfigEditor.pas">
+            <Form>frmGanttHintConfigEditor</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -519,13 +502,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

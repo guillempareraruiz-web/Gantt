@@ -9,10 +9,14 @@ uses
 type
   TGanttNodeHintWindow = class(THintWindow)
   private
-    FMargin: Integer;
-    FLineH: Integer;
+    FMarginX: Integer;   // padding horizontal interior
+    FMarginY: Integer;   // padding vertical interior
+    FLineGap: Integer;   // espai extra entre linies
+    FKeyW: Integer;      // ample reservat per a la columna "clau" (px)
+    function MeasureLineHeight: Integer;
   protected
     procedure Paint; override;
+    procedure CreateParams(var Params: TCreateParams); override;
     procedure WMNCHitTest(var Message: TWMNCHitTest); message WM_NCHITTEST;
     procedure WMMouseActivate(var Message: TWMMouseActivate); message WM_MOUSEACTIVATE;
   public
@@ -22,112 +26,155 @@ type
 
 implementation
 
+const
+  // Paleta del hint (estil "card" net)
+  clHintBack   = $00FAF9F7;   // fons gris molt clar (BGR)
+  clHintBorder = $00D8D2CC;   // vora suau
+  clHintKey    = $00806858;   // clau: gris-blau apagat
+  clHintVal    = $00403830;   // valor: gairebe negre
+  clHintShadow = $00C8C2BC;   // linia d'ombra inferior
+
 constructor TGanttNodeHintWindow.Create(AOwner: TComponent);
 begin
   inherited;
-  Color := $00FFFFE1; // clInfoBk (però així controlem)
+  Color := clHintBack;
   Canvas.Font.Name := 'Segoe UI';
-  Canvas.Font.Size := 9;
-  FMargin := 8;
-  FLineH := 16;
+  Canvas.Font.Size := 8;
+  FMarginX := 10;
+  FMarginY := 8;
+  FLineGap := 3;
+  FKeyW := 0;
+  DoubleBuffered := True;
+end;
+
+procedure TGanttNodeHintWindow.CreateParams(var Params: TCreateParams);
+begin
+  inherited;
+  // Ombra nativa de Windows: dona profunditat sense pintar res.
+  Params.WindowClass.Style := Params.WindowClass.Style or CS_DROPSHADOW;
 end;
 
 procedure TGanttNodeHintWindow.WMNCHitTest(var Message: TWMNCHitTest);
 begin
-  Message.Result := HTTRANSPARENT; // no roba ratolí
+  Message.Result := HTTRANSPARENT; // no roba ratoli
 end;
+
 procedure TGanttNodeHintWindow.WMMouseActivate(var Message: TWMMouseActivate);
 begin
   Message.Result := MA_NOACTIVATE; // no agafa focus
 end;
 
-function TGanttNodeHintWindow.CalcHintRect(MaxWidth: Integer; const AHint: string; AData: Pointer): TRect;
-var
-  lines: TStringDynArray;
-  i: Integer;
-  w, maxW, h, th: Integer;
+function TGanttNodeHintWindow.MeasureLineHeight: Integer;
 begin
-  lines := AHint.Split([sLineBreak]);
-
-  maxW := 0;
-  for i := 0 to High(lines) do
-  begin
-    w := Canvas.TextWidth(lines[i]);
-    if w > maxW then maxW := w;
-  end;
-
-  th := Canvas.TextHeight('A');
-  //h := (Length(lines) * FLineH) + (FMargin * 2);
-  h := (Length(lines) * th) + (FMargin * 2);
-  Result := Rect(0, 0, Min(MaxWidth, maxW + FMargin * 2), h);
+  Canvas.Font.Name := 'Segoe UI';
+  Canvas.Font.Size := 8;
+  Canvas.Font.Style := [];
+  Result := Canvas.TextHeight('Ag') + FLineGap;
 end;
 
+function TGanttNodeHintWindow.CalcHintRect(MaxWidth: Integer; const AHint: string;
+  AData: Pointer): TRect;
+var
+  lines: TStringDynArray;
+  i, p, lineH, maxKeyW, maxValW, kw, vw, totalW: Integer;
+  keyPart, valPart: string;
+begin
+  lines := AHint.Split([sLineBreak]);
+  lineH := MeasureLineHeight;
+
+  // Mesura per separat la columna de claus i la de valors per alinear-les.
+  maxKeyW := 0;
+  maxValW := 0;
+  for i := 0 to High(lines) do
+  begin
+    p := Pos(':', lines[i]);
+    if p > 0 then
+    begin
+      keyPart := Copy(lines[i], 1, p);
+      valPart := TrimLeft(Copy(lines[i], p + 1, MaxInt));
+      Canvas.Font.Style := [fsBold];
+      kw := Canvas.TextWidth(keyPart);
+      Canvas.Font.Style := [];
+      vw := Canvas.TextWidth(valPart);
+    end
+    else
+    begin
+      Canvas.Font.Style := [fsBold];
+      kw := Canvas.TextWidth(lines[i]);
+      Canvas.Font.Style := [];
+      vw := 0;
+    end;
+    if kw > maxKeyW then maxKeyW := kw;
+    if vw > maxValW then maxValW := vw;
+  end;
+
+  FKeyW := maxKeyW + 10; // gap entre clau i valor
+  totalW := FMarginX * 2 + FKeyW + maxValW;
+
+  Result := Rect(0, 0,
+    Min(MaxWidth, totalW),
+    Length(lines) * lineH + FMarginY * 2);
+end;
 
 procedure TGanttNodeHintWindow.Paint;
 var
   r: TRect;
-  sl: TStringList;
-  i, y: Integer;
-  s: string;
-  p: Integer;
-  keyPart: string;
+  lines: TStringDynArray;
+  i, y, p, lineH, valX: Integer;
+  keyPart, valPart, cap: string;
 begin
   r := ClientRect;
 
+  // Fons + vora suau
   Canvas.Brush.Color := Color;
+  Canvas.Brush.Style := bsSolid;
   Canvas.FillRect(r);
 
-  Canvas.Pen.Color := clGray;
+  Canvas.Pen.Color := clHintBorder;
+  Canvas.Pen.Width := 1;
+  Canvas.Brush.Style := bsClear;
   Canvas.Rectangle(r);
 
+  Canvas.Brush.Style := bsClear;
   Canvas.Font.Name := 'Segoe UI';
-  Canvas.Font.Size := 7;
+  Canvas.Font.Size := 8;
+  SetBkMode(Canvas.Handle, TRANSPARENT);
 
-  r.Top := r.Top + FMargin;
-  r.Left := r.Left + FMargin;
+  cap := Caption;
+  lines := cap.Split([sLineBreak]);
+  lineH := MeasureLineHeight;
+  if FKeyW <= 0 then FKeyW := 90;
+  valX := r.Left + FMarginX + FKeyW;
 
-  drawtext( canvas.Handle,  PWideChar( CAption ), length(CAption), r, DT_TOP or DT_WORDBREAK);
-
-  // Canvas.TextOut(FMargin , FMargin, Caption );
-
-   Exit;
-
-  sl := TStringList.Create;
-  try
-    sl.Text := Caption; // <-- aquí es fa el "split" per salts de línia
-
-    y := FMargin;
-    for i := 0 to sl.Count - 1 do
+  y := r.Top + FMarginY;
+  for i := 0 to High(lines) do
+  begin
+    p := Pos(':', lines[i]);
+    if p > 0 then
     begin
-      s := sl[i];
+      keyPart := Copy(lines[i], 1, p);
+      valPart := TrimLeft(Copy(lines[i], p + 1, MaxInt));
 
-      // mini “format”: si ve "Key: Value", fem Key en negreta
-      p := Pos(':', s);
-      if p > 0 then
-      begin
-        keyPart := Copy(s, 1, p); // inclou ":"
+      // Clau en negreta, color apagat
+      Canvas.Font.Style := [fsBold];
+      Canvas.Font.Color := clHintKey;
+      Canvas.TextOut(r.Left + FMarginX, y, keyPart);
 
-        Canvas.Font.Style := [fsBold];
-        Canvas.TextOut(FMargin, y, keyPart);
-
-        Canvas.Font.Style := [];
-        Canvas.TextOut(
-          FMargin + Canvas.TextWidth(keyPart) + 4,
-          y,
-          TrimLeft(Copy(s, p + 1, MaxInt))
-        );
-      end
-      else
-      begin
-        Canvas.Font.Style := [fsBold];
-        Canvas.TextOut(FMargin, y, s);
-        Canvas.Font.Style := [];
-      end;
-
-      Inc(y, FLineH);
+      // Valor normal, color fosc
+      Canvas.Font.Style := [];
+      Canvas.Font.Color := clHintVal;
+      Canvas.TextOut(valX, y, valPart);
+    end
+    else
+    begin
+      // Linia sense ":" -> titol en negreta
+      Canvas.Font.Style := [fsBold];
+      Canvas.Font.Color := clHintVal;
+      Canvas.TextOut(r.Left + FMarginX, y, lines[i]);
+      Canvas.Font.Style := [];
     end;
-  finally
-    sl.Free;
+
+    Inc(y, lineH);
   end;
 end;
 
