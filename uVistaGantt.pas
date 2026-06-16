@@ -11,7 +11,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.ExtCtrls, DateUtils,
-  uGanttHelpers, uCentreCalendar,
+  uGanttHelpers, uCentreCalendar, uGanttAlertas,
   uNodeDataRepo, uOperariosRepo, uMoldeRepo,
   uCustomFieldDefs, uPlanningRules, cxGraphics, cxControls, cxLookAndFeels,
   cxLookAndFeelPainters, cxContainer, cxEdit, dxSkinsCore, dxSkinBasic,
@@ -39,7 +39,7 @@ uses
   System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
   dxGDIPlusClasses, cxImage, System.ImageList, Vcl.ImgList, cxImageList,
-  Vcl.Buttons;
+  Vcl.Buttons, Winapi.GDIPOBJ, Winapi.GDIPAPI;
 type
   // Items agregados de nodos usados para calculo de KPIs por centro.
   TNodeKPIItem = record
@@ -74,9 +74,6 @@ type
     lblUndoCount: TLabel;
     lblRedoCount: TLabel;
     btnRefresh: TButton;
-    btnAutoPlanSel: TButton;
-    btnAutoPlanAll: TButton;
-    btnDesasignarSel: TButton;
     spCentros: TcxSpinEdit;
     cxSpinEdit2: TcxSpinEdit;
     dtFechaInicioGantt: TcxDateEdit;
@@ -139,6 +136,11 @@ type
     popCentros: TPopupMenu;
     INFO3: TMenuItem;
     popGantt: TPopupMenu;
+    miSeleccion: TMenuItem;
+    miSelDia: TMenuItem;
+    miSelSemana: TMenuItem;
+    miSelDeseleccionar: TMenuItem;
+    N5: TMenuItem;
     MenuItem1: TMenuItem;
     Desactivarfechabloqueo1: TMenuItem;
     Calendario1: TMenuItem;
@@ -217,30 +219,24 @@ type
     Label6: TLabel;
     btnGanttDates: TcxButton;
     btnShowWeekends: TcxButton;
-    Panel12: TPanel;
-    Label30: TLabel;
-    Label31: TLabel;
-    Panel4: TPanel;
-    Label9: TLabel;
-    Label10: TLabel;
-    Panel15: TPanel;
-    Label36: TLabel;
-    Label37: TLabel;
-    Panel14: TPanel;
-    Label34: TLabel;
-    lblVisible: TLabel;
-    Panel13: TPanel;
-    Label32: TLabel;
-    lblNodes: TLabel;
+    pnlKPI3: TPanel;
+    LblKPIValue3: TLabel;
+    pnlKPI2: TPanel;
+    LblKPIValue2: TLabel;
+    pnlKPI1: TPanel;
+    LblKPIValue1: TLabel;
+    pnlKPI0: TPanel;
+    LblKPITitle0: TLabel;
+    LblKPIValue0: TLabel;
     pnlOperarios: TPanel;
     Label23: TLabel;
     Shape3: TShape;
     Label19: TLabel;
-    cxButton2: TcxButton;
-    cxButton3: TcxButton;
+    btnHighlightOperarios: TcxButton;
+    btnFilterOperarios: TcxButton;
     FcxFilterOperarios: TcxCheckComboBox;
     cbDepartamentos: TcxCheckComboBox;
-    cxButton4: TcxButton;
+    btnClearOperarios: TcxButton;
     pnlSummary: TPanel;
     pnlSummaryToolbar: TPanel;
     Shape4: TShape;
@@ -250,6 +246,20 @@ type
     btnS4: TcxButton;
     btnS1: TcxButton;
     btnS2: TcxButton;
+    btnAutoPlanSel: TcxButton;
+    btnDesasignarSel: TcxButton;
+    LblKPITitle1: TLabel;
+    LblKPITitle2: TLabel;
+    LblKPITitle3: TLabel;
+    Image1: TImage;
+    Image2: TImage;
+    Shape6: TShape;
+    pnlKPIAlertas: TPanel;
+    Label8: TLabel;
+    Label9: TLabel;
+    Image3: TImage;
+    Label10: TLabel;
+    procedure pnlKPIAlertasClick(Sender: TObject);
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
@@ -258,9 +268,14 @@ type
       const StartTime: TDateTime; const PxPerMinute, ScrollX: Single);
     // Resum/KPIs per dia
     procedure SummaryDayKPI(Sender: TObject; const ADate: TDateTime;
-      out ALine1, ALine2: string; out AHighlight: Boolean);
+      out ALine1, ALine2, ALine3: string; out AHighlight: Boolean;
+      out AIntensity: Single; out ABadgeCount: Integer;
+      out ABadgeColor: TSummaryBadgeColor);
     procedure RebuildSummaryData;
     procedure SetSummaryView(const AView: TSummaryView);
+    // Marca el boton toggle de la vista de Summary indicada y la aplica (para
+    // restaurar el Summary guardado al reabrir el Gantt).
+    procedure RestaurarSummaryView(const AView: TSummaryView);
     procedure btnS1Click(Sender: TObject);
     procedure btnS2Click(Sender: TObject);
     procedure btnS3Click(Sender: TObject);
@@ -280,9 +295,6 @@ type
       const NewDateTime: TDateTime);
     procedure PersistMarcadores;
     procedure miAsignarOperariosClick(Sender: TObject);
-    procedure btnAutoPlanSelClick(Sender: TObject);
-    procedure btnAutoPlanAllClick(Sender: TObject);
-    procedure btnDesasignarSelClick(Sender: TObject);
     procedure miGestionOperariosClick(Sender: TObject);
     procedure miEditarLinksClick(Sender: TObject);
     procedure miDesplanificarClick(Sender: TObject);
@@ -299,6 +311,9 @@ type
     procedure Gestionmarcadores1Click(Sender: TObject);
     procedure Marcadoresautomaticos1Click(Sender: TObject);
     procedure RestaurarVistaDefecto1Click(Sender: TObject);
+    procedure miSelDiaClick(Sender: TObject);
+    procedure miSelSemanaClick(Sender: TObject);
+    procedure miSelDeseleccionarClick(Sender: TObject);
     procedure ShiftRow1Click(Sender: TObject);
     procedure ShiftRowallimpact1Click(Sender: TObject);
     procedure INFO3Click(Sender: TObject);
@@ -344,6 +359,10 @@ type
     procedure btnKPIAllClick(Sender: TObject);
     procedure btnShowWeekendsClick(Sender: TObject);
     procedure lblTituloClick(Sender: TObject);
+    procedure btnClearOperariosClick(Sender: TObject);
+    procedure cbDepartamentosPropertiesChange(Sender: TObject);
+    procedure btnDesasignarSelClick(Sender: TObject);
+    procedure btnAutoPlanSelClick(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -387,6 +406,60 @@ type
     // Cache de KPIs per dia per a la banda de resum (reconstruit en canviar
     // viewport/dades/vista). Clau = DateOf(dia).
     FSummaryNodeCountByDay: TDictionary<TDate, Integer>;
+    // Ultimas alertas detectadas (cache para abrir el dialogo sin recalcular).
+    FAlertas: TArray<TAlertaItem>;
+    // Vista S1: para el badge (nodos del dia y cuantos con operarios asignados).
+    FSummaryS1TotalByDay: TDictionary<TDate, Integer>;
+    FSummaryS1WithOpsByDay: TDictionary<TDate, Integer>;
+    // Maximo valor por dia (para normalizar el heatmap del Summary 0..1).
+    FSummaryMaxValue: Integer;
+    // Vista S3: minutos ocupados y disponibles (capacidad) por dia. CACHE
+    // INCREMENTAL: no se recalcula al hacer zoom/scroll; solo se anyaden los
+    // dias visibles que aun no estaban calculados. FSummaryDiasCalc marca que
+    // dias ya estan hechos (incluso si dieron 0, para no recalcularlos).
+    FSummaryOcupMinByDay: TDictionary<TDate, Double>;
+    FSummaryDispMinByDay: TDictionary<TDate, Double>;
+    FSummaryDiasCalc: TDictionary<TDate, Boolean>;
+    FSummaryDiaFestiu: TDictionary<TDate, Boolean>;  // dia sin capacidad (no calcular)
+    // Timer de debounce: al mover el viewport o cambiar el layout NO calculamos
+    // el Summary; lo reprogramamos y calculamos cuando el usuario para (Gantt
+    // fluido). Vale para CUALQUIER vista de Summary (solo hay una activa).
+    FSummaryDebounceTimer: TTimer;
+    // Si True, el proximo recalculo debe invalidar antes el cache de horas
+    // (cuando el disparo viene de un cambio de datos/layout, no de scroll/zoom).
+    FSummaryPendingInvalidate: Boolean;
+
+    // Debounce del calculo de ALERTAS (mismo patron que el Summary): recorrer
+    // todos los nodos + calendario es caro, asi que no se recalcula en caliente
+    // sino cuando el usuario para (one-shot ~250ms).
+    FAlertasDebounceTimer: TTimer;
+
+    // Cache de rotulo de operario por nodo (vista gvmOperarios). Lo puebla
+    // RebuildOperarioLabelCache; el callback de render solo hace lookup.
+    FOperarioLabelCache: TDictionary<Integer, string>;
+    // Categoria KPI por la que se esta filtrando (0 = ninguna). Para el toggle
+    // al hacer click de nuevo en el mismo panel KPI.
+    FKPIFilterCategoria: Integer;
+
+
+    procedure SummaryDebounceTick(Sender: TObject);
+    // AInvalidate=True cuando el recalculo viene de un cambio de datos (layout,
+    // edicion, filtro) y hay que rehacer el cache; False para scroll/zoom.
+    procedure ScheduleSummaryRecalc(const AInvalidate: Boolean = False);
+
+
+
+    procedure InvalidarSummaryHorasCache;
+
+
+
+    procedure BuildSummaryHorasByDay(const AFrom, ATo: TDateTime);
+    // Recalcula el cache del Summary (solo de la VENTANA visible) al mover el
+    // viewport. Con debounce: no recalcula durante el arrastre. Si la vista es
+    // svNone no hace nada.
+    procedure RecalcSummaryActiva;
+
+
 
     procedure GoToDate(const ADate: TDateTime);
     // Iguala l'amplada de la columna esquerra del resum (pnlSummaryToolbar) amb
@@ -399,6 +472,41 @@ type
     procedure AplicarNodeLayoutSet;
     // Llena los combos de filtro (operarios y departamentos) desde el repo.
     procedure CargarFiltros;
+    // Rotulo del operario asignado a un nodo para la vista gvmOperarios:
+    // nombre si hay 1, 'VARIOS...' si varios, '' si ninguno.
+    // Lookup O(1) en cache; el render lo pide por nodo en cada frame.
+    function GetOperarioLabelForNode(const ADataId: Integer): string;
+    // (Re)construye la cache DataId -> rotulo de operario. Llamar al cargar
+    // datos y tras (re)asignar operarios. Cache vacia => callback devuelve ''.
+    procedure RebuildOperarioLabelCache;
+    // Calcula los DataIds de nodos cuyos operarios asignados coinciden con la
+    // seleccion de los combos (operarios y/o departamentos).
+    function ComputeOperarioFilterDataIds: TArray<Integer>;
+    // Aplica al Gantt el efecto de resaltar/filtrar segun el estado de los
+    // botones y la seleccion de los combos. Si no hay seleccion o ningun boton
+    // esta pulsado, limpia el efecto.
+    procedure AplicarFiltroOperarios;
+    procedure btnHighlightOperariosClick(Sender: TObject);
+    procedure btnFilterOperariosClick(Sender: TObject);
+    // Clasifica un nodo en la categoria KPI 1/2/3 segun la vista activa (0 = no
+    // entra en ninguna). Compartido por UpdateKPIs y el filtro por KPI.
+    function ClassifyNodeKPI(const N: TNode; const D: TNodeData): Integer;
+    // Filtra el Gantt mostrando solo los nodos de la categoria KPI indicada
+    // (1/2/3). Si ya estaba ese filtro, lo quita (toggle).
+    procedure FiltrarPorKPI(ACategoria: Integer);
+    // Click en el icono de un KPI (Sender = TPaintBox con Tag = nº de KPI).
+    procedure IconoKPIClick(Sender: TObject);
+    // Recalcula las alertas de planificacion y refresca el KPI de alertas
+    // (contador + color del panel segun la severidad maxima presente).
+    procedure RecalcAlertas;
+    // Programa el recalculo de alertas con debounce (no calcula en caliente).
+    procedure ScheduleRecalcAlertas;
+    procedure AlertasDebounceTick(Sender: TObject);
+    // Crea un TPaintBox con un icono en la esquina inferior izquierda del panel
+    // KPI: embudo (filtrar) o "quitar filtro" (AClearIcon=True, para KPI0).
+    procedure CrearIconoFiltroKPI(APanel: TPanel; ATag: Integer;
+      AClearIcon: Boolean);
+    procedure IconoFiltroPaint(Sender: TObject);
 
     constructor CreateVista(AOwner: TComponent;
       AOperariosRepo: TOperariosRepo;
@@ -433,7 +541,8 @@ uses
   uCentresKPI, uGestionCentres, uNodeInspector, uMarkerEditor,
   uGanttDatesDialog, uUserPrefs, System.JSON,
   uNodeCardLayout, uNodeLayoutSetRepo,
-  uAssignOperaris, uGestionOperaris, uLinkEditor,  Main;
+  uAssignOperaris, uGestionOperaris, uLinkEditor,
+  uAlertasViewer, uAlertConfig, Main;
 
 
 
@@ -510,6 +619,18 @@ constructor TfrmVistaGantt.CreateVista(AOwner: TComponent;
 begin
   inherited Create(AOwner);
   FCentreKPIs := TDictionary<Integer, TCentreKPI>.Create;
+  FOperarioLabelCache := TDictionary<Integer, string>.Create;
+  // Timer de debounce del Summary (one-shot, ~150ms). Calcula quan l'usuari
+  // para de moure el viewport, sense penalitzar la fluidesa del Gantt.
+  FSummaryDebounceTimer := TTimer.Create(Self);
+  FSummaryDebounceTimer.Enabled := False;
+  FSummaryDebounceTimer.Interval := 150;
+  FSummaryDebounceTimer.OnTimer := SummaryDebounceTick;
+  // Timer de debounce de ALERTAS (one-shot, ~250ms).
+  FAlertasDebounceTimer := TTimer.Create(Self);
+  FAlertasDebounceTimer.Enabled := False;
+  FAlertasDebounceTimer.Interval := 250;
+  FAlertasDebounceTimer.OnTimer := AlertasDebounceTick;
   FOperariosRepo := AOperariosRepo;
   FMoldeRepo := AMoldeRepo;
   FCustomFieldDefs := ACustomFieldDefs;
@@ -536,6 +657,19 @@ begin
   btnS2.OnClick := btnS2Click;
   btnS3.OnClick := btnS3Click;
   btnS4.OnClick := btnS4Click;
+
+  // Botones de resaltar/filtrar operarios (toggle en grupo con btnClear).
+  btnHighlightOperarios.OnClick := btnHighlightOperariosClick;
+  btnFilterOperarios.OnClick := btnFilterOperariosClick;
+
+  // Solo el ICONO de cada KPI es clicable (no el panel ni los labels):
+  //   - KPI0: icono "quitar filtro" -> elimina cualquier filtro.
+  //   - KPI1/2/3: icono "embudo" -> filtra por esa categoria.
+  // El Tag del PaintBox identifica el KPI destino.
+  CrearIconoFiltroKPI(pnlKPI0, 0, True);   // True = icono de quitar filtro
+  CrearIconoFiltroKPI(pnlKPI1, 1, False);
+  CrearIconoFiltroKPI(pnlKPI2, 2, False);
+  CrearIconoFiltroKPI(pnlKPI3, 3, False);
   // Instanciar el control segun el RowMode del proyecto activo.
   // TGanttControlGrupo hereda de TGanttControl (fase 6.2 decision Z) asi que
   // el resto del uVistaGantt trabaja con FGanttControl: TGanttControl sin saber
@@ -579,6 +713,13 @@ begin
   FGanttControl.OnNodeSelected := GanttNodeSelected;
   FGanttControl.OnVoid := GanttVoidClick;
   FGanttControl.OnFechaBloqueoChanged := GanttFechaBloqueoChanged;
+  FGanttControl.OnGetOperarioLabel :=
+    function(const ADataId: Integer): string
+    begin
+      Result := GetOperarioLabelForNode(ADataId);
+    end;
+  // X del pill del overlay: limpiar efecto + combos (igual que el boton X).
+  FGanttControl.OnOpFilterClear := btnClearOperariosClick;
 
   FCentrosControl.OnScrollYChanged := CentresScrollYChanged;
   // Centros clampa su scroll al MISMO maximo que el Gantt (evita desalineacion
@@ -591,6 +732,87 @@ begin
 
 end;
 
+
+procedure TfrmVistaGantt.btnClearOperariosClick(Sender: TObject);
+
+  procedure ClearCheckCombo(ACombo: TcxCheckComboBox);
+  var
+    I: Integer;
+  begin
+    // En un TcxCheckComboBox la seleccion son los items marcados (States),
+    // no ItemIndex. Hay que desmarcarlos todos para vaciar el combo.
+    ACombo.Properties.BeginUpdate;
+    try
+      for I := 0 to ACombo.Properties.Items.Count - 1 do
+        ACombo.States[I] := cbsUnchecked;
+    finally
+      ACombo.Properties.EndUpdate;
+    end;
+  end;
+
+begin
+  ClearCheckCombo(FcxFilterOperarios);
+  ClearCheckCombo(cbDepartamentos);
+  // Soltar los toggles de resaltar/filtrar y deshabilitarlos (sin seleccion no
+  // tienen sentido). Se llama tambien desde la X del overlay (no via UI), por
+  // eso bajamos .Down explicitamente ademas de .Enabled.
+  btnHighlightOperarios.Down := False;
+  btnFilterOperarios.Down := False;
+  btnHighlightOperarios.Enabled := False;
+  btnFilterOperarios.Enabled := False;
+  // Tambien resetear el filtro por KPI (comparten el mismo efecto en el Gantt).
+  FKPIFilterCategoria := 0;
+  // Quitar cualquier efecto de resaltar/filtrar del Gantt.
+  if FGanttControl <> nil then
+  begin
+    FGanttControl.ClearOperarioFilter;
+    ScheduleSummaryRecalc(True);  // recuperar el conteo completo (con debounce)
+  end;
+end;
+
+procedure TfrmVistaGantt.btnDesasignarSelClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  I: Integer;
+  N: TNode;
+  D: TNodeData;
+  Ids: TArray<Integer>;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then
+  begin
+    ShowMessage('Selecciona al menos un nodo en el Gantt.');
+    Exit;
+  end;
+  if MessageDlg(Format('?Quitar TODAS las asignaciones de operarios de %d nodo(s)?',
+       [Length(SelIndexes)]),
+     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  if not Assigned(FOperariosRepo) or not Assigned(DMPlanner.NodeDataRepo) then
+    Exit;
+
+  SetLength(Ids, Length(SelIndexes));
+  for I := 0 to High(SelIndexes) do
+  begin
+    N := FGanttControl.GetNodeAt(SelIndexes[I]);
+    Ids[I] := N.DataId;
+    FOperariosRepo.ClearAsignacionsByNode(N.DataId);
+    if DMPlanner.NodeDataRepo.TryGetById(N.DataId, D) then
+    begin
+      D.OperariosAsignados := 0;
+      D.Modified := True;
+      DMPlanner.NodeDataRepo.AddOrUpdate(D);
+    end;
+  end;
+
+  RebuildOperarioLabelCache;
+  FGanttControl.RebuildLayout;
+  FGanttControl.Invalidate;
+  if Assigned(Form1) then
+    Form1.NotifyPlanModified(Ids);
+
+end;
 
 procedure TfrmVistaGantt.btnShowWeekendsClick(Sender: TObject);
 var
@@ -913,6 +1135,12 @@ begin
     FGanttControl.OnNodeSelected := GanttNodeSelected;
     FGanttControl.OnVoid := GanttVoidClick;
     FGanttControl.OnFechaBloqueoChanged := GanttFechaBloqueoChanged;
+    FGanttControl.OnGetOperarioLabel :=
+      function(const ADataId: Integer): string
+      begin
+        Result := GetOperarioLabelForNode(ADataId);
+      end;
+    FGanttControl.OnOpFilterClear := btnClearOperariosClick;
     AplicarNodeLayoutSet;   // control recreat -> reaplicar el set de layout
   end
   else if NecesitaGrupo then
@@ -945,6 +1173,8 @@ begin
     FSummaryControl.SetTimeRange(T0, T1);
     FSummaryControl.SetViewport(FTimelineControl.StartTime,
       FTimelineControl.PxPerMinute, FTimelineControl.ScrollX);
+    // Carga de datos: el cache de horas (de un plan anterior) ya no vale.
+    InvalidarSummaryHorasCache;
     RebuildSummaryData;
     FSummaryControl.Invalidate;
   end;
@@ -960,6 +1190,193 @@ begin
   Result := TFormatSettings.Create;
   Result.DateSeparator := '-';
   Result.ShortDateFormat := ISO_DATE;
+end;
+
+function TfrmVistaGantt.GetOperarioLabelForNode(const ADataId: Integer): string;
+begin
+  // Lookup O(1). La cache se puebla en RebuildOperarioLabelCache; aqui NO se
+  // recorre el repo (esto se llama por nodo en cada repintado).
+  if not FOperarioLabelCache.TryGetValue(ADataId, Result) then
+    Result := '';
+end;
+
+procedure TfrmVistaGantt.RebuildOperarioLabelCache;
+var
+  Asigs: TArray<TAsignacionOperario>;
+  I: Integer;
+  CountByNode: TDictionary<Integer, Integer>;
+  FirstOpByNode: TDictionary<Integer, Integer>;
+  Op: TOperario;
+  Pair: TPair<Integer, Integer>;
+  N, OpId: Integer;
+begin
+  FOperarioLabelCache.Clear;
+  if not Assigned(FOperariosRepo) then Exit;
+
+  // Una sola pasada sobre TODAS las asignaciones: contamos por nodo y
+  // guardamos el primer operario de cada nodo. Asi evitamos O(N) por nodo.
+  CountByNode := TDictionary<Integer, Integer>.Create;
+  FirstOpByNode := TDictionary<Integer, Integer>.Create;
+  try
+    Asigs := FOperariosRepo.GetAllAsignacions;
+    for I := 0 to High(Asigs) do
+    begin
+      if CountByNode.TryGetValue(Asigs[I].DataId, N) then
+        CountByNode[Asigs[I].DataId] := N + 1
+      else
+      begin
+        CountByNode.Add(Asigs[I].DataId, 1);
+        FirstOpByNode.Add(Asigs[I].DataId, Asigs[I].OperarioId);
+      end;
+    end;
+
+    for Pair in CountByNode do
+    begin
+      if Pair.Value > 1 then
+        FOperarioLabelCache.Add(Pair.Key, 'VARIOS...')
+      else
+      begin
+        FirstOpByNode.TryGetValue(Pair.Key, OpId);
+        if FOperariosRepo.GetOperarioById(OpId, Op) then
+          FOperarioLabelCache.Add(Pair.Key, Op.Nombre)
+        else
+          FOperarioLabelCache.Add(Pair.Key, IntToStr(OpId));
+      end;
+    end;
+  finally
+    CountByNode.Free;
+    FirstOpByNode.Free;
+  end;
+end;
+
+function TfrmVistaGantt.ComputeOperarioFilterDataIds: TArray<Integer>;
+var
+  I: Integer;
+  OpIdsSel: TDictionary<Integer, Boolean>;   // operarios marcados directamente
+  DeptIdsSel: TDictionary<Integer, Boolean>; // departamentos marcados
+  OpValido: TDictionary<Integer, Boolean>;   // operarios que cuentan como match
+  ResultIds: TDictionary<Integer, Boolean>;  // DataIds resultantes (dedup)
+  AllOps: TArray<TOperario>;
+  Depts: TArray<TDepartamento>;
+  Asigs: TArray<TAsignacionOperario>;
+  Tag, J: Integer;
+  Matches: Boolean;
+  List: TList<Integer>;
+  Key: Integer;
+begin
+  SetLength(Result, 0);
+  if not Assigned(FOperariosRepo) then Exit;
+
+  OpIdsSel := TDictionary<Integer, Boolean>.Create;
+  DeptIdsSel := TDictionary<Integer, Boolean>.Create;
+  OpValido := TDictionary<Integer, Boolean>.Create;
+  ResultIds := TDictionary<Integer, Boolean>.Create;
+  List := TList<Integer>.Create;
+  try
+    // 1) Operarios marcados en el combo (Tag = OperarioId; -1 = '(Todos)').
+    for I := 0 to FcxFilterOperarios.Properties.Items.Count - 1 do
+      if FcxFilterOperarios.States[I] = cbsChecked then
+      begin
+        Tag := FcxFilterOperarios.Properties.Items[I].Tag;
+        if Tag > 0 then OpIdsSel.AddOrSetValue(Tag, True);
+      end;
+
+    // 2) Departamentos marcados (Tag = DepartamentoId).
+    for I := 0 to cbDepartamentos.Properties.Items.Count - 1 do
+      if cbDepartamentos.States[I] = cbsChecked then
+      begin
+        Tag := cbDepartamentos.Properties.Items[I].Tag;
+        if Tag > 0 then DeptIdsSel.AddOrSetValue(Tag, True);
+      end;
+
+    if (OpIdsSel.Count = 0) and (DeptIdsSel.Count = 0) then Exit;
+
+    // 3) Operarios que cuentan como match: marcados directamente, o que
+    //    pertenecen a algun departamento marcado.
+    AllOps := FOperariosRepo.GetOperarios;
+    for I := 0 to High(AllOps) do
+    begin
+      Matches := OpIdsSel.ContainsKey(AllOps[I].Id);
+      if (not Matches) and (DeptIdsSel.Count > 0) then
+      begin
+        Depts := FOperariosRepo.GetDeptsByOperario(AllOps[I].Id);
+        for J := 0 to High(Depts) do
+          if DeptIdsSel.ContainsKey(Depts[J].Id) then
+          begin
+            Matches := True;
+            Break;
+          end;
+      end;
+      if Matches then OpValido.AddOrSetValue(AllOps[I].Id, True);
+    end;
+
+    if OpValido.Count = 0 then Exit;
+
+    // 4) DataIds de nodos con alguna asignacion a un operario valido.
+    Asigs := FOperariosRepo.GetAllAsignacions;
+    for I := 0 to High(Asigs) do
+      if OpValido.ContainsKey(Asigs[I].OperarioId) then
+        ResultIds.AddOrSetValue(Asigs[I].DataId, True);
+
+    for Key in ResultIds.Keys do
+      List.Add(Key);
+    Result := List.ToArray;
+  finally
+    OpIdsSel.Free;
+    DeptIdsSel.Free;
+    OpValido.Free;
+    ResultIds.Free;
+    List.Free;
+  end;
+end;
+
+procedure TfrmVistaGantt.AplicarFiltroOperarios;
+var
+  Ids: TArray<Integer>;
+  HideMode: Boolean;
+begin
+  if FGanttControl = nil then Exit;
+
+  // El filtro por operarios y el filtro por KPI comparten un unico efecto en el
+  // control: al actuar el de operarios, anular el de KPI.
+  FKPIFilterCategoria := 0;
+
+  // Solo aplica si hay seleccion en combos Y uno de los botones esta pulsado.
+  if not (btnHighlightOperarios.Down or btnFilterOperarios.Down) then
+  begin
+    FGanttControl.ClearOperarioFilter;
+    ScheduleSummaryRecalc(True);
+    Exit;
+  end;
+
+  Ids := ComputeOperarioFilterDataIds;
+  if Length(Ids) = 0 then
+  begin
+    FGanttControl.ClearOperarioFilter;
+    ScheduleSummaryRecalc(True);
+    Exit;
+  end;
+
+  // btnFilter = ocultar no coincidentes; btnHighlight = atenuar no coincidentes.
+  HideMode := btnFilterOperarios.Down;
+  // Texto del pill del overlay segun el modo y el nº de coincidencias.
+  if HideMode then
+    FGanttControl.OpFilterLabel := Format('Filtrado: %d', [Length(Ids)])
+  else
+    FGanttControl.OpFilterLabel := Format('Resaltado: %d', [Length(Ids)]);
+  FGanttControl.SetOperarioFilter(Ids, HideMode);
+  // El Summary cuenta solo nodos mostrados (en modo ocultar cambia el conteo).
+  ScheduleSummaryRecalc(True);
+end;
+
+procedure TfrmVistaGantt.btnHighlightOperariosClick(Sender: TObject);
+begin
+  AplicarFiltroOperarios;
+end;
+
+procedure TfrmVistaGantt.btnFilterOperariosClick(Sender: TObject);
+begin
+  AplicarFiltroOperarios;
 end;
 
 procedure TfrmVistaGantt.CargarFiltros;
@@ -1030,7 +1447,7 @@ var
   Root: TJSONObject;
   GanttStart, GanttEnd: TDateTime;
   PxPerMin, ScrollX, ScrollY: Double;
-  VistaIndex: Integer;
+  VistaIndex, SummaryViewInt: Integer;
   HideWeekends: Boolean;
   HasGanttRange, HasViewport, HasVista: Boolean;
 begin
@@ -1048,6 +1465,7 @@ begin
     HasGanttRange := False;
     HasViewport := False;
     HasVista := False;
+    SummaryViewInt := -1;
     GanttStart := 0;
     GanttEnd := 0;
     PxPerMin := 0;
@@ -1091,6 +1509,7 @@ begin
           HasVista := True;
 
         Root.TryGetValue<Boolean>('hideWeekends', HideWeekends);
+        Root.TryGetValue<Integer>('summaryView', SummaryViewInt);
       finally
         Root.Free;
       end;
@@ -1142,6 +1561,11 @@ begin
       end;
       cbVistasPropertiesChange(cbVistas);
     end;
+
+    // Restaurar la vista del Summary (banda KPIs): pulsar el boton toggle
+    // correspondiente para que quede marcado y SetSummaryView recalcule.
+    if SummaryViewInt > Ord(svNone) then
+      RestaurarSummaryView(TSummaryView(SummaryViewInt));
   finally
     // Si hay viewport pendiente, mantener FLoadingPrefs = True hasta que
     // ApplyPendingViewport lo libere. Si no, liberar ahora.
@@ -1189,6 +1613,11 @@ begin
     FGanttControl.SetViewport(FGanttControl.StartTime, FPendingPxPerMin, FPendingScrollX);
     if Assigned(FTimelineControl) then
       FTimelineControl.SetViewport(FTimelineControl.StartTime, FPendingPxPerMin, FPendingScrollX);
+    // La banda de resumen comparte coordenadas temporales: hay que aplicarle el
+    // MISMO viewport, si no queda desalineada con el timeline hasta el primer
+    // scroll/zoom (que ya la sincroniza via TimelineViewportChanged).
+    if Assigned(FSummaryControl) then
+      FSummaryControl.SetViewport(FSummaryControl.StartTime, FPendingPxPerMin, FPendingScrollX);
 
     // Scroll vertical: aplicar al Gantt (clampa contra GetMaxScrollY, que ya es
     // valido porque el form es visible y FContentHeight esta calculado) y
@@ -1234,6 +1663,9 @@ begin
     Root.AddPair('scrollY', TJSONNumber.Create(FGanttControl.ScrollY));
     Root.AddPair('vistaIndex', TJSONNumber.Create(cbVistas.ItemIndex));
     Root.AddPair('hideWeekends', TJSONBool.Create(FGanttControl.HideWeekends));
+    // Vista del Summary (banda KPIs por dia) para restaurarla al reabrir.
+    if Assigned(FSummaryControl) then
+      Root.AddPair('summaryView', TJSONNumber.Create(Ord(FSummaryControl.View)));
     DMPlanner.UserPrefs.Save(SCREEN_KEY_VISTA_GANTT, Root.ToJSON);
   finally
     Root.Free;
@@ -1471,8 +1903,13 @@ begin
   // Así ambos controles comparten las mismas filas y el scroll/zoom las mantiene.
   FCentrosControl.SetRows(FGanttControl.GetRowsCopy);
   FCentrosControl.Invalidate;
-  // Recalcular la banda de resum amb les noves dades (si hi ha vista activa).
+  // Carrega de dades: invalidar el cache d'hores i recalcular el Summary.
+  InvalidarSummaryHorasCache;
   RebuildSummaryData;
+  // Si la vista activa es operarios, repoblar la cache de rotulos con los
+  // datos recien cargados (si no, se poblara al entrar en esa vista).
+  if FGanttControl.Vista = gvmOperarios then
+    RebuildOperarioLabelCache;
 end;
 procedure TfrmVistaGantt.CargarDependencias;
 var
@@ -1597,6 +2034,41 @@ begin
   end;
 end;
 
+function CheckComboHasChecked(ACombo: TcxCheckComboBox): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to ACombo.Properties.Items.Count - 1 do
+    if ACombo.States[i] = cbsChecked then
+    begin
+      Result := True;
+      Break;
+    end;
+end;
+
+procedure TfrmVistaGantt.cbDepartamentosPropertiesChange(Sender: TObject);
+var
+  bEnabled: Boolean;
+begin
+  bEnabled := CheckComboHasChecked(FcxFilterOperarios) or
+              CheckComboHasChecked(cbDepartamentos);
+
+  btnHighlightOperarios.Enabled := bEnabled;
+  btnFilterOperarios.Enabled := bEnabled;
+
+  // Si ya no queda nada seleccionado, soltar los botones (no tiene sentido
+  // mantenerlos pulsados sin filtro) y limpiar el efecto del Gantt.
+  if not bEnabled then
+  begin
+    btnHighlightOperarios.Down := False;
+    btnFilterOperarios.Down := False;
+  end;
+
+  // Si hay un boton de efecto pulsado, reaplicar con la nueva seleccion.
+  AplicarFiltroOperarios;
+end;
+
 procedure TfrmVistaGantt.cbVistasPropertiesChange(Sender: TObject);
 var
   idx: Integer;
@@ -1621,7 +2093,23 @@ begin
       vm := gvmNormal;
     end;
 
+    // La vista de operarios pinta bajo el caption el operario asignado por
+    // nodo (lookup en cache). Repoblar la cache al entrar en la vista.
+    if vm = gvmOperarios then
+      RebuildOperarioLabelCache;
+
+    // Al cambiar de vista, un filtro por KPI activo ya no tiene sentido (las
+    // categorias cambian): quitarlo.
+    if FKPIFilterCategoria <> 0 then
+    begin
+      FKPIFilterCategoria := 0;
+      FGanttControl.ClearOperarioFilter;
+    end;
+
     FGanttControl.Vista := vm;
+    // Los KPIs (titulos/colores/contadores por categoria) dependen de la vista:
+    // refrescarlos al cambiarla.
+    UpdateKPIs;
     if btnFocus.CanFocus then
       btnFocus.SetFocus;
     SaveViewportPrefs;
@@ -1678,6 +2166,42 @@ end;
 procedure TfrmVistaGantt.RestaurarVistaDefecto1Click(Sender: TObject);
 begin
   RestaurarVistaPorDefecto;
+end;
+
+procedure TfrmVistaGantt.miSelDiaClick(Sender: TObject);
+var
+  D0, D1: TDateTime;
+  n: Integer;
+begin
+  if FGanttControl = nil then Exit;
+  // Dia bajo el clic (FClickDatetime se fija en el MouseDown del control).
+  D0 := DateOf(FGanttControl.FClickDatetime);
+  D1 := D0 + 1;  // [inicio dia, inicio dia siguiente)
+  n := FGanttControl.SelectNodesInDateRange(D0, D1, True);
+  if n = 0 then
+    ShowMessage('No hay nodos en ese d'#237'a.');
+end;
+
+procedure TfrmVistaGantt.miSelSemanaClick(Sender: TObject);
+var
+  D0, D1: TDateTime;
+  dow, n: Integer;
+begin
+  if FGanttControl = nil then Exit;
+  // Inicio de semana (lunes) que contiene el dia del clic.
+  D0 := DateOf(FGanttControl.FClickDatetime);
+  dow := DayOfTheWeek(D0);   // 1=lunes .. 7=domingo
+  D0 := D0 - (dow - 1);      // retroceder al lunes
+  D1 := D0 + 7;              // [lunes, lunes siguiente)
+  n := FGanttControl.SelectNodesInDateRange(D0, D1, True);
+  if n = 0 then
+    ShowMessage('No hay nodos en esa semana.');
+end;
+
+procedure TfrmVistaGantt.miSelDeseleccionarClick(Sender: TObject);
+begin
+  if FGanttControl <> nil then
+    FGanttControl.ClearSelection;
 end;
 procedure TfrmVistaGantt.lblModifiedClick(Sender: TObject);
 begin
@@ -1858,6 +2382,17 @@ begin
     for Dia := 0 to 6 do
     begin
       Periods := SrcCal.NonWorkingPeriodsForDate(RefDate + Dia);
+      // Defensa: si el SrcCal NO te franges no-laborables explicites pero el dia
+      // sencer es no laborable (cap minut de treball), forcem un periode complet
+      // 00:00-24:00. Aixi un diumenge sense regla explicita no queda 'tot
+      // laborable' al DstCal (bug: comptava nodes en diumenge al Summary S4).
+      if (Length(Periods) = 0) and
+         (SrcCal.WorkingMinutesBetween(RefDate + Dia, RefDate + Dia + 1) = 0) then
+      begin
+        SetLength(Periods, 1);
+        Periods[0].StartTimeOfDay := 0;
+        Periods[0].EndTimeOfDay := 1 - (1.0 / SecsPerDay);  // 23:59:59
+      end;
       DstCal.SetDayNonWorkingPeriods(
         DayOfTheWeek(RefDate + Dia), Periods);
     end;
@@ -1947,6 +2482,7 @@ begin
   finally
     FUpdatingViewport := False;
   end;
+  ScheduleSummaryRecalc;  // debounce: calcula quan l'usuari para
   SaveViewportPrefs;
 end;
 procedure TfrmVistaGantt.TimelineInteraction(Sender: TObject;
@@ -1954,6 +2490,9 @@ procedure TfrmVistaGantt.TimelineInteraction(Sender: TObject;
 begin
   if Assigned(FGanttControl) then
     FGanttControl.TimelineInteraction(Sender, Interacting);
+  // Al soltar el arrastre, programar el recalculo (debounce via timer).
+  if not Interacting then
+    ScheduleSummaryRecalc;
 end;
 procedure TfrmVistaGantt.SyncSummaryToolbarWidth;
 begin
@@ -1991,6 +2530,7 @@ begin
   finally
     FUpdatingViewport := False;
   end;
+  ScheduleSummaryRecalc;  // debounce: calcula quan l'usuari para
   SaveViewportPrefs;
 end;
 
@@ -2000,7 +2540,12 @@ var
 begin
   if not Assigned(FSummaryControl) then Exit;
 
+  // El compte de nodes SI es barat: el recreem cada cop sobre la finestra visible.
+  // El cache d'HORES (S3) NO es destrueix aqui: es INCREMENTAL (nomes hi afegim
+  // els dies nous). Nomes es buida quan canvien dades (InvalidarSummaryHorasCache).
   FreeAndNil(FSummaryNodeCountByDay);
+  FreeAndNil(FSummaryS1TotalByDay);
+  FreeAndNil(FSummaryS1WithOpsByDay);
 
   if (FSummaryControl.View = svNone) or (not Assigned(FGanttControl)) then
   begin
@@ -2008,39 +2553,331 @@ begin
     Exit;
   end;
 
-  // Calculem sobre TOT el rang del pla (no nomes el visible): el compte per dia
-  // no depen de l'scroll horitzontal, aixi el pan/zoom NO necessita recalcular
-  // (lookup O(1) per dia). Marge ampli per cobrir nodes fora del rang nominal.
-  vStart := FGanttControl.StartTime - 2;
-  vEnd := FGanttControl.EndTime + 2;
+  // SIEMPRE calculamos solo la VENTANA DE DIAS VISIBLE (nunca todo el plan/anyo),
+  // por rendimiento. Y solo la dato de la vista activa (el case salta lo demas).
+  vStart := FGanttControl.StartVisibleTime - 1;
+  vEnd := FGanttControl.EndVisibleTime + 1;
 
   case FSummaryControl.View of
     svNodeCount:
       FSummaryNodeCountByDay := FGanttControl.GetVisibleNodeCountByDay(vStart, vEnd);
+    svS1:
+      begin
+        // S1 = operarios asignados por dia (texto central) + badge de cobertura:
+        // nodos del dia y cuantos tienen operarios asignados.
+        FSummaryNodeCountByDay := FGanttControl.GetOperariosAsignadosByDay(vStart, vEnd);
+        FGanttControl.GetNodeOperatorCoverByDay(vStart, vEnd,
+          FSummaryS1TotalByDay, FSummaryS1WithOpsByDay);
+      end;
+    svS3:
+      BuildSummaryHorasByDay(vStart, vEnd);  // incremental: solo dias nuevos
   end;
+
+  // Maximo por dia, para normalizar el heatmap (verde claro->oscuro).
+  FSummaryMaxValue := 0;
+  if Assigned(FSummaryNodeCountByDay) then
+    for var V in FSummaryNodeCountByDay.Values do
+      if V > FSummaryMaxValue then FSummaryMaxValue := V;
 
   FSummaryControl.Invalidate;
 end;
 
-procedure TfrmVistaGantt.SummaryDayKPI(Sender: TObject; const ADate: TDateTime;
-  out ALine1, ALine2: string; out AHighlight: Boolean);
+procedure TfrmVistaGantt.InvalidarSummaryHorasCache;
+begin
+  // Vaciar el cache incremental de horas: se vuelve a poblar bajo demanda al
+  // pintar/mover el viewport. Llamar SOLO al cambiar datos (nodos, calendarios,
+  // filtro), NO al hacer zoom/scroll.
+  if Assigned(FSummaryOcupMinByDay) then FSummaryOcupMinByDay.Clear;
+  if Assigned(FSummaryDispMinByDay) then FSummaryDispMinByDay.Clear;
+  if Assigned(FSummaryDiasCalc) then FSummaryDiasCalc.Clear;
+  if Assigned(FSummaryDiaFestiu) then FSummaryDiaFestiu.Clear;
+end;
+
+procedure TfrmVistaGantt.BuildSummaryHorasByDay(const AFrom, ATo: TDateTime);
 var
-  n: Integer;
+  Centres: TArray<TCentreTreball>;
+  Cal, NodeCal: TCentreCalendar;
+  I: Integer;
+  Dia, DiaIni, DiaFi, dNodeIni, dNodeFi: TDate;
+  N: TNode;
+  ns, ne: TDateTime;
+  ov, cur: Double;
+  mins: Integer;
+  hayNuevos: Boolean;
+
+  function EsNou(const ADia: TDate): Boolean;
+  begin
+    Result := not FSummaryDiasCalc.ContainsKey(ADia);
+  end;
+
+begin
+  if FGanttControl = nil then Exit;
+
+  // CACHE INCREMENTAL: crear los diccionarios solo la primera vez; despues solo
+  // anyadimos los dias que faltan. NUNCA los recreamos al hacer zoom/scroll.
+  if FSummaryOcupMinByDay = nil then
+    FSummaryOcupMinByDay := TDictionary<TDate, Double>.Create;
+  if FSummaryDispMinByDay = nil then
+    FSummaryDispMinByDay := TDictionary<TDate, Double>.Create;
+  if FSummaryDiasCalc = nil then
+    FSummaryDiasCalc := TDictionary<TDate, Boolean>.Create;
+  if FSummaryDiaFestiu = nil then
+    FSummaryDiaFestiu := TDictionary<TDate, Boolean>.Create;
+
+  DiaIni := DateOf(AFrom);
+  DiaFi := DateOf(ATo);
+
+  // ¿Hay algun dia nuevo en la ventana? Si no, salimos sin recorrer nada.
+  hayNuevos := False;
+  Dia := DiaIni;
+  while Dia <= DiaFi do
+  begin
+    if EsNou(Dia) then begin hayNuevos := True; Break; end;
+    Dia := Dia + 1;
+  end;
+  if not hayNuevos then Exit;
+
+  // 1) Disponibles/dia = suma de minutos laborables de cada centro (calendario).
+  //    SOLO para los dias que aun NO estaban calculados.
+  //    IMPORTANTE: usamos el MISMO calendario que la ocupacion (el del control,
+  //    GetCalendar), no el de CentresRepo: si difieren, un dia no laborable
+  //    podria dar capacidad 0 pero ocupacion residual (bug '0h 0h 5%').
+  if Assigned(DMPlanner.CentresRepo) then
+  begin
+    Centres := DMPlanner.CentresRepo.GetAll;
+    for I := 0 to High(Centres) do
+    begin
+      Cal := FGanttControl.GetCalendar(Centres[I].Id);
+      if Cal = nil then Continue;
+      Dia := DiaIni;
+      while Dia <= DiaFi do
+      begin
+        if EsNou(Dia) then
+        begin
+          mins := Cal.WorkingMinutesBetween(Dia, Dia + 1);
+          if mins > 0 then
+          begin
+            if FSummaryDispMinByDay.TryGetValue(Dia, cur) then
+              FSummaryDispMinByDay[Dia] := cur + mins
+            else
+              FSummaryDispMinByDay.Add(Dia, mins);
+          end;
+        end;
+        Dia := Dia + 1;
+      end;
+    end;
+  end;
+
+  // Marcar como FESTIVO todo dia nuevo SIN capacidad (0 min laborables en todos
+  // los centros). En esos dias no calculamos ocupacion y el Summary los deja en
+  // blanco. Esto ademas abarata el bucle de nodos (los salta).
+  Dia := DiaIni;
+  while Dia <= DiaFi do
+  begin
+    if EsNou(Dia) and (not FSummaryDispMinByDay.ContainsKey(Dia)) then
+      FSummaryDiaFestiu.AddOrSetValue(Dia, True);
+    Dia := Dia + 1;
+  end;
+
+  // 2) Ocupadas/dia = minutos de cada nodo que solapan con cada dia NUEVO y
+  //    LABORABLE (los festivos se saltan: casilla en blanco).
+  for I := 0 to FGanttControl.NodeCount - 1 do
+  begin
+    N := FGanttControl.GetNodeAt(I);
+    if N.DataId = 0 then Continue;
+    // Respetar el filtro: los nodos ocultos (modo ocultar) NO cuentan horas,
+    // igual que en el contador de nodos (S4). Asi al filtrar/desfiltrar las
+    // horas ocupadas tambien cambian.
+    if FGanttControl.IsNodeHiddenByFilter(N.DataId) then Continue;
+    dNodeIni := DateOf(N.StartTime);
+    dNodeFi := DateOf(N.EndTime);
+    // Descartar nodos que no tocan la ventana.
+    if (dNodeFi < DiaIni) or (dNodeIni > DiaFi) then Continue;
+    // Calendario del centro del nodo: para imputar SOLO minutos laborables (las
+    // horas que caen en tiempo no laborable -fines de semana, festivos, fuera de
+    // turno- NO cuentan como ocupacion).
+    NodeCal := FGanttControl.GetCalendar(N.CentreId);
+    Dia := dNodeIni;
+    if Dia < DiaIni then Dia := DiaIni;
+    while (Dia <= DiaFi) and (Dia <= dNodeFi) do
+    begin
+      if EsNou(Dia) and (not FSummaryDiaFestiu.ContainsKey(Dia)) then
+      begin
+        // Solapamiento del nodo con el dia [Dia, Dia+1).
+        ns := N.StartTime; if ns < Dia then ns := Dia;
+        ne := N.EndTime;   if ne > (Dia + 1) then ne := Dia + 1;
+        if ne > ns then
+        begin
+          // Solo minutos LABORABLES del solapamiento (descuenta no laborable).
+          if NodeCal <> nil then
+            ov := NodeCal.WorkingMinutesBetween(ns, ne)
+          else
+            ov := (ne - ns) * 24 * 60;  // sin calendario: minutos de reloj
+          if ov > 0 then
+          begin
+            if FSummaryOcupMinByDay.TryGetValue(Dia, cur) then
+              FSummaryOcupMinByDay[Dia] := cur + ov
+            else
+              FSummaryOcupMinByDay.Add(Dia, ov);
+          end;
+        end;
+      end;
+      Dia := Dia + 1;
+    end;
+  end;
+
+  // Marcar como calculados TODOS los dias del rango (incluso los que dieron 0,
+  // para no reintentarlos). Hacerlo AL FINAL para que EsNou() funcione arriba.
+  Dia := DiaIni;
+  while Dia <= DiaFi do
+  begin
+    FSummaryDiasCalc.AddOrSetValue(Dia, True);
+    Dia := Dia + 1;
+  end;
+end;
+
+procedure TfrmVistaGantt.ScheduleSummaryRecalc(const AInvalidate: Boolean);
+begin
+  // DEBOUNCE: en vez de recalcular ahora (mientras el usuario mueve el viewport
+  // o arrastra nodos, lo que penalizaria el Gantt), reprogramamos un timer
+  // corto. Cada evento lo reinicia; solo se calcula cuando el usuario PARA.
+  if not Assigned(FSummaryControl) then Exit;
+  if FSummaryControl.View = svNone then Exit;
+  if not Assigned(FSummaryDebounceTimer) then Exit;
+  // Si algun disparador pide invalidar (cambio de datos), se queda pendiente
+  // hasta el proximo tick (no se pierde aunque luego lleguen disparos de scroll).
+  if AInvalidate then FSummaryPendingInvalidate := True;
+  FSummaryDebounceTimer.Enabled := False;  // reinicia la cuenta
+  FSummaryDebounceTimer.Enabled := True;
+end;
+
+procedure TfrmVistaGantt.SummaryDebounceTick(Sender: TObject);
+begin
+  FSummaryDebounceTimer.Enabled := False;  // one-shot
+  if FSummaryPendingInvalidate then
+  begin
+    FSummaryPendingInvalidate := False;
+    InvalidarSummaryHorasCache;  // datos cambiados -> rehacer cache
+  end;
+  RecalcSummaryActiva;
+end;
+
+procedure TfrmVistaGantt.RecalcSummaryActiva;
+begin
+  if not Assigned(FSummaryControl) then Exit;
+  if FSummaryControl.View = svNone then Exit; // nada que recalcular
+  // RebuildSummaryData ya calcula SOLO la ventana visible y SOLO la vista
+  // activa, y para S3 es INCREMENTAL (solo dias nuevos).
+  RebuildSummaryData;
+end;
+
+procedure TfrmVistaGantt.SummaryDayKPI(Sender: TObject; const ADate: TDateTime;
+  out ALine1, ALine2, ALine3: string; out AHighlight: Boolean;
+  out AIntensity: Single; out ABadgeCount: Integer;
+  out ABadgeColor: TSummaryBadgeColor);
+var
+  n, total, withOps: Integer;
+  dia: TDate;
+  ocup, disp, pct: Double;
 begin
   ALine1 := '';
   ALine2 := '';
+  ALine3 := '';
   AHighlight := False;
+  AIntensity := -1;  // por defecto sin heatmap
+  ABadgeCount := 0;
+  ABadgeColor := sbcNone;
+
+  dia := DateOf(ADate);
 
   case FSummaryControl.View of
     svNodeCount:
       begin
         n := 0;
         if Assigned(FSummaryNodeCountByDay) then
-          FSummaryNodeCountByDay.TryGetValue(DateOf(ADate), n);
+          FSummaryNodeCountByDay.TryGetValue(dia, n);
         if n > 0 then
         begin
           ALine1 := IntToStr(n);
           ALine2 := 'nodos';
+          // Heatmap: intensidad relativa al maximo por dia (verde claro->oscuro).
+          if FSummaryMaxValue > 0 then
+            AIntensity := n / FSummaryMaxValue
+          else
+            AIntensity := 0;
+        end;
+      end;
+
+    svS1:
+      begin
+        // Operarios asignados por dia (mismo dict que el contador de nodos).
+        n := 0;
+        if Assigned(FSummaryNodeCountByDay) then
+          FSummaryNodeCountByDay.TryGetValue(dia, n);
+        if n > 0 then
+        begin
+          ALine1 := IntToStr(n);
+          ALine2 := 'operarios';
+          if FSummaryMaxValue > 0 then
+            AIntensity := n / FSummaryMaxValue
+          else
+            AIntensity := 0;
+        end;
+
+        // Badge: numero de nodos del dia + color segun cobertura de operarios.
+        //   rojo  = ningun nodo con operarios; amarillo = algunos; verde = todos.
+        total := 0; withOps := 0;
+        if Assigned(FSummaryS1TotalByDay) then
+          FSummaryS1TotalByDay.TryGetValue(dia, total);
+        if Assigned(FSummaryS1WithOpsByDay) then
+          FSummaryS1WithOpsByDay.TryGetValue(dia, withOps);
+        if total > 0 then
+        begin
+          ABadgeCount := total;
+          if withOps = 0 then
+            ABadgeColor := sbcRed
+          else if withOps >= total then
+            ABadgeColor := sbcGreen
+          else
+            ABadgeColor := sbcYellow;
+        end;
+      end;
+
+    svS3:
+      begin
+        // Dia festivo (sin capacidad): casilla en blanco, sin heatmap.
+        if Assigned(FSummaryDiaFestiu) and FSummaryDiaFestiu.ContainsKey(dia) then
+          Exit;
+
+        // Horas ocupadas vs disponibles (capacidad de centros segun calendario).
+        disp := 0; ocup := 0;
+        if Assigned(FSummaryDispMinByDay) then
+          FSummaryDispMinByDay.TryGetValue(dia, disp);
+        if Assigned(FSummaryOcupMinByDay) then
+          FSummaryOcupMinByDay.TryGetValue(dia, ocup);
+
+        // SIN capacidad real ese dia (no laborable): casilla en blanco. Aunque
+        // hubiera ocupacion residual, sin capacidad no tiene sentido mostrarla
+        // (evita el caso '0h 0h X%' de dias no laborables).
+        if disp < 1 then Exit;
+
+        if ocup <= 0 then
+        begin
+          // Con capacidad pero sin nodos: horas disponibles + 'libre', TODO sin
+          // negrita. Forzamos modo 3-lineas (L1 vacia) para que no salga negrita.
+          ALine1 := '';
+          ALine2 := Format('%.0f h.', [disp / 60]);
+          ALine3 := 'libre';
+          AIntensity := -1;  // fondo gris (sin heatmap)
+        end
+        else
+        begin
+          // 3 lineas (letra normal): ocupadas / disponibles / % ocupacion.
+          ALine1 := Format('%.0f h.', [ocup / 60]);   // ocupadas
+          ALine2 := Format('%.0f h.', [disp / 60]);   // disponibles
+          pct := ocup / disp;
+          ALine3 := Format('%.0f%%', [pct * 100]);
+          AIntensity := pct;  // HeatColor ya clampa a 0..1
         end;
       end;
   end;
@@ -2051,6 +2888,17 @@ begin
   if not Assigned(FSummaryControl) then Exit;
   FSummaryControl.View := AView;
   RebuildSummaryData;  // recalcula el cache i repinta
+end;
+
+procedure TfrmVistaGantt.RestaurarSummaryView(const AView: TSummaryView);
+begin
+  // Marcar el toggle correspondiente (down) y aplicar la vista. Los botones van
+  // en grupo (GroupIndex), asi que marcar uno levanta los demas.
+  btnS1.Down := AView = svS1;
+  btnS2.Down := AView = svS2;
+  btnS3.Down := AView = svS3;
+  btnS4.Down := AView = svNodeCount;
+  SetSummaryView(AView);
 end;
 
 procedure TfrmVistaGantt.btnS1Click(Sender: TObject);
@@ -2087,9 +2935,12 @@ begin
   finally
     FUpdatingViewport := False;
   end;
-  // El compte per dia no depen de l'scroll/zoom (map complet del pla) -> no cal
-  // recalcular aqui. Repaint IMMEDIAT de timeline i summary perque segueixin el
-  // pan/zoom del Gantt sense moviment "a blocs".
+  // El Summary es calcula NOMES sobre els dies visibles. Per no penalitzar el
+  // pan/zoom del Gantt, el recalcul va amb DEBOUNCE (timer): es fa quan l'usuari
+  // para de moure's, no a cada frame.
+  ScheduleSummaryRecalc;
+  // Repaint IMMEDIAT de timeline i summary perque segueixin el pan/zoom del
+  // Gantt sense moviment "a blocs".
   FTimelineControl.Update;
   if Assigned(FSummaryControl) then
     FSummaryControl.Update;
@@ -2117,16 +2968,509 @@ begin
   UpdateKPIs;
 end;
 
-procedure TfrmVistaGantt.UpdateKPIs;
+function TfrmVistaGantt.ClassifyNodeKPI(const N: TNode;
+  const D: TNodeData): Integer;
+var
+  deltaMin: Integer;
+  prog, slackDays: Double;
 begin
-  lblNodes.Caption := IntToStr(FGanttControl.CNT_TotalNodes);
-  lblVisible.Caption := IntToStr(FGanttControl.CNT_TotalVisibleNodes);
-  lblModified.Caption := IntToStr(FGanttControl.CNT_TotalModifiedNodes);
-  lblNormal.Caption := IntToStr(FGanttControl.CNT_TotalNodes_StateNormal);
-  lblYellow.Caption := IntToStr(FGanttControl.CNT_TotalNodes_StateYellow);
-  lblOrange.Caption := IntToStr(FGanttControl.CNT_TotalNodes_StateOrange);
-  lblRed.Caption := IntToStr(FGanttControl.CNT_TotalNodes_StateRed);
-  lblGreen.Caption := IntToStr(FGanttControl.CNT_TotalNodes_StateGreen);
+  Result := 0;  // por defecto: no entra en ninguna categoria
+  case FGanttControl.Vista of
+    gvmOperarios:
+      begin
+        if D.OperariosNecesarios > 0 then
+        begin
+          if D.OperariosAsignados <= 0 then Result := 1
+          else if D.OperariosAsignados < D.OperariosNecesarios then Result := 2
+          else Result := 3;
+        end;
+      end;
+
+    gvmOptimitzacio:
+      begin
+        if D.DurationMinOriginal > 0 then
+        begin
+          deltaMin := Round(N.DurationMin - D.DurationMinOriginal);
+          if deltaMin > 0 then Result := 1
+          else if deltaMin = 0 then Result := 2
+          else Result := 3;
+        end
+        else
+          Result := 2;
+      end;
+
+    gvmFabricacio:
+      begin
+        if D.UnidadesAFabricar > 0 then
+        begin
+          prog := D.UnidadesFabricadas / D.UnidadesAFabricar;
+          if prog < 0.33 then Result := 1
+          else if prog < 0.85 then Result := 2
+          else Result := 3;
+        end
+        else
+          Result := 1;
+      end;
+
+    gvmFechaEntrega:
+      begin
+        if D.FechaEntrega > 0 then
+        begin
+          slackDays := (N.EndTime - D.FechaEntrega);
+          if slackDays > 0 then Result := 1
+          else if (-slackDays) <= 1 then Result := 2
+          else Result := 3;
+        end;
+      end;
+
+    gvmStock:
+      begin
+        if D.UnidadesAFabricar > 0 then
+        begin
+          if D.Stock >= D.UnidadesAFabricar then Result := 3
+          else if D.Stock >= (0.5 * D.UnidadesAFabricar) then Result := 2
+          else Result := 1;
+        end;
+      end;
+
+    gvmEstado:
+      begin
+        case D.Estado of
+          nePendiente:  Result := 1;
+          neEnCurso:    Result := 2;
+          neFinalizado: Result := 3;
+          // neBloqueado no entra en estas 3 categorias
+        end;
+      end;
+  end;
+end;
+
+procedure TfrmVistaGantt.UpdateKPIs;
+const
+  COL_DEF    = $007D6F62;  // por defecto (gris/marron)
+  COL_RED    = $004949D1;  // rojo
+  COL_ORANGE = $00559BE1;  // naranja
+  COL_GREEN  = $007EC770;  // verde
+  COL_BLUE   = $00E4D08B;  // azul (otros)
+
+  // Asigna titulo + color de fondo a un panel KPI (1..3). Title vacio = sin uso.
+  procedure SetKPI(APanel: TPanel; ATitle: TLabel; const ACaption: string;
+    AColor: TColor);
+  begin
+    ATitle.Caption := ACaption;
+    APanel.Color := AColor;
+  end;
+
+var
+  I: Integer;
+  N: TNode;
+  D: TNodeData;
+  T0, T1: TDateTime;
+  TotalNodes, VisibleNodes: Integer;
+  C1, C2, C3: Integer;  // categorias rojo/naranja/verde (o segun vista)
+begin
+  if FGanttControl = nil then Exit;
+
+  // GetVisibleTimeRange es protected; usamos las propiedades publicas que el
+  // control puebla al recalcular contadores (justo antes de OnStatsChanged).
+  T0 := FGanttControl.StartVisibleTime;
+  T1 := FGanttControl.EndVisibleTime;
+
+  TotalNodes := 0;
+  VisibleNodes := 0;
+  C1 := 0; C2 := 0; C3 := 0;
+
+  for I := 0 to FGanttControl.NodeCount - 1 do
+  begin
+    N := FGanttControl.GetNodeAt(I);
+    if (N.DataId = 0) or (DMPlanner.NodeDataRepo = nil) or
+       (not DMPlanner.NodeDataRepo.TryGetById(N.DataId, D)) then
+      Continue;
+
+    Inc(TotalNodes);
+
+    // Solo cuentan para C1/C2/C3 los nodos VISIBLES en el viewport actual.
+    if not ((N.StartTime < T1) and (N.EndTime > T0)) then Continue;
+    Inc(VisibleNodes);
+
+    // Clasificacion por vista (compartida con el filtro por KPI).
+    case ClassifyNodeKPI(N, D) of
+      1: Inc(C1);
+      2: Inc(C2);
+      3: Inc(C3);
+    end;
+  end;
+
+  // KPI0: siempre visibles / total, color por defecto.
+  pnlKPI0.Color := COL_DEF;
+  LblKPIValue0.Caption := Format('%d / %d', [VisibleNodes, TotalNodes]);
+
+  // KPI1..3: titulo, color de fondo y valor (categoria / visibles) por vista.
+  case FGanttControl.Vista of
+    gvmOperarios:
+      begin
+        SetKPI(pnlKPI1, LblKPITitle1, 'Nodos sin operarios', COL_RED);
+        SetKPI(pnlKPI2, LblKPITitle2, 'Nodos con operarios parciales', COL_ORANGE);
+        SetKPI(pnlKPI3, LblKPITitle3, 'Nodos con operarios', COL_GREEN);
+      end;
+
+    gvmOptimitzacio:
+      begin
+        SetKPI(pnlKPI1, LblKPITitle1, 'Nodos no optimizados', COL_RED);
+        SetKPI(pnlKPI2, LblKPITitle2, 'Nodos sin cambios', COL_BLUE);
+        SetKPI(pnlKPI3, LblKPITitle3, 'Nodos optimizados', COL_GREEN);
+      end;
+
+    gvmFabricacio:
+      begin
+        SetKPI(pnlKPI1, LblKPITitle1, 'No fabricado', COL_RED);
+        SetKPI(pnlKPI2, LblKPITitle2, 'Parcialmente fabricado', COL_ORANGE);
+        SetKPI(pnlKPI3, LblKPITitle3, 'Todo fabricado', COL_GREEN);
+      end;
+
+    gvmFechaEntrega:
+      begin
+        SetKPI(pnlKPI1, LblKPITitle1, 'Fuera de plazo entrega', COL_RED);
+        SetKPI(pnlKPI2, LblKPITitle2, 'Pr'#243'ximo a fecha entrega', COL_ORANGE);
+        SetKPI(pnlKPI3, LblKPITitle3, 'Dentro plazo entrega', COL_GREEN);
+      end;
+
+    gvmStock:
+      begin
+        SetKPI(pnlKPI1, LblKPITitle1, 'Sin Stock', COL_RED);
+        SetKPI(pnlKPI2, LblKPITitle2, 'Stock parcial', COL_ORANGE);
+        SetKPI(pnlKPI3, LblKPITitle3, 'Con Stock', COL_GREEN);
+      end;
+
+    gvmEstado:
+      begin
+        SetKPI(pnlKPI1, LblKPITitle1, 'Pendiente', COL_BLUE);
+        SetKPI(pnlKPI2, LblKPITitle2, 'En curso', COL_ORANGE);
+        SetKPI(pnlKPI3, LblKPITitle3, 'Finalizado', COL_GREEN);
+      end;
+
+  else
+    // gvmNormal y demas: KPIs 1..3 sin uso (titulo vacio, color por defecto).
+    SetKPI(pnlKPI1, LblKPITitle1, '', COL_DEF);
+    SetKPI(pnlKPI2, LblKPITitle2, '', COL_DEF);
+    SetKPI(pnlKPI3, LblKPITitle3, '', COL_DEF);
+  end;
+
+  // Valores categoria / visibles. En las vistas sin uso quedan vacios.
+  if FGanttControl.Vista in [gvmOperarios, gvmOptimitzacio, gvmFabricacio,
+       gvmFechaEntrega, gvmStock, gvmEstado] then
+  begin
+    LblKPIValue1.Caption := Format('%d / %d', [C1, VisibleNodes]);
+    LblKPIValue2.Caption := Format('%d / %d', [C2, VisibleNodes]);
+    LblKPIValue3.Caption := Format('%d / %d', [C3, VisibleNodes]);
+  end
+  else
+  begin
+    LblKPIValue1.Caption := '';
+    LblKPIValue2.Caption := '';
+    LblKPIValue3.Caption := '';
+  end;
+
+  // Alertas de planificacion (independiente de la vista activa). Con debounce
+  // para no penalizar el Gantt: UpdateKPIs se dispara muy a menudo.
+  ScheduleRecalcAlertas;
+end;
+
+procedure TfrmVistaGantt.FiltrarPorKPI(ACategoria: Integer);
+var
+  I: Integer;
+  N: TNode;
+  D: TNodeData;
+  List: TList<Integer>;
+  Ids: TArray<Integer>;
+  Titulo: string;
+begin
+  if FGanttControl = nil then Exit;
+
+  // Solo tiene sentido en las vistas con categorias KPI 1/2/3.
+  if not (FGanttControl.Vista in [gvmOperarios, gvmOptimitzacio, gvmFabricacio,
+       gvmFechaEntrega, gvmStock, gvmEstado]) then Exit;
+
+  // Toggle: si ya estaba filtrando por esta misma categoria, quitar el filtro.
+  if FKPIFilterCategoria = ACategoria then
+  begin
+    FKPIFilterCategoria := 0;
+    FGanttControl.ClearOperarioFilter;
+    ScheduleSummaryRecalc(True);  // el filtro cambia los nodos contados
+    Exit;
+  end;
+
+  List := TList<Integer>.Create;
+  try
+    for I := 0 to FGanttControl.NodeCount - 1 do
+    begin
+      N := FGanttControl.GetNodeAt(I);
+      if (N.DataId = 0) or (DMPlanner.NodeDataRepo = nil) or
+         (not DMPlanner.NodeDataRepo.TryGetById(N.DataId, D)) then
+        Continue;
+      if ClassifyNodeKPI(N, D) = ACategoria then
+        List.Add(N.DataId);
+    end;
+    Ids := List.ToArray;
+  finally
+    List.Free;
+  end;
+
+  if Length(Ids) = 0 then
+  begin
+    FKPIFilterCategoria := 0;
+    FGanttControl.ClearOperarioFilter;
+    ScheduleSummaryRecalc(True);
+    Exit;
+  end;
+
+  // Texto del pill: el titulo de la categoria clicada + el nº de coincidencias.
+  case ACategoria of
+    1: Titulo := LblKPITitle1.Caption;
+    2: Titulo := LblKPITitle2.Caption;
+    3: Titulo := LblKPITitle3.Caption;
+  end;
+  FKPIFilterCategoria := ACategoria;
+  FGanttControl.OpFilterLabel := Format('%s: %d', [Titulo, Length(Ids)]);
+  // Modo ocultar (hideMode=True): mostrar SOLO los de la categoria.
+  FGanttControl.SetOperarioFilter(Ids, True);
+  // El Summary debe reflejar el filtro (cuenta solo los nodos mostrados).
+  ScheduleSummaryRecalc(True);
+end;
+
+procedure TfrmVistaGantt.IconoKPIClick(Sender: TObject);
+begin
+  if not (Sender is TPaintBox) then Exit;
+  case TPaintBox(Sender).Tag of
+    0: begin
+         // KPI0: quitar cualquier filtro/resaltado y combos.
+         FKPIFilterCategoria := 0;
+         btnClearOperariosClick(nil);
+       end;
+    1, 2, 3: FiltrarPorKPI(TPaintBox(Sender).Tag);
+  end;
+end;
+
+procedure TfrmVistaGantt.ScheduleRecalcAlertas;
+begin
+  // DEBOUNCE: recorrer todos los nodos + calendario es caro; no lo hacemos en
+  // caliente (mientras se mueve/arrastra) sino cuando el usuario para. Cada
+  // disparo reinicia la cuenta del timer one-shot.
+  if not Assigned(FAlertasDebounceTimer) then Exit;
+  FAlertasDebounceTimer.Enabled := False;
+  FAlertasDebounceTimer.Enabled := True;
+end;
+
+procedure TfrmVistaGantt.AlertasDebounceTick(Sender: TObject);
+begin
+  FAlertasDebounceTimer.Enabled := False;  // one-shot
+  RecalcAlertas;
+end;
+
+procedure TfrmVistaGantt.RecalcAlertas;
+const
+  COL_ALERT_NONE = $00C8C8C8;  // gris: sin alertas
+  COL_ALERT_INFO = $00B08020;  // azul/info
+  COL_ALERT_AVISO= $0020B0E0;  // amarillo
+  COL_ALERT_MEDIA= $002090E8;  // naranja
+  COL_ALERT_ALTA = $004949D1;  // rojo
+var
+  Lookup: TNodeDataLookup;
+  Config: TAlertConfigLookup;
+  Alertas: TArray<TAlertaItem>;
+  A: TAlertaItem;
+  total, salud: Integer;
+  col: TColor;
+begin
+  if (FGanttControl = nil) then Exit;
+
+  // El lookup delega en el repo de NodeData (sin acoplar el motor al data module).
+  Lookup :=
+    function(const ADataId: Integer; out AData: TNodeData): Boolean
+    begin
+      Result := (DMPlanner.NodeDataRepo <> nil) and
+                DMPlanner.NodeDataRepo.TryGetById(ADataId, AData);
+    end;
+
+  // Config (activa/peso) desde FS_PL_AlertRule.
+  if Assigned(DMPlanner.AlertRulesRepo) then
+    Config := DMPlanner.AlertRulesRepo.ConfigLookup()
+  else
+    Config := nil;
+
+  // Para el KPI solo cuentan las alertas IMPLEMENTADAS con incidencias reales
+  // (las pendientes/roadmap y las cumplidas no inflan el contador).
+  Alertas := DetectarAlertas(FGanttControl, Lookup, Now, 3, False, Config);
+  FAlertas := Alertas;
+
+  total := 0;
+  for A in Alertas do
+    if A.Implementada and (A.Count > 0) then
+      Inc(total, A.Count);
+
+  // Indice de salud del plan (0..100), ponderado por los pesos de las alertas.
+  salud := CalcularSalud(Alertas, FGanttControl.NodeCount);
+
+  // El KPI muestra la SALUD como valor principal (semaforo). El detalle (etiqueta
+  // + nº de incidencias) va al hint del panel.
+  Label8.Caption := 'Salud del plan';
+  Label9.Caption := IntToStr(salud);
+  if total = 0 then
+    pnlKPIAlertas.Hint := Format('Salud %d/100 (%s) - sin incidencias',
+      [salud, EtiquetaSalud(salud)])
+  else
+    pnlKPIAlertas.Hint := Format('Salud %d/100 (%s) - %d incidencias',
+      [salud, EtiquetaSalud(salud), total]);
+  pnlKPIAlertas.ShowHint := True;
+
+  // Color del panel segun el grado de salud (verde -> rojo).
+  if salud >= 90 then col := COL_ALERT_NONE        // gris/ok
+  else if salud >= 75 then col := COL_ALERT_AVISO  // amarillo
+  else if salud >= 50 then col := COL_ALERT_MEDIA  // naranja
+  else col := COL_ALERT_ALTA;                       // rojo
+
+  pnlKPIAlertas.Color := col;
+  // Texto blanco salvo cuando el plan esta sano (fondo claro).
+  if salud >= 90 then
+  begin
+    Label8.Font.Color := clBlack;
+    Label9.Font.Color := clBlack;
+  end
+  else
+  begin
+    Label8.Font.Color := clWhite;
+    Label9.Font.Color := clWhite;
+  end;
+end;
+
+procedure TfrmVistaGantt.pnlKPIAlertasClick(Sender: TObject);
+var
+  Ids: TArray<Integer>;
+  Provider: TAlertasProvider;
+begin
+  if FGanttControl = nil then Exit;
+
+  // Proveedor: el dialogo lo invoca para (re)detectar; el flag "Ver todas"
+  // decide si incluye tambien los tipos cumplidos (Count=0).
+  Provider :=
+    function(const AIncluirCumplidas: Boolean): TArray<TAlertaItem>
+    var
+      Lookup: TNodeDataLookup;
+      Config: TAlertConfigLookup;
+    begin
+      Lookup :=
+        function(const ADataId: Integer; out AData: TNodeData): Boolean
+        begin
+          Result := (DMPlanner.NodeDataRepo <> nil) and
+                    DMPlanner.NodeDataRepo.TryGetById(ADataId, AData);
+        end;
+      if Assigned(DMPlanner.AlertRulesRepo) then
+        Config := DMPlanner.AlertRulesRepo.ConfigLookup()
+      else
+        Config := nil;
+      Result := DetectarAlertas(FGanttControl, Lookup, Now, 3,
+        AIncluirCumplidas, Config);
+    end;
+
+  if TfrmAlertasViewer.Ejecutar(Self, Provider, Ids,
+       procedure
+       begin
+         // Abre la config CRUD; al guardar, el repo queda actualizado y el
+         // dialogo de alertas se refresca solo (RefrescarDesdeProveedor).
+         if Assigned(DMPlanner.AlertRulesRepo) then
+           TfrmAlertConfig.Ejecutar(Self, DMPlanner.AlertRulesRepo);
+       end,
+       FGanttControl.NodeCount)
+     and (Length(Ids) > 0) then
+  begin
+    // Filtrar el Gantt: mostrar SOLO los nodos afectados por la alerta elegida.
+    FKPIFilterCategoria := 0;  // no es un filtro por categoria KPI
+    FGanttControl.OpFilterLabel := Format('Alerta: %d', [Length(Ids)]);
+    FGanttControl.SetOperarioFilter(Ids, True);
+    ScheduleSummaryRecalc(True);
+  end;
+
+  // El KPI puede haber cambiado si se replanifico entre tanto.
+  RecalcAlertas;
+end;
+
+procedure TfrmVistaGantt.CrearIconoFiltroKPI(APanel: TPanel; ATag: Integer;
+  AClearIcon: Boolean);
+var
+  PB: TPaintBox;
+begin
+  PB := TPaintBox.Create(APanel);
+  PB.Parent := APanel;
+  PB.SetBounds(4, APanel.Height - 13, 8, 10);
+  PB.Anchors := [akLeft, akBottom];
+  PB.Tag := ATag;   // 0 = KPI0 (icono quitar filtro); 1/2/3 = embudo
+  if AClearIcon then
+    PB.Hint := 'Quitar filtro'
+  else
+    PB.Hint := 'Filtrar por esta categor'#237'a';
+  PB.ShowHint := True;
+  PB.Cursor := crHandPoint;
+  PB.OnPaint := IconoFiltroPaint;
+  PB.OnClick := IconoKPIClick;
+end;
+
+procedure TfrmVistaGantt.IconoFiltroPaint(Sender: TObject);
+var
+  PB: TPaintBox;
+  G: TGPGraphics;
+  Brush: TGPSolidBrush;
+  Pen: TGPPen;
+  W, H, cx: Single;
+  pts: array[0..5] of TGPPointF;
+  IsClear: Boolean;
+begin
+  PB := Sender as TPaintBox;
+  W := PB.Width;
+  H := PB.Height;
+  cx := W / 2;
+  IsClear := (PB.Tag = 0);
+
+  G := TGPGraphics.Create(PB.Canvas.Handle);
+  try
+    G.SetSmoothingMode(SmoothingModeAntiAlias);
+
+    // Embudo: boca ancha arriba, cuello estrecho, tallo. Relleno blanco con
+    // borde ligeramente mas opaco. Antialiasing -> aspecto limpio "PRO".
+    pts[0] := MakePoint(0.8, 1.5);
+    pts[1] := MakePoint(W - 0.8, 1.5);
+    pts[2] := MakePoint(cx + 0.7, H * 0.42);  // cuello/tallo mas estrecho
+    pts[3] := MakePoint(cx + 0.7, H - 1.0);
+    pts[4] := MakePoint(cx - 0.7, H - 1.0);
+    pts[5] := MakePoint(cx - 0.7, H * 0.42);
+
+    Brush := TGPSolidBrush.Create(MakeColor(235, 255, 255, 255)); // blanco
+    try
+      G.FillPolygon(Brush, PGPPointF(@pts[0]), 6);
+    finally
+      Brush.Free;
+    end;
+
+    Pen := TGPPen.Create(MakeColor(255, 255, 255, 255), 1.2);
+    try
+      G.DrawPolygon(Pen, PGPPointF(@pts[0]), 6);
+    finally
+      Pen.Free;
+    end;
+
+    if IsClear then
+    begin
+      // "Quitar filtro": X roja en la esquina superior derecha del embudo.
+      Pen := TGPPen.Create(MakeColor(255, 224, 48, 48), 1.5);  // rojo ARGB
+      try
+        G.DrawLine(Pen, W - 5.0, 0.5, W - 0.5, 5.0);
+        G.DrawLine(Pen, W - 0.5, 0.5, W - 5.0, 5.0);
+      finally
+        Pen.Free;
+      end;
+    end;
+  finally
+    G.Free;
+  end;
 end;
 
 
@@ -2141,7 +3485,16 @@ begin
   // que pot haver-se pintat abans de tenir la mida final.
   if Assigned(FSummaryControl) then
   begin
-    RebuildSummaryData;
+    // Resincronitzar el viewport del Summary amb el del Timeline: en obrir el
+    // form, el Summary podia haver-se pintat abans que el viewport (zoom/scroll)
+    // quedes definitiu, quedant desalineat amb les dates fins al primer scroll.
+    if Assigned(FTimelineControl) and (not FUpdatingViewport) then
+      FSummaryControl.SetViewport(FTimelineControl.StartTime,
+        FTimelineControl.PxPerMinute, FTimelineControl.ScrollX);
+    // El layout ha canviat (nodes moguts/replanificats): les dades del Summary
+    // poden haver canviat. Recalcul amb DEBOUNCE + invalidacio: durant un drag
+    // de node el layout canvia molts cops; recalculem una sola vegada al final.
+    ScheduleSummaryRecalc(True);
     FSummaryControl.Invalidate;
   end;
 end;
@@ -2257,6 +3610,13 @@ destructor TfrmVistaGantt.Destroy;
 begin
   FreeAndNil(FCentreKPIs);
   FreeAndNil(FSummaryNodeCountByDay);
+  FreeAndNil(FSummaryS1TotalByDay);
+  FreeAndNil(FSummaryS1WithOpsByDay);
+  FreeAndNil(FSummaryOcupMinByDay);
+  FreeAndNil(FSummaryDispMinByDay);
+  FreeAndNil(FSummaryDiasCalc);
+  FreeAndNil(FSummaryDiaFestiu);
+  FreeAndNil(FOperarioLabelCache);
   inherited;
 end;
 
@@ -2596,6 +3956,7 @@ begin
     begin
       D.OperariosAsignados := AssignCount;
       DMPlanner.NodeDataRepo.AddOrUpdate(D);
+      RebuildOperarioLabelCache;
       FGanttControl.Invalidate;
     end;
     Exit;
@@ -2634,6 +3995,7 @@ begin
         DMPlanner.NodeDataRepo.AddOrUpdate(D);
       end;
     end;
+    RebuildOperarioLabelCache;
     FGanttControl.Invalidate;
   end;
 end;
@@ -2779,31 +4141,6 @@ begin
   end;
 end;
 
-procedure TfrmVistaGantt.btnAutoPlanSelClick(Sender: TObject);
-var
-  SelIndexes: TArray<Integer>;
-  I: Integer;
-  Ids: TArray<Integer>;
-  N: TNode;
-begin
-  if FGanttControl = nil then Exit;
-  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
-  if Length(SelIndexes) = 0 then
-  begin
-    ShowMessage('Selecciona al menos un nodo en el Gantt para planificar.');
-    Exit;
-  end;
-  SetLength(Ids, Length(SelIndexes));
-  for I := 0 to High(SelIndexes) do
-  begin
-    N := FGanttControl.GetNodeAt(SelIndexes[I]);
-    Ids[I] := N.DataId;
-  end;
-  if Assigned(Form1) then
-    Form1.LaunchAutoPlanificacion(Ids);
-  FGanttControl.Invalidate;
-end;
-
 procedure TfrmVistaGantt.btnConfigCentrosClick(Sender: TObject);
 var
   Frm: TfrmGestionCentres;
@@ -2830,54 +4167,38 @@ begin
     RebuildCentreKPIs_Parallel( FALSE );
 end;
 
-procedure TfrmVistaGantt.btnAutoPlanAllClick(Sender: TObject);
-begin
-  if Assigned(Form1) then
-    Form1.LaunchAutoPlanificacion([]);  // [] = todo el plan
-  if Assigned(FGanttControl) then
-    FGanttControl.Invalidate;
-end;
-
-procedure TfrmVistaGantt.btnDesasignarSelClick(Sender: TObject);
+procedure TfrmVistaGantt.btnAutoPlanSelClick(Sender: TObject);
 var
   SelIndexes: TArray<Integer>;
   I: Integer;
-  N: TNode;
-  D: TNodeData;
   Ids: TArray<Integer>;
+  N: TNode;
 begin
+
+{
+if Assigned(Form1) then
+    Form1.LaunchAutoPlanificacion([]);  // [] = todo el plan
+  if Assigned(FGanttControl) then
+    FGanttControl.Invalidate;
+
+}
   if FGanttControl = nil then Exit;
   SelIndexes := FGanttControl.GetSelectedNodeIndexes;
   if Length(SelIndexes) = 0 then
   begin
-    ShowMessage('Selecciona al menos un nodo en el Gantt.');
+    ShowMessage('Selecciona al menos un nodo en el Gantt para planificar.');
     Exit;
   end;
-  if MessageDlg(Format('?Quitar TODAS las asignaciones de operarios de %d nodo(s)?',
-       [Length(SelIndexes)]),
-     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-
-  if not Assigned(FOperariosRepo) or not Assigned(DMPlanner.NodeDataRepo) then
-    Exit;
-
   SetLength(Ids, Length(SelIndexes));
   for I := 0 to High(SelIndexes) do
   begin
     N := FGanttControl.GetNodeAt(SelIndexes[I]);
     Ids[I] := N.DataId;
-    FOperariosRepo.ClearAsignacionsByNode(N.DataId);
-    if DMPlanner.NodeDataRepo.TryGetById(N.DataId, D) then
-    begin
-      D.OperariosAsignados := 0;
-      D.Modified := True;
-      DMPlanner.NodeDataRepo.AddOrUpdate(D);
-    end;
   end;
-
-  FGanttControl.RebuildLayout;
-  FGanttControl.Invalidate;
   if Assigned(Form1) then
-    Form1.NotifyPlanModified(Ids);
+    Form1.LaunchAutoPlanificacion(Ids);
+  FGanttControl.Invalidate;
+
 end;
 
 procedure TfrmVistaGantt.miDesplanificarClick(Sender: TObject);

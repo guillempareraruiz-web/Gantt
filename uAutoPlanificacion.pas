@@ -174,8 +174,12 @@ begin
   // cxGrid styling
   tvAsigs.OptionsBehavior.IncSearch := True;
   tvAsigs.OptionsCustomize.ColumnsQuickCustomization := True;
-  tvAsigs.OptionsData.Editing := False;
-  tvAsigs.OptionsSelection.CellSelect := False;
+  // Editing=True es necesario para que el boton "Ver" de la columna Argumento
+  // (TcxButtonEdit) dispare su OnButtonClick. Las columnas de datos tienen
+  // Options.Editing=False, asi que el grid sigue siendo de solo lectura salvo
+  // para pulsar ese boton.
+  tvAsigs.OptionsData.Editing := True;
+  tvAsigs.OptionsSelection.CellSelect := True;
   tvAsigs.OptionsView.Indicator := True;
   tvAsigs.OptionsView.GroupByBox := False;
 

@@ -34,12 +34,28 @@ type
   // (svS1/svS2/svS3 quedan reservadas para las otras vistas.)
   TSummaryView = (svNone, svNodeCount, svS1, svS2, svS3);
 
+  // Color de fondo del badge (esquina superior derecha de cada dia).
+  //  sbcNone  = no pintar badge.
+  //  sbcRed   = ningun nodo del dia con operarios asignados.
+  //  sbcYellow= algunos nodos con operarios asignados.
+  //  sbcGreen = todos los nodos del dia con operarios asignados.
+  TSummaryBadgeColor = (sbcNone, sbcRed, sbcYellow, sbcGreen);
+
   // Proveedor de KPIs por dia. El caller lo asigna; el control lo invoca por
   // cada dia visible SOLO si hay una vista activa. Devuelve las lineas de texto.
-  //   ADate    = dia (a medianoche)
-  //   ALine1/2 = textos KPI (vacio = no pintar). Ampliable mas adelante.
+  //   ADate      = dia (a medianoche)
+  //   ALine1/2/3 = textos KPI (vacio = no pintar). Si ALine3<>'' se pintan las
+  //                3 lineas con letra NORMAL (no negrita) repartidas vertical;
+  //                si ALine3='' -> modo 2 lineas: valor (negrita) + etiqueta.
+  //   AHighlight = marca lateral (p.ej. hoy / dia critico).
+  //   AIntensity = 0..1 para el heatmap del fondo (0 = sin/poco, 1 = maximo).
+  //                <0 = no aplicar heatmap (fondo plano por defecto).
+  //   ABadgeCount/ABadgeColor = badge esquina sup. derecha (numero + color de
+  //                fondo). ABadgeColor=sbcNone -> no se pinta badge.
   TSummaryDayKPIEvent = procedure(Sender: TObject; const ADate: TDateTime;
-    out ALine1, ALine2: string; out AHighlight: Boolean) of object;
+    out ALine1, ALine2, ALine3: string; out AHighlight: Boolean;
+    out AIntensity: Single; out ABadgeCount: Integer;
+    out ABadgeColor: TSummaryBadgeColor) of object;
 
   // Mateixos contractes que el timeline, perque uVistaGantt els pugui cablejar igual.
   TSummaryViewportChangedEvent = procedure(Sender: TObject;
@@ -63,9 +79,16 @@ type
     FBrushHighlight: ID2D1SolidColorBrush;
     FBrushNoData: ID2D1SolidColorBrush;   // dia SENSE dades -> gris clar
     FBrushHasData: ID2D1SolidColorBrush;  // dia AMB dades   -> blau clar
+    FBrushGreen: ID2D1SolidColorBrush;    // valor destacat (verd) en mode 3 linies
+    FBrushBadgeRed: ID2D1SolidColorBrush;    // badge: cap node amb operaris
+    FBrushBadgeYellow: ID2D1SolidColorBrush; // badge: alguns nodes amb operaris
+    FBrushBadgeGreen: ID2D1SolidColorBrush;  // badge: tots els nodes amb operaris
+    FBrushBadgeText: ID2D1SolidColorBrush;   // numero del badge (blanc)
 
     FFmtValue: IDWriteTextFormat;
     FFmtLabel: IDWriteTextFormat;
+    FFmtValueSmall: IDWriteTextFormat;    // negreta mida petita (1a linia 3-linies)
+    FFmtBadge: IDWriteTextFormat;         // numero del badge (negreta, petita)
 
     // --- Modelo de coordenadas (igual que el timeline) ---
     FLeftWidth: Integer;
@@ -125,6 +148,8 @@ type
     procedure DiscardDeviceResources;
     procedure ResizeRenderTarget;
     function D2DColor(const C: TColor; const A: Single = 1.0): TD2D1ColorF;
+    // Color del heatmap segun intensidad 0..1: verde claro -> verde oscuro.
+    function HeatColor(const AIntensity: Single): TD2D1ColorF;
     procedure DrawTextD(const S: string; const R: TRectF;
       const Fmt: IDWriteTextFormat; const Brush: ID2D1Brush);
 
@@ -678,6 +703,12 @@ begin
   FBrushHighlight := B($002850D0);            // dia destacat
   FBrushNoData    := B($00EBEBEB);            // dia SENSE dades -> gris clar
   FBrushHasData   := B($00FAE4D0);            // dia AMB dades   -> blau clar (BGR)
+  FBrushGreen     := B($00308828);            // valor destacat verd (BGR)
+  // Badges (color en BGR): vermell / groc / verd; text blanc.
+  FBrushBadgeRed    := B($003B3BD0);          // vermell
+  FBrushBadgeYellow := B($0020B0E0);          // groc/ambre
+  FBrushBadgeGreen  := B($00308828);          // verd
+  FBrushBadgeText   := B($00FFFFFF);          // blanc
 end;
 
 procedure TGanttSummaryControl.CreateTextResources;
@@ -698,6 +729,22 @@ begin
   FFmtLabel.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
   FFmtLabel.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
   FFmtLabel.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+  // Valor destacado pequenyo (negrita, mida 9) para la 1a linia del mode 3 linies.
+  CheckHR(FDWriteFactory.CreateTextFormat('Segoe UI', nil,
+    DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+    9.0, '', FFmtValueSmall), 'CreateTextFormat valueSmall');
+  FFmtValueSmall.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+  FFmtValueSmall.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+  FFmtValueSmall.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+  // Numero del badge (negrita, mida petita, centrat).
+  CheckHR(FDWriteFactory.CreateTextFormat('Segoe UI', nil,
+    DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+    8.5, '', FFmtBadge), 'CreateTextFormat badge');
+  FFmtBadge.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+  FFmtBadge.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+  FFmtBadge.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 end;
 
 procedure TGanttSummaryControl.DiscardDeviceResources;
@@ -705,8 +752,10 @@ begin
   FBrushBg := nil; FBrushBandEven := nil; FBrushBandOdd := nil;
   FBrushWeekend := nil; FBrushGrid := nil; FBrushBorder := nil;
   FBrushText := nil; FBrushTextDim := nil; FBrushHighlight := nil;
-  FBrushNoData := nil; FBrushHasData := nil;
-  FFmtValue := nil; FFmtLabel := nil;
+  FBrushNoData := nil; FBrushHasData := nil; FBrushGreen := nil;
+  FBrushBadgeRed := nil; FBrushBadgeYellow := nil; FBrushBadgeGreen := nil;
+  FBrushBadgeText := nil;
+  FFmtValue := nil; FFmtLabel := nil; FFmtValueSmall := nil; FFmtBadge := nil;
   FHwndRT := nil;
 end;
 
@@ -732,6 +781,32 @@ begin
   Result.a := A;
 end;
 
+function TGanttSummaryControl.HeatColor(const AIntensity: Single): TD2D1ColorF;
+var
+  t: Single;
+begin
+  // Color de la barra de progreso: gradiente ROJO (0%) -> VERDE (100%) pasando
+  // por amarillo. Tonos PASTEL muy claros para que el texto negro encima sea
+  // siempre legible.
+  t := AIntensity;
+  if t < 0 then t := 0 else if t > 1 then t := 1;
+  if t < 0.5 then
+  begin
+    // Rojo pastel (245,200,200) -> Amarillo pastel (248,240,190)
+    Result.r := (245 + (248 - 245) * (t / 0.5)) / 255;
+    Result.g := (200 + (240 - 200) * (t / 0.5)) / 255;
+    Result.b := (200 + (190 - 200) * (t / 0.5)) / 255;
+  end
+  else
+  begin
+    // Amarillo pastel (248,240,190) -> Verde pastel (200,235,205)
+    Result.r := (248 + (200 - 248) * ((t - 0.5) / 0.5)) / 255;
+    Result.g := (240 + (235 - 240) * ((t - 0.5) / 0.5)) / 255;
+    Result.b := (190 + (205 - 190) * ((t - 0.5) / 0.5)) / 255;
+  end;
+  Result.a := 1.0;
+end;
+
 procedure TGanttSummaryControl.DrawTextD(const S: string; const R: TRectF;
   const Fmt: IDWriteTextFormat; const Brush: ID2D1Brush);
 var
@@ -749,9 +824,16 @@ var
   x1, x2: Single;
   bandR: TRectF;
   dayIdx: Integer;
-  v1, v2: string;
+  v1, v2, v3: string;
   hi: Boolean;
+  intensity: Single;
   H: Single;
+  badgeCount: Integer;
+  badgeColor: TSummaryBadgeColor;
+  badgeBrush: ID2D1SolidColorBrush;
+  badgeTxt: string;
+  bw, bh, bx, by: Single;
+  bRR: TD2D1RoundedRect;
 begin
   CreateDeviceResources;
   if not Assigned(FHwndRT) then Exit;
@@ -781,17 +863,42 @@ begin
 
         bandR := TRectF.Create(x1, 0, x2, H);
 
-        // PRIMER resolem les dades del dia (via OnDayKPI) per decidir el fons:
-        //  - AMB dades  -> blau clar
-        //  - SENSE dades-> gris clar
-        v1 := ''; v2 := ''; hi := False;
+        // PRIMER resolem les dades del dia (via OnDayKPI) per decidir el fons.
+        v1 := ''; v2 := ''; v3 := ''; hi := False; intensity := -1;
+        badgeCount := 0; badgeColor := sbcNone;
         if (FView <> svNone) and Assigned(FOnDayKPI) then
-          FOnDayKPI(Self, d, v1, v2, hi);
+          FOnDayKPI(Self, d, v1, v2, v3, hi, intensity, badgeCount, badgeColor);
 
-        var HasData: Boolean := (v1 <> '') or (v2 <> '') or hi;
+        var HasData: Boolean := (v1 <> '') or (v2 <> '') or (v3 <> '') or hi;
 
         if HasData then
-          FHwndRT.FillRectangle(D2D1RectF(bandR.Left, bandR.Top, bandR.Right, bandR.Bottom), FBrushHasData)
+        begin
+          if intensity >= 0 then
+          begin
+            // Fondo GRIS claro de base...
+            FBrushHasData.SetColor(D2DColor($00ECECEC));
+            FHwndRT.FillRectangle(D2D1RectF(bandR.Left, bandR.Top, bandR.Right, bandR.Bottom), FBrushHasData);
+            // ...y encima una BARRA DE PROGRESO vertical de abajo hacia arriba,
+            // proporcional al % de ocupacion (clamp a 1). El COLOR va de ROJO
+            // (0%) a VERDE (100%) segun ese mismo %.
+            var prog: Single := intensity;
+            if prog > 1 then prog := 1;
+            if prog > 0 then
+            begin
+              FBrushHasData.SetColor(HeatColor(prog));
+              FHwndRT.FillRectangle(
+                D2D1RectF(bandR.Left, H * (1 - prog), bandR.Right, H),
+                FBrushHasData);
+            end;
+          end
+          else
+          begin
+            // intensity < 0 con datos: fondo GRIS (dia con capacidad pero sin
+            // ocupacion). Sin barra de progreso.
+            FBrushHasData.SetColor(D2DColor($00DCDCDC));  // gris
+            FHwndRT.FillRectangle(D2D1RectF(bandR.Left, bandR.Top, bandR.Right, bandR.Bottom), FBrushHasData);
+          end;
+        end
         else
           FHwndRT.FillRectangle(D2D1RectF(bandR.Left, bandR.Top, bandR.Right, bandR.Bottom), FBrushNoData);
 
@@ -799,11 +906,53 @@ begin
           FHwndRT.FillRectangle(
             D2D1RectF(bandR.Left, 0, bandR.Left + 3, H), FBrushHighlight);
 
-        // Linia superior (valor) i inferior (etiqueta)
-        DrawTextD(v1, TRectF.Create(x1 + 1, 2, x2 - 1, H * 0.58),
-          FFmtValue, FBrushText);
-        DrawTextD(v2, TRectF.Create(x1 + 1, H * 0.55, x2 - 1, H - 1),
-          FFmtLabel, FBrushTextDim);
+        if v3 <> '' then
+        begin
+          // Mode 3 linies (p.ej. S3 amb dades): la 1a linia (valor principal)
+          // en NEGRITA; totes les lletres NEGRES (sobre fons pastel clar).
+          DrawTextD(v1, TRectF.Create(x1 + 1, 1, x2 - 1, H * 0.34),
+            FFmtValueSmall, FBrushText);
+          DrawTextD(v2, TRectF.Create(x1 + 1, H * 0.34, x2 - 1, H * 0.67),
+            FFmtLabel, FBrushText);
+          DrawTextD(v3, TRectF.Create(x1 + 1, H * 0.67, x2 - 1, H - 1),
+            FFmtLabel, FBrushTextDim);
+        end
+        else
+        begin
+          // Mode 2 linies: valor (negrita, gran) a dalt + etiqueta a baix.
+          DrawTextD(v1, TRectF.Create(x1 + 1, 2, x2 - 1, H * 0.58),
+            FFmtValue, FBrushText);
+          DrawTextD(v2, TRectF.Create(x1 + 1, H * 0.55, x2 - 1, H - 1),
+            FFmtLabel, FBrushTextDim);
+        end;
+
+        // Badge a la cantonada superior dreta: numero de nodes del dia, amb fons
+        // segons cobertura d'operaris (vermell/groc/verd) i numero en blanc. Nomes
+        // si hi cap (la franja del dia ha de ser prou ampla).
+        if (badgeColor <> sbcNone) and ((x2 - x1) >= 22) then
+        begin
+          case badgeColor of
+            sbcRed:    badgeBrush := FBrushBadgeRed;
+            sbcYellow: badgeBrush := FBrushBadgeYellow;
+            sbcGreen:  badgeBrush := FBrushBadgeGreen;
+          else
+            badgeBrush := nil;
+          end;
+          if badgeBrush <> nil then
+          begin
+            badgeTxt := IntToStr(badgeCount);
+            // Amplada proporcional als digits; alçada fixa. Marge de 2px a la vora.
+            bw := 14 + 6 * (Length(badgeTxt) - 1);
+            bh := 13;
+            bx := x2 - bw - 2;
+            if bx < x1 + 1 then bx := x1 + 1;
+            by := 2;
+            bRR := D2D1RoundedRect(D2D1RectF(bx, by, bx + bw, by + bh), 6, 6);
+            FHwndRT.FillRoundedRectangle(bRR, badgeBrush);
+            DrawTextD(badgeTxt, TRectF.Create(bx, by, bx + bw, by + bh),
+              FFmtBadge, FBrushBadgeText);
+          end;
+        end;
       end;
 
       // Linia vertical de separacio de dia (alineada amb el Gantt/timeline)
@@ -819,6 +968,8 @@ begin
     if FLeftWidth > 0 then
       FHwndRT.DrawLine(D2D1PointF(FLeftWidth, 0), D2D1PointF(FLeftWidth, H),
         FBrushBorder, 1.0);
+    FHwndRT.DrawLine(D2D1PointF(0, 0.5), D2D1PointF(ClientWidth, 0.5),
+      FBrushBorder, 1.0);
     FHwndRT.DrawLine(D2D1PointF(0, H - 0.5), D2D1PointF(ClientWidth, H - 0.5),
       FBrushBorder, 1.0);
 

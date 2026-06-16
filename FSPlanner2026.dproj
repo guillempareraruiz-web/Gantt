@@ -110,7 +110,6 @@
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>
-        <DCCReference Include="uGanttSummary.pas"/>
         <DCCReference Include="uGanttCentres.pas"/>
         <DCCReference Include="uNodeHelpers.pas"/>
         <DCCReference Include="uNodeDataRepo.pas"/>
@@ -474,10 +473,20 @@
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="uNodeLayoutSetRepo.pas"/>
-        <DCCReference Include="uGanttHintConfig.pas"/>
-        <DCCReference Include="uGanttHintConfigRepo.pas"/>
-        <DCCReference Include="uGanttHintConfigEditor.pas">
-            <Form>frmGanttHintConfigEditor</Form>
+        <DCCReference Include="uGanttAlertas.pas"/>
+        <DCCReference Include="uAlertRulesRepo.pas"/>
+        <DCCReference Include="uPlanSnapshot.pas"/>
+        <DCCReference Include="uSnapshotRepo.pas"/>
+        <DCCReference Include="uRestorePoints.pas">
+            <Form>frmRestorePoints</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uAlertasViewer.pas">
+            <Form>frmAlertasViewer</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uAlertConfig.pas">
+            <Form>frmAlertConfig</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <BuildConfiguration Include="Base">
@@ -502,13 +511,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

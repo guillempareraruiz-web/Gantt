@@ -153,7 +153,14 @@ uses
   uHelpAutoInstall in 'uHelpAutoInstall.pas',
   uKPICard in 'uKPICard.pas',
   uNodeLayoutEditor in 'uNodeLayoutEditor.pas' {frmNodeLayoutEditor},
-  uNodeLayoutSetRepo in 'uNodeLayoutSetRepo.pas';
+  uNodeLayoutSetRepo in 'uNodeLayoutSetRepo.pas',
+  uGanttAlertas in 'uGanttAlertas.pas',
+  uAlertRulesRepo in 'uAlertRulesRepo.pas',
+  uPlanSnapshot in 'uPlanSnapshot.pas',
+  uSnapshotRepo in 'uSnapshotRepo.pas',
+  uRestorePoints in 'uRestorePoints.pas' {frmRestorePoints},
+  uAlertasViewer in 'uAlertasViewer.pas' {frmAlertasViewer},
+  uAlertConfig in 'uAlertConfig.pas' {frmAlertConfig};
 
 {$R *.res}
 

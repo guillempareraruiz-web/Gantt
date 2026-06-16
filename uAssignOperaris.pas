@@ -32,14 +32,13 @@ uses
   dxScrollbarAnnotations,
   // Project
   uGanttTypes, uNodeDataRepo, uOperariosTypes, uOperariosRepo, cxCustomData,
-  cxData, cxDataStorage, cxNavigator, dxDateRanges;
+  cxData, cxDataStorage, cxNavigator, dxDateRanges, uHelpViewer;
 
 type
   TfrmAssignOperaris = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    chkDarkMode: TCheckBox;
     shpHeaderLine: TShape;
     pnlBottom: TPanel;
     lblResumen: TLabel;
@@ -49,6 +48,7 @@ type
     splCenter: TSplitter;
     pnlAssignats: TPanel;
     lblAssignats: TLabel;
+    btnDesasignar: TButton;
     gridAssignats: TcxGrid;
     tvAssignats: TcxGridTableView;
     colAsigId: TcxGridColumn;
@@ -68,10 +68,9 @@ type
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnOKClick(Sender: TObject);
     procedure btnCancelClick(Sender: TObject);
-    procedure chkDarkModeClick(Sender: TObject);
+    procedure btnDesasignarClick(Sender: TObject);
   private
     FRepo: TOperariosRepo;
     FDataId: Integer;          // nodo principal (para modo single)
@@ -87,7 +86,6 @@ type
     procedure LoadDisponibles;
     procedure SoloCapacitadosClick(Sender: TObject);
     procedure UpdateResumen;
-    procedure ApplyDarkMode(ADark: Boolean);
 
     procedure DoAssignar(Sender: TObject);
     procedure DoDesassignar(Sender: TObject);
@@ -188,6 +186,9 @@ end;
 
 procedure TfrmAssignOperaris.FormCreate(Sender: TObject);
 begin
+  // Ayuda contextual: boton '?' en el caption + F1 (igual que otros forms).
+  THelpViewer.InstallHelp(Self, 'uAssignOperaris', 'Asignar operarios');
+
   // Configurar events del grid Disponibles (doble-clic per assignar)
   tvDisponibles.OnDblClick := DoAssignar;
   tvAssignats.OnDblClick := DoDesassignar;
@@ -219,12 +220,6 @@ end;
 procedure TfrmAssignOperaris.FormDestroy(Sender: TObject);
 begin
   //
-end;
-
-procedure TfrmAssignOperaris.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-begin
-  if Key = VK_ESCAPE then
-    ModalResult := mrCancel;
 end;
 
 { --- Carregar dades als grids --- }
@@ -414,56 +409,13 @@ begin
   end;
 end;
 
-{ --- Visual --- }
-
-procedure TfrmAssignOperaris.chkDarkModeClick(Sender: TObject);
-begin
-  ApplyDarkMode(chkDarkMode.Checked);
-end;
-
-procedure TfrmAssignOperaris.ApplyDarkMode(ADark: Boolean);
-const
-  DARK_BG     = $00302C28;
-  DARK_HEADER = $003C3836;
-  DARK_TEXT   = $00F0F0F0;
-  DARK_SUB    = $00A0A0A0;
-  DARK_LINE   = $00504840;
-begin
-  if ADark then
-  begin
-    LookAndFeel.SkinName := 'Office2019Black';
-    pnlHeader.Color := DARK_HEADER;
-    lblTitle.Font.Color := DARK_TEXT;
-    lblSubtitle.Font.Color := DARK_SUB;
-    shpHeaderLine.Brush.Color := DARK_LINE;
-    chkDarkMode.Font.Color := DARK_TEXT;
-    pnlBottom.Color := DARK_HEADER;
-    pnlContent.Color := DARK_BG;
-    pnlAssignats.Color := DARK_BG;
-    pnlDisponibles.Color := DARK_BG;
-    lblAssignats.Font.Color := DARK_TEXT;
-    lblDisponibles.Font.Color := DARK_TEXT;
-    Color := DARK_BG;
-  end
-  else
-  begin
-    LookAndFeel.SkinName := 'Office2019Colorful';
-    pnlHeader.Color := clWhite;
-    lblTitle.Font.Color := 4474440;
-    lblSubtitle.Font.Color := clGray;
-    shpHeaderLine.Brush.Color := 15061727;
-    chkDarkMode.Font.Color := clWindowText;
-    pnlBottom.Color := clBtnFace;
-    pnlContent.Color := clBtnFace;
-    pnlAssignats.Color := clBtnFace;
-    pnlDisponibles.Color := clBtnFace;
-    lblAssignats.Font.Color := 4474440;
-    lblDisponibles.Font.Color := 4474440;
-    Color := clBtnFace;
-  end;
-end;
-
 { --- Botons --- }
+
+procedure TfrmAssignOperaris.btnDesasignarClick(Sender: TObject);
+begin
+  // Reutiliza la misma logica que el doble-clic sobre el grid de asignados.
+  DoDesassignar(Sender);
+end;
 
 procedure TfrmAssignOperaris.btnOKClick(Sender: TObject);
 begin

@@ -2225,7 +2225,7 @@ procedure TErpSyncRepo.ApplyCalendarioRow(const ARow: TSyncRowCalendario;
   const ADias: TArray<TCalendarioLaboralErp>);
 var
   Sql, EmpStr, CalStr, NombreStr: string;
-  CalId, Dia, I: Integer;
+  CalId, Dia, I, TotalDies: Integer;
   Q: TADOQuery;
   CountLab, CountFest: array[1..7] of Integer;
   DiaDominantLaborable: array[1..7] of Boolean;
@@ -2294,6 +2294,7 @@ begin
     ' AND CalendarId = ' + CalStr);
 
   // 3. Comptar dies laborables/festius per dia setmana ISO (1=Lu..7=Diu)
+  TotalDies := 0;
   for Dia := 1 to 7 do
   begin
     CountLab[Dia] := 0;
@@ -2304,17 +2305,29 @@ begin
     DowD := DayOfTheWeek(D.Fecha); // 1=Lu .. 7=Diu (Delphi DayOfTheWeek = ISO)
     if (DowD >= 1) and (DowD <= 7) then
     begin
+      Inc(TotalDies);
       if D.Duracion > 0 then Inc(CountLab[DowD])
       else Inc(CountFest[DowD]);
     end;
   end;
 
+  // Guarda: si el grup horari no porta CAP dada (rang buit / any sense omplir a
+  // CalendarioLaboral, veure project_gantt_calendariolaboral_year_gap), NO
+  // apliquem el criteri de tancament -> deixariem el calendari 100% tancat i
+  // bloquejaria tota la planificacio. Sortim deixant-lo "obert" (sense regles).
+  if TotalDies = 0 then Exit;
+
   // 4. Determinar patro dominant per dia setmana
-  //    Si majoria laborable -> dia "obert" (sense regla NO-LAB, motor el considera laborable)
-  //    Si majoria festiu -> dia "tancat" (regla NO-LAB 00:00-23:59)
+  //    Laborable ("obert", sense regla NO-LAB) NOMES si hi ha com a minim un
+  //    dia laborable real I son majoria. Tot el demes -> "tancat" (regla NO-LAB
+  //    00:00-23:59). IMPORTANT: un dia setmanal SENSE cap registre a
+  //    CalendarioLaboral (CountLab=0, CountFest=0) NO s'ha de presumir laborable
+  //    -> queda tancat. Abans (CountLab >= CountFest) un empat 0-0 el deixava
+  //    obert i el cap de setmana sense dades comptava nodes al Summary del Gantt.
   for Dia := 1 to 7 do
   begin
-    DiaDominantLaborable[Dia] := CountLab[Dia] >= CountFest[Dia];
+    DiaDominantLaborable[Dia] := (CountLab[Dia] > 0) and
+                                 (CountLab[Dia] >= CountFest[Dia]);
     if not DiaDominantLaborable[Dia] then
     begin
       ExecSql(

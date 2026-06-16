@@ -124,36 +124,43 @@ object frmAutoPlanificacion: TfrmAutoPlanificacion
           DataController.Summary.SummaryGroups = <>
           OptionsBehavior.IncSearch = True
           OptionsCustomize.ColumnsQuickCustomization = True
-          OptionsData.Editing = False
-          OptionsSelection.CellSelect = False
+          OptionsData.Editing = True
+          OptionsSelection.CellSelect = True
           OptionsView.GroupByBox = False
           OptionsView.Indicator = True
           object colA_Node: TcxGridColumn
             Caption = 'Node ID'
+            Options.Editing = False
             Width = 80
           end
           object colA_Operacion: TcxGridColumn
             Caption = 'Operaci'#243'n'
+            Options.Editing = False
             Width = 180
           end
           object colA_Operario: TcxGridColumn
             Caption = 'Operario'
+            Options.Editing = False
             Width = 200
           end
           object colA_Score: TcxGridColumn
             Caption = 'Score'
+            Options.Editing = False
             Width = 90
           end
           object colA_Coste: TcxGridColumn
             Caption = 'Coste'
+            Options.Editing = False
             Width = 100
           end
           object colA_Inicio: TcxGridColumn
             Caption = 'Inicio'
+            Options.Editing = False
             Width = 110
           end
           object colA_Fin: TcxGridColumn
             Caption = 'Fin'
+            Options.Editing = False
             Width = 110
           end
           object colA_Argumento: TcxGridColumn

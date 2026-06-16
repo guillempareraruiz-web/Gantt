@@ -605,12 +605,27 @@ begin
       else
         CountOpsByNode.Add(Mejor.NodeDataId, 1);
 
-      // Determinar MaxOperariosParalelos del tipo de operacion
-      MaxOpsNode := 1;
-      if Assigned(FOpTypesRepo) and (Node.Operacion <> '') then
+      // Determinar cuantos operarios asignar al nodo.
+      // Prioridad: OperariosNecesarios del nodo (requisito concreto de la OP,
+      // viene del ERP). Si no esta definido (<=0), caer al MaxOperariosParalelos
+      // del tipo de operacion (politica generica) o 1.
+      // El MaxOperariosParalelos del tipo actua ademas como techo tecnico:
+      // si el tipo declara un maximo explicito menor que el objetivo, limita
+      // (ej: una operacion de 1 sola maquina no admite 2 operarios en paralelo).
+      // OJO: el techo del tipo solo se aplica si el tipo esta REGISTRADO en
+      // FS_PL_OperationType. Un tipo no configurado devuelve Max=1 por defecto,
+      // pero ese 1 significa "sin configurar", no "techo real de 1"; aplicarlo
+      // anularia el requisito del nodo (volveria a 1 operario).
+      MaxOpsNode := Max(1, Node.OperariosNecesarios);
+      if Assigned(FOpTypesRepo) and (Node.Operacion <> '')
+         and FOpTypesRepo.Exists(Node.Operacion) then
       begin
         TipoOp := FOpTypesRepo.GetOrDefault(Node.Operacion);
-        MaxOpsNode := Max(1, TipoOp.MaxOperariosParalelos);
+        if Node.OperariosNecesarios <= 0 then
+          MaxOpsNode := Max(1, TipoOp.MaxOperariosParalelos)
+        else if (TipoOp.MaxOperariosParalelos > 0) and
+                (TipoOp.MaxOperariosParalelos < MaxOpsNode) then
+          MaxOpsNode := TipoOp.MaxOperariosParalelos;
       end;
       AsigsActuales := CountOpsByNode[Mejor.NodeDataId];
 

@@ -80,6 +80,7 @@ type
     procedure UpdateAsignacionHoras(OperarioId, DataId: Integer; Horas: Double);
     function GetAsignacionsByNode(DataId: Integer): TArray<TAsignacionOperario>;
     function GetAsignacionsByOperario(OperarioId: Integer): TArray<TAsignacionOperario>;
+    function GetAllAsignacions: TArray<TAsignacionOperario>;
     procedure ClearAsignacionsByNode(DataId: Integer);
 
     // --- Consultes ---
@@ -464,6 +465,11 @@ begin
   finally
     List.Free;
   end;
+end;
+
+function TOperariosRepo.GetAllAsignacions: TArray<TAsignacionOperario>;
+begin
+  Result := FAsignacions.ToArray;
 end;
 
 function TOperariosRepo.GetAsignacionsByOperario(OperarioId: Integer): TArray<TAsignacionOperario>;

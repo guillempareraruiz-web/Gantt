@@ -28,6 +28,11 @@ type
 
   TGetCalendarFunc = reference to function(const CentreId: Integer): TCentreCalendar;
 
+  // Devuelve el rotulo del operario asignado a un nodo (DataId) para pintarlo
+  // bajo el caption en la vista gvmOperarios: nombre si hay 1, 'VARIOS...' si
+  // hay varios, '' si ninguno. Lo resuelve uVistaGantt (tiene el repo).
+  TGetOperarioLabelFunc = reference to function(const ADataId: Integer): string;
+
   TIdxArray = TArray<Integer>;
 
   TResizeEdge = (reLeft, reRight, reMove);
@@ -151,6 +156,7 @@ type
     FOnVoid: TNotifyEvent;
     FOnPlanModified: TGanttPlanModifiedEvent;
     FOnLinksModified: TNotifyEvent;
+    FOnGetOperarioLabel: TGetOperarioLabelFunc;
 
     FMouseDownPos: TPoint;
     FMouseDownNodeIndex: Integer;
@@ -169,6 +175,12 @@ type
     FOpFilterHideMode: Boolean; // True = ocultar no filtrados; False = atenuar
     FOpFilterPulsePhase: Single; // 0..2*PI oscilación
     FOpFilterTimer: TTimer;
+    // Overlay del filtro/resaltado de operarios (marco + 2 pills).
+    FOpFilterLabel: string;          // texto del pill de estado (lo pone uVistaGantt)
+    FOpFilterPeeking: Boolean;       // True mientras se mantiene pulsado "Ver todo"
+    FOpFilterPillClearRect: TRectF;  // hit-test del pill con X (limpiar)
+    FOpFilterPillPeekRect: TRectF;   // hit-test del pill "Ver todo" (hold)
+    FOnOpFilterClear: TNotifyEvent;  // uVistaGantt limpia efecto + combos
 
     // Link hover
     FHoverLinkIndex: Integer; // -1 = cap link hovered
@@ -559,6 +571,11 @@ type
       const FillBrush, TextBrush: ID2D1SolidColorBrush; const R: TRectF; const Text: string;
       const FillC, TextC: TColor);
 
+    // Overlay cuando el Gantt esta resaltado/filtrado por operarios: marco de
+    // color + pill de estado (con X para limpiar) + pill "Ver todo" (hold-to-peek).
+    procedure DrawOpFilterOverlayD2D(const D2D: TDirect2DCanvas;
+      const RT: ID2D1RenderTarget; const FillBrush, TextBrush: ID2D1SolidColorBrush);
+
     function SameOF(const ANode1, ANode2: Integer): Boolean;
     function TryGetNodeData(const ANodeIndex: Integer; out AData: TNodeData): Boolean;
     function NodeMatchesOF(
@@ -620,6 +637,10 @@ type
     //...SELECT functions
     procedure ClearSelection;
     procedure SelectNodeIndex( const AIndex: Integer;  const AClearPrevious: Boolean = True);
+    // Selecciona tots els nodes (visibles i de centre habilitat) que solapen
+    // amb el rang temporal [AFrom, ATo). Retorna quants n'ha seleccionat.
+    function SelectNodesInDateRange(const AFrom, ATo: TDateTime;
+      const AClearPrevious: Boolean = True): Integer;
     procedure ToggleNodeIndexSelection(const AIndex: Integer);
     function IsNodeIndexSelected(const AIndex: Integer): Boolean;
     function IsNodeFocused(const AIndex: Integer): Boolean;
@@ -737,6 +758,18 @@ type
     // es responsable d'alliberar el diccionari resultant. Clau = DateOf(dia).
     function GetVisibleNodeCountByDay(const AFrom, ATo: TDateTime):
       TDictionary<TDate, Integer>;
+    // Igual que GetVisibleNodeCountByDay (mismos filtros + descarta dias no
+    // laborables), pero SUMA los operarios asignados de cada nodo en vez de
+    // contar 1. Para la vista de Summary S1.
+    function GetOperariosAsignadosByDay(const AFrom, ATo: TDateTime):
+      TDictionary<TDate, Integer>;
+    // Para el badge de la vista S1: por cada dia [AFrom..ATo] devuelve cuantos
+    // nodos (de filas visibles, mismos filtros y descarte de dias no laborables
+    // que GetVisibleNodeCountByDay) TOCAN ese dia (ATotalByDay) y cuantos de
+    // esos nodos tienen operarios asignados (AWithOpsByDay). El caller libera
+    // AMBOS diccionarios. Clau = DateOf(dia).
+    procedure GetNodeOperatorCoverByDay(const AFrom, ATo: TDateTime;
+      out ATotalByDay, AWithOpsByDay: TDictionary<TDate, Integer>);
 
     // Desplazamiento vertical maximo del Gantt (px). Es la referencia: el control
     // de Centros debe usar ESTE valor para clampar su scroll, no calcular el suyo,
@@ -768,6 +801,10 @@ type
     procedure SetOperarioFilter(const ADataIds: TArray<Integer>; AHideMode: Boolean);
     procedure ClearOperarioFilter;
     function IsNodeOperarioFiltered(const ADataId: Integer): Boolean;
+    // True si el nodo esta OCULTO ahora mismo por el filtro (modo ocultar y no
+    // coincide). Mismo criterio que usa el render/contador. Para que consumidores
+    // externos (Summary S3) cuenten solo lo visible.
+    function IsNodeHiddenByFilter(const ADataId: Integer): Boolean;
 
 
 
@@ -821,6 +858,14 @@ type
       read FOnPlanModified write FOnPlanModified;
     property OnLinksModified: TNotifyEvent
       read FOnLinksModified write FOnLinksModified;
+    property OnGetOperarioLabel: TGetOperarioLabelFunc
+      read FOnGetOperarioLabel write FOnGetOperarioLabel;
+    // Texto del pill de estado del overlay de filtro/resaltado (lo pone
+    // uVistaGantt: p.ej. 'Filtrado: 12' / 'Resaltado: 3 operarios').
+    property OpFilterLabel: string read FOpFilterLabel write FOpFilterLabel;
+    // Disparado al pulsar la X del pill: uVistaGantt limpia efecto + combos.
+    property OnOpFilterClear: TNotifyEvent
+      read FOnOpFilterClear write FOnOpFilterClear;
   end;
 
 
@@ -3192,36 +3237,153 @@ begin
   padX := 4;
   padY := 2;
 
-  // mida "aprox" (simple i ràpid). Si vols exacte: mesurar text.
-  bw := Max(22, Length(Text) * 5.2 + padX*2);
-  bh := 12;
+  bh := 13;
+
+  // Un solo digito/caracter: badge REDONDO (circulo), ancho = alto.
+  // Mas de un caracter: pildora redondeada con ancho proporcional al texto.
+  var IsSingle := Length(Text) = 1;
+  if IsSingle then
+    bw := bh
+  else
+    bw := Max(22, Length(Text) * 5.2 + padX * 2);
 
   // No pintar badge si el node és massa estret
   if (R.Right - R.Left) < bw + 4 then Exit;
 
-  bx := R.Right - bw + 2;
+  // Alineado a la esquina superior derecha del nodo.
+  bx := R.Right - bw - 1;
   by := R.Top + 1;
 
   badgeR := TRectF.Create(bx, by, bx + bw, by + bh);
 
-  SetBrushColor(FillBrush, FillC, 0.85);
+  SetBrushColor(FillBrush, FillC, 0.95);
 
   rr.rect.left   := badgeR.Left;
   rr.rect.top    := badgeR.Top;
   rr.rect.right  := badgeR.Right;
   rr.rect.bottom := badgeR.Bottom;
-  rr.radiusX := 3;
-  rr.radiusY := 3;
+  // Circulo cuando es un solo caracter (radio = mitad del lado); pildora si no.
+  if IsSingle then
+  begin
+    rr.radiusX := bh / 2;
+    rr.radiusY := bh / 2;
+  end
+  else
+  begin
+    rr.radiusX := 3;
+    rr.radiusY := 3;
+  end;
   RT.FillRoundedRectangle(rr, FillBrush);
 
   SetBrushColor(TextBrush, TextC, 1.0);
   D2D.Font.Color := TextC;
   D2D.Brush.Style := bsClear;
-  D2D.TextOut(Round(badgeR.Left + padX), Round(badgeR.Top + 1), Text);
+  // Texto del badge en negrita y un punto mas pequenyo que el texto de nodo.
+  D2D.Font.Size := 6;
+  D2D.Font.Style := D2D.Font.Style + [fsBold];
+  try
+    // Centrar el texto en el badge (aprox: ~3.2 px por caracter a tamanyo 6 bold).
+    var TextW := Length(Text) * 3.2;
+    var TX := badgeR.Left + (bw - TextW) / 2;
+    if not IsSingle then TX := badgeR.Left + padX;
+    D2D.TextOut(Round(TX), Round(badgeR.Top + 1), Text);
+  finally
+    D2D.Font.Style := D2D.Font.Style - [fsBold];
+    D2D.Font.Size := 7;
+  end;
   D2D.Brush.Style := bsSolid;
 end;
 
+procedure TGanttControl.DrawOpFilterOverlayD2D(const D2D: TDirect2DCanvas;
+  const RT: ID2D1RenderTarget; const FillBrush, TextBrush: ID2D1SolidColorBrush);
+const
+  // Amarillo-naranja (BGR) para marco y pill de resultado, tanto en filtrado
+  // como en resaltado: color calido bien visible sin ser alarmante.
+  COL_FILTER = $001EAAF5;  // amarillo-naranja
+  COL_HIGH   = $001EAAF5;  // mismo color
+  MARGIN     = 8;
+  PILL_H     = 22;
+  GAP        = 6;
 
+  // Pinta un pill redondeado con texto y devuelve su rect.
+  function Pill(const ARight, ATop: Single; const AText: string;
+    AFillC: TColor; AReserveX: Boolean): TRectF;
+  var
+    tw, w: Single;
+    rr: TD2D1RoundedRect;
+    extra: Single;
+  begin
+    tw := Length(AText) * 6.2;          // ancho aprox del texto (tamanyo 8)
+    extra := 0;
+    if AReserveX then extra := 18;      // hueco para la 'X'
+    w := tw + 16 + extra;
+    Result := TRectF.Create(ARight - w, ATop, ARight, ATop + PILL_H);
+
+    rr.rect.left := Result.Left; rr.rect.top := Result.Top;
+    rr.rect.right := Result.Right; rr.rect.bottom := Result.Bottom;
+    rr.radiusX := PILL_H / 2; rr.radiusY := PILL_H / 2;
+    SetBrushColor(FillBrush, AFillC, 0.95);
+    RT.FillRoundedRectangle(rr, FillBrush);
+
+    D2D.Brush.Style := bsClear;
+    D2D.Font.Color := clWhite;
+    D2D.Font.Size := 8;
+    D2D.Font.Style := D2D.Font.Style + [fsBold];
+    D2D.TextOut(Round(Result.Left + 10), Round(Result.Top + 3), AText);
+    D2D.Font.Style := D2D.Font.Style - [fsBold];
+    D2D.Brush.Style := bsSolid;
+  end;
+
+var
+  FrameC: TColor;
+  PillRight, PillTop: Single;
+  xRect: TRectF;
+  xr: TD2D1RoundedRect;
+begin
+  FOpFilterPillClearRect := TRectF.Empty;
+  FOpFilterPillPeekRect := TRectF.Empty;
+  if not FOpFilterActive then Exit;
+  if FFastPaint then Exit;
+
+  // Mientras se hace "peek" (Ver todo) no pintamos marco para que se vea el
+  // Gantt completo sin distraccion, pero si mantenemos los pills.
+  if FOpFilterHideMode then FrameC := COL_FILTER else FrameC := COL_HIGH;
+
+  if not FOpFilterPeeking then
+  begin
+    // Marco de color alrededor de toda el area del Gantt.
+    SetBrushColor(TextBrush, FrameC, 0.90);
+    RT.DrawRectangle(
+      D2D1RectF(1.5, 1.5, ClientWidth - 1.5, ClientHeight - 1.5),
+      TextBrush, 3.0);
+  end;
+
+  // Pills arriba a la derecha. Primero "Ver todo", luego el de estado a su izq.
+  PillTop := MARGIN;
+  PillRight := ClientWidth - MARGIN;
+
+  FOpFilterPillPeekRect := Pill(PillRight, PillTop,
+    'Ver todo', $00707070, False);
+
+  PillRight := FOpFilterPillPeekRect.Left - GAP;
+  FOpFilterPillClearRect := Pill(PillRight, PillTop,
+    FOpFilterLabel, FrameC, True);
+
+  // Dibujar la 'X' a la derecha del pill de estado (zona reservada).
+  xRect := TRectF.Create(
+    FOpFilterPillClearRect.Right - 20, FOpFilterPillClearRect.Top + 3,
+    FOpFilterPillClearRect.Right - 6, FOpFilterPillClearRect.Bottom - 3);
+  xr.rect.left := xRect.Left; xr.rect.top := xRect.Top;
+  xr.rect.right := xRect.Right; xr.rect.bottom := xRect.Bottom;
+  xr.radiusX := 3; xr.radiusY := 3;
+  SetBrushColor(FillBrush, clWhite, 0.25);
+  RT.FillRoundedRectangle(xr, FillBrush);
+  SetBrushColor(TextBrush, clWhite, 1.0);
+  RT.DrawLine(D2D1PointF(xRect.Left + 3, xRect.Top + 3),
+    D2D1PointF(xRect.Right - 3, xRect.Bottom - 3), TextBrush, 1.6);
+  RT.DrawLine(D2D1PointF(xRect.Right - 3, xRect.Top + 3),
+    D2D1PointF(xRect.Left + 3, xRect.Bottom - 3), TextBrush, 1.6);
+end;
 
 procedure TGanttControl.SetData(const ACentres: TArray<TCentreTreball>; const ANodes: TArray<TNode>;
   const AStartTime: TDateTime);
@@ -4016,6 +4178,13 @@ begin
   Result := FOpFilterDataIds.TryGetValue(ADataId, dummy);
 end;
 
+function TGanttControl.IsNodeHiddenByFilter(const ADataId: Integer): Boolean;
+begin
+  // Oculto = filtro activo en modo ocultar Y este nodo no coincide.
+  Result := FOpFilterActive and FOpFilterHideMode and (ADataId > 0) and
+            (not IsNodeOperarioFiltered(ADataId));
+end;
+
 
 function TGanttControl.GetNodes: TArray<TNode>;
 begin
@@ -4040,6 +4209,9 @@ var
   N: TNode;
   d, dEnd, lo, hi: TDate;
   cur: Integer;
+  Cal: TCentreCalendar;
+  ns, ne: TDateTime;
+  cuentaDia: Boolean;
 begin
   Result := TDictionary<TDate, Integer>.Create;
   lo := DateOf(AFrom);
@@ -4055,6 +4227,10 @@ begin
     if FOpFilterActive and FOpFilterHideMode and (N.DataId > 0) and
        (not IsNodeOperarioFiltered(N.DataId)) then Continue;
 
+    // Calendari del centre del node: per descartar dies on el node cau
+    // plenament en zona NO laborable (cap de setmana, festiu, fora de torn).
+    Cal := GetCalendar(N.CentreId);
+
     // Dies que toca el node (interval StartTime..EndTime), retallat al rang.
     d := DateOf(N.StartTime);
     dEnd := DateOf(N.EndTime);
@@ -4063,11 +4239,169 @@ begin
 
     while d <= dEnd do
     begin
-      if Result.TryGetValue(d, cur) then
-        Result[d] := cur + 1
-      else
-        Result.Add(d, 1);
+      // El node compta a aquest dia nomes si hi te treball LABORABLE real.
+      // Usem una tolerancia de frontera: un final a 23:59:59 NO ha de fer
+      // comptar el dia seguent, i un solapament residual de pocs segons/minuts
+      // (efecte mitjanit) tampoc. Per aixo exigim un minim de minuts laborables.
+      cuentaDia := True;
+      if Cal <> nil then
+      begin
+        ns := N.StartTime; if ns < d then ns := d;
+        ne := N.EndTime;   if ne > (d + 1) then ne := d + 1;
+        // Tolerancia de frontera (~1 minut = 1/1440 de dia): un solapament de
+        // pocs segons a la vora de mitjanit (final 23:59:59 o inici 00:00 del
+        // dia seguent) NO ha de fer comptar el dia. Exigim ademas minuts
+        // laborables reals segons el calendari (>=1).
+        if (ne - ns) < (1.0 / 1440.0) then
+          cuentaDia := False
+        else
+          cuentaDia := Cal.WorkingMinutesBetween(ns, ne) >= 1;
+      end;
+
+      if cuentaDia then
+      begin
+        if Result.TryGetValue(d, cur) then
+          Result[d] := cur + 1
+        else
+          Result.Add(d, 1);
+      end;
       d := d + 1;  // dia seguent (TDate enter = 1 dia)
+    end;
+  end;
+end;
+
+function TGanttControl.GetOperariosAsignadosByDay(const AFrom, ATo: TDateTime):
+  TDictionary<TDate, Integer>;
+var
+  i: Integer;
+  N: TNode;
+  D: TNodeData;
+  d2, dEnd, lo, hi: TDate;
+  cur, ops: Integer;
+  Cal: TCentreCalendar;
+  ns, ne: TDateTime;
+  cuentaDia: Boolean;
+begin
+  Result := TDictionary<TDate, Integer>.Create;
+  lo := DateOf(AFrom);
+  hi := DateOf(ATo);
+
+  for i := 0 to High(FNodes) do
+  begin
+    N := FNodes[i];
+    if not N.Visible then Continue;
+    if not IsCentreVisible(N.CentreId) then Continue;
+    if not IsCentreEnabled(N.CentreId) then Continue;
+    if FOpFilterActive and FOpFilterHideMode and (N.DataId > 0) and
+       (not IsNodeOperarioFiltered(N.DataId)) then Continue;
+
+    // Operarios asignados de este nodo (0 si no hay NodeData).
+    ops := 0;
+    if (N.DataId > 0) and Assigned(FNodeRepo) and
+       FNodeRepo.TryGetById(N.DataId, D) then
+      ops := D.OperariosAsignados;
+    if ops <= 0 then Continue;  // sin operarios no aporta nada
+
+    Cal := GetCalendar(N.CentreId);
+
+    d2 := DateOf(N.StartTime);
+    dEnd := DateOf(N.EndTime);
+    if d2 < lo then d2 := lo;
+    if dEnd > hi then dEnd := hi;
+
+    while d2 <= dEnd do
+    begin
+      // Mismo criterio que el contador de nodos: solo dias con trabajo laborable.
+      cuentaDia := True;
+      if Cal <> nil then
+      begin
+        ns := N.StartTime; if ns < d2 then ns := d2;
+        ne := N.EndTime;   if ne > (d2 + 1) then ne := d2 + 1;
+        cuentaDia := (ne > ns) and (Cal.WorkingMinutesBetween(ns, ne) > 0);
+      end;
+
+      if cuentaDia then
+      begin
+        if Result.TryGetValue(d2, cur) then
+          Result[d2] := cur + ops
+        else
+          Result.Add(d2, ops);
+      end;
+      d2 := d2 + 1;
+    end;
+  end;
+end;
+
+
+procedure TGanttControl.GetNodeOperatorCoverByDay(const AFrom, ATo: TDateTime;
+  out ATotalByDay, AWithOpsByDay: TDictionary<TDate, Integer>);
+var
+  i: Integer;
+  N: TNode;
+  D: TNodeData;
+  d2, dEnd, lo, hi: TDate;
+  cur: Integer;
+  Cal: TCentreCalendar;
+  ns, ne: TDateTime;
+  cuentaDia, tieneOps: Boolean;
+begin
+  ATotalByDay := TDictionary<TDate, Integer>.Create;
+  AWithOpsByDay := TDictionary<TDate, Integer>.Create;
+  lo := DateOf(AFrom);
+  hi := DateOf(ATo);
+
+  for i := 0 to High(FNodes) do
+  begin
+    N := FNodes[i];
+    if not N.Visible then Continue;
+    if not IsCentreVisible(N.CentreId) then Continue;
+    if not IsCentreEnabled(N.CentreId) then Continue;
+    if FOpFilterActive and FOpFilterHideMode and (N.DataId > 0) and
+       (not IsNodeOperarioFiltered(N.DataId)) then Continue;
+
+    // Este nodo tiene operarios asignados?
+    tieneOps := False;
+    if (N.DataId > 0) and Assigned(FNodeRepo) and
+       FNodeRepo.TryGetById(N.DataId, D) then
+      tieneOps := D.OperariosAsignados > 0;
+
+    Cal := GetCalendar(N.CentreId);
+
+    d2 := DateOf(N.StartTime);
+    dEnd := DateOf(N.EndTime);
+    if d2 < lo then d2 := lo;
+    if dEnd > hi then dEnd := hi;
+
+    while d2 <= dEnd do
+    begin
+      // Mismo criterio de dia laborable que GetVisibleNodeCountByDay.
+      cuentaDia := True;
+      if Cal <> nil then
+      begin
+        ns := N.StartTime; if ns < d2 then ns := d2;
+        ne := N.EndTime;   if ne > (d2 + 1) then ne := d2 + 1;
+        if (ne - ns) < (1.0 / 1440.0) then
+          cuentaDia := False
+        else
+          cuentaDia := Cal.WorkingMinutesBetween(ns, ne) >= 1;
+      end;
+
+      if cuentaDia then
+      begin
+        if ATotalByDay.TryGetValue(d2, cur) then
+          ATotalByDay[d2] := cur + 1
+        else
+          ATotalByDay.Add(d2, 1);
+
+        if tieneOps then
+        begin
+          if AWithOpsByDay.TryGetValue(d2, cur) then
+            AWithOpsByDay[d2] := cur + 1
+          else
+            AWithOpsByDay.Add(d2, 1);
+        end;
+      end;
+      d2 := d2 + 1;
     end;
   end;
 end;
@@ -6497,31 +6831,6 @@ begin
   end;
 
   Canvas.Draw(0, 0, FFrameBmp);
-
-  // ===== DIAGNOSTIC TEMPORAL: vista actual + layout carregat per aquesta vista.
-  // (treure quan es resolgui el tema del NodeLayout per vista)
-  if FNodeLayoutSet_Set then
-  begin
-    var dbgL := FNodeLayoutSet.Layouts[FVista];
-    var dbg := Format('Vista=%s  Layout="%s"  files=%d  set=%d',
-      [GanttViewModeToStr(FVista), dbgL.Name, Length(dbgL.Rows),
-       Ord(FNodeLayoutSet_Set)]);
-    Canvas.Brush.Style := bsSolid;
-    Canvas.Brush.Color := $00203020;
-    Canvas.Font.Name := 'Consolas';
-    Canvas.Font.Size := 8;
-    Canvas.Font.Color := clYellow;
-    Canvas.TextOut(6, ClientHeight - 20, dbg);
-  end
-  else
-  begin
-    Canvas.Brush.Style := bsSolid;
-    Canvas.Brush.Color := $00203020;
-    Canvas.Font.Name := 'Consolas';
-    Canvas.Font.Size := 8;
-    Canvas.Font.Color := clRed;
-    Canvas.TextOut(6, ClientHeight - 20, 'NodeLayoutSet NO assignat (fallback)');
-  end;
 end;
 
 
@@ -6860,12 +7169,16 @@ begin
           begin
             if D.OperariosAsignados <= 0 then
             begin
+              // Rojo: ningun operario asignado. Badge con los necesarios.
               S.Fill := COL_BAD_FILL;
               S.Border := COL_BAD_BORDER;
+              S.BadgeText := IntToStr(D.OperariosNecesarios);
+              S.BadgeFill := S.Border;
+              S.BadgeTextColor := clWhite;
             end
             else if D.OperariosAsignados < D.OperariosNecesarios then
             begin
-              // Amarillo: badge con cantidad
+              // Amarillo: parcial. Badge asignados/necesarios.
               S.Fill := COL_WARN_FILL;
               S.Border := COL_WARN_BORDER;
               S.BadgeText := Format('%d/%d', [D.OperariosAsignados, D.OperariosNecesarios]);
@@ -6874,8 +7187,12 @@ begin
             end
             else
             begin
+              // Verde: completo. Badge con los asignados.
               S.Fill := COL_OK_FILL;
               S.Border := COL_OK_BORDER;
+              S.BadgeText := IntToStr(D.OperariosAsignados);
+              S.BadgeFill := S.Border;
+              S.BadgeTextColor := clWhite;
             end;
           end;
         end;
@@ -7078,11 +7395,13 @@ begin
   if IsHi and (not IsSel) then
     S.Border := $0000CCFF; // groc daurat (BGR)
 
-  // Filtro de operarios: atenuar nodos no filtrados (mantener colores de estado)
-  if FOpFilterActive and (not FOpFilterHideMode) then
+  // Filtro de operarios (modo resaltar): atenuar fuertemente los nodos no
+  // coincidentes (semitransparentes ~90%) y dejar los coincidentes intactos.
+  // Durante "peek" (Ver todo) no se aplica: se muestra el Gantt completo.
+  if FOpFilterActive and (not FOpFilterPeeking) and (not FOpFilterHideMode) then
   begin
     if not IsNodeOperarioFiltered(Node.DataId) then
-      S.Alpha := 0.45;
+      S.Alpha := 0.10;
   end;
 end;
 
@@ -7239,26 +7558,16 @@ var
       const AHAlign: TCardHAlign);
     var
       T: string;
-      tw, th, availW, tx, ty, keep: Integer;
+      tw, th, availW, tx, ty: Integer;
     begin
       if AText = '' then Exit;
       availW := R.Right - R.Left;
       if availW <= 0 then Exit;
 
+      // Sin ellipsis: el texto que no cabe se recorta por el clip del nodo.
+      // No anyadimos '...'; solo medimos para alinear.
       T := AText;
       tw := D2D.TextWidth(T);
-      if tw > availW then
-      begin
-        keep := Max(1, (Length(T) * (availW - 12)) div Max(1, tw));
-        if keep < Length(T) then SetLength(T, keep);
-        tw := D2D.TextWidth(T + '...');
-        while (Length(T) > 1) and (tw > availW) do
-        begin
-          SetLength(T, Length(T) - 1);
-          tw := D2D.TextWidth(T + '...');
-        end;
-        T := T + '...';
-      end;
 
       th := D2D.TextHeight(T);
       ty := R.Top + (R.Bottom - R.Top - th) div 2;
@@ -7445,6 +7754,12 @@ var
     else
       LodMax := MaxInt;             // contingut complet
 
+    // El rotulo de operario (vista gvmOperarios) se muestra casi siempre:
+    // basta con que el nodo no sea demasiado estrecho (LOD_MIN_W ya filtra eso),
+    // sin exigir el ancho completo que pide el contenido secundario.
+    var ShowOpLabel := (FVista = gvmOperarios) and (AData.DataId > 0)
+      and Assigned(FOnGetOperarioLabel);
+
     // Clip per retallar el contingut que desbordi el node.
     RT.PushAxisAlignedClip(
       D2D1RectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom),
@@ -7455,25 +7770,46 @@ var
       if FNodeLayoutSet_Set then
       begin
         RenderNodeLayoutD2D(ARect, ANode, AData, LodMax);
-        Exit;
+      end
+      else
+      begin
+        // Fallback (sense Node Layout Set): render per defecte Caption + Articulo.
+        var FbColor: TColor;
+        if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then
+          FbColor := $00555555
+        else
+          FbColor := clBlack;
+        D2D.Font.Color := FbColor;
+        D2D.Brush.Style := bsClear;
+
+        FallbackLine(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y,
+          Round(ARect.Right) - PAD_X, ANode.Caption, FbColor);
+
+        // 2a linia (article) nomes amb detall complet. En la vista de operarios
+        // esa 2a linia la ocupa el rotulo de operario, asi que no pintamos el
+        // articulo para que no se solapen.
+        if (LodMax > 1) and (AData.DataId > 0) and (not ShowOpLabel) then
+          FallbackLine(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y + 10,
+            Round(ARect.Right) - PAD_X, AData.CodigoArticulo, FbColor);
       end;
 
-      // Fallback (sense Node Layout Set): render per defecte Caption + Articulo.
-      var FbColor: TColor;
-      if (not ANode.Enabled) or (not IsCentreEnabled(ANode.CentreId)) then
-        FbColor := $00555555
-      else
-        FbColor := clBlack;
-      D2D.Font.Color := FbColor;
-      D2D.Brush.Style := bsClear;
-
-      FallbackLine(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y,
-        Round(ARect.Right) - PAD_X, ANode.Caption, FbColor);
-
-      // 2a linia (article) nomes amb detall complet.
-      if (LodMax > 1) and (AData.DataId > 0) then
-        FallbackLine(Round(ARect.Left) + PAD_X, Round(ARect.Top) + PAD_Y + 9,
-          Round(ARect.Right) - PAD_X, AData.CodigoArticulo, FbColor);
+      // En la vista de operarios, bajo el caption mostramos el operario
+      // asignado (o 'VARIOS...'). uVistaGantt resuelve el rotulo via callback.
+      // Va en una 2a linea fija bajo el caption (alineada, sin tocarlo).
+      if ShowOpLabel then
+      begin
+        var OpLabel := FOnGetOperarioLabel(AData.DataId);
+        if OpLabel <> '' then
+        begin
+          D2D.Brush.Style := bsClear;
+          D2D.Font.Size := 7;
+          D2D.Font.Color := clWhite;
+          D2D.Font.Style := D2D.Font.Style + [fsBold];
+          D2D.TextOut(Round(ARect.Left) + PAD_X,
+            Round(ARect.Top) + PAD_Y + 10, OpLabel);
+          D2D.Font.Style := D2D.Font.Style - [fsBold];
+        end;
+      end;
     finally
       RT.PopAxisAlignedClip;
       D2D.Brush.Style := bsSolid;
@@ -7505,13 +7841,13 @@ var
   var
     inflate: Single;
   begin
-    // Filtro operarios: ocultar nodos no filtrados
-    if FOpFilterActive and FOpFilterHideMode and (ANode.DataId > 0) then
+    // Filtro operarios: ocultar nodos no filtrados (salvo durante "peek").
+    if FOpFilterActive and (not FOpFilterPeeking) and FOpFilterHideMode and (ANode.DataId > 0) then
       if not IsNodeOperarioFiltered(ANode.DataId) then
         Exit;
 
     // Filtro operarios: inflate/pulse suave en nodos filtrados
-    if FOpFilterActive and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
+    if FOpFilterActive and (not FOpFilterPeeking) and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
     begin
       inflate := 2.0 * (0.5 + 0.5 * Sin(FOpFilterPulsePhase)); // oscila suave entre 0 y 2 px
       ARectS.Inflate(inflate, inflate);
@@ -7561,7 +7897,7 @@ var
 
     // Borde: mas grueso para nodos filtrados
     var borderWidth: Single;
-    if FOpFilterActive and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
+    if FOpFilterActive and (not FOpFilterPeeking) and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
     begin
       borderWidth := 3.0;
       SetBrushColor(StrokeBrush, clBlack, 1.0);
@@ -7592,18 +7928,20 @@ var
     if (Style.Progress >= 0) and (not FFastPaint) and (ANodeLayout.LoteId = 0) then
       DrawProgressBarD2D(RT, FillBrush, ARectS, Style.Progress);
 
-    if (Style.BadgeText <> '') and (not FFastPaint) and (ANodeLayout.LoteId = 0) then
-      DrawBadgeD2D(
-        D2D, RT, FillBrush, TextBrush, ARectS,
-        Style.BadgeText, Style.BadgeFill, Style.BadgeTextColor
-      );
-
     // Texto del lote: 'Lote N (X op)' en vez del texto de nodo individual.
     if ANodeLayout.LoteId > 0 then
       DrawNodeTextStr(ARectS,
         Format('Lote %d (%d op)', [ANodeLayout.LoteId, ANodeLayout.LoteCount]))
     else
       DrawNodeText(ARectS, ANode, D);
+
+    // El badge se pinta DESPUES del texto para quedar SIEMPRE por encima
+    // (una capa por encima del caption/articulo/operario).
+    if (Style.BadgeText <> '') and (not FFastPaint) and (ANodeLayout.LoteId = 0) then
+      DrawBadgeD2D(
+        D2D, RT, FillBrush, TextBrush, ARectS,
+        Style.BadgeText, Style.BadgeFill, Style.BadgeTextColor
+      );
   end;
 
 begin
@@ -7950,6 +8288,9 @@ begin
       end;
 
       DrawMarqueeD2D(RT);
+
+      // Overlay de filtro/resaltado de operarios: lo ultimo, por encima de todo.
+      DrawOpFilterOverlayD2D(D2D, RT, FillBrush, TextBrush);
 
     finally
       D2D.EndDraw;
@@ -12900,6 +13241,24 @@ var
 begin
   inherited;
 
+  // Overlay de filtro/resaltado: los pills tienen prioridad sobre todo.
+  if (Button = mbLeft) and FOpFilterActive then
+  begin
+    if FOpFilterPillClearRect.Contains(PointF(X, Y)) then
+    begin
+      if Assigned(FOnOpFilterClear) then FOnOpFilterClear(Self);
+      Exit;
+    end;
+    if FOpFilterPillPeekRect.Contains(PointF(X, Y)) then
+    begin
+      // Hold-to-peek: mientras se mantiene pulsado, se ve el Gantt completo.
+      FOpFilterPeeking := True;
+      MouseCapture := True;
+      Invalidate;
+      Exit;
+    end;
+  end;
+
   FClickDatetime := GetDateTimeFromPoint(X, Y);
   FClickPoint := Point(X, Y);
 
@@ -13128,6 +13487,15 @@ begin
 
   inherited;
 
+  // Fin del "peek" (Ver todo): al soltar, vuelve el efecto de filtro/resaltado.
+  if FOpFilterPeeking then
+  begin
+    FOpFilterPeeking := False;
+    MouseCapture := False;
+    Invalidate;
+    Exit;
+  end;
+
   if Button = mbMiddle then
   begin
     FIsPanning := False;
@@ -13353,6 +13721,33 @@ begin
   FSelectedNodeIndexes.AddOrSetValue(AIndex, 1);
 
   FFocusedNodeIndex := AIndex;
+
+  Invalidate;
+end;
+
+function TGanttControl.SelectNodesInDateRange(const AFrom, ATo: TDateTime;
+  const AClearPrevious: Boolean): Integer;
+var
+  I: Integer;
+  N: TNode;
+begin
+  Result := 0;
+  if AClearPrevious then
+    FSelectedNodeIndexes.Clear;
+
+  for I := 0 to High(FNodes) do
+  begin
+    N := FNodes[I];
+    if not N.Visible then Continue;
+    if not IsCentreVisible(N.CentreId) then Continue;
+    if not IsCentreEnabled(N.CentreId) then Continue;
+    // Solapa amb el rang? (interval obert per dalt: [AFrom, ATo))
+    if (N.StartTime < ATo) and (N.EndTime > AFrom) then
+    begin
+      FSelectedNodeIndexes.AddOrSetValue(I, 1);
+      Inc(Result);
+    end;
+  end;
 
   Invalidate;
 end;

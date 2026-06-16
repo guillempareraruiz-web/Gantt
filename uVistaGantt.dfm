@@ -387,9 +387,9 @@ object frmVistaGantt: TfrmVistaGantt
         end
         object Shape5: TShape
           Left = 474
-          Top = 0
+          Top = 1
           Width = 1
-          Height = 40
+          Height = 39
           Align = alRight
           Brush.Color = clSilver
           Pen.Color = clSilver
@@ -410,15 +410,26 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = []
           ParentFont = False
         end
+        object Shape6: TShape
+          Left = 0
+          Top = 0
+          Width = 475
+          Height = 1
+          Align = alTop
+          Brush.Color = clSilver
+          Pen.Color = clSilver
+          ExplicitTop = 41
+          ExplicitWidth = 226
+        end
         object btnS3: TcxButton
           AlignWithMargins = True
           Left = 419
-          Top = 5
+          Top = 9
           Width = 24
-          Height = 30
-          Margins.Top = 5
+          Height = 23
+          Margins.Top = 8
           Margins.Right = 1
-          Margins.Bottom = 5
+          Margins.Bottom = 8
           Align = alRight
           LookAndFeel.Kind = lfUltraFlat
           LookAndFeel.NativeStyle = False
@@ -428,26 +439,26 @@ object frmVistaGantt: TfrmVistaGantt
           OptionsImage.Glyph.SourceWidth = 16
           OptionsImage.Glyph.Data = {
             3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
-            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D2243
-            72656174655F526F74617465645F537461636B65645F4261725F436861727422
-            20786D6C6E733D22687474703A2F2F7777772E77332E6F72672F323030302F73
-            76672220786D6C6E733A786C696E6B3D22687474703A2F2F7777772E77332E6F
-            72672F313939392F786C696E6B2220783D223070782220793D22307078222076
-            696577426F783D2230203020333220333222207374796C653D22656E61626C65
-            2D6261636B67726F756E643A6E6577203020302033322033323B2220786D6C3A
-            73706163653D227072657365727665223E262331333B262331303B3C7374796C
-            6520747970653D22746578742F6373732220786D6C3A73706163653D22707265
-            7365727665223E2E59656C6C6F777B66696C6C3A234646423131353B7D262331
-            333B262331303B2623393B2E5265647B66696C6C3A234431314331433B7D2623
-            31333B262331303B2623393B2E426C75657B66696C6C3A233131373744373B7D
-            3C2F7374796C653E0D0A3C7061746820636C6173733D225265642220643D224D
-            342C313056346834763648347A204D31302C3138762D36483476364831307A20
-            4D31362C3236762D36483476364831367A222F3E0D0A3C7061746820636C6173
-            733D2259656C6C6F772220643D224D382C313056346838763648387A204D3138
-            2C3138762D36682D3876364831387A204D32322C3236762D36682D3676364832
-            327A222F3E0D0A3C7061746820636C6173733D22426C75652220643D224D3136
-            2C31305634683476364831367A204D32342C3138762D36682D3676364832347A
-            204D32382C3236762D36682D3676364832387A222F3E0D0A3C2F7376673E0D0A}
+            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D2241
+            7265612220786D6C6E733D22687474703A2F2F7777772E77332E6F72672F3230
+            30302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F7777772E
+            77332E6F72672F313939392F786C696E6B2220783D223070782220793D223070
+            78222076696577426F783D2230203020333220333222207374796C653D22656E
+            61626C652D6261636B67726F756E643A6E6577203020302033322033323B2220
+            786D6C3A73706163653D227072657365727665223E262331333B262331303B3C
+            7374796C6520747970653D22746578742F6373732220786D6C3A73706163653D
+            227072657365727665223E2E426C75657B66696C6C3A233131373744373B7D26
+            2331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646423131
+            353B7D262331333B262331303B2623393B2E7374307B6F7061636974793A302E
+            353B7D3C2F7374796C653E0D0A3C706F6C79676F6E20636C6173733D2259656C
+            6C6F772220706F696E74733D22322C31322031322C32302033302C342033302C
+            323820322C323820222F3E0D0A3C6720636C6173733D22737430223E0D0A0909
+            3C706F6C79676F6E20636C6173733D22426C75652220706F696E74733D22322C
+            32322031342C31302033302C31362033302C323820322C3238202623393B222F
+            3E0D0A093C2F673E0D0A3C706F6C79676F6E20636C6173733D22426C75652220
+            706F696E74733D2231322C323020372E362C31362E3420322C323220322C3238
+            2033302C32382033302C31362032302E352C31322E3420222F3E0D0A3C2F7376
+            673E0D0A}
           ParentShowHint = False
           ShowHint = True
           SpeedButtonOptions.GroupIndex = 1
@@ -460,51 +471,15 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
-          ExplicitLeft = 403
-          ExplicitTop = 3
-          ExplicitHeight = 34
         end
         object btnS4: TcxButton
           AlignWithMargins = True
           Left = 447
-          Top = 5
+          Top = 9
           Width = 24
-          Height = 30
-          Margins.Top = 5
-          Margins.Bottom = 5
-          Align = alRight
-          Caption = 'T'
-          LookAndFeel.Kind = lfUltraFlat
-          LookAndFeel.NativeStyle = False
-          LookAndFeel.SkinName = 'Office2010Silver'
-          OptionsImage.Glyph.SourceHeight = 12
-          OptionsImage.Glyph.SourceWidth = 12
-          OptionsImage.Layout = blGlyphBottom
-          ParentShowHint = False
-          ShowHint = True
-          SpeedButtonOptions.GroupIndex = 1
-          SpeedButtonOptions.CanBeFocused = False
-          SpeedButtonOptions.AllowAllUp = True
-          TabOrder = 1
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          ExplicitLeft = 439
-          ExplicitTop = 3
-          ExplicitHeight = 34
-        end
-        object btnS1: TcxButton
-          AlignWithMargins = True
-          Left = 363
-          Top = 5
-          Width = 24
-          Height = 30
-          Margins.Top = 5
-          Margins.Right = 1
-          Margins.Bottom = 5
+          Height = 23
+          Margins.Top = 8
+          Margins.Bottom = 8
           Align = alRight
           LookAndFeel.Kind = lfUltraFlat
           LookAndFeel.NativeStyle = False
@@ -514,35 +489,69 @@ object frmVistaGantt: TfrmVistaGantt
           OptionsImage.Glyph.SourceWidth = 16
           OptionsImage.Glyph.Data = {
             3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
-            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
-            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
-            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
-            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
-            22307078222076696577426F783D2230203020333220333222207374796C653D
-            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
-            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
-            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
-            63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
-            3B7D262331333B262331303B2623393B2E5265647B66696C6C3A234431314331
-            433B7D3C2F7374796C653E0D0A3C672069643D224C617965725F32223E0D0A09
-            093C7061746820636C6173733D22426C75652220643D224D32362C313663352C
-            312E322C362C322E372C362C38682D372E35483863302D352E332C312D362E38
-            2C362D3863322E362D302E362C332D322E332C332D322E3963302C302C302C30
-            2C302C30632D342E312C302D352D312D352D3120202623393B2623393B63342E
-            342D332C302E342D362E352C342D31302E3963312E312D312E332C322E352D31
-            2E332C342D3163312E352D302E332C322E392D302E332C342C3163332E362C34
-            2E342D302E342C372E392C342C31302E3963302C302D302E392C312D352C3163
-            302C302C302C302E332C302C302E3320202623393B2623393B4332332C31332E
-            392C32332E342C31352E342C32362C31367A222F3E0D0A09093C706174682063
-            6C6173733D225265642220643D224D31382C3231632D322E362D302E372D332D
-            322E332D332D3363312E362D312E362C332D342E372C332D3863302D302E322C
-            302D302E352C302D3163302D322E352D322E382D352D352E392D3563302C302D
-            302E312C302D302E312C3020202623393B2623393B63302C302D302E312C302D
-            302E312C3043382E382C342C362C362E352C362C3963302C302E352C302C302E
-            382C302C3163302C332E332C312E342C362E342C332C3863302C302E372D302E
-            342C322E332D332C33632D352C312E342D362C312E312D362C37683132683132
-            20202623393B2623393B4332342C32322E312C32332C32322E342C31382C3231
-            7A222F3E0D0A093C2F673E0D0A3C2F7376673E0D0A}
+            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D2253
+            656C6563745461626C65526F772220786D6C6E733D22687474703A2F2F777777
+            2E77332E6F72672F323030302F7376672220786D6C6E733A786C696E6B3D2268
+            7474703A2F2F7777772E77332E6F72672F313939392F786C696E6B2220783D22
+            3070782220793D22307078222076696577426F783D2230203020333220333222
+            207374796C653D22656E61626C652D6261636B67726F756E643A6E6577203020
+            302033322033323B2220786D6C3A73706163653D227072657365727665223E26
+            2331333B262331303B3C7374796C6520747970653D22746578742F6373732220
+            786D6C3A73706163653D227072657365727665223E2E426C75657B66696C6C3A
+            233131373744373B7D262331333B262331303B2623393B2E426C61636B7B6669
+            6C6C3A233732373237323B7D262331333B262331303B2623393B2E7374307B6F
+            7061636974793A302E353B7D3C2F7374796C653E0D0A3C7061746820636C6173
+            733D22426C75652220643D224D31302C31384832762D3668385631387A204D32
+            302C3132682D38763668385631327A204D33302C3132682D3876366838563132
+            7A222F3E0D0A3C6720636C6173733D22737430223E0D0A09093C706174682063
+            6C6173733D22426C61636B2220643D224D31302C31304832563468385631307A
+            204D32302C34682D387636683856347A204D33302C34682D387636683856347A
+            204D31302C32304832763668385632307A204D32302C3230682D387636683856
+            32307A204D33302C3230682D38763668385632307A222F3E0D0A093C2F673E0D
+            0A3C2F7376673E0D0A}
+          OptionsImage.Layout = blGlyphBottom
+          ParentShowHint = False
+          ShowHint = True
+          SpeedButtonOptions.GroupIndex = 1
+          SpeedButtonOptions.CanBeFocused = False
+          SpeedButtonOptions.AllowAllUp = True
+          SpeedButtonOptions.Down = True
+          TabOrder = 1
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+        end
+        object btnS1: TcxButton
+          AlignWithMargins = True
+          Left = 363
+          Top = 9
+          Width = 24
+          Height = 23
+          Margins.Top = 8
+          Margins.Right = 1
+          Margins.Bottom = 8
+          Align = alRight
+          LookAndFeel.Kind = lfUltraFlat
+          LookAndFeel.NativeStyle = False
+          LookAndFeel.SkinName = 'Office2010Silver'
+          OptionsImage.Glyph.SourceDPI = 96
+          OptionsImage.Glyph.SourceHeight = 16
+          OptionsImage.Glyph.SourceWidth = 16
+          OptionsImage.Glyph.Data = {
+            89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+            610000001974455874536F6674776172650041646F626520496D616765526561
+            647971C9653C00000032744558745469746C6500437573746F6D65723B456D70
+            6C6F7965653B506572736F6E3B436F6E746163743B557365723B436C69656E74
+            7E1136E8000000AC49444154785EA5D1310AC2501084E114923EC750B04915AB
+            681FCF90BB58A5F1103984602F829E2127D03A1626C838C8146121CFD514DF2B
+            86E56F5E046092CFB3DD1DAD8CCEF4900BE5E6663430A31BC1B853EC09CC0923
+            169EC03A10D8780255205079022B7AD980B6EC6B404E36A02DF20672EA08D279
+            BED12AE92AA5365720A1BDF9F3585B120AA474A09E40352DA5D6D6EB26B58182
+            9E040FDD16C34043F851330CB47F045A0530C91BA77C3FB55043EFF400000000
+            49454E44AE426082}
           ParentShowHint = False
           ShowHint = True
           SpeedButtonOptions.GroupIndex = 1
@@ -555,20 +564,18 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
-          ExplicitLeft = 331
-          ExplicitTop = 3
-          ExplicitHeight = 34
         end
         object btnS2: TcxButton
           AlignWithMargins = True
           Left = 391
-          Top = 5
+          Top = 9
           Width = 24
-          Height = 30
-          Margins.Top = 5
+          Height = 23
+          Margins.Top = 8
           Margins.Right = 1
-          Margins.Bottom = 5
+          Margins.Bottom = 8
           Align = alRight
+          Enabled = False
           LookAndFeel.Kind = lfUltraFlat
           LookAndFeel.NativeStyle = False
           LookAndFeel.SkinName = 'Office2010Silver'
@@ -610,7 +617,6 @@ object frmVistaGantt: TfrmVistaGantt
           SpeedButtonOptions.GroupIndex = 1
           SpeedButtonOptions.CanBeFocused = False
           SpeedButtonOptions.AllowAllUp = True
-          SpeedButtonOptions.Down = True
           TabOrder = 3
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
@@ -618,9 +624,6 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
-          ExplicitLeft = 367
-          ExplicitTop = 3
-          ExplicitHeight = 34
         end
       end
     end
@@ -731,36 +734,6 @@ object frmVistaGantt: TfrmVistaGantt
         Caption = 'Refrescar'
         TabOrder = 0
         OnClick = btnRefreshClick
-      end
-      object btnAutoPlanSel: TButton
-        Left = 847
-        Top = 52
-        Width = 130
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Auto-planificar sel.'
-        TabOrder = 22
-        OnClick = btnAutoPlanSelClick
-      end
-      object btnAutoPlanAll: TButton
-        Left = 982
-        Top = 52
-        Width = 137
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Auto-planificar todo'
-        TabOrder = 23
-        OnClick = btnAutoPlanAllClick
-      end
-      object btnDesasignarSel: TButton
-        Left = 709
-        Top = 52
-        Width = 135
-        Height = 25
-        Anchors = [akTop, akRight]
-        Caption = 'Desasignar oper. sel.'
-        TabOrder = 24
-        OnClick = btnDesasignarSelClick
       end
       object spCentros: TcxSpinEdit
         Left = 276
@@ -1023,7 +996,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 7699523
         ParentBackground = False
-        TabOrder = 25
+        TabOrder = 22
       end
       object Panel16: TPanel
         Left = 548
@@ -1033,7 +1006,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 9404016
         ParentBackground = False
-        TabOrder = 26
+        TabOrder = 23
       end
       object Panel17: TPanel
         Left = 506
@@ -1043,7 +1016,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 8220514
         ParentBackground = False
-        TabOrder = 27
+        TabOrder = 24
       end
       object Panel18: TPanel
         Left = 381
@@ -1053,7 +1026,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 7041597
         ParentBackground = False
-        TabOrder = 28
+        TabOrder = 25
       end
       object Panel19: TPanel
         Left = 356
@@ -1063,7 +1036,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 3553567
         ParentBackground = False
-        TabOrder = 29
+        TabOrder = 26
       end
       object Panel20: TPanel
         Left = 464
@@ -1073,7 +1046,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 6313290
         ParentBackground = False
-        TabOrder = 30
+        TabOrder = 27
       end
     end
     object Panel3: TPanel
@@ -1508,6 +1481,40 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         Layout = tlCenter
       end
+      object Image1: TImage
+        Left = 592
+        Top = 7
+        Width = 16
+        Height = 16
+        AutoSize = True
+        Picture.Data = {
+          0D546478536D617274496D61676589504E470D0A1A0A0000000D494844520000
+          00100000001008060000001FF3FF610000001974455874536F66747761726500
+          41646F626520496D616765526561647971C9653C0000000D744558745469746C
+          650046696C7465723B851A65D10000004D49444154785EE5CCB10D00200C0341
+          CFCC06D98D795821342E100299285051B8F31FDC3DB57B40ABC5237B025800B0
+          157084F083354044C50A20B28F3540648EA30006009F039600180B20B50E0C1F
+          BDB00076F6BE0000000049454E44AE426082}
+        Visible = False
+      end
+      object Image2: TImage
+        Left = 614
+        Top = 7
+        Width = 16
+        Height = 16
+        AutoSize = True
+        Picture.Data = {
+          0D546478536D617274496D61676589504E470D0A1A0A0000000D494844520000
+          00100000001008060000001FF3FF610000001974455874536F66747761726500
+          41646F626520496D616765526561647971C9653C0000002D744558745469746C
+          6500436C6561722046696C7465723B46696C7465723B52656D6F76652046696C
+          7465723B436C65617229F58C020000007B49444154785EB5D1C109C0200C0550
+          77CA0ABD768A82037483ECD6213A455748B508C921FC44A487AF78F80F498A88
+          2CE53B9EEB9499FC02F004C01E9045B8A5B88022B80C0145FC320210B22B9E07
+          EC66CA32701F5B6D9116EAA57E8F77CD026242F69D056CC98630A07BF710C233
+          18E5CC0FA244330803B7F002CE38AC29FE0CE78A0000000049454E44AE426082}
+        Visible = False
+      end
       object btnFocus: TButton
         Left = 511
         Top = 15
@@ -1562,11 +1569,11 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         OnClick = btnGanttDatesClick
       end
-      object Panel12: TPanel
+      object pnlKPI3: TPanel
         AlignWithMargins = True
-        Left = 1054
+        Left = 1037
         Top = 5
-        Width = 73
+        Width = 90
         Height = 60
         Margins.Left = 1
         Margins.Top = 5
@@ -1583,49 +1590,48 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         ShowCaption = False
         TabOrder = 3
-        object Label30: TLabel
+        object LblKPIValue3: TLabel
           Left = 0
-          Top = 0
-          Width = 73
-          Height = 16
-          Align = alTop
-          Alignment = taCenter
-          AutoSize = False
-          Caption = 'Total Nodos'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          Layout = tlBottom
-          WordWrap = True
-          ExplicitLeft = 1
-          ExplicitTop = 1
-          ExplicitWidth = 71
-        end
-        object Label31: TLabel
-          Left = 0
-          Top = 16
-          Width = 73
-          Height = 19
+          Top = 28
+          Width = 90
+          Height = 24
           Align = alTop
           Alignment = taCenter
           AutoSize = False
           Caption = '0'
           Font.Charset = DEFAULT_CHARSET
-          Font.Color = 14024661
+          Font.Color = clWhite
           Font.Height = -15
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
+          Layout = tlCenter
+          ExplicitTop = 16
+        end
+        object LblKPITitle3: TLabel
+          Left = 0
+          Top = 0
+          Width = 90
+          Height = 28
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'XXXXX'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          Layout = tlCenter
+          WordWrap = True
         end
       end
-      object Panel4: TPanel
+      object pnlKPI2: TPanel
         AlignWithMargins = True
-        Left = 979
+        Left = 945
         Top = 5
-        Width = 73
+        Width = 90
         Height = 60
         Margins.Left = 1
         Margins.Top = 5
@@ -1643,49 +1649,48 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         ShowCaption = False
         TabOrder = 4
-        object Label9: TLabel
+        object LblKPIValue2: TLabel
           Left = 0
-          Top = 0
-          Width = 73
-          Height = 16
-          Align = alTop
-          Alignment = taCenter
-          AutoSize = False
-          Caption = 'Total Nodos'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          Layout = tlBottom
-          WordWrap = True
-          ExplicitLeft = 1
-          ExplicitTop = 1
-          ExplicitWidth = 71
-        end
-        object Label10: TLabel
-          Left = 0
-          Top = 16
-          Width = 73
-          Height = 19
+          Top = 28
+          Width = 90
+          Height = 24
           Align = alTop
           Alignment = taCenter
           AutoSize = False
           Caption = '0'
           Font.Charset = DEFAULT_CHARSET
-          Font.Color = 12703487
+          Font.Color = clWhite
           Font.Height = -15
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
+          Layout = tlCenter
+          ExplicitTop = 16
+        end
+        object LblKPITitle2: TLabel
+          Left = 0
+          Top = 0
+          Width = 90
+          Height = 28
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'XXXXX'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          Layout = tlCenter
+          WordWrap = True
         end
       end
-      object Panel15: TPanel
+      object pnlKPI1: TPanel
         AlignWithMargins = True
-        Left = 904
+        Left = 853
         Top = 5
-        Width = 73
+        Width = 90
         Height = 60
         Margins.Left = 1
         Margins.Top = 5
@@ -1703,92 +1708,11 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         ShowCaption = False
         TabOrder = 5
-        object Label36: TLabel
+        object LblKPIValue1: TLabel
           Left = 0
-          Top = 0
-          Width = 73
-          Height = 16
-          Align = alTop
-          Alignment = taCenter
-          AutoSize = False
-          Caption = 'xxx'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          Layout = tlBottom
-          WordWrap = True
-          ExplicitLeft = 1
-          ExplicitTop = 1
-          ExplicitWidth = 71
-        end
-        object Label37: TLabel
-          Left = 0
-          Top = 16
-          Width = 73
-          Height = 19
-          Align = alTop
-          Alignment = taCenter
-          AutoSize = False
-          Caption = '0'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = 8421631
-          Font.Height = -15
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-        end
-      end
-      object Panel14: TPanel
-        AlignWithMargins = True
-        Left = 829
-        Top = 5
-        Width = 73
-        Height = 60
-        Margins.Left = 1
-        Margins.Top = 5
-        Margins.Right = 1
-        Margins.Bottom = 5
-        Align = alRight
-        BevelOuter = bvNone
-        Color = 8220514
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = 7041597
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = []
-        ParentBackground = False
-        ParentFont = False
-        ShowCaption = False
-        TabOrder = 6
-        object Label34: TLabel
-          Left = 0
-          Top = 0
-          Width = 73
-          Height = 16
-          Align = alTop
-          Alignment = taCenter
-          AutoSize = False
-          Caption = 'Nodos visibles'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = 13156537
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          Layout = tlBottom
-          WordWrap = True
-          ExplicitLeft = 1
-          ExplicitTop = 1
-          ExplicitWidth = 71
-        end
-        object lblVisible: TLabel
-          Left = 0
-          Top = 16
-          Width = 73
-          Height = 19
+          Top = 28
+          Width = 90
+          Height = 24
           Align = alTop
           Alignment = taCenter
           AutoSize = False
@@ -1799,13 +1723,33 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
+          Layout = tlCenter
+          ExplicitTop = 16
+        end
+        object LblKPITitle1: TLabel
+          Left = 0
+          Top = 0
+          Width = 90
+          Height = 28
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'Operarios sin asignar'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          Layout = tlCenter
+          WordWrap = True
         end
       end
-      object Panel13: TPanel
+      object pnlKPI0: TPanel
         AlignWithMargins = True
-        Left = 754
+        Left = 761
         Top = 5
-        Width = 73
+        Width = 90
         Height = 60
         Margins.Left = 1
         Margins.Top = 5
@@ -1822,43 +1766,147 @@ object frmVistaGantt: TfrmVistaGantt
         ParentBackground = False
         ParentFont = False
         ShowCaption = False
-        TabOrder = 7
-        object Label32: TLabel
+        TabOrder = 6
+        object LblKPITitle0: TLabel
           Left = 0
           Top = 0
-          Width = 73
-          Height = 16
+          Width = 90
+          Height = 28
           Align = alTop
           Alignment = taCenter
           AutoSize = False
-          Caption = 'Total Nodos'
+          Caption = 'Nodos'
           Font.Charset = DEFAULT_CHARSET
-          Font.Color = 13156537
+          Font.Color = clWhite
           Font.Height = -9
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
-          Layout = tlBottom
+          Layout = tlCenter
           WordWrap = True
-          ExplicitLeft = 1
-          ExplicitTop = 1
-          ExplicitWidth = 71
         end
-        object lblNodes: TLabel
+        object LblKPIValue0: TLabel
           Left = 0
-          Top = 16
-          Width = 73
-          Height = 19
+          Top = 28
+          Width = 90
+          Height = 24
           Align = alTop
           Alignment = taCenter
           AutoSize = False
-          Caption = '0'
+          Caption = '23 / 456'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
           Font.Height = -15
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
+          Layout = tlCenter
+          ExplicitTop = 16
+        end
+      end
+      object pnlKPIAlertas: TPanel
+        AlignWithMargins = True
+        Left = 664
+        Top = 5
+        Width = 80
+        Height = 60
+        Margins.Left = 1
+        Margins.Top = 5
+        Margins.Right = 16
+        Margins.Bottom = 5
+        Align = alRight
+        BevelOuter = bvNone
+        Color = 4803025
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 8220514
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentBackground = False
+        ParentFont = False
+        ShowCaption = False
+        TabOrder = 7
+        OnClick = pnlKPIAlertasClick
+        object Label8: TLabel
+          Left = 0
+          Top = 16
+          Width = 80
+          Height = 16
+          Cursor = crHandPoint
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'Salud del Plan'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          WordWrap = True
+          OnClick = pnlKPIAlertasClick
+          ExplicitTop = 0
+        end
+        object Label9: TLabel
+          Left = 0
+          Top = 32
+          Width = 80
+          Height = 24
+          Cursor = crHandPoint
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = '13'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clBlack
+          Font.Height = -15
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          OnClick = pnlKPIAlertasClick
+          ExplicitTop = 16
+          ExplicitWidth = 90
+        end
+        object Image3: TImage
+          Left = 8
+          Top = 35
+          Width = 16
+          Height = 16
+          Cursor = crHandPoint
+          Center = True
+          Picture.Data = {
+            0D546478536D617274496D61676589504E470D0A1A0A0000000D494844520000
+            00100000001008060000001FF3FF610000001974455874536F66747761726500
+            41646F626520496D616765526561647971C9653C0000000B744558745469746C
+            6500496E666F3B6D122D860000007949444154785EA5D3DD09C0200C046047C9
+            203E673A9DA2C3649D8003D8132214C1167BC2F7A086C3DF94735E295430F060
+            31A66BFDB32350A041DF6851236B80C015459FA2569E0105FAA1320374B76CB4
+            34BC6C47531C4E3F0D08754C1A116063D28900E703E6167E32FA10E96B241F12
+            FF94F9CF447FE71B64B98D4C2A6C055E0000000049454E44AE426082}
+          Proportional = True
+          Stretch = True
+          OnClick = pnlKPIAlertasClick
+        end
+        object Label10: TLabel
+          Left = 0
+          Top = 0
+          Width = 80
+          Height = 16
+          Cursor = crHandPoint
+          Align = alTop
+          Alignment = taCenter
+          AutoSize = False
+          Caption = 'ALERTAS'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          Layout = tlBottom
+          WordWrap = True
+          OnClick = pnlKPIAlertasClick
+          ExplicitTop = 8
         end
       end
     end
@@ -2316,20 +2364,56 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = []
           ParentFont = False
         end
-        object cxButton2: TcxButton
+        object btnHighlightOperarios: TcxButton
           Left = 379
           Top = 21
-          Width = 50
+          Width = 21
           Height = 19
-          Caption = 'Resaltar'
+          Hint = 'Resaltar operarios'
           Colors.PressedText = 7136979
+          Enabled = False
           LookAndFeel.Kind = lfUltraFlat
           LookAndFeel.NativeStyle = False
           LookAndFeel.SkinName = 'Sharp'
+          OptionsImage.Glyph.SourceDPI = 96
+          OptionsImage.Glyph.SourceHeight = 14
+          OptionsImage.Glyph.SourceWidth = 14
+          OptionsImage.Glyph.Data = {
+            89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+            610000003F744558745469746C6500436F6E646974696F6E616C466F726D6174
+            74696E7349636F6E5365745374617273333B436F6E646974696F6E616C466F72
+            6D617474696E673BBD1216EC0000032C49444154785E45926D485B571CC69F73
+            131793D4248B26EB5A496A8BA26E6E3ACA46192BD889C3B1C98476AC30F61206
+            5DCBFAA576C240987BB5DD8B1F4A999B038BF8C142EBC656B73A669DB8B56C85
+            958C2AAD7496D48A1A6B6362D47B73EF3DE7BF136F322F3C3CFC9F737FCFE1DE
+            73D8A5F6DD2002400C04211DB999D078F21A1B7EF709CA06042BA3FFD7AD9951
+            6606F9C74AD986334758193A56DBF94257F43DCAC4C42605E477196A6B817D33
+            DC5C60853BD8E0D1C75EF604C36DE70E9B51E6D87196D45B395AE41082E0801D
+            C437E19C1F7DB6D4E9F5074E3EF97A2BFEE8FEE044E4E9FB3F9230D798458248
+            582E28574016CC5C150C8072EED0A36F57EC6B09398C1B28AF7F29D4383F7F48
+            71579D02C0A520D251923404B73845CADEDA18F2F447AAF70DBCF548EBD8A7CD
+            29BEF0039993ED64CE7D47A31FBD98EA7FA3F278CFC1F286C89EAD3E00055236
+            29C6060FD77C52E42F39E82BDD59E67D3804EFF630BC8107615BFD1330328062
+            87B9E529A41613589E8D2139378344EC762CB9B434F06AFF54BB32757BF94CE2
+            5EDA5D59DF805DB5611417DD83B27C05B49E86D033202D2DE7DF651EC7AEC7B7
+            A1AA7E2F12F7D3EE7FA697FBACC307948E866D7555655B479E3F72C057A0CF02
+            DCB07E14114848877428306C0FE1A79EA164F456FCB9CFAF2CFEFD55532957CC
+            A571D1313217BD39BDD03CFCCDF9355D2996BC019E5121A44857C1750D06F361
+            B8F7E2DAC4BF8BFB257C4DBFFB3DE73C5BCB3598F15FF8FBA373575753A90175
+            651D649A12CC6C80C2D0C0B88096D6B0924C9FEDBC1CBFACDF19304972C57E27
+            14E23A84A9C3FA1E1674BA0B21D415803128853E10D9C0D5340ADD0FC0060401
+            10991A88AB1082A06407C80190EF3B9D6185A7C0DC01C4664C8C5F9840ECAE09
+            B8FCC8E6AE22E74E20C764952F209ED928F0F8BCA1C9BFA6F0ED17BF6ADD5D23
+            BD17C7A79BBEEE1AEDEDE91AD726AF4EC3E5716F07F28C14017612D92681E66A
+            BF33313BCF2EFC1CFFF266CA38FDDBBCB690BB7963CF248D8FE571BFB3B72618
+            692AF73A21B43502411001EA8DD352A710D91D74BD56170800704829EAC46750
+            AF9F90EACCDF56C72B35C5C137EB4A5CEBD10FB11EED405F4B19FE0365D3BD53
+            AA437B1A0000000049454E44AE426082}
+          ParentShowHint = False
+          ShowHint = True
           SpeedButtonOptions.GroupIndex = 1
           SpeedButtonOptions.CanBeFocused = False
           SpeedButtonOptions.AllowAllUp = True
-          SpeedButtonOptions.Down = True
           TabOrder = 0
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
@@ -2338,16 +2422,44 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Style = [fsBold]
           ParentFont = False
         end
-        object cxButton3: TcxButton
-          Left = 431
+        object btnFilterOperarios: TcxButton
+          Left = 401
           Top = 21
-          Width = 44
+          Width = 21
           Height = 19
-          Caption = 'Filtrar'
+          Hint = 'Filtrar operarios'
           Colors.PressedText = 7136979
+          Enabled = False
           LookAndFeel.Kind = lfUltraFlat
           LookAndFeel.NativeStyle = False
           LookAndFeel.SkinName = 'Sharp'
+          OptionsImage.Glyph.SourceDPI = 96
+          OptionsImage.Glyph.SourceHeight = 14
+          OptionsImage.Glyph.SourceWidth = 14
+          OptionsImage.Glyph.Data = {
+            3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+            22307078222076696577426F783D2230203020333220333222207374796C653D
+            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+            63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
+            3B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646
+            423131353B7D262331333B262331303B2623393B2E426C61636B7B66696C6C3A
+            233732373237323B7D262331333B262331303B2623393B2E477265656E7B6669
+            6C6C3A233033394332333B7D262331333B262331303B2623393B2E5265647B66
+            696C6C3A234431314331433B7D262331333B262331303B2623393B2E7374307B
+            6F7061636974793A302E37353B7D262331333B262331303B2623393B2E737431
+            7B6F7061636974793A302E353B7D3C2F7374796C653E0D0A3C672069643D2246
+            696C746572223E0D0A09093C706F6C79676F6E20636C6173733D2259656C6C6F
+            772220706F696E74733D22362C342032362C342032362C382031382C31362031
+            382C32342031342C32382031342C313620362C38202623393B222F3E0D0A093C
+            2F673E0D0A3C2F7376673E0D0A}
+          ParentShowHint = False
+          ShowHint = True
           SpeedButtonOptions.GroupIndex = 1
           SpeedButtonOptions.CanBeFocused = False
           SpeedButtonOptions.AllowAllUp = True
@@ -2365,6 +2477,7 @@ object frmVistaGantt: TfrmVistaGantt
           ParentFont = False
           Properties.DropDownRows = 30
           Properties.Items = <>
+          Properties.OnChange = cbDepartamentosPropertiesChange
           Style.BorderColor = 3553567
           Style.BorderStyle = ebsSingle
           Style.Color = 8220514
@@ -2391,6 +2504,7 @@ object frmVistaGantt: TfrmVistaGantt
           ParentFont = False
           Properties.DropDownRows = 30
           Properties.Items = <>
+          Properties.OnChange = cbDepartamentosPropertiesChange
           Style.BorderColor = 3553567
           Style.BorderStyle = ebsSingle
           Style.Color = 8220514
@@ -2411,10 +2525,10 @@ object frmVistaGantt: TfrmVistaGantt
           TabOrder = 3
           Width = 160
         end
-        object cxButton4: TcxButton
+        object btnClearOperarios: TcxButton
           Left = 357
           Top = 21
-          Width = 20
+          Width = 21
           Height = 19
           Caption = 'X'
           Colors.PressedText = 7136979
@@ -2426,6 +2540,7 @@ object frmVistaGantt: TfrmVistaGantt
           SpeedButtonOptions.GroupIndex = 1
           SpeedButtonOptions.CanBeFocused = False
           SpeedButtonOptions.AllowAllUp = True
+          SpeedButtonOptions.Down = True
           TabOrder = 4
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
@@ -2433,6 +2548,134 @@ object frmVistaGantt: TfrmVistaGantt
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
+          OnClick = btnClearOperariosClick
+        end
+        object btnAutoPlanSel: TcxButton
+          Left = 433
+          Top = 21
+          Width = 21
+          Height = 19
+          Hint = 'Auto asignar selecci'#243'n'
+          Colors.PressedText = 7136979
+          LookAndFeel.Kind = lfUltraFlat
+          LookAndFeel.NativeStyle = False
+          LookAndFeel.SkinName = 'Sharp'
+          OptionsImage.Glyph.SourceDPI = 96
+          OptionsImage.Glyph.SourceHeight = 14
+          OptionsImage.Glyph.SourceWidth = 14
+          OptionsImage.Glyph.Data = {
+            3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+            22307078222076696577426F783D2230203020333220333222207374796C653D
+            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+            63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
+            3B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646
+            423131353B7D262331333B262331303B2623393B2E5265647B66696C6C3A2344
+            31314331433B7D262331333B262331303B2623393B2E477265656E7B66696C6C
+            3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
+            696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
+            657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
+            74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
+            74317B6F7061636974793A302E37353B7D262331333B262331303B2623393B2E
+            7374327B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B
+            2E7374337B646973706C61793A696E6C696E653B66696C6C3A23464642313135
+            3B7D262331333B262331303B2623393B2E7374347B646973706C61793A696E6C
+            696E653B7D262331333B262331303B2623393B2E7374357B646973706C61793A
+            696E6C696E653B6F7061636974793A302E37353B7D262331333B262331303B26
+            23393B2E7374367B646973706C61793A696E6C696E653B6F7061636974793A30
+            2E353B7D262331333B262331303B2623393B2E7374377B646973706C61793A69
+            6E6C696E653B66696C6C3A233033394332333B7D262331333B262331303B2623
+            393B2E7374387B646973706C61793A696E6C696E653B66696C6C3A2344313143
+            31433B7D262331333B262331303B2623393B2E7374397B646973706C61793A69
+            6E6C696E653B66696C6C3A233131373744373B7D262331333B262331303B2623
+            393B2E737431307B646973706C61793A696E6C696E653B66696C6C3A23464646
+            4646463B7D3C2F7374796C653E0D0A3C672069643D22506572736F6E223E0D0A
+            09093C7061746820636C6173733D22477265656E2220643D224D31302C392E39
+            632D302E312C302E352C302E322C302E392C302E342C312E34732D302E312C31
+            2E372C302E392C312E3663302C302C302C302E312C302C302E3263302E362C32
+            2E332C322C342E392C342E372C342E3973342E322D322E362C342E372D342E39
+            20202623393B2623393B56313363312C302E312C302E362D312E312C302E392D
+            312E3663302E322D302E352C302E342D302E392C302E332D312E34632D302E31
+            2D302E342D302E342D302E342D302E352D302E334332332E322C342E382C3230
+            2E332C352C32302E332C355332302C322C31342E382C3220202623393B262339
+            3B4331302C322C392E342C362C31302E352C392E364331302E342C392E362C31
+            302E312C392E372C31302C392E397A204D32302C3138632D302E382C312E352D
+            322E312C342D342C34732D332E322D322E352D342D34632D322E332C332E352D
+            382C312D382C382E35563330683234762D332E3520202623393B2623393B4332
+            382C31392E312C32322E332C32312E342C32302C31387A222F3E0D0A093C2F67
+            3E0D0A3C2F7376673E0D0A}
+          ParentShowHint = False
+          ShowHint = True
+          SpeedButtonOptions.CanBeFocused = False
+          SpeedButtonOptions.AllowAllUp = True
+          TabOrder = 5
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          OnClick = btnAutoPlanSelClick
+        end
+        object btnDesasignarSel: TcxButton
+          Left = 455
+          Top = 21
+          Width = 21
+          Height = 19
+          Hint = 'Desasignar selecci'#243'n'
+          Colors.PressedText = 7136979
+          LookAndFeel.Kind = lfUltraFlat
+          LookAndFeel.NativeStyle = False
+          LookAndFeel.SkinName = 'Sharp'
+          OptionsImage.Glyph.SourceDPI = 96
+          OptionsImage.Glyph.SourceHeight = 14
+          OptionsImage.Glyph.SourceWidth = 14
+          OptionsImage.Glyph.Data = {
+            3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+            22307078222076696577426F783D2230203020333220333222207374796C653D
+            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+            63653D227072657365727665223E2E426C61636B7B66696C6C3A233732373237
+            323B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A2346
+            46423131353B7D262331333B262331303B2623393B2E426C75657B66696C6C3A
+            233131373744373B7D262331333B262331303B2623393B2E5265647B66696C6C
+            3A234431314331433B7D262331333B262331303B2623393B2E57686974657B66
+            696C6C3A234646464646463B7D262331333B262331303B2623393B2E47726565
+            6E7B66696C6C3A233033394332333B7D262331333B262331303B2623393B2E73
+            74307B66696C6C3A233732373237323B7D262331333B262331303B2623393B2E
+            7374317B6F7061636974793A302E353B7D262331333B262331303B2623393B2E
+            7374327B6F7061636974793A302E37353B7D3C2F7374796C653E0D0A3C672069
+            643D225061796D656E74556E70616964223E0D0A09093C7061746820636C6173
+            733D225265642220643D224D31362C3243382E322C322C322C382E322C322C31
+            3673362E322C31342C31342C31347331342D362E322C31342D31345332332E38
+            2C322C31362C327A204D31362C3663322C302C342C302E362C352E362C312E36
+            4C372E382C32312E3420202623393B2623393B43362E362C32302C362C31382C
+            362C313643362C31302E342C31302E342C362C31362C367A204D31362C323663
+            2D322C302D342D302E362D352E362D312E366C31332E382D31332E384332352E
+            342C31322C32362C31342C32362C31364332362C32312E362C32312E362C3236
+            2C31362C32367A222F3E0D0A093C2F673E0D0A3C2F7376673E0D0A}
+          ParentShowHint = False
+          ShowHint = True
+          SpeedButtonOptions.CanBeFocused = False
+          SpeedButtonOptions.AllowAllUp = True
+          TabOrder = 6
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          OnClick = btnDesasignarSelClick
         end
       end
     end
@@ -2452,6 +2695,24 @@ object frmVistaGantt: TfrmVistaGantt
   object popGantt: TPopupMenu
     Left = 984
     Top = 364
+    object miSeleccion: TMenuItem
+      Caption = 'Selecci'#243'n'
+      object miSelDia: TMenuItem
+        Caption = 'D'#237'a: seleccionar todo'
+        OnClick = miSelDiaClick
+      end
+      object miSelSemana: TMenuItem
+        Caption = 'Semana: seleccionar todo'
+        OnClick = miSelSemanaClick
+      end
+      object miSelDeseleccionar: TMenuItem
+        Caption = 'Deseleccionar todo'
+        OnClick = miSelDeseleccionarClick
+      end
+    end
+    object N5: TMenuItem
+      Caption = '-'
+    end
     object MenuItem1: TMenuItem
       Caption = 'Asignar fecha bloqueo'
       OnClick = MenuItem1Click

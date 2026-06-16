@@ -51,6 +51,7 @@ type
     Dashboard1: TMenuItem;
     N4: TMenuItem;
     Proyectos1: TMenuItem;
+    PuntosRestauracion1: TMenuItem;
     ConfigEmpresa1: TMenuItem;
     SelectorErp1: TMenuItem;
     SincronizarERP1: TMenuItem;
@@ -72,6 +73,7 @@ type
     Turnos1: TMenuItem;
     Moldes1: TMenuItem;
     Utillajes1: TMenuItem;
+    Alertas1: TMenuItem;
     Links1: TMenuItem;
     N10: TMenuItem;
     CamposPersonalizados1: TMenuItem;
@@ -124,11 +126,13 @@ type
     btnTB_PlaniGantt: TcxButton;
     btnTB_Help: TcxButton;
     Label29: TLabel;
+    btnLinkERP: TcxButton;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
     procedure InstalarDemos1Click(Sender: TObject);
     procedure Proyectos1Click(Sender: TObject);
+    procedure PuntosRestauracion1Click(Sender: TObject);
     procedure ConfigEmpresa1Click(Sender: TObject);
     procedure PreferenciasGantt1Click(Sender: TObject);
     procedure SelectorErp1Click(Sender: TObject);
@@ -184,6 +188,7 @@ type
     procedure tmr1SecTimer(Sender: TObject);
     procedure Moldes1Click(Sender: TObject);
     procedure Utillajes1Click(Sender: TObject);
+    procedure Alertas1Click(Sender: TObject);
     procedure Calendarios1Click(Sender: TObject);
     procedure Turnos1Click(Sender: TObject);
     procedure Operarios1Click(Sender: TObject);
@@ -210,6 +215,7 @@ type
     procedure MnGanttClick(Sender: TObject);
     procedure Indicadoresdecentros1Click(Sender: TObject);
     procedure btnTB_HelpClick(Sender: TObject);
+    procedure btnLinkERPClick(Sender: TObject);
   private
     { Private declarations }
 
@@ -271,6 +277,7 @@ var
 implementation
 
 uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList,
+  uAlertConfig, uRestorePoints,
   uDemoBacklog,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
@@ -639,6 +646,11 @@ begin
 
 end;
 
+procedure TForm1.btnLinkERPClick(Sender: TObject);
+begin
+  ShowMessage('Enlace directo hacia el ERP');
+end;
+
 procedure TForm1.btnTB_HelpClick(Sender: TObject);
 var
   TopicKey, Titulo: string;
@@ -706,6 +718,14 @@ end;
 procedure TForm1.Utillajes1Click(Sender: TObject);
 begin
   TfrmGestionUtillajes.Execute;
+end;
+
+procedure TForm1.Alertas1Click(Sender: TObject);
+begin
+  if Assigned(DMPlanner.AlertRulesRepo) then
+    TfrmAlertConfig.Ejecutar(Self, DMPlanner.AlertRulesRepo)
+  else
+    ShowMessage('No hay conexi'#243'n con la base de datos.');
 end;
 
 procedure TForm1.CamposPersonalizados1Click(Sender: TObject);
@@ -901,6 +921,29 @@ begin
 
   // Si el proyecto activo ha cambiado, recargar el plan
   if Assigned(DMPlanner) and (DMPlanner.CurrentProjectId <> OldProjectId) then
+    LoadActivePlan;
+end;
+
+procedure TForm1.PuntosRestauracion1Click(Sender: TObject);
+begin
+  if not Assigned(DMPlanner) or not Assigned(DMPlanner.SnapshotRepo) then
+  begin
+    ShowMessage('No hay conexi'#243'n con la base de datos.');
+    Exit;
+  end;
+  if DMPlanner.CurrentProjectId <= 0 then
+  begin
+    ShowMessage('No hay ning'#250'n proyecto activo.');
+    Exit;
+  end;
+
+  // Vaciar cambios pendientes a BD para que los puntos reflejen el estado real.
+  if Assigned(FAutoSaver) then
+    FAutoSaver.Flush(True);
+
+  // Si el usuario restaura, recargamos el plan activo en pantalla.
+  if TfrmRestorePoints.Ejecutar(Self, DMPlanner.SnapshotRepo,
+       DMPlanner.CurrentProjectId) then
     LoadActivePlan;
 end;
 
@@ -1639,6 +1682,18 @@ end;
 
 procedure TForm1.NotifyPlanModified(const ADataIds: TArray<Integer>);
 begin
+  // Punto de restauracion AUTO del dia: ANTES de marcar el cambio, si hoy aun no
+  // hay snapshot AUTO de este proyecto, capturamos el estado ACTUAL (el "antes"
+  // de los cambios de hoy). Idempotente: solo crea el primero del dia. Va aqui
+  // (hilo principal, antes de MarkDirty) para no tocar BD desde el hilo de save.
+  if Assigned(DMPlanner) and Assigned(DMPlanner.SnapshotRepo) and
+     (DMPlanner.CurrentProjectId > 0) then
+    try
+      DMPlanner.SnapshotRepo.CrearAutoDiarioSiHaceFalta(DMPlanner.CurrentProjectId);
+    except
+      // El punto de restauracion no debe bloquear nunca la edicion del plan.
+    end;
+
   if Assigned(FAutoSaver) then
     FAutoSaver.MarkDirty(ADataIds);
 end;
@@ -2021,6 +2076,7 @@ begin
 
     if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
     begin
+      FVistaGantt.RebuildOperarioLabelCache;  // refrescar rotulos operario/nodo
       FVistaGantt.GanttControl.RebuildLayout;
       FVistaGantt.GanttControl.Invalidate;
     end;

@@ -791,7 +791,15 @@ var
   I: Integer;
   T: TTurno;
 begin
-  Q := OpenQuery('SELECT * FROM FS_PL_Shift ORDER BY Orden');
+  // HoraInicio/HoraFin son TIME en BD; algunos providers ADO no exponen TIME
+  // como campo DateTime con SELECT * (da "Field not found"). Se castea a
+  // DATETIME con alias, igual que el resto del codigo (uGestionTurnos, etc.).
+  Q := OpenQuery(
+    'SELECT ShiftId, Nombre, ' +
+    '  CAST(HoraInicio AS DATETIME) AS HoraIni, ' +
+    '  CAST(HoraFin AS DATETIME) AS HoraFin, ' +
+    '  Color, Activo, Orden ' +
+    'FROM FS_PL_Shift ORDER BY Orden');
   try
     SetLength(Result, Q.RecordCount);
     I := 0;
@@ -800,8 +808,8 @@ begin
       FillChar(T, SizeOf(T), 0);
       T.Id := Q.FieldByName('ShiftId').AsInteger;
       T.Nombre := Q.FieldByName('Nombre').AsString;
-      T.HoraInicio := Q.FieldByName('HoraInicio').AsDateTime;
-      T.HoraFin := Q.FieldByName('HoraFin').AsDateTime;
+      T.HoraInicio := Frac(Q.FieldByName('HoraIni').AsDateTime);
+      T.HoraFin := Frac(Q.FieldByName('HoraFin').AsDateTime);
       T.Color := SQLToColor(Q.FieldByName('Color').Value);
       T.Activo := SQLToBool(Q.FieldByName('Activo').Value, True);
       T.Order := SQLToInt(Q.FieldByName('Orden').Value);

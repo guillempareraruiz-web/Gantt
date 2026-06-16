@@ -6,7 +6,8 @@ uses
   System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
   Data.DB, Data.Win.ADODB,
   uDataConnector, uSQLServerConnector, uDBMigrations, uUserPreferencesRepo,
-  uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo;
+  uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo, uAlertRulesRepo,
+  uSnapshotRepo;
 
 function UserCanAccessProject(AUserId, AProjectId: Integer): Boolean;
 
@@ -61,6 +62,8 @@ type
     FNodesRepo: TNodesRepo;
     FNodeDataRepo: TNodeDataRepo;
     FUserPrefs: TUserPreferencesRepo;
+    FAlertRulesRepo: TAlertRulesRepo;
+    FSnapshotRepo: TSnapshotRepo;
     procedure BuildConnectionString;
     procedure SetCodigoEmpresa(AValue: SmallInt);
   public
@@ -116,6 +119,8 @@ type
     property CentresRepo: TCentresRepo read FCentresRepo;
     property NodesRepo: TNodesRepo read FNodesRepo;
     property NodeDataRepo: TNodeDataRepo read FNodeDataRepo;
+    property AlertRulesRepo: TAlertRulesRepo read FAlertRulesRepo;
+    property SnapshotRepo: TSnapshotRepo read FSnapshotRepo;
     property UserPrefs: TUserPreferencesRepo read FUserPrefs;
 
     // Acceso al conector
@@ -214,6 +219,7 @@ begin
   FNodesRepo := TNodesRepo.Create(ADOConnection);
   FNodeDataRepo := TNodeDataRepo.Create;
   FUserPrefs := TUserPreferencesRepo.Create(ADOConnection, FCodigoEmpresa);
+  FAlertRulesRepo := TAlertRulesRepo.Create(ADOConnection);
 end;
 
 procedure TDMPlanner.SetCodigoEmpresa(AValue: SmallInt);
@@ -225,6 +231,8 @@ begin
     TSQLServerConnector(FConnectorObj).CodigoEmpresa := AValue;
   if Assigned(FUserPrefs) then
     FUserPrefs.CodigoEmpresa := AValue;
+  if Assigned(FSnapshotRepo) then
+    FSnapshotRepo.SetContext(AValue, CurrentSession.UserId, CurrentSession.Login);
 end;
 
 destructor TDMPlanner.Destroy;
@@ -234,6 +242,8 @@ begin
   FNodesRepo.Free;
   FCentresRepo.Free;
   FCalendarsRepo.Free;
+  FAlertRulesRepo.Free;
+  FSnapshotRepo.Free;
   inherited;
 end;
 
@@ -241,6 +251,10 @@ procedure TDMPlanner.LoadCalendars;
 begin
   if (FCalendarsRepo <> nil) and IsConnected then
     FCalendarsRepo.LoadFromDB(FCodigoEmpresa);
+  // Reglas de alertas (seed + carga). Se hace aqui porque LoadCalendars se
+  // invoca al abrir la conexion, antes de mostrar el Gantt.
+  if (FAlertRulesRepo <> nil) and IsConnected then
+    FAlertRulesRepo.LoadFromDB(FCodigoEmpresa);
 end;
 
 procedure TDMPlanner.LoadCentres;
@@ -740,6 +754,12 @@ begin
     SQLConn.CodigoEmpresa := FCodigoEmpresa;
     FConnectorObj := SQLConn;
     FConnector := SQLConn;
+
+    // Repo de puntos de restauracion (necesita el connector ya creado).
+    FreeAndNil(FSnapshotRepo);
+    FSnapshotRepo := TSnapshotRepo.Create(ADOConnection, FConnector);
+    FSnapshotRepo.SetContext(FCodigoEmpresa, CurrentSession.UserId,
+      CurrentSession.Login);
 
     // Aplicar migraciones pendientes automáticamente
     MigrationsPath := TPath.Combine(ExtractFilePath(ParamStr(0)), 'SQL\migrations');

@@ -1,7 +1,7 @@
 object frmAssignOperaris: TfrmAssignOperaris
   Left = 0
   Top = 0
-  BorderStyle = bsSizeToolWin
+  BorderStyle = bsDialog
   Caption = 'Assignar Operaris'
   ClientHeight = 557
   ClientWidth = 787
@@ -15,7 +15,6 @@ object frmAssignOperaris: TfrmAssignOperaris
   Position = poScreenCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  OnKeyDown = FormKeyDown
   PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
@@ -70,17 +69,6 @@ object frmAssignOperaris: TfrmAssignOperaris
       Brush.Color = 15061727
       Pen.Style = psClear
       ExplicitWidth = 780
-    end
-    object chkDarkMode: TCheckBox
-      Left = 697
-      Top = 8
-      Width = 80
-      Height = 17
-      Anchors = [akTop, akRight]
-      Caption = 'Oscuro'
-      TabOrder = 0
-      OnClick = chkDarkModeClick
-      ExplicitLeft = 690
     end
   end
   object pnlBottom: TPanel
@@ -174,6 +162,16 @@ object frmAssignOperaris: TfrmAssignOperaris
         Font.Name = 'Segoe UI Semibold'
         Font.Style = []
         ParentFont = False
+      end
+      object btnDesasignar: TButton
+        Left = 199
+        Top = 1
+        Width = 158
+        Height = 23
+        Anchors = [akTop, akRight]
+        Caption = 'Desasignar seleccionado'
+        TabOrder = 1
+        OnClick = btnDesasignarClick
       end
       object gridAssignats: TcxGrid
         Left = 0

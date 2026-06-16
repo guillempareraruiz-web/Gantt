@@ -31,7 +31,7 @@ object Form1: TForm1
       1092
       33)
     object Label28: TLabel
-      Left = 810
+      Left = 760
       Top = 2
       Width = 240
       Height = 19
@@ -48,7 +48,7 @@ object Form1: TForm1
       Layout = tlCenter
     end
     object Label29: TLabel
-      Left = 954
+      Left = 904
       Top = 12
       Width = 96
       Height = 19
@@ -182,7 +182,7 @@ object Form1: TForm1
     end
     object btnTB_Help: TcxButton
       AlignWithMargins = True
-      Left = 1064
+      Left = 1005
       Top = 5
       Width = 25
       Height = 23
@@ -197,6 +197,34 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 6
       OnClick = btnTB_HelpClick
+      ExplicitLeft = 1064
+    end
+    object btnLinkERP: TcxButton
+      AlignWithMargins = True
+      Left = 1036
+      Top = 6
+      Width = 48
+      Height = 21
+      Margins.Top = 6
+      Margins.Right = 8
+      Margins.Bottom = 6
+      Align = alRight
+      Caption = 'Sage200'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'DevExpressDarkStyle'
+      SpeedButtonOptions.CanBeFocused = False
+      TabOrder = 7
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWhite
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      OnClick = btnLinkERPClick
+      ExplicitLeft = 1064
+      ExplicitTop = -3
+      ExplicitHeight = 33
     end
   end
   object tmr1Sec: TTimer
@@ -215,6 +243,10 @@ object Form1: TForm1
       object Proyectos1: TMenuItem
         Caption = 'Proyectos...'
         OnClick = Proyectos1Click
+      end
+      object PuntosRestauracion1: TMenuItem
+        Caption = 'Puntos de restauraci'#243'n...'
+        OnClick = PuntosRestauracion1Click
       end
       object N3: TMenuItem
         Caption = '-'
@@ -281,6 +313,10 @@ object Form1: TForm1
       object Utillajes1: TMenuItem
         Caption = 'Utillajes'
         OnClick = Utillajes1Click
+      end
+      object Alertas1: TMenuItem
+        Caption = 'Alertas (configuraci'#243'n)'
+        OnClick = Alertas1Click
       end
       object Links1: TMenuItem
         Caption = 'Links'
