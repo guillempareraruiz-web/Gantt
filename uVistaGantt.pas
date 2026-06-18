@@ -34,7 +34,7 @@ uses
   cxDateUtils, cxCheckBox, Vcl.Menus, dxCoreGraphics, cxButtonEdit, cxScrollBox,
   cxButtons, cxDropDownEdit, cxCheckComboBox, Vcl.StdCtrls, Vcl.WinXCtrls,
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
-  uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uErpTypes,
+  uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uGanttHistory, uErpTypes,
   System.Generics.Collections, System.Generics.Defaults,
   System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
@@ -259,6 +259,7 @@ type
     Label9: TLabel;
     Image3: TImage;
     Label10: TLabel;
+    cxButton1: TcxButton;
     procedure pnlKPIAlertasClick(Sender: TObject);
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
@@ -363,6 +364,7 @@ type
     procedure cbDepartamentosPropertiesChange(Sender: TObject);
     procedure btnDesasignarSelClick(Sender: TObject);
     procedure btnAutoPlanSelClick(Sender: TObject);
+    procedure cxButton1Click(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -542,7 +544,7 @@ uses
   uGanttDatesDialog, uUserPrefs, System.JSON,
   uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,
-  uAlertasViewer, uAlertConfig, Main;
+  uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, Main;
 
 
 
@@ -732,6 +734,13 @@ begin
 
 end;
 
+
+procedure TfrmVistaGantt.cxButton1Click(Sender: TObject);
+begin
+ // El boton abre el timeline visual del historico (navegar adelante/atras con
+  // contador). El undo directo de un paso sigue disponible con Ctrl+Z.
+  TfrmGanttHistoryTimeline.Execute(Self, FGanttControl, btnUndo);
+end;
 
 procedure TfrmVistaGantt.btnClearOperariosClick(Sender: TObject);
 
@@ -1715,8 +1724,13 @@ begin
   idx := FGanttControl.SelectedNodeIndex;
   if idx < 0 then Exit;
 
-  FGanttControl.BackwardScheduleOT( idx, cxDateEdit1.Date, 0, TRUE  );
-
+  FGanttControl.BeginUndoBatch('Planificar hacia atras (OT)', hatBackwardOT);
+  try
+    FGanttControl.BackwardScheduleOT( idx, cxDateEdit1.Date, 0, TRUE  );
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.Button24Click(Sender: TObject);
@@ -1748,8 +1762,13 @@ begin
   idx := FGanttControl.SelectedNodeIndex;
   if idx < 0 then Exit;
 
-  FGanttControl.BackwardScheduleOF( idx, cxDateEdit1.Date, 0, TRUE  );
-
+  FGanttControl.BeginUndoBatch('Planificar hacia atras (OF)', hatBackwardOF);
+  try
+    FGanttControl.BackwardScheduleOF( idx, cxDateEdit1.Date, 0, TRUE  );
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.Button3Click(Sender: TObject);
@@ -2437,7 +2456,9 @@ end;
 
 procedure TfrmVistaGantt.btnUndoClick(Sender: TObject);
 begin
-  FGanttControl.UndoLastAction;
+  // El boton abre el timeline visual del historico (navegar adelante/atras con
+  // contador). El undo directo de un paso sigue disponible con Ctrl+Z.
+  TfrmGanttHistoryTimeline.Execute(Self, FGanttControl, btnUndo);
   UpdateHistoryButtons;
 end;
 
@@ -2445,19 +2466,38 @@ procedure TfrmVistaGantt.pnlGanttContainerResize(Sender: TObject);
 begin
   // TODO (paso siguiente): copiar lógica de Main.pnlGanttContainerResize
 end;
+
 procedure TfrmVistaGantt.ShiftRow1Click(Sender: TObject);
 begin
-  FGanttControl.ShiftLeftSequentialCentresFromDate( FGanttControl.FClickDatetime, 0);
+  FGanttControl.BeginUndoBatch('Desplazar a la izquierda', hatShiftLeft);
+  try
+    FGanttControl.ShiftLeftSequentialCentresFromDate( FGanttControl.FClickDatetime, 0);
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.ShiftRow2Click(Sender: TObject);
 begin
-  FGanttControl.ShiftLeftSequentialCentresFromDate( FGanttControl.FClickDatetime, 0);
+  FGanttControl.BeginUndoBatch('Desplazar a la izquierda', hatShiftLeft);
+  try
+    FGanttControl.ShiftLeftSequentialCentresFromDate( FGanttControl.FClickDatetime, 0);
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.ShiftRowallimpact1Click(Sender: TObject);
 begin
-  FGanttControl.ShiftLeftAllImpactedSequentialFromDate( FGanttControl.FClickDatetime, 0);
+  FGanttControl.BeginUndoBatch('Desplazar a la izquierda (cascada)', hatShiftLeft);
+  try
+    FGanttControl.ShiftLeftAllImpactedSequentialFromDate( FGanttControl.FClickDatetime, 0);
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.UpdateHistoryButtons;
@@ -3538,6 +3578,7 @@ procedure TfrmVistaGantt.GanttNodeDblClick(Sender: TObject;
 var
   node: TNode;
   ANodeData: TNodeData;
+  FechaIni, FechaFin: TDateTime;
 begin
   if NodeIndex < 0 then Exit;
   node := FGanttControl.SelectedNode;
@@ -3554,10 +3595,30 @@ begin
 
   if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, ANodeData) then Exit;
 
-  if TfrmNodeInspector.Execute(ANodeData, False, FCustomFieldDefs) then
+  // Fechas de PLANIFICACION (Gantt): viven en el TNode, no en TNodeData. Se pasan
+  // al inspector y, si el usuario las edita, se aplican al Gantt con registro de
+  // undo.
+  FechaIni := node.StartTime;
+  FechaFin := node.EndTime;
+
+  if TfrmNodeInspector.Execute(ANodeData, FechaIni, FechaFin, False, FCustomFieldDefs) then
   begin
     ANodeData.Modified := True;
     DMPlanner.NodeDataRepo.AddOrUpdate(ANodeData);
+
+    // Si las fechas de planificacion han cambiado, mover el nodo en el Gantt
+    // (con undo). NodeIndex es la seleccion actual (el doble-clic la fijo).
+    if (FechaIni <> node.StartTime) or (FechaFin <> node.EndTime) then
+    begin
+      FGanttControl.BeginUndoBatch('Editar fechas de nodo', hatEditNode);
+      try
+        FGanttControl.SetNodeTimesByIndex(NodeIndex, FechaIni, FechaFin);
+      finally
+        FGanttControl.EndUndoBatch;
+      end;
+      UpdateHistoryButtons;
+    end;
+
     FGanttControl.Invalidate;
     // Notificar al Main para que el AutoSaver persista el cambio en BD.
     if Assigned(Form1) then
@@ -3909,7 +3970,13 @@ begin
   iAllOF := TMenuItem(Sender).Tag;
   iPrioridad := TMenuItem(Sender).HelpContext;
 
-  FGanttControl.CompactOFFromNode( idx, 0, (iAllOF=1) , (iPrioridad=1) );
+  FGanttControl.BeginUndoBatch('Compactar OF', hatCompactOF);
+  try
+    FGanttControl.CompactOFFromNode( idx, 0, (iAllOF=1) , (iPrioridad=1) );
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.otalaOT1Click(Sender: TObject);
@@ -3924,8 +3991,13 @@ begin
   iAllOT := TMenuItem(Sender).Tag;
   iPrioridad := TMenuItem(Sender).HelpContext;
 
-  FGanttControl.CompactOTFromNode( idx, 0, (iAllOT=1) , (iPrioridad=1) );
-
+  FGanttControl.BeginUndoBatch('Compactar OT', hatCompactOT);
+  try
+    FGanttControl.CompactOTFromNode( idx, 0, (iAllOT=1) , (iPrioridad=1) );
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
 end;
 
 procedure TfrmVistaGantt.miAsignarOperariosClick(Sender: TObject);

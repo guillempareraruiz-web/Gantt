@@ -572,10 +572,18 @@ var
   I: Integer;
   D: TNodeData;
 begin
+  // EstadoOF1: EstadoERP de la OF (Nivel 1) a la que pertenece el nodo. El nodo
+  // puede vincularse a Raw_Item de cualquier nivel (OF/OT/OP segun el nivel
+  // planificable elegido), asi que NO subimos un nº fijo de saltos: se obtiene
+  // el Nivel 1 con una funcion escalar que recorre ParentRawItemId. Sirve para
+  // la alerta D11 (OF ya cerrada en el ERP). LEFT JOIN: NULL si el nodo no esta
+  // vinculado a Raw_Item.
   Q := OpenQuery(
     'SELECT nd.*, ' +
     '  gp.Nivel1ClaveERP, gp.Nivel1Caption, ' +
-    '  gp.Nivel2ClaveERP, gp.Nivel2Caption ' +
+    '  gp.Nivel2ClaveERP, gp.Nivel2Caption, ' +
+    '  dbo.FS_PL_fn_EstadoOFNivel1(nd.CodigoEmpresa, ' +
+    '    nd.RawItemTipoOrigen, nd.RawItemClaveERP) AS EstadoOF1 ' +
     'FROM FS_PL_NodeData nd ' +
     'INNER JOIN FS_PL_Node n ON n.NodeId = nd.NodeId ' +
     'LEFT JOIN FS_PL_vw_NodeGroupParent gp ' +
@@ -630,6 +638,13 @@ begin
         D.Nivel2ClaveERP := SQLToStr(Q.FieldByName('Nivel2ClaveERP').Value);
       if Q.FindField('Nivel2Caption') <> nil then
         D.Nivel2Caption := SQLToStr(Q.FieldByName('Nivel2Caption').Value);
+      // OF padre cerrada en ERP: EstadoERP del Nivel 1 distinto de '0'/'1' (y no
+      // vacio/NULL). '0'=abierto, '1'=pendiente; cualquier otro = cerrada.
+      if Q.FindField('EstadoOF1') <> nil then
+      begin
+        var estOF := Trim(SQLToStr(Q.FieldByName('EstadoOF1').Value));
+        D.EstadoOFCerrada := (estOF <> '') and (estOF <> '0') and (estOF <> '1');
+      end;
       Result[I] := D;
       Inc(I);
       Q.Next;

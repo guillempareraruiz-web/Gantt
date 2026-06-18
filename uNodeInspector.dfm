@@ -70,16 +70,6 @@ object frmNodeInspector: TfrmNodeInspector
       Pen.Style = psClear
       ExplicitTop = 57
     end
-    object chkDarkMode: TCheckBox
-      Left = 430
-      Top = 8
-      Width = 80
-      Height = 17
-      Anchors = [akTop, akRight]
-      Caption = 'Oscuro'
-      TabOrder = 0
-      OnClick = chkDarkModeClick
-    end
   end
   object pnlBottom: TPanel
     Left = 0

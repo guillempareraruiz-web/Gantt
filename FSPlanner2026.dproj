@@ -412,6 +412,10 @@
         </DCCReference>
         <DCCReference Include="uRttiGridFiller.pas"/>
         <DCCReference Include="uStockProjection.pas"/>
+        <DCCReference Include="uMrpTypes.pas"/>
+        <DCCReference Include="uMrpParamRepo.pas"/>
+        <DCCReference Include="uMrpRecommender.pas"/>
+        <DCCReference Include="uMrpPropuestaBacklog.pas"/>
         <DCCReference Include="uArticuloPicker.pas">
             <Form>frmArticuloPicker</Form>
         </DCCReference>
@@ -487,6 +491,10 @@
         </DCCReference>
         <DCCReference Include="uAlertConfig.pas">
             <Form>frmAlertConfig</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uGanttHistoryTimeline.pas">
+            <Form>frmGanttHistoryTimeline</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <BuildConfiguration Include="Base">

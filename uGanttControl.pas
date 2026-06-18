@@ -67,6 +67,11 @@ type
     // que el RebuildLayout override necesita. Mantener `protected` simplifica
     // la herencia en fase 6.2.
     FHistory: TGanttHistoryManager;
+    // Estado del batch de undo en curso (BeginUndoBatch/EndUndoBatch).
+    FUndoBatchActive: Boolean;
+    FUndoBatchBefore: TArray<TNodePlanSnapshot>;
+    FUndoBatchCaption: string;
+    FUndoBatchAction: TGanttHistoryActionType;
 
     FScrollX, FScrollY: Single;
     FPxPerMinute: Single;
@@ -371,7 +376,9 @@ type
     // Persiste (Modified + OnPlanModified) todos los miembros de lote tras
     // mover el lote como bloque.
     procedure PersistLotesModificados;
-    procedure CommitNodeMoveOrResize(const NodeIdx: Integer);
+    procedure CommitNodeMoveOrResize(const NodeIdx: Integer;
+      const ABeforeSnaps: TArray<TNodePlanSnapshot> = nil;
+      const ACaption: string = ''; const AActionType: TGanttHistoryActionType = hatEdit);
 
     procedure DrawDependenciesD2D(
                 const VisibleXLeft, VisibleXRight, VisibleYTop, VisibleYBottom: Single;
@@ -696,6 +703,8 @@ type
                   const AChanges: TArray<TNodeHistoryChange>): TGanttHistoryEntry;
     procedure UndoLastAction;
     procedure RedoLastAction;
+    procedure DoJumpToHistoryStep(const ATargetUndoCount: Integer);
+    function CaptureAllNodesSnapshot: TArray<TNodePlanSnapshot>;
 
 
     function ShiftLeftSequentialCentresFromDate( const AFromTime: TDateTime; const MinGapMin: Integer): Boolean;
@@ -812,6 +821,33 @@ type
     property CanRedo: Boolean read GetCanRedo;
     property UndoCount: Integer read GetUndoCount;
     property RedoCount: Integer read GetRedoCount;
+    // Acceso de solo lectura al gestor de historico para el timeline visual.
+    property History: TGanttHistoryManager read FHistory;
+    // Navega en cadena hasta dejar el plan en el "paso" indicado. ATargetUndo es
+    // el numero de acciones que deben quedar aplicadas (= UndoCount destino).
+    // Mayor que el actual => redo en cadena; menor => undo en cadena.
+    procedure JumpToHistoryStep(const ATargetUndoCount: Integer);
+
+    // Envoltorio generico para registrar en el historico CUALQUIER accion que
+    // mute el plan (replanificados masivos, compactar, backward, agrupar/romper
+    // lotes, editar nodo...). Captura un snapshot de TODOS los nodos antes y
+    // despues; el diff resultante es la entrada de undo. Pensado para acciones de
+    // baja frecuencia (menu/dialogo); el drag/resize sigue usando su captura por
+    // propagacion (mas barata). Uso:
+    //   FGantt.BeginUndoBatch('Compactar OF', hatCompactOF);
+    //   try ...accion... finally FGantt.EndUndoBatch; end;
+    // Si no hay cambios reales, EndUndoBatch no registra nada. No se anidan: un
+    // segundo BeginUndoBatch sin cerrar el primero se ignora (se respeta el de
+    // fuera, que abarca toda la operacion).
+    procedure BeginUndoBatch(const ACaption: string;
+      const AActionType: TGanttHistoryActionType = hatEdit);
+    procedure EndUndoBatch;
+
+    // Aplica nuevas fechas de inicio/fin a un nodo (desde el NodeInspector),
+    // recalcula su duracion segun calendario, resuelve cascada y refresca el
+    // layout. Pensado para edicion manual de fechas. NO crea entrada de undo por
+    // si mismo: el llamador debe envolverlo en BeginUndoBatch/EndUndoBatch.
+    procedure SetNodeTimesByIndex(const NodeIndex: Integer; const NewStart, NewEnd: TDateTime);
 
     // Markers
     function AddMarker(const AMarker: TGanttMarker): Integer;
@@ -1902,6 +1938,7 @@ begin
   FAutoMarkersEnabled := False;
 
   FHistory := TGanttHistoryManager.Create(200);
+  FUndoBatchActive := False;
 end;
 
 destructor TGanttControl.Destroy;
@@ -1948,6 +1985,8 @@ begin
   Result.StartTime := FNodes[ANodeIdx].StartTime;
   Result.EndTime := FNodes[ANodeIdx].EndTime;
   Result.Duration := FNodes[ANodeIdx].DurationMin;
+  Result.CentreId := FNodes[ANodeIdx].CentreId;
+  Result.LoteId := FNodes[ANodeIdx].LoteId;
 end;
 
 
@@ -1963,6 +2002,8 @@ begin
   FNodes[idx].StartTime := ASnap.StartTime;
   FNodes[idx].EndTime := ASnap.EndTime;
   FNodes[idx].DurationMin := ASnap.Duration;
+  FNodes[idx].CentreId := ASnap.CentreId;
+  FNodes[idx].LoteId := ASnap.LoteId;
 end;
 
 procedure TGanttControl.SetLinksVisible(const Value: TLinksVisible);
@@ -1985,6 +2026,40 @@ procedure TGanttControl.GetNodeTimes(const NodeIndex: Integer; out AStart, AEnd:
 begin
   AStart := FNodes[NodeIndex].StartTime;
   AEnd := FNodes[NodeIndex].EndTime;
+end;
+
+procedure TGanttControl.SetNodeTimesByIndex(const NodeIndex: Integer;
+  const NewStart, NewEnd: TDateTime);
+var
+  cal: TCentreCalendar;
+  s, e: TDateTime;
+  durMin: Integer;
+begin
+  if (NodeIndex < 0) or (NodeIndex > High(FNodes)) then Exit;
+
+  s := NewStart;
+  e := NewEnd;
+  if e < s then e := s;  // seguridad: fin no antes que inicio
+
+  // Duracion en minutos laborables segun el calendario del centro del nodo.
+  cal := GetCalendar(FNodes[NodeIndex].CentreId);
+  if cal <> nil then
+    durMin := cal.WorkingMinutesBetween(s, e)
+  else
+    durMin := Round((e - s) * 24 * 60);
+  if durMin < 1 then durMin := 1;
+
+  // Aplica al modelo (Node + TNodeData) y resuelve cascada/lotes desde el nodo.
+  ApplyResizeToModel(NodeIndex, s, e, durMin);
+  ResolveAllConstraintsFromNode(NodeIndex, 0);
+  IgualarFinestrasLotes(NodeIndex);
+
+  RebuildAfterModelChange(False);
+  Invalidate;
+
+  // Marcar dirty para persistencia (igual que CommitNodeMoveOrResize paso 7).
+  if Assigned(FOnPlanModified) and (FNodes[NodeIndex].DataId > 0) then
+    FOnPlanModified(Self, [FNodes[NodeIndex].DataId]);
 end;
 
 procedure TGanttControl.SetTimeRange(const AStart, AEnd: TDateTime);
@@ -2327,9 +2402,13 @@ var
   cal: TCentreCalendar;
   newStart, newEnd: TDateTime;
   newDurMin: Integer;
+  BeforeSnaps: TArray<TNodePlanSnapshot>;
 begin
   if not IsValidNodeIndex(ANodeIndex) then Exit;
   if not TryGetNodeData(ANodeIndex, D) then Exit;
+
+  // Estado ANTES de tocar el model (para el historico).
+  BeforeSnaps := CaptureSnapshotsFromNodePropagation(ANodeIndex);
 
   // Restaurar duració original
   newDurMin := Round(D.DurationMinOriginal);
@@ -2345,7 +2424,7 @@ begin
 
   // Aplicar al model
   ApplyResizeToModel(ANodeIndex, newStart, newEnd, newDurMin);
-  CommitNodeMoveOrResize(ANodeIndex);
+  CommitNodeMoveOrResize(ANodeIndex, BeforeSnaps, 'Restaurar duracion original', hatResetDuration);
 
   RebuildAfterModelChange(False);
   Invalidate;
@@ -4873,7 +4952,9 @@ begin
       ApplyNodeSnapshot(Entry.Changes[i].BeforeValue);
 
     FHistory.PushRedo(Entry);
-    RebuildLayout;   // o RefreshNodes / relayout
+    // RebuildAfterModelChange (no solo RebuildLayout) porque el undo puede
+    // restaurar CentreId/LoteId, lo que cambia la fila/centro de un nodo.
+    RebuildAfterModelChange(True);
     RecalcCounters;
     Invalidate;
   except
@@ -4896,14 +4977,96 @@ begin
     for i := 0 to High(Entry.Changes) do
       ApplyNodeSnapshot(Entry.Changes[i].AfterValue);
 
-    FHistory.PushUndo(Entry);
-    RebuildLayout;
+    // PushUndoKeepRedo (NO PushUndo): rehacer un paso no debe vaciar el redo, o
+    // navegar adelante en el timeline destruiria los pasos siguientes.
+    FHistory.PushUndoKeepRedo(Entry);
+    RebuildAfterModelChange(True);
     RecalcCounters;
     Invalidate;
   except
     Entry.Free;
     raise;
   end;
+end;
+
+procedure TGanttControl.DoJumpToHistoryStep(const ATargetUndoCount: Integer);
+var
+  Target: Integer;
+  Guard: Integer;
+begin
+  if not Assigned(FHistory) then Exit;
+
+  // Clamp al rango valido: [0 .. UndoCount+RedoCount]
+  Target := ATargetUndoCount;
+  if Target < 0 then Target := 0;
+  if Target > FHistory.UndoCount + FHistory.RedoCount then
+    Target := FHistory.UndoCount + FHistory.RedoCount;
+
+  // Guard evita bucle infinito si una accion no mueve los contadores.
+  Guard := FHistory.UndoCount + FHistory.RedoCount + 1;
+
+  // Deshacer mientras sobren acciones aplicadas
+  while (FHistory.UndoCount > Target) and FHistory.CanUndo and (Guard > 0) do
+  begin
+    UndoLastAction;
+    Dec(Guard);
+  end;
+
+  // Rehacer mientras falten acciones aplicadas
+  while (FHistory.UndoCount < Target) and FHistory.CanRedo and (Guard > 0) do
+  begin
+    RedoLastAction;
+    Dec(Guard);
+  end;
+end;
+
+procedure TGanttControl.JumpToHistoryStep(const ATargetUndoCount: Integer);
+begin
+  DoJumpToHistoryStep(ATargetUndoCount);
+end;
+
+function TGanttControl.CaptureAllNodesSnapshot: TArray<TNodePlanSnapshot>;
+var
+  i: Integer;
+begin
+  SetLength(Result, Length(FNodes));
+  for i := 0 to High(FNodes) do
+    Result[i] := MakeNodeSnapshot(i);
+end;
+
+procedure TGanttControl.BeginUndoBatch(const ACaption: string;
+  const AActionType: TGanttHistoryActionType);
+begin
+  // No anidar: si ya hay un batch abierto, se mantiene el de fuera (abarca toda
+  // la operacion). El interior es un no-op.
+  if FUndoBatchActive then Exit;
+
+  FUndoBatchActive := True;
+  FUndoBatchCaption := ACaption;
+  FUndoBatchAction := AActionType;
+  FUndoBatchBefore := CaptureAllNodesSnapshot;
+end;
+
+procedure TGanttControl.EndUndoBatch;
+var
+  AfterSnaps: TArray<TNodePlanSnapshot>;
+  Changes: TArray<TNodeHistoryChange>;
+  Entry: TGanttHistoryEntry;
+begin
+  if not FUndoBatchActive then Exit;
+  FUndoBatchActive := False;
+
+  AfterSnaps := CaptureAllNodesSnapshot;
+  Changes := BuildNodeHistoryChanges(FUndoBatchBefore, AfterSnaps);
+
+  // Liberar el before (puede ser grande).
+  SetLength(FUndoBatchBefore, 0);
+
+  if Length(Changes) = 0 then Exit;  // accion sin efecto real
+
+  Entry := BuildHistoryEntry(FUndoBatchAction, FUndoBatchCaption, -1, Changes);
+  if Entry <> nil then
+    FHistory.PushUndo(Entry);
 end;
 
 function TGanttControl.FindNodeIndexById(const NodeId: Integer): Integer;
@@ -9505,6 +9668,7 @@ var
   newDurMins: Integer;
   MovedNodes: TIdxArray;
   K: Integer;
+  BeforeSnaps: TArray<TNodePlanSnapshot>;
 
   function ClampToOverlay(const T: TDateTime): TDateTime;
   begin
@@ -9549,6 +9713,10 @@ begin
 
   centreId := FNodes[idx].CentreId;
   cal := GetCalendar(centreId);
+
+  // Estado ANTES de aplicar el resize al model (mas abajo se llama
+  // ApplyResizeToModel). Se pasa a CommitNodeMoveOrResize para registrar el cambio.
+  BeforeSnaps := CaptureSnapshotsFromNodePropagation(idx);
 
   // ===== 1) Construir rang base segons edge =====
   if FResizeEdge = reLeft then
@@ -9627,7 +9795,7 @@ begin
   // aquí: col·lisions (push-right) si el centre és seqüencial
   //bAnyShift := ResolveSequentialCollisionsFromNode(centreId, idx, FMinGapBetweenNodes, MovedNodes); //{gap minuts entre nodes});
 
-  CommitNodeMoveOrResize( idx );
+  CommitNodeMoveOrResize( idx, BeforeSnaps, 'Redimensionar nodo', hatResize );
 
   if FNodes[idx].LoteId > 0 then
     LogLote('DESPUES de CommitNodeMoveOrResize (reflow+igualar): ' + DumpLote(FNodes, FNodes[idx].LoteId));
@@ -10431,7 +10599,9 @@ begin
   end;
 end;
 
-procedure TGanttControl.CommitNodeMoveOrResize(const NodeIdx: Integer);
+procedure TGanttControl.CommitNodeMoveOrResize(const NodeIdx: Integer;
+  const ABeforeSnaps: TArray<TNodePlanSnapshot>;
+  const ACaption: string; const AActionType: TGanttHistoryActionType);
 var
   BeforeSnaps, AfterSnaps: TArray<TNodePlanSnapshot>;
   Changes: TArray<TNodeHistoryChange>;
@@ -10442,8 +10612,15 @@ var
   I, NIdx, DataId: Integer;
 begin
   if (NodeIdx < 0) or (NodeIdx > High(FNodes)) then Exit;
-  // 1) estat abans
-  BeforeSnaps := CaptureSnapshotsFromNodePropagation(NodeIdx);
+  // 1) estat abans. Si el cridant ja ha aplicat el moviment al model (CommitMove,
+  // CommitResize...), DEBE pasar aqui el snapshot capturado ANTES de mover; de lo
+  // contrario capturariamos el estado ya nuevo (before == after => 0 cambios => no
+  // se registra nada en el historico). Si no se pasa, se captura aqui (cridants que
+  // aun no han tocado el model).
+  if Length(ABeforeSnaps) > 0 then
+    BeforeSnaps := ABeforeSnaps
+  else
+    BeforeSnaps := CaptureSnapshotsFromNodePropagation(NodeIdx);
   // IMPORTANT: si l'has mogut cap a l'esquerra, el corregeix segons predecessors
   ClampNodeToPredecessors(NodeIdx);
 
@@ -10461,19 +10638,21 @@ begin
   // 4) genera canvis reals
   Changes := BuildNodeHistoryChanges(BeforeSnaps, AfterSnaps);
 
-    // 5) crear entrada històric
-  Entry := BuildHistoryEntry(
-    hatEdit,   // o hatMove / hatResize si ho saps
-    'Move/Resize node',
-    NodeIdx,
-    Changes
-  );
-  // 6) push a undo
-  if Entry <> nil then
+    // 5+6) crear entrada històric y push a undo. Si hay un BATCH abierto
+    // (BeginUndoBatch), NO se registra aqui: el batch ya captura el diff global de
+    // toda la operacion, asi un compactar/shift no contamina el historico con una
+    // entrada por cada nodo movido internamente. (El paso 7, marcar dirty, SI se
+    // ejecuta siempre porque la persistencia es independiente del historico.)
+  if not FUndoBatchActive then
   begin
-    FHistory.PushUndo(Entry);
-    //if Assigned(FOnHistoryChanged) then
-    //  FOnHistoryChanged(Self);
+    Entry := BuildHistoryEntry(
+      AActionType,
+      IfThen(ACaption <> '', ACaption, 'Mover/redimensionar nodo'),
+      NodeIdx,
+      Changes
+    );
+    if Entry <> nil then
+      FHistory.PushUndo(Entry);
   end;
 
   RecalcCounters;
@@ -10998,9 +11177,16 @@ var
   DeltaDays: Double;
   OtherIdxs: TArray<Integer>;
   K, OIdx: Integer;
+  BeforeSnaps: TArray<TNodePlanSnapshot>;
+  OtherBefore: TArray<TNodePlanSnapshot>;
 begin
   idx := FMoveNodeIndex;
   if (idx < 0) or (idx > High(FNodes)) then Exit;
+
+  // Capturar el estado ANTES de tocar el model (mas abajo se escriben StartTime/
+  // CentreId). Se pasa a CommitNodeMoveOrResize para que el historico registre el
+  // cambio real (si no, before==after y no se registra nada).
+  BeforeSnaps := CaptureSnapshotsFromNodePropagation(idx);
 
   // Delta de tiempo INTENCIONADO por el usuario (lo que ha arrastrado), antes
   // de correcciones de calendario/colisiones. Se aplicara a los demas nodos
@@ -11086,7 +11272,7 @@ begin
             FNodes[K].DurationMin := FNodes[idx].DurationMin;
           end;
 
-      CommitNodeMoveOrResize( idx );
+      CommitNodeMoveOrResize( idx, BeforeSnaps, 'Mover nodo', hatMove );
 
       // Drag multiple: si el nodo arrastrado forma parte de una seleccion de
       // varios, mover todos el mismo delta de tiempo (cada uno en su centro),
@@ -11111,8 +11297,9 @@ begin
           if OIdx = idx then Continue;                  // el arrastrado ya esta hecho
           if (OIdx < 0) or (OIdx > High(FNodes)) then Continue;
           if not FNodes[OIdx].Enabled then Continue;    // bloqueado: no se mueve
+          OtherBefore := CaptureSnapshotsFromNodePropagation(OIdx);
           if MoveNodeKeepingDuration(OIdx, FNodes[OIdx].StartTime + DeltaDays) then
-            CommitNodeMoveOrResize(OIdx);
+            CommitNodeMoveOrResize(OIdx, OtherBefore, 'Mover nodo', hatMove);
         end;
       end;
 

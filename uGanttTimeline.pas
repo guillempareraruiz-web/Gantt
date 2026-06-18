@@ -1428,9 +1428,11 @@ begin
     Exit;
 
   FStartTime := AStartTime;
-  //FPxPerMinute := APxPerMinute;
-  FPxPerMinute := ClampPxPerMinute(APxPerMinute);
- // FScrollX := Max(0, AScrollX);
+  // NO reclampar aqui: el valor ve del control on l'usuari ha fet wheel (Gantt),
+  // que ja l'ha clampat amb el SEU ample. Reclampar amb el nostre ClientWidth
+  // (que inclou FLeftWidth) divergeix el px/min al zoom minim i desalinea les
+  // linies de dies. SetViewport ha de confiar en el valor rebut (com fa el Gantt).
+  FPxPerMinute := APxPerMinute;
   FScrollX := ClampScrollX(AScrollX);
 
   BeginInteraction;

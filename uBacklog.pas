@@ -1284,13 +1284,19 @@ end;
 // ---------------------------------------------------------------------------
 procedure TfrmBacklog.BuildBaseColumns;
 
-  function AddCol(const AKey, ACaption: string; AWidth: Integer): TcxGridColumn;
+  // AValueType: '' = texto (por defecto), 'Float' = numerico, 'Integer',
+  // 'DateTime'. Fija DataBinding.ValueType para que el grid ORDENE y formatee por
+  // tipo (si no, una columna unbound ordena siempre como string: "10" < "2").
+  function AddCol(const AKey, ACaption: string; AWidth: Integer;
+    const AValueType: string = ''): TcxGridColumn;
   begin
     Result := tvBacklog.CreateColumn;
     Result.Caption := ACaption;
     Result.Name := 'col_' + StringReplace(AKey, ' ', '_', [rfReplaceAll]);
     Result.Width := AWidth;
     Result.Options.Editing := False;
+    if AValueType <> '' then
+      Result.DataBinding.ValueType := AValueType;
     Result.Tag := tvBacklog.ColumnCount - 1;
     FColKeyByTag.Add(Result.Tag, AKey);
   end;
@@ -1308,22 +1314,22 @@ begin
       Cols.Add(AddCol('CodigoDocumento',      'Documento',     120));
       Cols.Add(AddCol('DescripcionArticulo',  'Descripcion',   260));
       Cols.Add(AddCol('CodigoArticulo',       'Articulo',      110));
-      Cols.Add(AddCol('Cantidad',             'Cantidad',       80));
+      Cols.Add(AddCol('Cantidad',             'Cantidad',       80, 'Float'));
       Cols.Add(AddCol('UnidadMedida',         'UM',             50));
       Cols.Add(AddCol('NombreCliente',        'Cliente',       180));
       Cols.Add(AddCol('CodigoProyecto',       'Proyecto',      100));
       Cols.Add(AddCol('SerieOF',              'Serie OF',       70));
-      Cols.Add(AddCol('NumeroOF',             'OF',             70));
+      Cols.Add(AddCol('NumeroOF',             'OF',             70, 'Integer'));
       Cols.Add(AddCol('CodigoOT',             'OT',             90));
       Cols.Add(AddCol('CodigoOP',             'OP',             90));
-      Cols.Add(AddCol('FechaCompromiso',      'F. Compromiso', 110));
-      Cols.Add(AddCol('FechaNecesaria',       'F. Necesaria',  110));
-      Cols.Add(AddCol('FechaEntrega',         'F. Entrega',    110));
-      Cols.Add(AddCol('Prioridad',            'Prio',           50));
+      Cols.Add(AddCol('FechaCompromiso',      'F. Compromiso', 110, 'DateTime'));
+      Cols.Add(AddCol('FechaNecesaria',       'F. Necesaria',  110, 'DateTime'));
+      Cols.Add(AddCol('FechaEntrega',         'F. Entrega',    110, 'DateTime'));
+      Cols.Add(AddCol('Prioridad',            'Prio',           50, 'Integer'));
       Cols.Add(AddCol('CentroPreferente',     'Centro pref.',  100));
-      Cols.Add(AddCol('HorasEstimadas',       'Horas est.',     80));
+      Cols.Add(AddCol('HorasEstimadas',       'Horas est.',     80, 'Float'));
       Cols.Add(AddCol('EstadoERP',            'Estado',         90));
-      Cols.Add(AddCol('Orden',                'Orden op.',      70));
+      Cols.Add(AddCol('Orden',                'Orden op.',      70, 'Integer'));
 
       // Prevision agregada (V055): solo aporta a Nivel 1/2 (cada fila resume
       // sus OP descendientes pendientes). A Nivel 3 una fila ya es una OP.

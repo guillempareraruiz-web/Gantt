@@ -23,7 +23,7 @@ uses
   uNodeCardLayout, uNodeLayoutSetRepo, uNodeLayoutEditor,
   uGanttHintConfig, uGanttHintConfigRepo, uGanttHintConfigEditor,
   uDashBoard, uVistaGantt, uFiniteCapacityPlanner,
-  uBacklog, uFiniteCapacityOperaris, dxGDIPlusClasses,
+  uBacklog, uFiniteCapacityOperaris, uArticleDetail, dxGDIPlusClasses,
   dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
   dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
@@ -127,6 +127,7 @@ type
     btnTB_Help: TcxButton;
     Label29: TLabel;
     btnLinkERP: TcxButton;
+    cxButton2: TcxButton;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -162,6 +163,9 @@ type
     procedure DashboardAbrirFiniteCapacity(Sender: TObject);
     procedure MostrarVistaGantt;
     procedure MostrarFiniteCapacity;
+    // Muestra el Detalle de Articulo como child embebido (patron VistaGantt/
+    // Dashboard). Si ACodigo<>'' calcula directamente ese articulo.
+    procedure MostrarArticleDetail(const ACodigo: string = '');
     procedure LoadActivePlan;
     function HasActivePlan: Boolean;
 
@@ -216,6 +220,7 @@ type
     procedure Indicadoresdecentros1Click(Sender: TObject);
     procedure btnTB_HelpClick(Sender: TObject);
     procedure btnLinkERPClick(Sender: TObject);
+    procedure cxButton2Click(Sender: TObject);
   private
     { Private declarations }
 
@@ -273,6 +278,7 @@ var
   FFiniteCapacity: TfrmFiniteCapacityPlanner;
   FBacklog: uBacklog.TfrmBacklog;
   FFiniteOps: uFiniteCapacityOperaris.TfrmFiniteCapacityOperaris;
+  FArticleDetail: TfrmArticleDetail;
 
 implementation
 
@@ -289,7 +295,7 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uGestionProyectos, uGestionAreas, uGestionDepartamentos,
   uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uSincronizarERP, uInstallWizard,
   uDataConnector, uUserPrefs,
-  uErpReader, uErpReaderFactory, uArticleDetail, uStockCockpit,
+  uErpReader, uErpReaderFactory, uStockCockpit,
   uDashboardOperativo, uBusyDialog, uHelpViewer;
 
 {$R *.dfm}
@@ -632,6 +638,11 @@ begin
     FTurnos);
 end;
 
+
+procedure TForm1.cxButton2Click(Sender: TObject);
+begin
+  MostrarArticleDetail;
+end;
 
 procedure TForm1.Indicadoresdecentros1Click(Sender: TObject);
 begin
@@ -1260,6 +1271,40 @@ begin
     FDashboard.Visible := False;
 end;
 
+procedure TForm1.MostrarArticleDetail(const ACodigo: string);
+var
+  Reader: IErpReader;
+begin
+  Reader := GetActiveErpReader;
+  if Reader = nil then
+  begin
+    ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
+      + ' Configuraci'#243'n > Selector de ERP.');
+    Exit;
+  end;
+
+  if FArticleDetail = nil then
+  begin
+    FArticleDetail := TfrmArticleDetail.Create(Self);
+    FArticleDetail.Parent := Self;
+    FArticleDetail.Align := alClient;
+  end;
+  FArticleDetail.PrepareAsChild(Reader);
+
+  // Ocultar los demas childs hermanos.
+  if Assigned(FDashboard) then      FDashboard.Visible := False;
+  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
+  if Assigned(FBacklog) then        FBacklog.Visible := False;
+  if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
+
+  FArticleDetail.Visible := True;
+  FArticleDetail.BringToFront;
+
+  if Trim(ACodigo) <> '' then
+    FArticleDetail.CargarArticulo(ACodigo);
+end;
+
 procedure TForm1.DashboardAbrirGantt(Sender: TObject);
 begin
   OcultarDashboard;
@@ -1864,17 +1909,8 @@ begin
 end;
 
 procedure TForm1.ArticleDetail1Click(Sender: TObject);
-var
-  Reader: IErpReader;
 begin
-  Reader := GetActiveErpReader;
-  if Reader = nil then
-  begin
-    ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
-      + ' Configuraci'#243'n > Selector de ERP.');
-    Exit;
-  end;
-  TfrmArticleDetail.Execute(Reader);
+  MostrarArticleDetail;
 end;
 
 procedure TForm1.AsistenteInstalacion1Click(Sender: TObject);

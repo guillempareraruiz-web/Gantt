@@ -2678,6 +2678,25 @@ object frmVistaGantt: TfrmVistaGantt
           OnClick = btnDesasignarSelClick
         end
       end
+      object cxButton1: TcxButton
+        Left = 490
+        Top = 23
+        Width = 56
+        Height = 19
+        Caption = 'Historial'
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        SpeedButtonOptions.CanBeFocused = False
+        TabOrder = 11
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = cxButton1Click
+      end
     end
   end
   object popCentros: TPopupMenu

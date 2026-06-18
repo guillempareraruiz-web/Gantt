@@ -25,7 +25,8 @@ uses
   cxClasses, cxGridCustomView, cxGrid, cxDBData, cxCheckComboBox,
   cxDropDownEdit, cxTextEdit, cxMaskEdit, cxSpinEdit, cxButtons, cxPC,
   cxTL, cxTLData, cxInplaceContainer, cxTLdxBarBuiltInMenu,
-  uErpReader, uErpTypes, uStockProjection, cxCheckBox, cxContainer, dxSkinsCore,
+  uErpReader, uErpTypes, uStockProjection, uMrpTypes, uMrpParamRepo,
+  uMrpRecommender, cxCheckBox, cxContainer, dxSkinsCore,
   dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint, dxSkinCaramel,
   dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide, dxSkinDevExpressDarkStyle,
   dxSkinDevExpressStyle, dxSkinFoggy, dxSkinGlassOceans, dxSkinHighContrast,
@@ -41,7 +42,8 @@ uses
   dxSkinSpringtime, dxSkinStardust, dxSkinSummer2008, dxSkinTheAsphaltWorld,
   dxSkinTheBezier, dxSkinValentine, dxSkinVisualStudio2013Blue,
   dxSkinVisualStudio2013Dark, dxSkinVisualStudio2013Light, dxSkinVS2010,
-  dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, dxBarBuiltInMenu;
+  dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, dxBarBuiltInMenu,
+  dxGDIPlusClasses, cxImage;
 type
   TfrmArticleDetail = class(TForm)
     pgcTabs: TcxPageControl;
@@ -161,16 +163,26 @@ type
     lblStockMinimo: TLabel;
     lblValStockMinimo: TLabel;
     lblAviso: TLabel;
+    pnlRecomendacion: TPanel;
+    lblRecomendacion: TLabel;
+    btnAccionMrp: TButton;
     grdMovs: TcxGrid;
     grdMovsView: TcxGridDBTableView;
     grdMovsLevel: TcxGridLevel;
     cdsMovs: TClientDataSet;
     dsMovs: TDataSource;
+    pnlBottom: TPanel;
+    pnlMovsContainer: TPanel;
+    splitLog: TSplitter;
+    pnlLog: TPanel;
+    mmoLog: TMemo;
+    btnToggleLog: TButton;
+    pnlTitulo: TPanel;
+    lblTitulo: TLabel;
+    lblSubtitulo: TLabel;
+    btnFocus: TButton;
+    imgSection: TcxImage;
     pnlKPIs: TPanel;
-    pnlKPI1: TPanel;
-    lblKPI1Cap: TLabel;
-    lblKPI1Val: TLabel;
-    lblKPI1Sub: TLabel;
     pnlKPI2: TPanel;
     lblKPI2Cap: TLabel;
     lblKPI2Val: TLabel;
@@ -191,16 +203,16 @@ type
     lblKPI6Cap: TLabel;
     lblKPI6Val: TLabel;
     lblKPI6Sub: TLabel;
-    pnlBottom: TPanel;
-    btnCerrar: TButton;
-    pnlMovsContainer: TPanel;
-    splitLog: TSplitter;
-    pnlLog: TPanel;
-    mmoLog: TMemo;
+    pnlKPI1: TPanel;
+    lblKPI1Cap: TLabel;
+    lblKPI1Sub: TLabel;
+    lblKPI1Val: TLabel;
+    Edit1: TEdit;
     procedure FormCreate(Sender: TObject);
     procedure btnBuscarArticuloClick(Sender: TObject);
     procedure btnCalcularClick(Sender: TObject);
-    procedure btnCerrarClick(Sender: TObject);
+    procedure btnToggleLogClick(Sender: TObject);
+    procedure btnAccionMrpClick(Sender: TObject);
     procedure grdMovsViewCustomDrawCell(Sender: TcxCustomGridTableView;
       ACanvas: TcxCanvas;
       AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
@@ -230,6 +242,11 @@ type
     FCodigoArticulo: string;
     FDescripcionArticulo: string;
     FStockMinimo: Double;
+    // MRP: ultima recomendacion calculada (para el boton de accion) y articulo
+    // Sage leido en el ultimo calculo (lleva los parametros: lead time, lote...).
+    FUltimaRecom: TMrpRecommendation;
+    FArticuloActual: TArticuloErp;
+    FArticuloLeido: Boolean;
     FPartidasCargadas: Boolean;
     FMovsFutCargados: Boolean;
     FDispCalculada: Boolean;
@@ -245,8 +262,18 @@ type
     procedure CrearColumnasMovs;
     procedure CrearColumnasPartidas;
     procedure CrearColumnasMovsFut;
+    // True si la fila ARecIdx es la primera con saldo >= 0 tras una ruptura
+    // (saldo anterior < 0). Para colorear la recuperacion en el Time-Phased View.
+    function EsFilaRecuperacion(ARecIdx: Integer): Boolean;
     procedure RellenarMovs(const AMovs: TArray<TMovStock>);
     procedure PintarResumen(const AResumen: TResumenProyeccion);
+    // Calcula y pinta la recomendacion MRP a partir de la proyeccion ya hecha.
+    // AArticulo es el TArticuloErp ya leido (con los parametros de Sage).
+    // Cuerpo del calculo de proyeccion (lo invoca btnCalcularClick dentro de
+    // ShowBusy para animar el dialogo de "cargando").
+    procedure DoCalcular;
+    procedure CalcularRecomendacion(const AArticulo: TArticuloErp;
+      AProjector: TStockProjector);
     procedure CargarPartidas;
     procedure AplicarFiltroPartidas;
     procedure CargarMovsFut;
@@ -273,10 +300,14 @@ type
     class procedure Execute(const AReader: IErpReader); overload;
     class procedure Execute(const AReader: IErpReader;
       const ACodigoArticulo: string); overload;
+    // Uso como child embebido en el Main (no-modal). PrepareAsChild inicializa
+    // (reader + almacenes); CargarArticulo carga y calcula un articulo concreto.
+    procedure PrepareAsChild(const AReader: IErpReader);
+    procedure CargarArticulo(const ACodigo: string);
   end;
 implementation
 uses
-  uArticuloPicker;
+  uArticuloPicker, uDMPlanner, uMrpPropuestaBacklog, uGanttTypes, uBusyDialog;
 {$R *.dfm}
 class procedure TfrmArticleDetail.Execute(const AReader: IErpReader);
 begin
@@ -302,6 +333,23 @@ begin
   finally
     Frm.Free;
   end;
+end;
+
+procedure TfrmArticleDetail.PrepareAsChild(const AReader: IErpReader);
+begin
+  // Inicializacion para uso como child embebido (no-modal). El Main lo crea una
+  // vez y lo reutiliza; aqui solo refrescamos el reader y los almacenes.
+  FReader := AReader;
+  CargarAlmacenes;
+
+end;
+
+procedure TfrmArticleDetail.CargarArticulo(const ACodigo: string);
+begin
+  if Trim(ACodigo) = '' then Exit;
+  FCodigoArticulo := ACodigo;
+  edArticulo.Text := ACodigo;
+  btnCalcularClick(nil);
 end;
 procedure TfrmArticleDetail.FormCreate(Sender: TObject);
 begin
@@ -521,7 +569,162 @@ begin
   else
     lblValStockFinal.Font.Color := clWindowText;
 end;
+
+procedure TfrmArticleDetail.CalcularRecomendacion(const AArticulo: TArticuloErp;
+  AProjector: TStockProjector);
+var
+  Repo: TMrpParamRepo;
+  HasOvr: Boolean;
+  Ovr: TMrpParamOverride;
+  Param: TMrpParam;
+  Almacen: string;
+  Almacenes: TArray<string>;
+begin
+  // Almacen para resolver parametros: si hay UN solo almacen seleccionado, se usa
+  // su override/ArticulosAlmacen; si hay varios o ninguno, se usa el global ('').
+  Almacenes := AlmacenesSeleccionados;
+  if Length(Almacenes) = 1 then
+    Almacen := Almacenes[0]
+  else
+    Almacen := '';
+
+  // Override propio (FS_PL_MrpParam) desde la BD del Planner.
+  HasOvr := False;
+  Ovr := Default(TMrpParamOverride);
+  Repo := TMrpParamRepo.Create(DMPlanner.ADOConnection);
+  try
+    Repo.LoadFromDB(DMPlanner.CodigoEmpresa);
+    HasOvr := Repo.TryGet(AArticulo.Codigo, Almacen, Ovr);
+  finally
+    Repo.Free;
+  end;
+
+  // Fusiona override + Sage -> parametros efectivos, y genera la recomendacion.
+  Param := TMrpRecommender.ResolveParam(AArticulo, HasOvr, Ovr, Almacen);
+  FUltimaRecom := TMrpRecommender.Recommend(Param, FDescripcionArticulo,
+    AProjector, Date);
+
+  // Pinta el panel.
+  if FUltimaRecom.Accion = maNinguna then
+  begin
+    pnlRecomendacion.Visible := False;
+    Exit;
+  end;
+
+  lblRecomendacion.Caption := FUltimaRecom.Motivo;
+  if FUltimaRecom.EsUrgente then
+    lblRecomendacion.Font.Color := clRed
+  else
+    lblRecomendacion.Font.Color := clWindowText;
+
+  // El boton solo tiene sentido para fabricacion (pont al Gantt, F2). Para compra
+  // de momento queda informativo (sin boton).
+  if FUltimaRecom.Accion in [maFabricar, maSubcontratar] then
+  begin
+    btnAccionMrp.Caption := 'Fabricar '#8594' Gantt';
+    btnAccionMrp.Visible := True;
+  end
+  else
+    btnAccionMrp.Visible := False;
+
+  pnlRecomendacion.Visible := True;
+end;
+
+procedure TfrmArticleDetail.btnAccionMrpClick(Sender: TObject);
+var
+  Versiones: TArray<SmallInt>;
+  Operaciones: TArray<TFormulaOperacion>;
+  CentroPref: string;
+  HorasUnit, HorasTotal: Double;
+  i: Integer;
+  Puente: TMrpPropuestaBacklog;
+  RawId: Int64;
+begin
+  if FUltimaRecom.Accion = maNinguna then Exit;
+  if not (FUltimaRecom.Accion in [maFabricar, maSubcontratar]) then Exit;
+
+  if MessageDlg(Format(
+      'Crear propuesta de fabricaci'#243'n en el Backlog?'#13#10#13#10 +
+      'Art'#237'culo: %s'#13#10'Cantidad: %s ud.'#13#10 +
+      'Fecha necesaria: %s'#13#10'Lanzar antes de: %s',
+      [FUltimaRecom.CodigoArticulo,
+       FormatFloat('#,##0.##', FUltimaRecom.Cantidad),
+       FormatDateTime('dd/mm/yyyy', FUltimaRecom.FechaNecesaria),
+       FormatDateTime('dd/mm/yyyy', FUltimaRecom.FechaLanzamiento)]),
+      mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    Exit;
+
+  // Centro preferente + horas estimadas desde la formula (primera version),
+  // sumando el tiempo de las operaciones * cantidad. Si no hay formula, queda
+  // sin centro/horas y el planificador lo ajusta en el Backlog.
+  CentroPref := '';
+  HorasUnit := 0;
+  if FReader <> nil then
+  begin
+    Versiones := FReader.ReadFormulaVersiones(FUltimaRecom.CodigoArticulo);
+    if Length(Versiones) > 0 then
+    begin
+      Operaciones := FReader.ReadFormulaOperaciones(
+        FUltimaRecom.CodigoArticulo, Versiones[0]);
+      for i := 0 to High(Operaciones) do
+      begin
+        if (CentroPref = '') and (Trim(Operaciones[i].CentroTrabajo) <> '') then
+          CentroPref := Operaciones[i].CentroTrabajo;  // primer centro de ruta
+        HorasUnit := HorasUnit + Operaciones[i].TiempoTotalMin;
+      end;
+    end;
+  end;
+  // TiempoTotalMin de las operaciones suele ser por lote de calculo; aqui lo
+  // tratamos como minutos por unidad de forma simple (horas = min/60 * cantidad).
+  // TODO: refinar con UnidadesCalculo de la formula en la fase BOM.
+  HorasTotal := (HorasUnit / 60.0) * FUltimaRecom.Cantidad;
+
+  // Si la formula no da centro, aterrizar en el centro de sistema SIN CENTRO
+  // (cajon de sastre); el planificador lo movera al centro real desde el Gantt.
+  if Trim(CentroPref) = '' then
+    CentroPref := CENTRO_SIN_CENTRO;
+
+  Puente := TMrpPropuestaBacklog.Create(DMPlanner.ADOConnection,
+    DMPlanner.CodigoEmpresa);
+  try
+    RawId := Puente.InsertarPropuesta(FUltimaRecom, HorasTotal, CentroPref);
+  finally
+    Puente.Free;
+  end;
+
+  if RawId > 0 then
+    ShowMessage(Format(
+      'Propuesta creada en el Backlog (OF MRP).'#13#10 +
+      'Plan'#237'ficala desde la pantalla de Backlog / Carga pendiente.'#13#10#13#10 +
+      'Art'#237'culo: %s  -  %s ud.',
+      [FUltimaRecom.CodigoArticulo, FormatFloat('#,##0.##', FUltimaRecom.Cantidad)]))
+  else
+    ShowMessage('No se pudo crear la propuesta en el Backlog.');
+end;
+
 procedure TfrmArticleDetail.btnCalcularClick(Sender: TObject);
+begin
+  if FReader = nil then
+  begin
+    ShowMessage('No hay conector ERP activo.');
+    Exit;
+  end;
+  if Trim(edArticulo.Text) = '' then
+  begin
+    ShowMessage('Selecciona un art'#237'culo.');
+    Exit;
+  end;
+  // Muestra el dialogo de "cargando" (spinner) mientras se calcula la proyeccion.
+  // ShowBusy ejecuta en el hilo principal (DoCalcular toca controles de UI).
+  // ShowBusy espera un TProc (metodo anonimo): envolvemos DoCalcular.
+  uBusyDialog.ShowBusy(Self, 'Calculando proyecci'#243'n de stock...',
+    procedure
+    begin
+      DoCalcular;
+    end);
+end;
+
+procedure TfrmArticleDetail.DoCalcular;
 var
   Almacenes: TArray<string>;
   FechaCorte: TDateTime;
@@ -536,17 +739,7 @@ var
   Resumen: TResumenProyeccion;
   StockTotal, PendRecibir, PendServir: Double;
 begin
-  if FReader = nil then
-  begin
-    ShowMessage('No hay conector ERP activo.');
-    Exit;
-  end;
   FCodigoArticulo := Trim(edArticulo.Text);
-  if FCodigoArticulo = '' then
-  begin
-    ShowMessage('Selecciona un art'#237'culo.');
-    Exit;
-  end;
   Almacenes := AlmacenesSeleccionados;
   FechaCorte := dtFecha.Date;
   mmoLog.Lines.Clear;
@@ -560,15 +753,18 @@ begin
   Screen.Cursor := crHourGlass;
   try
     try
-      // 1) Stock m'inimo (para alerta)
+      // 1) Stock m'inimo (para alerta) + datos del articulo (parametros MRP)
       Articulos := FReader.ReadArticulos(FCodigoArticulo);
       FStockMinimo := 0;
       FDescripcionArticulo := '';
+      FArticuloLeido := False;
       for i := 0 to High(Articulos) do
         if SameText(Articulos[i].Codigo, FCodigoArticulo) then
         begin
           FStockMinimo := Articulos[i].StockMinimo;
           FDescripcionArticulo := Articulos[i].Descripcion;
+          FArticuloActual := Articulos[i];   // guarda parametros MRP de Sage
+          FArticuloLeido := True;
           Break;
         end;
       lblDescripcion.Caption := FDescripcionArticulo;
@@ -630,6 +826,9 @@ begin
       LogInfo(Format('Stock proyectado a %s: %s',
         [FormatDateTime('dd/mm/yyyy', FechaCorte),
          FormatFloat('#,##0.##', Resumen.StockFinal)]));
+      // 7) Recomendacion MRP (necesita el articulo con sus parametros).
+      if FArticuloLeido then
+        CalcularRecomendacion(FArticuloActual, Proy);
     finally
       Proy.Free;
     end;
@@ -643,16 +842,63 @@ procedure TfrmArticleDetail.grdMovsViewCustomDrawCell(
 var
   RecIdx: Integer;
   IsBajoMinimo: Boolean;
+  Saldo: Double;
+  VSaldo: Variant;
 begin
+  // Time-Phased Stock View: colorea cada fila segun el estado del saldo proyectado.
+  //   ROJO  -> ruptura (saldo < 0): no hay stock para cubrir la demanda de esa fecha.
+  //   ROSA  -> bajo minimo (saldo >= 0 pero < stock minimo): zona de riesgo.
+  //   verde -> primera fila de RECUPERACION (saldo vuelve a >= 0 tras una ruptura).
+  //   normal-> OK.
   RecIdx := AViewInfo.GridRecord.RecordIndex;
   if RecIdx < 0 then Exit;
+
+  VSaldo := Sender.DataController.Values[RecIdx,
+    grdMovsView.GetColumnByFieldName('Saldo').Index];
+  if VarIsNull(VSaldo) then Exit;
+  Saldo := VSaldo;
+
   IsBajoMinimo := Sender.DataController.Values[RecIdx,
     grdMovsView.GetColumnByFieldName('BajoMinimo').Index];
-  if IsBajoMinimo then
+
+  if Saldo < 0 then
+  begin
+    // Ruptura: rojo fuerte.
+    ACanvas.Brush.Color := $008080FF;  // rojo claro (BGR)
+    ACanvas.Font.Color := clWhite;
+  end
+  else if EsFilaRecuperacion(RecIdx) then
+  begin
+    // Recuperacion: primera fila que vuelve a >= 0 despues de una ruptura.
+    ACanvas.Brush.Color := $00C0FFC0;  // verde claro
+    ACanvas.Font.Color := clGreen;
+  end
+  else if IsBajoMinimo then
   begin
     ACanvas.Brush.Color := $00CCCCFF;  // rosat clar
     ACanvas.Font.Color := clMaroon;
   end;
+end;
+
+function TfrmArticleDetail.EsFilaRecuperacion(ARecIdx: Integer): Boolean;
+var
+  VPrev, VCur: Variant;
+  PrevSaldo, CurSaldo: Double;
+  Col: Integer;
+begin
+  // Recuperacion = esta fila tiene saldo >= 0 y la ANTERIOR estaba en ruptura
+  // (< 0). La fila 0 nunca es recuperacion (no hay anterior).
+  Result := False;
+  if ARecIdx <= 0 then Exit;
+
+  Col := grdMovsView.GetColumnByFieldName('Saldo').Index;
+  VCur := grdMovsView.DataController.Values[ARecIdx, Col];
+  VPrev := grdMovsView.DataController.Values[ARecIdx - 1, Col];
+  if VarIsNull(VCur) or VarIsNull(VPrev) then Exit;
+
+  CurSaldo := VCur;
+  PrevSaldo := VPrev;
+  Result := (CurSaldo >= 0) and (PrevSaldo < 0);
 end;
 procedure TfrmArticleDetail.LogInfo(const AMsg: string);
 begin
@@ -664,9 +910,18 @@ begin
   mmoLog.Lines.Add(Format('[%s] ERROR: %s',
     [FormatDateTime('hh:nn:ss', Now), AMsg]));
 end;
-procedure TfrmArticleDetail.btnCerrarClick(Sender: TObject);
+procedure TfrmArticleDetail.btnToggleLogClick(Sender: TObject);
+var
+  Mostrar: Boolean;
 begin
-  Close;
+  // El log ocupa mucho espacio; por defecto va plegado y se muestra a demanda.
+  Mostrar := not pnlLog.Visible;
+  pnlLog.Visible := Mostrar;
+  splitLog.Visible := Mostrar;
+  if Mostrar then
+    btnToggleLog.Caption := 'Ocultar log'
+  else
+    btnToggleLog.Caption := 'Mostrar log';
 end;
 // ============================================================================
 // TAB "Stock por partida / lote"

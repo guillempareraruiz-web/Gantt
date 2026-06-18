@@ -27,11 +27,10 @@ object frmRestorePoints: TfrmRestorePoints
     Color = 8776698
     ParentBackground = False
     TabOrder = 0
-    ExplicitWidth = 760
     object lblTitulo: TLabel
       Left = 12
       Top = 8
-      Width = 500
+      Width = 613
       Height = 40
       AutoSize = False
       Caption = 
@@ -81,7 +80,6 @@ object frmRestorePoints: TfrmRestorePoints
     TabOrder = 1
     ViewStyle = vsReport
     OnDblClick = btnRestaurarClick
-    ExplicitWidth = 760
   end
   object pnlBottom: TPanel
     Left = 0
@@ -93,7 +91,6 @@ object frmRestorePoints: TfrmRestorePoints
     Color = clWhite
     ParentBackground = False
     TabOrder = 2
-    ExplicitWidth = 760
     object btnCrearManual: TButton
       AlignWithMargins = True
       Left = 12
@@ -122,7 +119,6 @@ object frmRestorePoints: TfrmRestorePoints
       Caption = 'Eliminar'
       TabOrder = 1
       OnClick = btnEliminarClick
-      ExplicitLeft = 432
     end
     object btnRestaurar: TButton
       AlignWithMargins = True
@@ -144,7 +140,6 @@ object frmRestorePoints: TfrmRestorePoints
       ParentFont = False
       TabOrder = 2
       OnClick = btnRestaurarClick
-      ExplicitLeft = 540
     end
     object btnCerrar: TButton
       AlignWithMargins = True
@@ -161,7 +156,6 @@ object frmRestorePoints: TfrmRestorePoints
       Caption = 'Cerrar'
       TabOrder = 3
       OnClick = btnCerrarClick
-      ExplicitLeft = 678
     end
   end
 end

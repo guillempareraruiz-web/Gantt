@@ -1120,6 +1120,9 @@ begin
       '  CosteFabricacionUnitario, PrecioCosteEstandar, ' +
       '  BloqueoCompra, BloqueoPedidoCompra, BloqueoPedidoVenta, ' +
       '  PublicarInternet, FechaAlta, Utilizado, ' +
+      '  PuntoPedido, LotePedido, LoteFabricacion, ' +
+      '  UsarStockSeg, [%StockSeguridad] AS PctStockSeguridad, ' +
+      '  TiempoMedioReposicion, CodigoProveedor, ' +
       '  CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.Formulas F ' +
       '    WHERE F.CodigoEmpresa = A.CodigoEmpresa ' +
       '      AND F.CodigoArticulo = A.CodigoArticulo) THEN 1 ELSE 0 END AS bit) AS TieneFormula ' +
@@ -1160,6 +1163,14 @@ begin
         A.FechaAlta := Q.FieldByName('FechaAlta').AsDateTime;
       A.Activo := Q.FieldByName('Utilizado').AsInteger <> 0;
       A.TieneFormula := Q.FieldByName('TieneFormula').AsBoolean;
+      // Parametros MRP / aprovisionamiento
+      A.PuntoPedido           := Q.FieldByName('PuntoPedido').AsFloat;
+      A.LotePedido            := Q.FieldByName('LotePedido').AsInteger;
+      A.LoteFabricacion       := Q.FieldByName('LoteFabricacion').AsInteger;
+      A.UsarStockSeguridad    := Q.FieldByName('UsarStockSeg').AsInteger <> 0;
+      A.PctStockSeguridad     := Q.FieldByName('PctStockSeguridad').AsInteger;
+      A.TiempoMedioReposicion := Q.FieldByName('TiempoMedioReposicion').AsFloat;
+      A.CodigoProveedor       := Q.FieldByName('CodigoProveedor').AsString;
       Result[Idx] := A;
       Inc(Idx);
       Q.Next;

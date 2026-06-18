@@ -15,7 +15,18 @@ type
     hatShiftLeft,
     hatShiftRight,
     hatResolveConstraints,
-    hatEdit
+    hatEdit,
+    // Lliurable B: acciones masivas y estructurales
+    hatResetDuration,    // restaurar duracion original de un nodo
+    hatCompactOF,        // compactar OF
+    hatCompactOT,        // compactar OT
+    hatBackwardOF,       // planificacion hacia atras de OF
+    hatBackwardOT,       // planificacion hacia atras de OT
+    hatReplanAll,        // replanificar todo desde fecha
+    hatChangeCentre,     // mover nodo a otro centro
+    hatCreateLote,       // agrupar nodos en lote
+    hatBreakLote,        // deshacer/romper lote
+    hatEditNode          // editar propiedades de nodo (NodeInspector)
   );
 
   TNodePlanSnapshot = record
@@ -23,6 +34,8 @@ type
     StartTime: TDateTime;
     EndTime: TDateTime;
     Duration: Double;
+    CentreId: Integer;  // Lliurable B: para deshacer cambios de centro
+    LoteId: Integer;    // Lliurable B: para deshacer agrupar/romper lotes
   end;
 
   TNodeHistoryChange = record
@@ -60,6 +73,11 @@ type
 
     procedure PushUndo(AEntry: TGanttHistoryEntry);
     procedure PushRedo(AEntry: TGanttHistoryEntry);
+    // Empuja a undo SIN vaciar el redo. Lo usa RedoLastAction al navegar: rehacer
+    // un paso no debe destruir los pasos que quedan por rehacer. (PushUndo si vacia
+    // el redo, porque se usa para acciones NUEVAS del usuario, que invalidan el
+    // futuro deshecho.)
+    procedure PushUndoKeepRedo(AEntry: TGanttHistoryEntry);
 
     function PopUndo: TGanttHistoryEntry;
     function PopRedo: TGanttHistoryEntry;
@@ -69,6 +87,11 @@ type
 
     function UndoCount: Integer;
     function RedoCount: Integer;
+
+    // Acceso de solo lectura para pintar el timeline visual. Indice 0 es la
+    // entrada mas antigua del stack correspondiente.
+    function GetUndoEntry(const AIndex: Integer): TGanttHistoryEntry;
+    function GetRedoEntry(const AIndex: Integer): TGanttHistoryEntry;
 
     property MaxEntries: Integer read FMaxEntries write FMaxEntries;
   end;
@@ -152,6 +175,16 @@ begin
     FUndoStack.Delete(0);
 end;
 
+procedure TGanttHistoryManager.PushUndoKeepRedo(AEntry: TGanttHistoryEntry);
+begin
+  if AEntry = nil then Exit;
+
+  FUndoStack.Add(AEntry);
+
+  while FUndoStack.Count > FMaxEntries do
+    FUndoStack.Delete(0);
+end;
+
 function TGanttHistoryManager.RedoCount: Integer;
 begin
   Result := FRedoStack.Count;
@@ -162,6 +195,20 @@ begin
   Result := FUndoStack.Count;
 end;
 
+function TGanttHistoryManager.GetUndoEntry(const AIndex: Integer): TGanttHistoryEntry;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex < FUndoStack.Count) then
+    Result := FUndoStack[AIndex];
+end;
+
+function TGanttHistoryManager.GetRedoEntry(const AIndex: Integer): TGanttHistoryEntry;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex < FRedoStack.Count) then
+    Result := FRedoStack[AIndex];
+end;
+
 function SameNodePlanSnapshot(const A, B: TNodePlanSnapshot): Boolean;
 const
   EPS = 1/864000; // ~0.1 ms
@@ -170,7 +217,9 @@ begin
     (A.NodeIndex = B.NodeIndex) and
     (Abs(A.StartTime - B.StartTime) < EPS) and
     (Abs(A.EndTime - B.EndTime) < EPS) and
-    (Abs(A.Duration - B.Duration) < EPS);
+    (Abs(A.Duration - B.Duration) < EPS) and
+    (A.CentreId = B.CentreId) and
+    (A.LoteId = B.LoteId);
 end;
 
 end.

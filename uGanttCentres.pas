@@ -87,6 +87,7 @@ type
     FBrushBg: ID2D1SolidColorBrush;
     FBrushRowEven: ID2D1SolidColorBrush;
     FBrushRowOdd: ID2D1SolidColorBrush;
+    FBrushRowSistema: ID2D1SolidColorBrush;  // fons destacat per centres de sistema
     FBrushText: ID2D1SolidColorBrush;
     FBrushTextDisabled: ID2D1SolidColorBrush;
     FBrushLine: ID2D1SolidColorBrush;
@@ -343,6 +344,7 @@ begin
   FBrushBg := nil;
   FBrushRowEven := nil;
   FBrushRowOdd := nil;
+  FBrushRowSistema := nil;
   FBrushText := nil;
   FBrushTextDisabled := nil;
   FBrushLine := nil;
@@ -592,6 +594,14 @@ begin
       'CreateSolidColorBrush FBrushMonthBg1'
     );
 
+  // Fons blau clar per als centres de sistema (SIN CENTRO / CENTRO EXTERNO).
+  // BGR $00F8E6D6 ~ RGB(214,230,248), un blau cel suau.
+  if not Assigned(FBrushRowSistema) then
+    CheckHR(
+      FHwndRT.CreateSolidColorBrush(D2DColor($00F8E6D6), nil, FBrushRowSistema),
+      'CreateSolidColorBrush FBrushRowSistema'
+    );
+
   if not Assigned(FBrushText) then
     CheckHR(
       FHwndRT.CreateSolidColorBrush(D2DColor(clBlack), nil, FBrushText),
@@ -698,7 +708,13 @@ begin
   y1 := Row.TopY - FScrollY;
   y2 := (Row.TopY + Row.Height) - FScrollY;
 
-  if (RowIndex and 1) = 0 then
+  // Els centres de sistema (SIN CENTRO / CENTRO EXTERNO) es destaquen amb fons
+  // blau clar; la resta alternen even/odd.
+  if (iCentreIdx >= 0) and
+     (SameText(Trim(FCentres[iCentreIdx].CodiCentre), CENTRO_SIN_CENTRO) or
+      SameText(Trim(FCentres[iCentreIdx].CodiCentre), CENTRO_EXTERNO)) then
+    FillRectD(RectF(0, y1, ClientWidth, y2), FBrushRowSistema)
+  else if (RowIndex and 1) = 0 then
     FillRectD(RectF(0, y1, ClientWidth, y2), FBrushRowEven)
   else
     FillRectD(RectF(0, y1, ClientWidth, y2), FBrushRowOdd);

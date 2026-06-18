@@ -32,6 +32,7 @@ type
     atZonaNoLaborable,       // cae integramente en zona no laborable
     atDuracionCero,          // duracion <=0 o sin unidades a fabricar
     atNoOptimizado,          // duracion actual peor que la original
+    atOFCerradaERP,          // la OF (Nivel 1) del nodo ya esta cerrada en el ERP
 
     // --- PENDIENTES (roadmap): coherencia temporal y dependencias ---
     atSolapamientoSecuencial,// 2 nodos solapados en un centro secuencial
@@ -223,6 +224,7 @@ begin
     atSinCentro:                 Result := 'D08';
     atFueraPlanMaster:           Result := 'D09';
     atFueraHorizonte:            Result := 'D10';
+    atOFCerradaERP:              Result := 'D11';
   else
     Result := '';
   end;
@@ -243,6 +245,7 @@ begin
     atZonaNoLaborable:   Result := 'nodos en zona no laborable';
     atDuracionCero:      Result := 'nodos con duraci'#243'n o cantidad nula';
     atNoOptimizado:      Result := 'nodos no optimizados (m'#225's largos de lo previsto)';
+    atOFCerradaERP:      Result := 'nodos cuya OF ya est'#225' cerrada en el ERP';
     // --- Pendientes ---
     atSolapamientoSecuencial:
                          Result := 'nodos solapados en centro secuencial';
@@ -282,7 +285,7 @@ begin
     atActivoAntesHoy, atFueraPlazoEntrega, atCentroNoPermitido,
     atSolapamientoSecuencial, atDependenciaViolada, atOperarioSobrecargado,
     atUtillajeEnConflicto, atMaquinaNoOperativa, atMaterialNoDisponible,
-    atOFEnRiesgo, atSinCentro, atMargenEntregaInsuf:
+    atOFEnRiesgo, atSinCentro, atMargenEntregaInsuf, atOFCerradaERP:
       Result := asAlta;
     // Media
     atSinOperarios, atSinStock, atZonaNoLaborable, atDiaSobrecargado,
@@ -318,6 +321,7 @@ begin
     atOperarioSobrecargado:      Result := 82;
     atOFEnRiesgo:                Result := 80;
     atMaterialNoDisponible:      Result := 78;
+    atOFCerradaERP:              Result := 77;
     atMaquinaNoOperativa:        Result := 75;
     atSinCentro:                 Result := 72;
     atMargenEntregaInsuf:        Result := 70;
@@ -457,6 +461,11 @@ begin
         if (D.DurationMinOriginal > 0) and
            (N.DurationMin > D.DurationMinOriginal + 1) then
           Add(atNoOptimizado, N.DataId);
+
+        // 13. OF cerrada en el ERP: el nodo sigue planificado pero su OF (Nivel
+        //     1) ya esta cerrada -> no deberia fabricarse, hay que revisarlo.
+        if D.EstadoOFCerrada then
+          Add(atOFCerradaERP, N.DataId);
       end;
 
     // Construir el resultado.

@@ -800,23 +800,29 @@ begin
       Output.Input := Input;
       Output.CenterCode := Input.CentroPreferente;
 
+      // Resolucion de centro con fallback al centro de sistema "SIN CENTRO":
+      // toda carga sin centro valido aterriza alli (en vez de quedarse fuera del
+      // plan), y el planificador la arrastra manualmente al centro real.
       if Trim(Input.CentroPreferente) = '' then
-      begin
-        Output.Status := ssSinCentro;
-        Output.Observaciones := 'Sin centro preferente';
-        OutList.Add(Output);
-        Inc(Result.TotalNoPlanificados);
-        Continue;
-      end;
+        Key := UpperCase(CENTRO_SIN_CENTRO)
+      else
+        Key := UpperCase(Trim(Input.CentroPreferente));
 
-      Key := UpperCase(Trim(Input.CentroPreferente));
       if not CentresMap.TryGetValue(Key, C) then
       begin
-        Output.Status := ssSinCentro;
-        Output.Observaciones := 'Centro ' + Input.CentroPreferente + ' no existe';
-        OutList.Add(Output);
-        Inc(Result.TotalNoPlanificados);
-        Continue;
+        // El centro indicado no existe -> probar el cajon de sastre SIN CENTRO.
+        if not CentresMap.TryGetValue(UpperCase(CENTRO_SIN_CENTRO), C) then
+        begin
+          // Ni siquiera existe SIN CENTRO (BD sin V065): no se puede planificar.
+          Output.Status := ssSinCentro;
+          Output.Observaciones := 'Sin centro (falta centro de sistema SIN CENTRO)';
+          OutList.Add(Output);
+          Inc(Result.TotalNoPlanificados);
+          Continue;
+        end;
+        if Trim(Input.CentroPreferente) <> '' then
+          Output.Observaciones := 'Centro ' + Input.CentroPreferente +
+            ' no existe; asignado a Sin centro';
       end;
 
       // Inicializar cursor del centro si es la primera vez. Carga la ocupacion

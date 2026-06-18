@@ -103,10 +103,11 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 1
       OnClick = Backlog1Click
+      ExplicitLeft = 168
     end
     object btnTB_PlaniCentros: TcxButton
       AlignWithMargins = True
-      Left = 168
+      Left = 249
       Top = 5
       Width = 75
       Height = 23
@@ -125,7 +126,7 @@ object Form1: TForm1
     end
     object cxButton1: TcxButton
       AlignWithMargins = True
-      Left = 411
+      Left = 492
       Top = 5
       Width = 75
       Height = 23
@@ -144,7 +145,7 @@ object Form1: TForm1
     end
     object btnTB_PlaniOperarios: TcxButton
       AlignWithMargins = True
-      Left = 249
+      Left = 330
       Top = 5
       Width = 75
       Height = 23
@@ -163,7 +164,7 @@ object Form1: TForm1
     end
     object btnTB_PlaniGantt: TcxButton
       AlignWithMargins = True
-      Left = 330
+      Left = 411
       Top = 5
       Width = 75
       Height = 23
@@ -197,7 +198,6 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 6
       OnClick = btnTB_HelpClick
-      ExplicitLeft = 1064
     end
     object btnLinkERP: TcxButton
       AlignWithMargins = True
@@ -222,9 +222,27 @@ object Form1: TForm1
       Font.Style = [fsBold]
       ParentFont = False
       OnClick = btnLinkERPClick
-      ExplicitLeft = 1064
-      ExplicitTop = -3
-      ExplicitHeight = 33
+    end
+    object cxButton2: TcxButton
+      AlignWithMargins = True
+      Left = 168
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'MRP'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 8
+      OnClick = cxButton2Click
+      ExplicitLeft = 191
+      ExplicitTop = 1
     end
   end
   object tmr1Sec: TTimer

@@ -357,6 +357,14 @@ type
     FechaAlta: TDateTime;
     Activo: Boolean;
     TieneFormula: Boolean;   // True si existe al menos una formula para el articulo (PA/SE fabricable)
+    // --- Parametros MRP / aprovisionamiento (Sage dbo.Articulos) ---
+    PuntoPedido: Double;             // Articulos.PuntoPedido
+    LotePedido: Integer;             // Articulos.LotePedido (lote/multiplo de compra)
+    LoteFabricacion: Integer;        // Articulos.LoteFabricacion
+    UsarStockSeguridad: Boolean;     // Articulos.UsarStockSeg
+    PctStockSeguridad: Integer;      // Articulos.[%StockSeguridad]
+    TiempoMedioReposicion: Double;   // Articulos.TiempoMedioReposicion (lead time compra, dias)
+    CodigoProveedor: string;         // Articulos.CodigoProveedor (proveedor preferente)
   end;
 
   // ==========================================================================

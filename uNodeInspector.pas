@@ -49,8 +49,6 @@ type
     lblTitle: TLabel;
     lblSubtitle: TLabel;
     shpHeaderLine: TShape;
-    chkDarkMode: TCheckBox;
-    procedure chkDarkModeClick(Sender: TObject);
     procedure btnEditFieldsClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -59,11 +57,14 @@ type
     procedure btnCancelClick(Sender: TObject);
   private
     FNodeData: TNodeData;
+    FFechaInicioPlan: TDateTime;  // StartTime del TNode (planificacion)
+    FFechaFinPlan: TDateTime;     // EndTime del TNode (planificacion)
     FReadOnly: Boolean;
     FCustomFieldDefs: TCustomFieldDefs;
     FCustomRows: TArray<TcxEditorRow>;
     FCatCustom: TcxCategoryRow;
     FStyleReadOnly: TcxStyle;
+    FStyleEditable: TcxStyle;
     FStyleRequired: TcxStyle;
     // Category rows
     FCatIdentitat: TcxCategoryRow;
@@ -84,6 +85,8 @@ type
     FRowNumeroOF: TcxEditorRow;
     FRowSerieFab: TcxEditorRow;
     FRowNumeroTrabajo: TcxEditorRow;
+    FRowFechaInicioPlan: TcxEditorRow;
+    FRowFechaFinPlan: TcxEditorRow;
     FRowFechaEntrega: TcxEditorRow;
     FRowFechaNecesaria: TcxEditorRow;
     FRowCodigoArticulo: TcxEditorRow;
@@ -123,7 +126,9 @@ type
       const AItems: array of string; AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
     function AddColorRow(AParent: TcxCategoryRow; const ACaption: string; AValue: TColor;
       AReadOnly: Boolean = False; AGrid: TcxVerticalGrid = nil): TcxEditorRow;
-    procedure ApplyDarkMode(ADark: Boolean);
+    // Aplica colores de fondo a una fila: columna 0 (caption) SIEMPRE gris claro;
+    // columna 1 (valor) gris si read-only, blanco si editable.
+    procedure ApplyRowStyle(ARow: TcxEditorRow; AIsReadOnly: Boolean);
     procedure BuildCustomRows;
     procedure ApplyCustomFields;
     procedure ApplyToNodeData;
@@ -135,8 +140,17 @@ type
     function EstadoToStr(E: TNodoEstado): string;
     function StrToEstado(const S: string): TNodoEstado;
   public
+    // AFechaInicioPlan/AFechaFinPlan son las fechas de PLANIFICACION del Gantt
+    // (StartTime/EndTime del TNode, que no viven en TNodeData). Entran y, si el
+    // usuario las edita, salen por var. Pasar 0 si el llamador no las gestiona.
+    class function Execute(var ANodeData: TNodeData;
+      var AFechaInicioPlan, AFechaFinPlan: TDateTime;
+      AReadOnly: Boolean = False;
+      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean; overload;
+    // Sobrecarga para llamadores que NO gestionan las fechas de planificacion
+    // (visores read-only, LoteViewer...). Las filas Inicio/Final saldran a 0.
     class function Execute(var ANodeData: TNodeData; AReadOnly: Boolean = False;
-      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean;
+      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean; overload;
   end;
 
 var
@@ -149,6 +163,7 @@ implementation
 { TfrmNodeInspector }
 
 class function TfrmNodeInspector.Execute(var ANodeData: TNodeData;
+  var AFechaInicioPlan, AFechaFinPlan: TDateTime;
   AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs): Boolean;
 var
   F: TfrmNodeInspector;
@@ -156,6 +171,8 @@ begin
   F := TfrmNodeInspector.Create(Application);
   try
     F.FNodeData := ANodeData;
+    F.FFechaInicioPlan := AFechaInicioPlan;
+    F.FFechaFinPlan := AFechaFinPlan;
     F.FReadOnly := AReadOnly;
     F.FCustomFieldDefs := ACustomFieldDefs;
 
@@ -178,17 +195,38 @@ begin
 
     Result := F.ShowModal = mrOk;
     if Result then
+    begin
       ANodeData := F.FNodeData;
+      AFechaInicioPlan := F.FFechaInicioPlan;
+      AFechaFinPlan := F.FFechaFinPlan;
+    end;
   finally
     F.Free;
   end;
 end;
 
+class function TfrmNodeInspector.Execute(var ANodeData: TNodeData;
+  AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs): Boolean;
+var
+  Ini, Fin: TDateTime;
+begin
+  Ini := 0;
+  Fin := 0;
+  Result := Execute(ANodeData, Ini, Fin, AReadOnly, ACustomFieldDefs);
+end;
+
 procedure TfrmNodeInspector.FormCreate(Sender: TObject);
 begin
+  // Fondo gris claro para celdas de SOLO LECTURA (columna valor read-only y la
+  // columna 0 de caption, que siempre va en gris).
   FStyleReadOnly := TcxStyle.Create(Self);
-  FStyleReadOnly.Color := $00F0F0F0;       // gris clar de fons
+  FStyleReadOnly.Color := $00F0F0F0;        // gris clar de fons
   FStyleReadOnly.Font.Color := clGrayText;  // text gris
+
+  // Fondo blanco para celdas EDITABLES (columna valor de escritura).
+  FStyleEditable := TcxStyle.Create(Self);
+  FStyleEditable.Color := clWhite;
+  FStyleEditable.Font.Color := clWindowText;
 
   FStyleRequired := TcxStyle.Create(Self);
   FStyleRequired.Font.Style := [fsBold];
@@ -198,6 +236,7 @@ end;
 procedure TfrmNodeInspector.FormDestroy(Sender: TObject);
 begin
   FStyleReadOnly.Free;
+  FStyleEditable.Free;
   FStyleRequired.Free;
 end;
 
@@ -208,6 +247,17 @@ begin
 end;
 
 { --- Row creation helpers --- }
+
+procedure TfrmNodeInspector.ApplyRowStyle(ARow: TcxEditorRow; AIsReadOnly: Boolean);
+begin
+  // Columna 0 (caption): SIEMPRE gris claro.
+  ARow.Styles.Header := FStyleReadOnly;
+  // Columna 1 (valor): gris si solo lectura, blanco si editable.
+  if AIsReadOnly then
+    ARow.Styles.Content := FStyleReadOnly
+  else
+    ARow.Styles.Content := FStyleEditable;
+end;
 
 function TfrmNodeInspector.AddCategory(const ACaption: string; AGrid: TcxVerticalGrid): TcxCategoryRow;
 var
@@ -229,8 +279,7 @@ begin
   Result.Properties.EditPropertiesClassName := 'TcxTextEditProperties';
   (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := AReadOnly or FReadOnly;
   Result.Properties.Value := AValue;
-  if AReadOnly or FReadOnly then
-    Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, AReadOnly or FReadOnly);
 end;
 
 function TfrmNodeInspector.AddIntRow(AParent: TcxCategoryRow;
@@ -249,8 +298,7 @@ begin
   Props.MaxValue := MaxInt;
   Props.ReadOnly := AReadOnly or FReadOnly;
   Result.Properties.Value := AValue;
-  if AReadOnly or FReadOnly then
-    Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, AReadOnly or FReadOnly);
 end;
 
 function TfrmNodeInspector.AddFloatRow(AParent: TcxCategoryRow;
@@ -270,8 +318,7 @@ begin
   Props.Increment := 0.1;
   Props.ReadOnly := AReadOnly or FReadOnly;
   Result.Properties.Value := AValue;
-  if AReadOnly or FReadOnly then
-    Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, AReadOnly or FReadOnly);
 end;
 
 function TfrmNodeInspector.AddBoolRow(AParent: TcxCategoryRow;
@@ -289,8 +336,7 @@ begin
   Props.DisplayUnchecked := 'No';
   Props.ReadOnly := AReadOnly or FReadOnly;
   Result.Properties.Value := AValue;
-  if AReadOnly or FReadOnly then
-    Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, AReadOnly or FReadOnly);
 end;
 
 function TfrmNodeInspector.AddDateRow(AParent: TcxCategoryRow;
@@ -310,8 +356,7 @@ begin
   Props.DateButtons := [btnNow, btnClear];
   Props.Kind := ckDateTime;
   Result.Properties.Value := AValue;
-  if AReadOnly or FReadOnly then
-    Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, AReadOnly or FReadOnly);
 end;
 
 function TfrmNodeInspector.AddComboRow(AParent: TcxCategoryRow;
@@ -332,8 +377,7 @@ begin
   for I := Low(AItems) to High(AItems) do
     Props.Items.Add(AItems[I]);
   Result.Properties.Value := AValue;
-  if AReadOnly or FReadOnly then
-    Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, AReadOnly or FReadOnly);
 end;
 
 function TfrmNodeInspector.AddColorRow(AParent: TcxCategoryRow;
@@ -347,7 +391,7 @@ begin
   Result.Properties.EditPropertiesClassName := 'TcxTextEditProperties';
   (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := True;
   Result.Properties.Value := '$' + IntToHex(AValue, 6);
-  Result.Styles.Content := vg.Styles.Category;
+  ApplyRowStyle(Result, True);  // el color siempre es de solo lectura
 end;
 
 { --- Build all rows --- }
@@ -401,6 +445,8 @@ begin
 
     // ── Fechas ──
     FCatDates := AddCategory('Fechas');
+    FRowFechaInicioPlan := AddDateRow(FCatDates, 'Fecha/Hora Inicio', FFechaInicioPlan);
+    FRowFechaFinPlan    := AddDateRow(FCatDates, 'Fecha/Hora Final', FFechaFinPlan);
     FRowFechaEntrega    := AddDateRow(FCatDates, 'Fecha Entrega', D.FechaEntrega);
     FRowFechaNecesaria  := AddDateRow(FCatDates, 'Fecha Necesaria', D.FechaNecesaria);
 
@@ -605,9 +651,8 @@ begin
       if D.Tooltip <> '' then
         Row.Properties.Hint := D.Tooltip;
 
-      // Estilo visual ReadOnly
-      if D.ReadOnly then
-        Row.Styles.Content := FStyleReadOnly;
+      // El color de fondo (columna 0 gris + columna 1 segun read-only) ya lo ha
+      // aplicado el helper AddXxxRow via ApplyRowStyle con D.ReadOnly.
 
       // Estilo visual Required (negreta + color al header)
       if D.Required then
@@ -672,55 +717,11 @@ end;
 
 { --- Apply changes back --- }
 
-procedure TfrmNodeInspector.chkDarkModeClick(Sender: TObject);
-begin
-  ApplyDarkMode(chkDarkMode.Checked);
-end;
-
-procedure TfrmNodeInspector.ApplyDarkMode(ADark: Boolean);
-const
-  DARK_BG     = $00302C28;  // fons fosc
-  DARK_HEADER = $003C3836;
-  DARK_TEXT   = $00F0F0F0;
-  DARK_SUB    = $00A0A0A0;
-  DARK_LINE   = $00504840;
-  LIGHT_BG    = clWhite;
-  LIGHT_HEADER = clWhite;
-  LIGHT_TITLE  = 4474440;
-begin
-  if ADark then
-  begin
-    LookAndFeel.SkinName := 'Office2019Black';
-    // Header
-    pnlHeader.Color := DARK_HEADER;
-    lblTitle.Font.Color := DARK_TEXT;
-    lblSubtitle.Font.Color := DARK_SUB;
-    shpHeaderLine.Brush.Color := DARK_LINE;
-    chkDarkMode.Font.Color := DARK_TEXT;
-    // Bottom
-    pnlBottom.Color := DARK_HEADER;
-    // Form
-    Color := DARK_BG;
-  end
-  else
-  begin
-    LookAndFeel.SkinName := 'Office2019Colorful';
-    // Header
-    pnlHeader.Color := LIGHT_HEADER;
-    lblTitle.Font.Color := LIGHT_TITLE;
-    lblSubtitle.Font.Color := clGray;
-    shpHeaderLine.Brush.Color := 15061727;
-    chkDarkMode.Font.Color := clWindowText;
-    // Bottom
-    pnlBottom.Color := clBtnFace;
-    // Form
-    Color := clBtnFace;
-  end;
-end;
-
 procedure TfrmNodeInspector.ApplyToNodeData;
 begin
   FNodeData.Operacion           := GetRowText(FRowOperacion);
+  FFechaInicioPlan              := GetRowDate(FRowFechaInicioPlan);
+  FFechaFinPlan                 := GetRowDate(FRowFechaFinPlan);
   FNodeData.FechaEntrega        := GetRowDate(FRowFechaEntrega);
   FNodeData.FechaNecesaria      := GetRowDate(FRowFechaNecesaria);
   FNodeData.Stock               := GetRowFloat(FRowStock);

@@ -10,6 +10,11 @@ const
   CENTRE_ID_SIN_CENTRO   = -1;
   CENTRE_ID_CENTRO_EXTERNO = -2;
 
+  // Codigos de los centros de sistema (FS_PL_Center, sembrados en V065). Son los
+  // CodigoCentro reales; el scheduler y la propuesta MRP los resuelven por codigo.
+  CENTRO_SIN_CENTRO = '__SINCENTRO__';
+  CENTRO_EXTERNO    = '__EXTERNO__';
+
 type
   TCentreTreball = record
     Id: Integer;
@@ -148,6 +153,11 @@ type
     Nivel1Caption: string;          // etiqueta para UI
     Nivel2ClaveERP: string;         // padre Nivel 2 (OT / LINEA / TAREA)
     Nivel2Caption: string;          // etiqueta para UI
+
+    // True si la OF padre (Nivel 1) ya esta CERRADA en el ERP. El nodo no
+    // deberia seguir planificado si su OF se ha cerrado. Lo calcula el conector
+    // (EstadoERP del Nivel 1 distinto de '0'/'1'). Por defecto False.
+    EstadoOFCerrada: Boolean;
 
     CustomFields: TArray<TCustomFieldValue>;
   end;
