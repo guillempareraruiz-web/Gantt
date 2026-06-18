@@ -65,6 +65,7 @@ type
     FAlertRulesRepo: TAlertRulesRepo;
     FSnapshotRepo: TSnapshotRepo;
     procedure BuildConnectionString;
+    function GetConnectionString: string;
     procedure SetCodigoEmpresa(AValue: SmallInt);
   public
     procedure AfterConstruction; override;
@@ -146,6 +147,12 @@ type
     property UserName: string read FUserName write FUserName;
     property Password: string read FPassword write FPassword;
     property UseWindowsAuth: Boolean read FUseWindowsAuth write FUseWindowsAuth;
+
+    // Cadena de conexion completa (incluye password si es autenticacion SQL)
+    // reconstruida desde la configuracion. La deben usar los hilos que abren su
+    // propia TADOConnection, en lugar de clonar ADOConnection.ConnectionString
+    // (que OLE DB devuelve sin el password).
+    property ConnectionStringForThreads: string read GetConnectionString;
   end;
 
 var
@@ -727,17 +734,34 @@ begin
   end;
 end;
 
-procedure TDMPlanner.BuildConnectionString;
-var
-  CS: string;
+function TDMPlanner.GetConnectionString: string;
 begin
-  CS := 'Provider=MSOLEDBSQL.1;Data Source=' + FServer +
-        ';Initial Catalog=' + FDatabase;
+  // Cadena de conexion del Planner construida desde SU PROPIA configuracion
+  // ([Database] del INI). No se mezcla con la del ERP: aunque compartan servidor,
+  // el catalogo (BD de las tablas FS_PL_*) es distinto del de Sage.
+  //
+  // Si no hay servidor configurado, la conexion principal se abrio con la cadena
+  // de diseno del DFM; devolvemos la cadena viva en lugar de generar un Data
+  // Source vacio (-> "Named Pipes: error 2").
+  if Trim(FServer) = '' then
+    Exit(ADOConnection.ConnectionString);
+
+  Result := 'Provider=MSOLEDBSQL.1;Data Source=' + FServer +
+            ';Initial Catalog=' + FDatabase;
   if FUseWindowsAuth then
-    CS := CS + ';Integrated Security=SSPI'
+    Result := Result + ';Integrated Security=SSPI'
   else
-    CS := CS + ';User ID=' + FUserName + ';Password=' + FPassword;
-  ADOConnection.ConnectionString := CS;
+    // Persist Security Info=True: necesario para que el password sobreviva al
+    // leer ConnectionString despues de conectar (lo necesitan los hilos que
+    // clonan la conexion, p.ej. la carga del Backlog). Sin esto, OLE DB elimina
+    // el password al exportar la cadena y la reconexion en el hilo falla.
+    Result := Result + ';User ID=' + FUserName + ';Password=' + FPassword +
+              ';Persist Security Info=True';
+end;
+
+procedure TDMPlanner.BuildConnectionString;
+begin
+  ADOConnection.ConnectionString := GetConnectionString;
 end;
 
 function TDMPlanner.Connect: TConnectorResult;

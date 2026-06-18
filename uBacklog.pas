@@ -295,7 +295,12 @@ type
     function CollectSelectedInputs: TArray<TSchedInput>;
     function BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
     function ExplodeToOpInputs(ARawId: Int64; ANivel: Integer): TArray<TSchedInput>;
-    procedure CommitScheduling(const AResult: TSchedResult);
+    procedure CommitScheduling(const AResult: TSchedResult;
+      out ACreados: TArray<TPair<Integer, Integer>>);
+    // Aplica la agrupacion elegida en el wizard sobre los nodos recien creados,
+    // reutilizando el motor de Lotes (V057). ACreados = (NodeId, CenterId).
+    procedure AplicarAgrupacion(const AParams: TSchedParams;
+      const ACreados: TArray<TPair<Integer, Integer>>);
 
     procedure ApplyImpactoVisible(AVisible: Boolean);
     procedure ApplyFiltrosVisible(AVisible: Boolean);
@@ -319,7 +324,8 @@ implementation
 uses
   uDMPlanner, uLogin, uGanttTypes, uCentreCalendar, uBacklogCustomCols,
   uBusyDialog,
-  uBacklogSchedParams, uBacklogSchedPreview, uUserPrefs, uGenerarNodosDemo,
+  uBacklogSchedParams, uBacklogSchedWizard, uBacklogSchedPreview, uUserPrefs,
+  uGenerarNodosDemo,
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
   uFormulaArticuloViewer, Main,
   uErpReader, uErpReaderFactory, uSyncBacklogPreview, uOFViewer;
@@ -714,7 +720,8 @@ begin
   end;
 end;
 
-procedure TfrmBacklog.CommitScheduling(const AResult: TSchedResult);
+procedure TfrmBacklog.CommitScheduling(const AResult: TSchedResult;
+  out ACreados: TArray<TPair<Integer, Integer>>);
 var
   Cmd: TADOCommand;
   Q: TADOQuery;
@@ -725,6 +732,7 @@ var
   DurStr, FIniStr, FFinStr, CenterStr: string;
   UdsStr, FNecStr, FEntStr, TufStr: string;
   NumCreats: Integer;
+  Creados: TList<TPair<Integer, Integer>>;
 
   function QS(const S: string): string;
   begin
@@ -745,6 +753,8 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   PID := IntToStr(DMPlanner.CurrentProjectId);
   NumCreats := 0;
+  Creados := TList<TPair<Integer, Integer>>.Create;
+  try
 
   DMPlanner.ADOConnection.BeginTrans;
   try
@@ -838,6 +848,7 @@ begin
         Cmd.Free;
       end;
 
+      Creados.Add(TPair<Integer, Integer>.Create(NodeId, Item.CenterId));
       Inc(NumCreats);
     end;
 
@@ -850,10 +861,99 @@ begin
     end;
   end;
 
+    ACreados := Creados.ToArray;
+  finally
+    Creados.Free;
+  end;
+
   ShowMessage(Format(
     'Planificacion confirmada: %d nodos creados en el plan actual.' + sLineBreak +
     'El Backlog se recargara.',
     [NumCreats]));
+end;
+
+procedure TfrmBacklog.AplicarAgrupacion(const AParams: TSchedParams;
+  const ACreados: TArray<TPair<Integer, Integer>>);
+var
+  PorCentro: TDictionary<Integer, TList<Integer>>;
+  P: TPair<Integer, Integer>;
+  Par: TPair<Integer, TList<Integer>>;
+  IdsTodos: TList<Integer>;
+  CentroDestId: Integer;
+  C: TCentreTreball;
+  Cmd: TADOCommand;
+
+  procedure CrearLoteSiProcede(const AIds: TArray<Integer>);
+  begin
+    // CrearLote exige >=2 nodos y mismo centro; con 1 no hay nada que agrupar.
+    if Length(AIds) >= 2 then
+      DMPlanner.CrearLote(AIds);
+  end;
+
+begin
+  if AParams.Agrupacion = agNinguna then Exit;
+  if Length(ACreados) = 0 then Exit;
+
+  if AParams.Agrupacion = agPorCentro then
+  begin
+    // Un lote por cada centro con 2+ nodos.
+    PorCentro := TDictionary<Integer, TList<Integer>>.Create;
+    try
+      for P in ACreados do
+      begin
+        if not PorCentro.ContainsKey(P.Value) then
+          PorCentro.Add(P.Value, TList<Integer>.Create);
+        PorCentro[P.Value].Add(P.Key);
+      end;
+      for Par in PorCentro do
+        CrearLoteSiProcede(Par.Value.ToArray);
+    finally
+      for Par in PorCentro do
+        Par.Value.Free;
+      PorCentro.Free;
+    end;
+    Exit;
+  end;
+
+  // agTodo: un unico lote con todos los nodos.
+  // Si caen en varios centros, primero los reubicamos al centro destino elegido
+  // por el usuario (CrearLote exige mismo centro). El reflow del Gantt afina la
+  // posicion al recargar; aqui solo reasignamos CenterId.
+  IdsTodos := TList<Integer>.Create;
+  try
+    CentroDestId := 0;
+    if Trim(AParams.CentroDestinoAgrupado) <> '' then
+      if (DMPlanner.CentresRepo <> nil) then
+        for C in DMPlanner.CentresRepo.GetAll do
+          if SameText(Trim(C.CodiCentre), Trim(AParams.CentroDestinoAgrupado)) then
+          begin
+            CentroDestId := C.Id;
+            Break;
+          end;
+
+    for P in ACreados do
+    begin
+      IdsTodos.Add(P.Key);
+      // Reubicar al centro destino si difiere y lo conocemos.
+      if (CentroDestId > 0) and (P.Value <> CentroDestId) then
+      begin
+        Cmd := TADOCommand.Create(nil);
+        try
+          Cmd.Connection := DMPlanner.ADOConnection;
+          Cmd.CommandText :=
+            'UPDATE FS_PL_Node SET CenterId = ' + IntToStr(CentroDestId) +
+            ' WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+            ' AND NodeId = ' + IntToStr(P.Key);
+          Cmd.Execute;
+        finally
+          Cmd.Free;
+        end;
+      end;
+    end;
+    CrearLoteSiProcede(IdsTodos.ToArray);
+  finally
+    IdsTodos.Free;
+  end;
 end;
 
 procedure TfrmBacklog.Configurar1Click(Sender: TObject);
@@ -873,6 +973,7 @@ var
   Params: TSchedParams;
   SR: TSchedResult;
   MR: TModalResult;
+  Creados: TArray<TPair<Integer, Integer>>;
 begin
   if tvBacklog.Controller.SelectedRowCount = 0 then
   begin
@@ -899,7 +1000,9 @@ begin
   Params := Default(TSchedParams);
   while True do
   begin
-    if not TfrmBacklogSchedParams.Execute(Params) then Exit;
+    // Asistente visual: analiza la seleccion y deja que el usuario decida COMO
+    // planificar (granularidad/agrupacion + direccion + fecha + ajustes).
+    if not TfrmBacklogSchedWizard.Execute(Inputs, Params) then Exit;
 
     // Validacion: la fecha base no puede ser anterior a la fecha de bloqueo
     // del proyecto activo (si la tiene). La fecha de bloqueo marca el corte
@@ -924,7 +1027,9 @@ begin
       mrOk:
         begin
           try
-            CommitScheduling(SR);
+            CommitScheduling(SR, Creados);
+            // Agrupacion elegida en el wizard (via Lotes V057), si procede.
+            AplicarAgrupacion(Params, Creados);
           except
             on E: Exception do
             begin
@@ -961,7 +1066,14 @@ begin
     Exit;
   end;
   try
-    Reader.EnsureConnected;
+    // La conexion al ERP puede tardar: feedback visual con el dialogo Busy.
+    // El reader crea su propia conexion ADO, asi que es seguro hacerlo en el
+    // hilo de trabajo de RunBusy (que inicializa COM y propaga la excepcion).
+    uBusyDialog.RunBusy(Self, 'Conectando con el ERP...',
+      procedure
+      begin
+        Reader.EnsureConnected;
+      end);
   except
     on E: Exception do
     begin
@@ -1653,7 +1765,10 @@ var
 begin
   ClearRows;
   SQLText := BuildSQL;
-  ConnStr := DMPlanner.ADOConnection.ConnectionString;
+  // Reconstruir la cadena desde la configuracion (incluye el password en auth
+  // SQL). NO clonar ADOConnection.ConnectionString: OLE DB la devuelve sin el
+  // password una vez conectado, y el ThConn.Open del hilo fallaria con auth SQL.
+  ConnStr := DMPlanner.ConnectionStringForThreads;
 
   // La query (parte lenta) se ejecuta en un thread con conexion ADO propia y
   // cursor client-side: asi se desconecta y se puede leer desde el hilo

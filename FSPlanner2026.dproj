@@ -247,6 +247,15 @@
             <Form>frmBacklogSchedParams</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uBacklogSchedWizard.pas">
+            <Form>frmBacklogSchedWizard</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uPlanAnalisisData.pas"/>
+        <DCCReference Include="uPlanAnalisis.pas">
+            <Form>frmPlanAnalisis</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uBacklogSchedPreview.pas">
             <Form>frmBacklogSchedPreview</Form>
             <FormType>dfm</FormType>
@@ -412,10 +421,6 @@
         </DCCReference>
         <DCCReference Include="uRttiGridFiller.pas"/>
         <DCCReference Include="uStockProjection.pas"/>
-        <DCCReference Include="uMrpTypes.pas"/>
-        <DCCReference Include="uMrpParamRepo.pas"/>
-        <DCCReference Include="uMrpRecommender.pas"/>
-        <DCCReference Include="uMrpPropuestaBacklog.pas"/>
         <DCCReference Include="uArticuloPicker.pas">
             <Form>frmArticuloPicker</Form>
         </DCCReference>
@@ -493,10 +498,6 @@
             <Form>frmAlertConfig</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uGanttHistoryTimeline.pas">
-            <Form>frmGanttHistoryTimeline</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -519,13 +520,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

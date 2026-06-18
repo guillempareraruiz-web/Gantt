@@ -16,6 +16,7 @@ uses
   uHeatmapCargaCentro,
   uHeatmapCargaOperario,
   uHeatmapEntregasVsCarga,
+  uPlanAnalisis,
   uHistogramasOperarios,
   uCustomFieldDefs, uCustomFieldEditor, uCustomColsManager,
   uPlanningRules, uPlanningRulesEditor,
@@ -84,6 +85,7 @@ type
     DisenadorNodos1: TMenuItem;
     ConfigHint1: TMenuItem;
     Vistas1: TMenuItem;
+    AnalisisPlan1: TMenuItem;
     Kanban1: TMenuItem;
     DispatchList1: TMenuItem;
     Backlog1: TMenuItem;
@@ -213,6 +215,7 @@ type
     procedure HeatmapCargaCentro1Click(Sender: TObject);
     procedure HeatmapCargaOperario1Click(Sender: TObject);
     procedure HeatmapEntregasVsCarga1Click(Sender: TObject);
+    procedure AnalisisPlan1Click(Sender: TObject);
     procedure HistogramasOperarios1Click(Sender: TObject);
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
@@ -598,6 +601,11 @@ end;
 procedure TForm1.HeatmapEntregasVsCarga1Click(Sender: TObject);
 begin
   TfrmHeatmapEntregasVsCarga.Execute;
+end;
+
+procedure TForm1.AnalisisPlan1Click(Sender: TObject);
+begin
+  TfrmPlanAnalisis.Ejecutar;
 end;
 
 procedure TForm1.HistogramasOperarios1Click(Sender: TObject);

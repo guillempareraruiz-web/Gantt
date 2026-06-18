@@ -1,9 +1,10 @@
 object frmBacklogSchedPreview: TfrmBacklogSchedPreview
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Preview de auto-planificaci'#243'n'
-  ClientHeight = 560
-  ClientWidth = 1000
+  ClientHeight = 580
+  ClientWidth = 1220
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -17,7 +18,7 @@ object frmBacklogSchedPreview: TfrmBacklogSchedPreview
     Left = 0
     Top = 0
     Width = 1000
-    Height = 70
+    Height = 96
     Align = alTop
     BevelOuter = bvNone
     Color = 3553567
@@ -26,7 +27,7 @@ object frmBacklogSchedPreview: TfrmBacklogSchedPreview
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 260
+      Width = 207
       Height = 25
       Caption = 'Preview de planificaci'#243'n'
       Font.Charset = DEFAULT_CHARSET
@@ -36,18 +37,12 @@ object frmBacklogSchedPreview: TfrmBacklogSchedPreview
       Font.Style = []
       ParentFont = False
     end
-    object lblKPIs: TLabel
+    object pbKpis: TPaintBox
       Left = 16
-      Top = 36
-      Width = 960
-      Height = 15
-      Caption = 'Resumen:'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = 14869218
-      Font.Height = -12
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
+      Top = 42
+      Width = 1188
+      Height = 46
+      OnPaint = pbKpisPaint
     end
   end
   object pnlBottom: TPanel
@@ -82,30 +77,40 @@ object frmBacklogSchedPreview: TfrmBacklogSchedPreview
       Top = 6
       Width = 76
       Height = 28
-      Caption = 'Cancelar'
       Cancel = True
+      Caption = 'Cancelar'
       ModalResult = 2
       TabOrder = 2
     end
   end
   object grdPreview: TcxGrid
     Left = 0
-    Top = 70
+    Top = 96
     Width = 1000
-    Height = 450
+    Height = 424
     Align = alClient
     TabOrder = 2
     object tvPreview: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
+      ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
       DataController.Summary.SummaryGroups = <>
       OptionsCustomize.ColumnsQuickCustomization = True
       OptionsData.Deleting = False
-      OptionsData.Inserting = False
       OptionsData.Editing = False
-      OptionsView.GroupByBox = False
+      OptionsData.Inserting = False
+      OptionsView.GroupByBox = True
       OptionsView.Indicator = True
+      OnCustomDrawCell = tvPreviewCustomDrawCell
+      object colOF: TcxGridColumn
+        Caption = 'OF'
+        Width = 90
+      end
+      object colOT: TcxGridColumn
+        Caption = 'OT'
+        Width = 80
+      end
       object colDoc: TcxGridColumn
         Caption = 'Documento'
         Width = 140
@@ -141,6 +146,11 @@ object frmBacklogSchedPreview: TfrmBacklogSchedPreview
       object colObs: TcxGridColumn
         Caption = 'Observaciones'
         Width = 250
+      end
+      object colStatusVal: TcxGridColumn
+        Caption = 'St'
+        Visible = False
+        Options.Grouping = False
       end
     end
     object lvPreview: TcxGridLevel

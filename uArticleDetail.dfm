@@ -17,17 +17,6 @@ object frmArticleDetail: TfrmArticleDetail
   OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 15
-  object splitLog: TSplitter
-    Left = 0
-    Top = 549
-    Width = 1116
-    Height = 5
-    Cursor = crVSplit
-    Align = alBottom
-    Visible = False
-    ExplicitTop = 550
-    ExplicitWidth = 100
-  end
   object pnlTop: TPanel
     Left = 0
     Top = 70
@@ -35,82 +24,105 @@ object frmArticleDetail: TfrmArticleDetail
     Height = 51
     Align = alTop
     BevelOuter = bvNone
-    Color = 9404016
+    Color = 6313290
     ParentBackground = False
     TabOrder = 0
+    ExplicitTop = 67
     DesignSize = (
       1116
       51)
     object lblArticulo: TLabel
       Left = 12
       Top = 8
-      Width = 45
-      Height = 15
+      Width = 43
+      Height = 13
       Caption = 'Art'#237'culo:'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clSilver
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
     end
     object lblDescripcion: TLabel
-      Left = 199
-      Top = 6
-      Width = 67
+      Left = 70
+      Top = 30
+      Width = 346
       Height = 15
       AutoSize = False
       Caption = 'Desc'
       Font.Charset = DEFAULT_CHARSET
-      Font.Color = clNavy
+      Font.Color = clLime
       Font.Height = -12
       Font.Name = 'Segoe UI'
       Font.Style = [fsBold]
       ParentFont = False
     end
     object lblAlmacenes: TLabel
-      Left = 314
-      Top = 6
-      Width = 61
-      Height = 15
+      Left = 552
+      Top = 5
+      Width = 57
+      Height = 13
+      Anchors = [akTop, akRight]
       Caption = 'Almacenes:'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clSilver
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
     end
     object lblFecha: TLabel
-      Left = 748
-      Top = 6
-      Width = 96
-      Height = 15
+      Left = 825
+      Top = 3
+      Width = 92
+      Height = 13
+      Anchors = [akTop, akRight]
       Caption = 'Fecha proyecci'#243'n:'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clSilver
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
     end
     object edArticulo: TEdit
-      Left = 12
-      Top = 22
+      Left = 69
+      Top = 6
       Width = 180
       Height = 23
       TabOrder = 0
     end
     object btnBuscarArticulo: TButton
-      Left = 197
-      Top = 21
-      Width = 30
-      Height = 25
+      Left = 219
+      Top = 8
+      Width = 28
+      Height = 19
       Caption = '...'
       TabOrder = 1
       OnClick = btnBuscarArticuloClick
     end
     object ccbAlmacenes: TcxCheckComboBox
-      Left = 314
-      Top = 22
+      Left = 552
+      Top = 20
+      Anchors = [akTop, akRight]
       Properties.Items = <>
       TabOrder = 2
-      Width = 400
+      Width = 265
     end
     object dtFecha: TDateTimePicker
-      Left = 748
-      Top = 22
+      Left = 825
+      Top = 19
       Width = 130
       Height = 23
+      Anchors = [akTop, akRight]
       Date = 44562.000000000000000000
       Time = 44562.000000000000000000
       TabOrder = 3
     end
     object btnCalcular: TButton
-      Left = 990
-      Top = 9
+      Left = 989
+      Top = 18
       Width = 116
       Height = 26
       Anchors = [akTop, akRight]
@@ -119,21 +131,12 @@ object frmArticleDetail: TfrmArticleDetail
       TabOrder = 4
       OnClick = btnCalcularClick
     end
-    object btnToggleLog: TButton
-      Left = 900
-      Top = 6
-      Width = 84
-      Height = 25
-      Caption = 'Mostrar log'
-      TabOrder = 5
-      OnClick = btnToggleLogClick
-    end
     object Edit1: TEdit
-      Left = 72
-      Top = 0
+      Left = 264
+      Top = 6
       Width = 121
       Height = 23
-      TabOrder = 6
+      TabOrder = 5
       Text = 'AUT0801KIT'
     end
   end
@@ -142,26 +145,21 @@ object frmArticleDetail: TfrmArticleDetail
     Left = 3
     Top = 124
     Width = 1110
-    Height = 422
+    Height = 612
     Align = alClient
     TabOrder = 1
-    Properties.ActivePage = tabOFs
+    Properties.ActivePage = tabATP
     Properties.CustomButtons.Buttons = <>
     Properties.TabHeight = 28
     OnChange = pgcTabsChange
-    ExplicitLeft = 0
-    ExplicitTop = 121
-    ExplicitWidth = 1116
-    ExplicitHeight = 428
-    ClientRectBottom = 418
+    ExplicitHeight = 422
+    ClientRectBottom = 608
     ClientRectLeft = 4
     ClientRectRight = 1106
     ClientRectTop = 34
     object tabDisponibilidad: TcxTabSheet
       Caption = 'Disponibilidad fabricaci'#243'n'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlDispTop: TPanel
         Left = 0
         Top = 0
@@ -170,6 +168,9 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
+        DesignSize = (
+          1102
+          70)
         object lblDispCantidad: TLabel
           Left = 12
           Top = 12
@@ -183,19 +184,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 80
           Height = 15
           Caption = 'Fecha objetivo:'
-        end
-        object lblDispVeredicto: TLabel
-          Left = 480
-          Top = 8
-          Width = 600
-          Height = 25
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -16
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
         end
         object lblDispLeyenda: TLabel
           Left = 12
@@ -232,10 +220,11 @@ object frmArticleDetail: TfrmArticleDetail
           TabOrder = 1
         end
         object btnRecargarDisp: TButton
-          Left = 970
-          Top = 38
+          Left = 988
+          Top = 6
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Calcular'
           TabOrder = 2
           OnClick = btnRecargarDispClick
@@ -246,7 +235,7 @@ object frmArticleDetail: TfrmArticleDetail
         Left = 3
         Top = 73
         Width = 1096
-        Height = 308
+        Height = 457
         Align = alClient
         Bands = <
           item
@@ -258,10 +247,7 @@ object frmArticleDetail: TfrmArticleDetail
         ScrollbarAnnotations.CustomAnnotations = <>
         TabOrder = 1
         OnCustomDrawDataCell = tlDispCustomDrawDataCell
-        ExplicitLeft = 0
-        ExplicitTop = 70
-        ExplicitWidth = 1102
-        ExplicitHeight = 314
+        ExplicitHeight = 308
         object colDispArticulo: TcxTreeListColumn
           Caption.Text = 'Art'#237'culo'
           Width = 180
@@ -344,12 +330,42 @@ object frmArticleDetail: TfrmArticleDetail
           Summary.GroupFooterSummaryItems = <>
         end
       end
+      object Panel1: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblDispVeredicto: TLabel
+          AlignWithMargins = True
+          Left = 3
+          Top = 3
+          Width = 1096
+          Height = 35
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -16
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 62
+          ExplicitWidth = 600
+          ExplicitHeight = 25
+        end
+      end
     end
     object tabDondeUsa: TcxTabSheet
       Caption = 'D'#243'nde se usa'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlDondeUsaTop: TPanel
         Left = 0
         Top = 0
@@ -358,24 +374,15 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
-        object lblDondeUsaResumen: TLabel
-          Left = 12
-          Top = 12
-          Width = 600
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-        end
+        DesignSize = (
+          1102
+          40)
         object btnRecargarDondeUsa: TButton
-          Left = 983
-          Top = 3
+          Left = 969
+          Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 0
           OnClick = btnRecargarDondeUsaClick
@@ -386,13 +393,10 @@ object frmArticleDetail: TfrmArticleDetail
         Left = 3
         Top = 43
         Width = 1096
-        Height = 338
+        Height = 487
         Align = alClient
         TabOrder = 1
-        ExplicitLeft = 0
-        ExplicitTop = 40
-        ExplicitWidth = 1102
-        ExplicitHeight = 344
+        ExplicitHeight = 338
         object grdDondeUsaView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -410,20 +414,54 @@ object frmArticleDetail: TfrmArticleDetail
           GridView = grdDondeUsaView
         end
       end
+      object Panel2: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblDondeUsaResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1091
+          Height = 35
+          Margins.Left = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -15
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 20
+          ExplicitTop = 20
+          ExplicitWidth = 600
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabHistorico: TcxTabSheet
       Caption = 'Hist'#243'rico'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pbHistorico: TPaintBox
-        Left = 0
-        Top = 40
-        Width = 1102
-        Height = 344
+        AlignWithMargins = True
+        Left = 3
+        Top = 43
+        Width = 1096
+        Height = 487
         Align = alClient
         OnPaint = pbHistoricoPaint
-        ExplicitWidth = 1096
+        ExplicitLeft = 0
+        ExplicitTop = 40
         ExplicitHeight = 506
       end
       object pnlHistTop: TPanel
@@ -434,25 +472,15 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
+        DesignSize = (
+          1102
+          40)
         object lblHistMeses: TLabel
           Left = 12
           Top = 12
           Width = 36
           Height = 15
           Caption = 'Meses:'
-        end
-        object lblHistResumen: TLabel
-          Left = 200
-          Top = 12
-          Width = 700
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
         end
         object seHistMeses: TcxSpinEdit
           Left = 60
@@ -468,17 +496,51 @@ object frmArticleDetail: TfrmArticleDetail
           Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 1
           OnClick = btnRecargarHistClick
         end
       end
+      object Panel3: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 1
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblHistResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1086
+          Height = 35
+          Margins.Left = 8
+          Margins.Right = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 200
+          ExplicitTop = 12
+          ExplicitWidth = 700
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabOFs: TcxTabSheet
       Caption = 'OFs activas'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlOFsTop: TPanel
         Left = 0
         Top = 0
@@ -487,36 +549,32 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
-        object lblOFsResumen: TLabel
-          Left = 12
-          Top = 12
-          Width = 700
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-        end
+        DesignSize = (
+          1102
+          40)
         object btnRecargarOFs: TButton
           Left = 970
           Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 0
           OnClick = btnRecargarOFsClick
         end
       end
       object grdOFs: TcxGrid
-        Left = 0
-        Top = 40
-        Width = 1102
-        Height = 344
+        AlignWithMargins = True
+        Left = 3
+        Top = 43
+        Width = 1096
+        Height = 487
         Align = alClient
         TabOrder = 1
+        ExplicitLeft = 0
+        ExplicitTop = 40
+        ExplicitWidth = 1102
+        ExplicitHeight = 344
         object grdOFsView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -533,12 +591,45 @@ object frmArticleDetail: TfrmArticleDetail
           GridView = grdOFsView
         end
       end
+      object Panel4: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblOFsResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1086
+          Height = 35
+          Margins.Left = 8
+          Margins.Right = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 20
+          ExplicitTop = 20
+          ExplicitWidth = 700
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabProveedores: TcxTabSheet
       Caption = 'Proveedores'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlProvTop: TPanel
         Left = 0
         Top = 0
@@ -547,25 +638,15 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
+        DesignSize = (
+          1102
+          40)
         object lblProvMeses: TLabel
           Left = 12
           Top = 12
           Width = 114
           Height = 15
           Caption = 'Meses atr'#225's (0=todo):'
-        end
-        object lblProvResumen: TLabel
-          Left = 220
-          Top = 12
-          Width = 700
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
         end
         object seProvMeses: TcxSpinEdit
           Left = 134
@@ -581,18 +662,24 @@ object frmArticleDetail: TfrmArticleDetail
           Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 1
           OnClick = btnRecargarProvClick
         end
       end
       object grdProv: TcxGrid
-        Left = 0
-        Top = 40
-        Width = 1102
-        Height = 344
+        AlignWithMargins = True
+        Left = 3
+        Top = 43
+        Width = 1096
+        Height = 487
         Align = alClient
         TabOrder = 1
+        ExplicitLeft = 0
+        ExplicitTop = 40
+        ExplicitWidth = 1102
+        ExplicitHeight = 344
         object grdProvView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -609,12 +696,45 @@ object frmArticleDetail: TfrmArticleDetail
           GridView = grdProvView
         end
       end
+      object Panel5: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblProvResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1086
+          Height = 35
+          Margins.Left = 8
+          Margins.Right = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 228
+          ExplicitTop = 20
+          ExplicitWidth = 700
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabClientes: TcxTabSheet
       Caption = 'Clientes'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlCliTop: TPanel
         Left = 0
         Top = 0
@@ -623,25 +743,15 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
+        DesignSize = (
+          1102
+          40)
         object lblCliMeses: TLabel
           Left = 12
           Top = 12
           Width = 114
           Height = 15
           Caption = 'Meses atr'#225's (0=todo):'
-        end
-        object lblCliResumen: TLabel
-          Left = 220
-          Top = 12
-          Width = 700
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
         end
         object seCliMeses: TcxSpinEdit
           Left = 135
@@ -657,18 +767,24 @@ object frmArticleDetail: TfrmArticleDetail
           Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 1
           OnClick = btnRecargarCliClick
         end
       end
       object grdCli: TcxGrid
-        Left = 0
-        Top = 40
-        Width = 1102
-        Height = 344
+        AlignWithMargins = True
+        Left = 3
+        Top = 43
+        Width = 1096
+        Height = 487
         Align = alClient
         TabOrder = 1
+        ExplicitLeft = 0
+        ExplicitTop = 40
+        ExplicitWidth = 1102
+        ExplicitHeight = 344
         object grdCliView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -685,12 +801,45 @@ object frmArticleDetail: TfrmArticleDetail
           GridView = grdCliView
         end
       end
+      object Panel6: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblCliResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1086
+          Height = 35
+          Margins.Left = 8
+          Margins.Right = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 220
+          ExplicitTop = 12
+          ExplicitWidth = 700
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabMovimientos: TcxTabSheet
       Caption = 'Movimientos futuros'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlMovsFutTop: TPanel
         Left = 0
         Top = 0
@@ -699,6 +848,9 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
+        DesignSize = (
+          1102
+          40)
         object lblMovsFutDesde: TLabel
           Left = 12
           Top = 12
@@ -712,19 +864,6 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 33
           Height = 15
           Caption = 'Hasta:'
-        end
-        object lblMovsFutResumen: TLabel
-          Left = 480
-          Top = 12
-          Width = 480
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
         end
         object dtMovsFutDesde: TDateTimePicker
           Left = 60
@@ -756,8 +895,8 @@ object frmArticleDetail: TfrmArticleDetail
           OnClick = MovFutTipoChange
         end
         object chkMovFutVentas: TCheckBox
-          Left = 370
-          Top = 28
+          Left = 498
+          Top = 12
           Width = 70
           Height = 17
           Caption = 'Ventas'
@@ -767,9 +906,9 @@ object frmArticleDetail: TfrmArticleDetail
           OnClick = MovFutTipoChange
         end
         object chkMovFutOFs: TCheckBox
-          Left = 440
+          Left = 448
           Top = 12
-          Width = 60
+          Width = 44
           Height = 17
           Caption = 'OFs'
           Checked = True
@@ -782,18 +921,24 @@ object frmArticleDetail: TfrmArticleDetail
           Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 5
           OnClick = btnRecargarMovsFutClick
         end
       end
       object grdMovsFut: TcxGrid
-        Left = 0
-        Top = 40
-        Width = 1102
-        Height = 344
+        AlignWithMargins = True
+        Left = 3
+        Top = 43
+        Width = 1096
+        Height = 487
         Align = alClient
         TabOrder = 1
+        ExplicitLeft = 0
+        ExplicitTop = 40
+        ExplicitWidth = 1102
+        ExplicitHeight = 344
         object grdMovsFutView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -812,12 +957,45 @@ object frmArticleDetail: TfrmArticleDetail
           GridView = grdMovsFutView
         end
       end
+      object Panel7: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblMovsFutResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1086
+          Height = 35
+          Margins.Left = 8
+          Margins.Right = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 480
+          ExplicitTop = 12
+          ExplicitWidth = 480
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabPartidas: TcxTabSheet
       Caption = 'Stock por partida / lote'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlPartidasTop: TPanel
         Left = 0
         Top = 0
@@ -826,24 +1004,15 @@ object frmArticleDetail: TfrmArticleDetail
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
-        object lblPartidasResumen: TLabel
-          Left = 12
-          Top = 12
-          Width = 600
-          Height = 17
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-        end
+        DesignSize = (
+          1102
+          40)
         object btnRecargarPartidas: TButton
           Left = 970
           Top = 7
           Width = 110
           Height = 26
+          Anchors = [akTop, akRight]
           Caption = 'Recargar'
           TabOrder = 0
           OnClick = btnRecargarPartidasClick
@@ -861,12 +1030,17 @@ object frmArticleDetail: TfrmArticleDetail
         end
       end
       object grdPartidas: TcxGrid
-        Left = 0
-        Top = 40
-        Width = 1102
-        Height = 344
+        AlignWithMargins = True
+        Left = 3
+        Top = 43
+        Width = 1096
+        Height = 487
         Align = alClient
         TabOrder = 1
+        ExplicitLeft = 0
+        ExplicitTop = 40
+        ExplicitWidth = 1102
+        ExplicitHeight = 344
         object grdPartidasView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -886,23 +1060,59 @@ object frmArticleDetail: TfrmArticleDetail
           GridView = grdPartidasView
         end
       end
+      object Panel8: TPanel
+        Left = 0
+        Top = 533
+        Width = 1102
+        Height = 41
+        Align = alBottom
+        BevelOuter = bvNone
+        Color = 15921906
+        ParentBackground = False
+        TabOrder = 2
+        ExplicitLeft = 456
+        ExplicitTop = 264
+        ExplicitWidth = 185
+        object lblPartidasResumen: TLabel
+          AlignWithMargins = True
+          Left = 8
+          Top = 3
+          Width = 1086
+          Height = 35
+          Margins.Left = 8
+          Margins.Right = 8
+          Align = alClient
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          ExplicitLeft = 20
+          ExplicitTop = 20
+          ExplicitWidth = 600
+          ExplicitHeight = 17
+        end
+      end
     end
     object tabATP: TcxTabSheet
       Caption = 'Projected Stock (ATP)'
-      ExplicitTop = 26
-      ExplicitWidth = 1108
-      ExplicitHeight = 398
+      ExplicitHeight = 384
       object pnlResumen: TPanel
-        Left = 0
-        Top = 0
-        Width = 1102
+        AlignWithMargins = True
+        Left = 3
+        Top = 3
+        Width = 1096
         Height = 90
         Align = alTop
         BevelOuter = bvLowered
         Color = clInfoBk
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 1108
+        ExplicitLeft = 0
+        ExplicitTop = 0
+        ExplicitWidth = 1102
         object lblTitResumen: TLabel
           Left = 12
           Top = 6
@@ -1021,25 +1231,12 @@ object frmArticleDetail: TfrmArticleDetail
           Font.Style = [fsBold]
           ParentFont = False
         end
-        object lblAviso: TLabel
-          Left = 800
-          Top = 46
-          Width = 280
-          Height = 18
-          AutoSize = False
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clRed
-          Font.Height = -13
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          Visible = False
-        end
       end
       object pnlRecomendacion: TPanel
-        Left = 0
-        Top = 90
-        Width = 1102
+        AlignWithMargins = True
+        Left = 3
+        Top = 99
+        Width = 1096
         Height = 44
         Align = alTop
         BevelOuter = bvLowered
@@ -1047,9 +1244,11 @@ object frmArticleDetail: TfrmArticleDetail
         ParentBackground = False
         TabOrder = 2
         Visible = False
-        ExplicitWidth = 1108
+        ExplicitLeft = 0
+        ExplicitTop = 90
+        ExplicitWidth = 1102
         DesignSize = (
-          1102
+          1096
           44)
         object lblRecomendacion: TLabel
           Left = 12
@@ -1066,7 +1265,7 @@ object frmArticleDetail: TfrmArticleDetail
           ParentFont = False
         end
         object btnAccionMrp: TButton
-          Left = 946
+          Left = 940
           Top = 8
           Width = 144
           Height = 28
@@ -1075,28 +1274,31 @@ object frmArticleDetail: TfrmArticleDetail
           TabOrder = 0
           Visible = False
           OnClick = btnAccionMrpClick
-          ExplicitLeft = 952
+          ExplicitLeft = 946
         end
       end
       object pnlMovsContainer: TPanel
         Left = 0
-        Top = 134
+        Top = 146
         Width = 1102
-        Height = 250
+        Height = 428
         Align = alClient
         BevelOuter = bvNone
         TabOrder = 1
-        ExplicitWidth = 1108
-        ExplicitHeight = 264
+        ExplicitTop = 134
+        ExplicitHeight = 250
         object grdMovs: TcxGrid
-          Left = 0
-          Top = 0
-          Width = 1102
-          Height = 250
+          AlignWithMargins = True
+          Left = 3
+          Top = 3
+          Width = 1096
+          Height = 381
           Align = alClient
           TabOrder = 0
-          ExplicitWidth = 1108
-          ExplicitHeight = 264
+          ExplicitLeft = 0
+          ExplicitTop = 0
+          ExplicitWidth = 1102
+          ExplicitHeight = 250
           object grdMovsView: TcxGridDBTableView
             Navigator.Buttons.CustomButtons = <>
             ScrollbarAnnotations.CustomAnnotations = <>
@@ -1115,43 +1317,70 @@ object frmArticleDetail: TfrmArticleDetail
             GridView = grdMovsView
           end
         end
+        object Panel9: TPanel
+          Left = 0
+          Top = 387
+          Width = 1102
+          Height = 41
+          Align = alBottom
+          BevelOuter = bvNone
+          Color = 15921906
+          ParentBackground = False
+          TabOrder = 1
+          ExplicitLeft = 456
+          ExplicitTop = 264
+          ExplicitWidth = 185
+          object lblAviso: TLabel
+            AlignWithMargins = True
+            Left = 8
+            Top = 3
+            Width = 1086
+            Height = 35
+            Margins.Left = 8
+            Margins.Right = 8
+            Align = alClient
+            AutoSize = False
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clRed
+            Font.Height = -13
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            Visible = False
+            ExplicitLeft = 800
+            ExplicitTop = 23
+            ExplicitWidth = 280
+            ExplicitHeight = 18
+          end
+        end
       end
     end
-  end
-  object pnlLog: TPanel
-    Left = 0
-    Top = 554
-    Width = 1116
-    Height = 140
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 3
-    Visible = False
-    object mmoLog: TMemo
-      Left = 0
-      Top = 0
-      Width = 1116
-      Height = 140
-      Align = alClient
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWindowText
-      Font.Height = -11
-      Font.Name = 'Consolas'
-      Font.Style = []
-      ParentFont = False
-      ReadOnly = True
-      ScrollBars = ssVertical
-      TabOrder = 0
+    object cxTabSheet1: TcxTabSheet
+      Caption = 'Log'
+      ImageIndex = 9
+      ExplicitHeight = 384
+      object mmoLog: TMemo
+        AlignWithMargins = True
+        Left = 3
+        Top = 3
+        Width = 1096
+        Height = 568
+        Align = alClient
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -11
+        Font.Name = 'Consolas'
+        Font.Style = []
+        ParentFont = False
+        ReadOnly = True
+        ScrollBars = ssVertical
+        TabOrder = 0
+        ExplicitLeft = 40
+        ExplicitTop = 6
+        ExplicitWidth = 1116
+        ExplicitHeight = 140
+      end
     end
-  end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 694
-    Width = 1116
-    Height = 45
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 2
   end
   object pnlTitulo: TPanel
     Left = 0
@@ -1160,9 +1389,9 @@ object frmArticleDetail: TfrmArticleDetail
     Height = 70
     Align = alTop
     BevelOuter = bvNone
-    Color = 6313290
+    Color = 3748653
     ParentBackground = False
-    TabOrder = 4
+    TabOrder = 2
     object lblTitulo: TLabel
       Left = 69
       Top = 5
@@ -1207,12 +1436,31 @@ object frmArticleDetail: TfrmArticleDetail
       Align = alLeft
       Picture.Data = {
         0D546478536D617274496D6167653C3F786D6C2076657273696F6E3D22312E30
-        2220656E636F64696E673D225554462D38223F3E0D0A3C737667207669657742
-        6F783D223020302032342032342220786D6C6E733D22687474703A2F2F777777
-        2E77332E6F72672F323030302F737667223E0D0A093C706174682066696C6C3D
-        2223464646464646222066696C6C2D6F7061636974793D22302E352220643D22
-        4D313220335637483356334831325A4D31362031375632314833563137483136
-        5A4D323220313056313448335631304832325A222F3E0D0A3C2F7376673E0D0A}
+        2220656E636F64696E673D225554462D38223F3E0D0A3C737667207665727369
+        6F6E3D22312E31222069643D224C617965725F312220786D6C6E733D22687474
+        703A2F2F7777772E77332E6F72672F323030302F7376672220786D6C6E733A78
+        6C696E6B3D22687474703A2F2F7777772E77332E6F72672F313939392F786C69
+        6E6B2220783D223070782220793D22307078222076696577426F783D22302030
+        20333220333222207374796C653D22656E61626C652D6261636B67726F756E64
+        3A6E6577203020302033322033323B2220786D6C3A73706163653D2270726573
+        65727665223E262331333B262331303B3C7374796C6520747970653D22746578
+        742F6373732220786D6C3A73706163653D227072657365727665223E2E59656C
+        6C6F777B66696C6C3A234646423131353B7D262331333B262331303B2623393B
+        2E5265647B66696C6C3A234431314331433B7D262331333B262331303B262339
+        3B2E426C61636B7B66696C6C3A233732373237323B7D262331333B262331303B
+        2623393B2E477265656E7B66696C6C3A233033394332333B7D262331333B2623
+        31303B2623393B2E426C75657B66696C6C3A233131373744373B7D3C2F737479
+        6C653E0D0A3C672069643D2253686F7070696E6743617274223E0D0A09093C63
+        6972636C6520636C6173733D22426C61636B222063783D223133222063793D22
+        32372220723D2233222F3E0D0A09093C7061746820636C6173733D22426C6163
+        6B2220643D224D31362E332C313868372E3963302E342C302C302E372D302E32
+        2C302E392D302E356C342E382D384333302E332C382E382C32392E382C382C32
+        392C384831302E344C362E382C3268304832763268332E376C372E382C31332E
+        324C31302E362C323020202623393B2623393B6C2D302E342C302E3443392E37
+        2C32312C31302E312C32322C31312C323268302E35483238762D324831332E35
+        6C322D324831362E337A222F3E0D0A09093C636972636C6520636C6173733D22
+        426C61636B222063783D223235222063793D2232372220723D2233222F3E0D0A
+        093C2F673E0D0A3C2F7376673E0D0A}
       Properties.FitMode = ifmProportionalStretch
       Properties.ReadOnly = True
       Properties.ShowFocusRect = False
@@ -1230,7 +1478,7 @@ object frmArticleDetail: TfrmArticleDetail
       Height = 64
       Align = alRight
       BevelOuter = bvNone
-      Color = 6313290
+      Color = 3748653
       ParentBackground = False
       TabOrder = 2
       object pnlKPI2: TPanel

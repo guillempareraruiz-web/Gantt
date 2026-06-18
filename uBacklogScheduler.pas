@@ -109,6 +109,17 @@ type
   //                    el nodo quepa entero; con 50, al menos la mitad.
   TPlacementPolicy = (ppFinCola, ppHueco, ppHuecoShift);
 
+  // Granularidad del resultado: como se agrupan las OP planificadas en nodos.
+  //   agNinguna   1 nodo por OP (comportamiento clasico, sin agrupar).
+  //   agPorCentro Agrupa en un lote las OP que caen en el MISMO centro
+  //               (-> tantos nodos-lote como centros implicados).
+  //   agTodo      Agrupa TODAS las OP en un solo nodo-lote. Si caen en varios
+  //               centros, se usa CentroDestinoAgrupado (lo elige el usuario en
+  //               el wizard) para reubicarlas antes de agrupar.
+  // La agrupacion es POST-scheduling: primero se planifica 1 nodo por OP y luego
+  // se fusionan via el motor de Lotes (V057). No la consume RunAutoScheduling.
+  TSchedAgrupacion = (agNinguna, agPorCentro, agTodo);
+
   TSchedParams = record
     Mode: TSchedMode;
     Order: TSchedOrder;
@@ -118,6 +129,10 @@ type
     PorcentajeMinNodo: Integer;  // % minimo del nodo (def. 50)
     DistanciaMinNodos: Integer;  // separacion minima entre nodos consecutivos
                                  // en el mismo lane, en minutos (def. 0)
+    // --- Agrupacion (wizard, post-scheduling) ------------------------------
+    Agrupacion: TSchedAgrupacion;   // por defecto agNinguna (sin agrupar)
+    CentroDestinoAgrupado: string;  // solo para agTodo multi-centro: codigo del
+                                    // centro destino elegido por el usuario.
   end;
 
   TSchedResult = record
@@ -139,6 +154,8 @@ type
     RetrasoTotalH: Double;    // suma de horas de retraso
     RetrasoMedioH: Double;    // RetrasoTotalH / Retrasos
     MakespanH: Double;        // (max fin - min inicio) en horas
+    FechaMin: TDateTime;      // inicio mas temprano de la tanda (0 si nada)
+    FechaMax: TDateTime;      // fin mas tardio de la tanda (0 si nada)
   end;
 
   // ---------------------------------------------------------------------------
@@ -290,7 +307,11 @@ begin
   if Result.Retrasos > 0 then
     Result.RetrasoMedioH := Result.RetrasoTotalH / Result.Retrasos;
   if TieneRango then
+  begin
     Result.MakespanH := (MaxFin - MinIni) * 24.0;
+    Result.FechaMin := MinIni;
+    Result.FechaMax := MaxFin;
+  end;
 end;
 
 function StatusToStr(AStatus: TSchedStatus): string;

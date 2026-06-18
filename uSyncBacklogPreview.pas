@@ -87,6 +87,8 @@ type
     FEjercicio: SmallInt;
     FRows: TArray<TSyncRowRawItem>;
     FApplied: Boolean;
+    FPreloaded: Boolean;   // True si FetchRows ya se ejecuto antes del ShowModal
+    procedure FetchRows;   // parte lenta: lee del ERP. Llamable bajo Busy.
     procedure LoadPreview;
     procedure RefreshGrid;
     procedure RefreshResumen;
@@ -100,7 +102,8 @@ type
 implementation
 {$R *.dfm}
 uses
-  System.DateUtils;
+  System.DateUtils, uBusyDialog;
+
 class function TfrmSyncBacklogPreview.Execute(AOwner: TComponent;
   AConn: TADOConnection; ACodigoEmpresa: SmallInt;
   const AErpSistema: string; AReader: IErpReader;
@@ -115,6 +118,17 @@ begin
     Frm.FErpSistema := AErpSistema;
     Frm.FReader := AReader;
     Frm.FEjercicio := AEjercicio;
+
+    // Precargar los datos del ERP (parte lenta) BAJO el dialogo Busy, antes de
+    // mostrar la ventana. Asi el Busy se mantiene hasta que la ventana aparece
+    // ya con los datos, sin el "parpadeo" de un form vacio que luego carga.
+    uBusyDialog.RunBusy(
+      Application.MainForm, 'Cargando backlog desde el ERP...',
+      procedure
+      begin
+        Frm.FetchRows;
+      end);
+
     Frm.ShowModal;
     Result := Frm.Applied;
   finally
@@ -129,20 +143,33 @@ procedure TfrmSyncBacklogPreview.FormDestroy(Sender: TObject);
 begin
   SetLength(FRows, 0);
 end;
-procedure TfrmSyncBacklogPreview.LoadPreview;
+procedure TfrmSyncBacklogPreview.FetchRows;
 var
   Repo: TErpSyncRepo;
 begin
-  Screen.Cursor := crHourGlass;
+  // Parte lenta (lee del ERP). Se puede llamar antes del ShowModal dentro de un
+  // dialogo Busy para que la espera tenga feedback y la ventana ya aparezca con
+  // los datos cargados.
+  Repo := TErpSyncRepo.Create(FConn, FCodigoEmpresa, FErpSistema);
   try
-    Repo := TErpSyncRepo.Create(FConn, FCodigoEmpresa, FErpSistema);
-    try
-      FRows := Repo.PreviewBacklogOF(FReader, FEjercicio);
-    finally
-      Repo.Free;
-    end;
+    FRows := Repo.PreviewBacklogOF(FReader, FEjercicio);
   finally
-    Screen.Cursor := crDefault;
+    Repo.Free;
+  end;
+  FPreloaded := True;
+end;
+
+procedure TfrmSyncBacklogPreview.LoadPreview;
+begin
+  // Si no se precargo (flujo normal), leer ahora con cursor de espera.
+  if not FPreloaded then
+  begin
+    Screen.Cursor := crHourGlass;
+    try
+      FetchRows;
+    finally
+      Screen.Cursor := crDefault;
+    end;
   end;
   RefreshGrid;
   RefreshResumen;

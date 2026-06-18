@@ -50,7 +50,6 @@ type
     tabATP: TcxTabSheet;
     tabPartidas: TcxTabSheet;
     pnlPartidasTop: TPanel;
-    lblPartidasResumen: TLabel;
     btnRecargarPartidas: TButton;
     chkSoloConSaldo: TCheckBox;
     grdPartidas: TcxGrid;
@@ -62,7 +61,6 @@ type
     pnlMovsFutTop: TPanel;
     lblMovsFutDesde: TLabel;
     lblMovsFutHasta: TLabel;
-    lblMovsFutResumen: TLabel;
     dtMovsFutDesde: TDateTimePicker;
     dtMovsFutHasta: TDateTimePicker;
     chkMovFutCompras: TCheckBox;
@@ -77,13 +75,11 @@ type
     tabHistorico: TcxTabSheet;
     pnlHistTop: TPanel;
     lblHistMeses: TLabel;
-    lblHistResumen: TLabel;
     seHistMeses: TcxSpinEdit;
     btnRecargarHist: TButton;
     pbHistorico: TPaintBox;
     tabOFs: TcxTabSheet;
     pnlOFsTop: TPanel;
-    lblOFsResumen: TLabel;
     btnRecargarOFs: TButton;
     grdOFs: TcxGrid;
     grdOFsView: TcxGridDBTableView;
@@ -93,7 +89,6 @@ type
     tabProveedores: TcxTabSheet;
     pnlProvTop: TPanel;
     lblProvMeses: TLabel;
-    lblProvResumen: TLabel;
     seProvMeses: TcxSpinEdit;
     btnRecargarProv: TButton;
     grdProv: TcxGrid;
@@ -104,7 +99,6 @@ type
     tabClientes: TcxTabSheet;
     pnlCliTop: TPanel;
     lblCliMeses: TLabel;
-    lblCliResumen: TLabel;
     seCliMeses: TcxSpinEdit;
     btnRecargarCli: TButton;
     grdCli: TcxGrid;
@@ -114,7 +108,6 @@ type
     dsCli: TDataSource;
     tabDondeUsa: TcxTabSheet;
     pnlDondeUsaTop: TPanel;
-    lblDondeUsaResumen: TLabel;
     btnRecargarDondeUsa: TButton;
     grdDondeUsa: TcxGrid;
     grdDondeUsaView: TcxGridDBTableView;
@@ -125,7 +118,6 @@ type
     pnlDispTop: TPanel;
     lblDispCantidad: TLabel;
     lblDispFecha: TLabel;
-    lblDispVeredicto: TLabel;
     lblDispLeyenda: TLabel;
     seDispCantidad: TcxSpinEdit;
     dtDispFecha: TDateTimePicker;
@@ -162,7 +154,6 @@ type
     lblValStockFinal: TLabel;
     lblStockMinimo: TLabel;
     lblValStockMinimo: TLabel;
-    lblAviso: TLabel;
     pnlRecomendacion: TPanel;
     lblRecomendacion: TLabel;
     btnAccionMrp: TButton;
@@ -171,12 +162,7 @@ type
     grdMovsLevel: TcxGridLevel;
     cdsMovs: TClientDataSet;
     dsMovs: TDataSource;
-    pnlBottom: TPanel;
     pnlMovsContainer: TPanel;
-    splitLog: TSplitter;
-    pnlLog: TPanel;
-    mmoLog: TMemo;
-    btnToggleLog: TButton;
     pnlTitulo: TPanel;
     lblTitulo: TLabel;
     lblSubtitulo: TLabel;
@@ -208,6 +194,26 @@ type
     lblKPI1Sub: TLabel;
     lblKPI1Val: TLabel;
     Edit1: TEdit;
+    cxTabSheet1: TcxTabSheet;
+    mmoLog: TMemo;
+    Panel1: TPanel;
+    lblDispVeredicto: TLabel;
+    Panel2: TPanel;
+    lblDondeUsaResumen: TLabel;
+    Panel3: TPanel;
+    lblHistResumen: TLabel;
+    Panel4: TPanel;
+    lblOFsResumen: TLabel;
+    Panel5: TPanel;
+    lblProvResumen: TLabel;
+    Panel6: TPanel;
+    lblCliResumen: TLabel;
+    Panel7: TPanel;
+    lblMovsFutResumen: TLabel;
+    Panel8: TPanel;
+    lblPartidasResumen: TLabel;
+    Panel9: TPanel;
+    lblAviso: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure btnBuscarArticuloClick(Sender: TObject);
     procedure btnCalcularClick(Sender: TObject);
@@ -374,6 +380,7 @@ begin
   FCliCargados := False;
   SetLength(FHistorico, 0);
   LimpiarResultados;
+  btnFocus.Left := -100;
 end;
 procedure TfrmArticleDetail.CargarAlmacenes;
 var
@@ -911,17 +918,8 @@ begin
     [FormatDateTime('hh:nn:ss', Now), AMsg]));
 end;
 procedure TfrmArticleDetail.btnToggleLogClick(Sender: TObject);
-var
-  Mostrar: Boolean;
 begin
-  // El log ocupa mucho espacio; por defecto va plegado y se muestra a demanda.
-  Mostrar := not pnlLog.Visible;
-  pnlLog.Visible := Mostrar;
-  splitLog.Visible := Mostrar;
-  if Mostrar then
-    btnToggleLog.Caption := 'Ocultar log'
-  else
-    btnToggleLog.Caption := 'Mostrar log';
+
 end;
 // ============================================================================
 // TAB "Stock por partida / lote"

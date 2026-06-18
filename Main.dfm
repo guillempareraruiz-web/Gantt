@@ -103,7 +103,6 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 1
       OnClick = Backlog1Click
-      ExplicitLeft = 168
     end
     object btnTB_PlaniCentros: TcxButton
       AlignWithMargins = True
@@ -241,8 +240,6 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 8
       OnClick = cxButton2Click
-      ExplicitLeft = 191
-      ExplicitTop = 1
     end
   end
   object tmr1Sec: TTimer
@@ -497,6 +494,10 @@ object Form1: TForm1
       end
       object N6: TMenuItem
         Caption = '-'
+      end
+      object AnalisisPlan1: TMenuItem
+        Caption = 'An'#225'lisis del plan'
+        OnClick = AnalisisPlan1Click
       end
       object CuadroPlanificacionDia1: TMenuItem
         Caption = 'Cuadro Planificaci'#243'n del D'#237'a'
