@@ -92,6 +92,14 @@ type
     FRows: TArray<TRowLayout>;
     FNodeLayouts: TArray<TNodeLayout>;
 
+    // Modo "compactar centros": cuando esta activo, RebuildLayout omite los
+    // centros que NO tienen ningun nodo dentro del rango temporal visible
+    // (viewport). Util con muchos centros para no ver filas vacias. FCompactKey
+    // recuerda el conjunto de centros mostrados la ultima vez para no refrescar
+    // el layout en cada pixel de scroll (solo cuando cambia el conjunto).
+    FCompactToViewport: Boolean;
+    FCompactKey: string;
+
     FHoverNodeIndex: Integer;
 
     FStartVisibleTime, FEndVisibleTime : TDatetime;
@@ -561,6 +569,13 @@ type
     function ClampScrollX(const Value: Single): Single;
 
     procedure SetScrollX(const Value: Single);
+    procedure SetCompactToViewport(const Value: Boolean);
+    // True si el centro tiene al menos un nodo que intersecta [T0,T1].
+    function CentreHasNodesInRange(const ACentreId: Integer;
+      const T0, T1: TDateTime): Boolean;
+    // Clave del conjunto de centros visibles para el viewport actual (modo
+    // compactar). Si cambia respecto a FCompactKey, hay que refrescar layout.
+    function ComputeCompactKey: string;
 
     procedure DrawSelectedNodeHandlesD2D(
                 const RT: ID2D1RenderTarget;
@@ -809,6 +824,14 @@ type
 
     procedure SetOperarioFilter(const ADataIds: TArray<Integer>; AHideMode: Boolean);
     procedure ClearOperarioFilter;
+    // Modo foco/cadena: atenua todo salvo el nodo dado y su cadena de
+    // dependencias (predecesores + sucesores, transitivos via links). Reusa el
+    // overlay del filtro de operarios. AHideMode=False -> atenua; True -> oculta.
+    procedure FocusChain(const ANodeIndex: Integer; const AHideMode: Boolean = False);
+    // Centra en pantalla toda la OF del nodo dado: ajusta zoom (PxPerMinute) y
+    // scroll para que el rango temporal [primer inicio, ultimo fin] de la OF
+    // quepa en el viewport, y desplaza verticalmente para ver sus centros.
+    procedure CenterOFOnScreen(const ANodeIndex: Integer);
     function IsNodeOperarioFiltered(const ADataId: Integer): Boolean;
     // True si el nodo esta OCULTO ahora mismo por el filtro (modo ocultar y no
     // coincide). Mismo criterio que usa el render/contador. Para que consumidores
@@ -884,6 +907,9 @@ type
     property LinksVisible: TLinksVisible    read FLinksVisible    write SetLinksVisible    default lvSelected;
     property RenderMode: TGanttRenderMode read FRenderMode write SetRenderMode default grmNormalVCL;
     property PxPerMinute: Single read FPxPerMinute write SetPxPerMinute;
+    // Modo compactar: muestra solo los centros con nodos en el viewport actual.
+    property CompactToViewport: Boolean read FCompactToViewport
+      write SetCompactToViewport default False;
     property OnViewportChanged: TGanttViewportChangedEvent read FOnViewportChanged write FOnViewportChanged;
     property OnNodeDblClick: TNodeDblClickEvent read FOnNodeDblClick write FOnNodeDblClick;
     property OnStatsChanged: TGanttStatsChanged read FOnStatsChanged write FOnStatsChanged;
@@ -2695,6 +2721,47 @@ begin
 
 end;
 
+function TGanttControl.CentreHasNodesInRange(const ACentreId: Integer;
+  const T0, T1: TDateTime): Boolean;
+var
+  i: Integer;
+begin
+  // Un nodo intersecta el viewport si empieza antes de T1 y acaba despues de T0.
+  for i := 0 to High(FNodes) do
+    if FNodes[i].Visible and (FNodes[i].CentreId = ACentreId) then
+      if (FNodes[i].StartTime < T1) and (FNodes[i].EndTime > T0) then
+        Exit(True);
+  Result := False;
+end;
+
+function TGanttControl.ComputeCompactKey: string;
+var
+  T0, T1: TDateTime;
+  i: Integer;
+  sb: TStringBuilder;
+begin
+  GetVisibleTimeRange(T0, T1);
+  sb := TStringBuilder.Create;
+  try
+    for i := 0 to High(FCentres) do
+      if FCentres[i].Visible and CentreHasNodesInRange(FCentres[i].Id, T0, T1) then
+        sb.Append(FCentres[i].Id).Append(',');
+    Result := sb.ToString;
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TGanttControl.SetCompactToViewport(const Value: Boolean);
+begin
+  if FCompactToViewport = Value then Exit;
+  FCompactToViewport := Value;
+  FCompactKey := '';            // forzar recalculo
+  RebuildLayout;                // dispara OnLayoutChanged -> sincroniza centros
+  UpdateScrollBars;
+  Invalidate;
+end;
+
 function TGanttControl.FindFreeLaneForMovePreview(
   const CentreId: Integer;
   const XLeftW, XRightW: Single;
@@ -4107,19 +4174,30 @@ procedure TGanttControl.HighlightOF(const ANodeIndex: Integer);
 var
   DStart, D: TNodeData;
   i: Integer;
+  dataIds: TList<Integer>;
 begin
   FHighlightSet.Clear;
   if not TryGetNodeData(ANodeIndex, DStart) then
   begin
+    ClearOperarioFilter;
     Invalidate;
     Exit;
   end;
-  for i := 0 to High(FNodes) do
-  begin
-    if TryGetNodeData(i, D) and
-       (D.NumeroOrdenFabricacion = DStart.NumeroOrdenFabricacion) and
-       SameText(D.SerieFabricacion, DStart.SerieFabricacion) then
-      FHighlightSet.AddOrSetValue(i, 1);
+  dataIds := TList<Integer>.Create;
+  try
+    for i := 0 to High(FNodes) do
+      if TryGetNodeData(i, D) and
+         (D.NumeroOrdenFabricacion = DStart.NumeroOrdenFabricacion) and
+         SameText(D.SerieFabricacion, DStart.SerieFabricacion) then
+      begin
+        FHighlightSet.AddOrSetValue(i, 1);
+        if FNodes[i].DataId <> 0 then
+          dataIds.Add(FNodes[i].DataId);
+      end;
+    // Ademas de marcar, atenuar el resto de nodos (reusa el overlay del filtro).
+    SetOperarioFilter(dataIds.ToArray, False);
+  finally
+    dataIds.Free;
   end;
   Invalidate;
 end;
@@ -4128,20 +4206,30 @@ procedure TGanttControl.HighlightOT(const ANodeIndex: Integer);
 var
   DStart, D: TNodeData;
   i: Integer;
+  dataIds: TList<Integer>;
 begin
   FHighlightSet.Clear;
   if not TryGetNodeData(ANodeIndex, DStart) then
   begin
+    ClearOperarioFilter;
     Invalidate;
     Exit;
   end;
-  for i := 0 to High(FNodes) do
-  begin
-    if TryGetNodeData(i, D) and
-       SameText(D.NumeroTrabajo, DStart.NumeroTrabajo) and
-       (D.NumeroOrdenFabricacion = DStart.NumeroOrdenFabricacion) and
-       SameText(D.SerieFabricacion, DStart.SerieFabricacion) then
-      FHighlightSet.AddOrSetValue(i, 1);
+  dataIds := TList<Integer>.Create;
+  try
+    for i := 0 to High(FNodes) do
+      if TryGetNodeData(i, D) and
+         SameText(D.NumeroTrabajo, DStart.NumeroTrabajo) and
+         (D.NumeroOrdenFabricacion = DStart.NumeroOrdenFabricacion) and
+         SameText(D.SerieFabricacion, DStart.SerieFabricacion) then
+      begin
+        FHighlightSet.AddOrSetValue(i, 1);
+        if FNodes[i].DataId <> 0 then
+          dataIds.Add(FNodes[i].DataId);
+      end;
+    SetOperarioFilter(dataIds.ToArray, False);   // atenuar el resto
+  finally
+    dataIds.Free;
   end;
   Invalidate;
 end;
@@ -4175,6 +4263,158 @@ begin
   FOpFilterHideMode := False;
   FOpFilterTimer.Enabled := False;
   Invalidate;
+end;
+
+procedure TGanttControl.FocusChain(const ANodeIndex: Integer;
+  const AHideMode: Boolean);
+var
+  startId: Integer;
+  visited: TDictionary<Integer, Byte>;   // NodeIds ya alcanzados
+  queue: TQueue<Integer>;                 // BFS por NodeId
+  curId, nIdx, li: Integer;
+  links: TList<Integer>;
+  dataIds: TList<Integer>;
+begin
+  if (ANodeIndex < 0) or (ANodeIndex > High(FNodes)) then
+  begin
+    ClearOperarioFilter;
+    Exit;
+  end;
+  startId := FNodes[ANodeIndex].Id;
+
+  visited := TDictionary<Integer, Byte>.Create;
+  queue := TQueue<Integer>.Create;
+  dataIds := TList<Integer>.Create;
+  try
+    visited.AddOrSetValue(startId, 1);
+    queue.Enqueue(startId);
+
+    // BFS transitivo por el grafo de links (sucesores + predecesores).
+    while queue.Count > 0 do
+    begin
+      curId := queue.Dequeue;
+
+      // Sucesores: links salientes -> ToNodeId.
+      if Assigned(FSuccessors) and FSuccessors.TryGetValue(curId, links) then
+        for li in links do
+          if (li >= 0) and (li <= High(FLinks)) then
+            if not visited.ContainsKey(FLinks[li].ToNodeId) then
+            begin
+              visited.AddOrSetValue(FLinks[li].ToNodeId, 1);
+              queue.Enqueue(FLinks[li].ToNodeId);
+            end;
+
+      // Predecesores: links entrantes -> FromNodeId.
+      if Assigned(FPredecessors) and FPredecessors.TryGetValue(curId, links) then
+        for li in links do
+          if (li >= 0) and (li <= High(FLinks)) then
+            if not visited.ContainsKey(FLinks[li].FromNodeId) then
+            begin
+              visited.AddOrSetValue(FLinks[li].FromNodeId, 1);
+              queue.Enqueue(FLinks[li].FromNodeId);
+            end;
+    end;
+
+    // Traducir NodeIds de la cadena a DataIds (lo que entiende el overlay).
+    for curId in visited.Keys do
+      if FNodeIdToIndex.TryGetValue(curId, nIdx) then
+        if (nIdx >= 0) and (nIdx <= High(FNodes)) and (FNodes[nIdx].DataId <> 0) then
+          dataIds.Add(FNodes[nIdx].DataId);
+
+    SetOperarioFilter(dataIds.ToArray, AHideMode);
+  finally
+    dataIds.Free;
+    queue.Free;
+    visited.Free;
+  end;
+end;
+
+procedure TGanttControl.CenterOFOnScreen(const ANodeIndex: Integer);
+const
+  MARGIN_FRAC = 0.08;   // 8% de margen horizontal a cada lado
+var
+  DStart, D: TNodeData;
+  i: Integer;
+  minStart, maxEnd: TDateTime;
+  hayNodos: Boolean;
+  totalMin, viewMin, newPxPerMin: Double;
+  row: TRowLayout;
+  minTopY, maxBottomY: Single;
+  hayRow: Boolean;
+  marginPx: Single;
+begin
+  if not TryGetNodeData(ANodeIndex, DStart) then Exit;
+
+  // 1) Rango temporal de toda la OF (min inicio, max fin).
+  hayNodos := False;
+  minStart := 0; maxEnd := 0;
+  for i := 0 to High(FNodes) do
+    if NodeMatchesOF(i, DStart.NumeroOrdenFabricacion, DStart.SerieFabricacion) then
+    begin
+      if not hayNodos then
+      begin
+        minStart := FNodes[i].StartTime;
+        maxEnd := FNodes[i].EndTime;
+        hayNodos := True;
+      end
+      else
+      begin
+        if FNodes[i].StartTime < minStart then minStart := FNodes[i].StartTime;
+        if FNodes[i].EndTime   > maxEnd   then maxEnd   := FNodes[i].EndTime;
+      end;
+    end;
+  if not hayNodos then Exit;
+
+  // 2) Zoom: que el rango (con margen) quepa en el ancho del cliente.
+  totalMin := VisibleMinutesBetween(minStart, maxEnd);
+  if totalMin < 1 then totalMin := 1;                 // OF muy corta: evitar /0
+  viewMin := totalMin * (1 + 2 * MARGIN_FRAC);        // anyadir margenes
+  if ClientWidth > 0 then
+    newPxPerMin := ClientWidth / viewMin
+  else
+    newPxPerMin := FPxPerMinute;
+  FPxPerMinute := ClampPxPerMinute(newPxPerMin);
+
+  // 3) Layout con el nuevo zoom (las X-world dependen de FPxPerMinute).
+  RebuildLayout;
+
+  // 4) Scroll horizontal: dejar minStart cerca del borde izquierdo, con margen.
+  marginPx := ClientWidth * MARGIN_FRAC;
+  FScrollX := ClampScrollX(
+    Single(VisibleMinutesBetween(FStartTime, minStart) * FPxPerMinute) - marginPx);
+
+  // 5) Scroll vertical: encuadrar las filas (centros) que contienen la OF.
+  hayRow := False;
+  minTopY := 0; maxBottomY := 0;
+  for i := 0 to High(FNodes) do
+    if NodeMatchesOF(i, DStart.NumeroOrdenFabricacion, DStart.SerieFabricacion) then
+      if TryGetNodeData(i, D) and TryGetRowByCentreId(FNodes[i].CentreId, row) then
+      begin
+        if not hayRow then
+        begin
+          minTopY := row.TopY;
+          maxBottomY := row.TopY + row.Height;
+          hayRow := True;
+        end
+        else
+        begin
+          if row.TopY < minTopY then minTopY := row.TopY;
+          if row.TopY + row.Height > maxBottomY then
+            maxBottomY := row.TopY + row.Height;
+        end;
+      end;
+  if hayRow then
+    // Centrar verticalmente el bloque de filas de la OF (o alinear arriba si no
+    // cabe entero).
+    FScrollY := EnsureRange(
+      (minTopY + maxBottomY) * 0.5 - ClientHeight * 0.5,
+      0, Max(0, FContentHeight - ClientHeight));
+
+  UpdateScrollBars;
+  Invalidate;
+  NotifyViewportChanged;
+  if Assigned(FOnScrollYChanged) then
+    FOnScrollYChanged(Self, FScrollY);
 end;
 
 function TGanttControl.HitTestLink(const X, Y: Single; const Tolerance: Single): Integer;
@@ -5735,9 +5975,24 @@ end;
 procedure TGanttControl.NotifyViewportChanged;
 var
   T0, T1: TDateTime;
+  key: string;
 begin
   GetVisibleTimeRange(T0, T1);
   RecalcCounters;
+
+  // Modo compactar: si al desplazarse/zoom cambia el CONJUNTO de centros con
+  // nodos visibles, rehacer el layout (no en cada pixel: solo si la clave varia).
+  if FCompactToViewport then
+  begin
+    key := ComputeCompactKey;
+    if key <> FCompactKey then
+    begin
+      FCompactKey := key;
+      RebuildLayout;        // dispara OnLayoutChanged -> sincroniza centros
+      UpdateScrollBars;
+      Invalidate;
+    end;
+  end;
 
   if Assigned(FOnViewportChanged) then
     FOnViewportChanged(Self, FStartTime, FPxPerMinute, FScrollX);
@@ -6195,6 +6450,7 @@ var
   maxEndTime: TDateTime;
   centreIdxs: TArray<Integer>;
   ci: Integer;
+  compactT0, compactT1: TDateTime;   // rango visible en modo compactar
 
   // Lotes del centre actual: por LoteId -> ventana [min,max], conteo y primer idx.
   LoteMin, LoteMax: TDictionary<Integer, TDateTime>;
@@ -6239,12 +6495,21 @@ begin
         Result := FCentres[L].Order - FCentres[R].Order;
       end));
 
+  // Rango visible (solo se usa en modo compactar; se calcula una vez).
+  if FCompactToViewport then
+    GetVisibleTimeRange(compactT0, compactT1);
+
   for i := 0 to High(centreIdxs) do
   begin
     centre := FCentres[centreIdxs[i]];
 
     if not centre.Visible then
      Continue;
+
+    // Modo compactar: omitir centros sin nodos dentro del viewport temporal.
+    if FCompactToViewport and
+       not CentreHasNodesInRange(centre.Id, compactT0, compactT1) then
+      Continue;
 
     // ===== Índexs de nodes d'aquest centre (sense copiar nodes) =====
     idxs := GetNodeIndexesForCentre(centre.Id);

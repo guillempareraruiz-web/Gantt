@@ -86,6 +86,7 @@ type
     ConfigHint1: TMenuItem;
     Vistas1: TMenuItem;
     AnalisisPlan1: TMenuItem;
+    AlertasPlanificacion1: TMenuItem;
     Kanban1: TMenuItem;
     DispatchList1: TMenuItem;
     Backlog1: TMenuItem;
@@ -130,6 +131,7 @@ type
     Label29: TLabel;
     btnLinkERP: TcxButton;
     cxButton2: TcxButton;
+    btnTB_PlaniAlertas: TcxButton;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -216,6 +218,8 @@ type
     procedure HeatmapCargaOperario1Click(Sender: TObject);
     procedure HeatmapEntregasVsCarga1Click(Sender: TObject);
     procedure AnalisisPlan1Click(Sender: TObject);
+    procedure AlertasPlanificacion1Click(Sender: TObject);
+    procedure btnTB_PlaniAlertasClick(Sender: TObject);
     procedure HistogramasOperarios1Click(Sender: TObject);
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
@@ -258,6 +262,10 @@ type
     // Lanza la pantalla de Auto-Planificacion sobre los DataIds dados.
     // Si ANodeIds esta vacio, planifica TODO el plan activo.
     procedure LaunchAutoPlanificacion(const ANodeIds: TArray<Integer>);
+
+    // Actualiza el caption del boton de alertas de la toolbar con la salud del
+    // plan recien calculada. La llama la VistaGantt tras RecalcAlertas.
+    procedure ActualizarBotonAlertas(const ASalud, ATotalIncidencias: Integer);
 
   private
     FAutoSaver: TPlanAutoSaver;
@@ -606,6 +614,51 @@ end;
 procedure TForm1.AnalisisPlan1Click(Sender: TObject);
 begin
   TfrmPlanAnalisis.Ejecutar;
+end;
+
+procedure TForm1.AlertasPlanificacion1Click(Sender: TObject);
+begin
+  // Reaprovecha el dialogo de alertas de la VistaGantt activa (mismo Provider
+  // que el KPI). Sin Gantt activo no hay nada que analizar.
+  if not Assigned(FVistaGantt) or not Assigned(FVistaGantt.GanttControl) then
+  begin
+    ShowMessage('No hay un plan Gantt activo para analizar.');
+    Exit;
+  end;
+  FVistaGantt.MostrarAlertas;
+end;
+
+procedure TForm1.btnTB_PlaniAlertasClick(Sender: TObject);
+begin
+  // Acceso directo desde la toolbar al mismo dialogo de alertas.
+  AlertasPlanificacion1Click(Sender);
+end;
+
+procedure TForm1.ActualizarBotonAlertas(const ASalud,
+  ATotalIncidencias: Integer);
+begin
+  // El boton muestra la salud del plan (semaforo) cuando esta calculada, con el
+  // nº de incidencias entre parentesis. Color de fondo segun el grado de salud.
+  if ASalud < 0 then
+    btnTB_PlaniAlertas.Caption := 'Alertas'
+  else if ATotalIncidencias = 0 then
+    btnTB_PlaniAlertas.Caption := Format('Salud %d/100', [ASalud])
+  else
+    btnTB_PlaniAlertas.Caption := Format('Salud %d/100 (%d)',
+      [ASalud, ATotalIncidencias]);
+
+  // Color de fondo verde -> rojo segun salud (mismo criterio que el KPI).
+  if ASalud < 0 then
+    btnTB_PlaniAlertas.Colors.Normal := $00F0F0F0   // gris boton por defecto
+  else if ASalud >= 90 then
+    btnTB_PlaniAlertas.Colors.Normal := $00C8E6C8     // verde claro
+  else if ASalud >= 75 then
+    btnTB_PlaniAlertas.Colors.Normal := $00C8F0F8     // amarillo claro
+  else if ASalud >= 50 then
+    btnTB_PlaniAlertas.Colors.Normal := $00C0E0FF     // naranja claro
+  else
+    btnTB_PlaniAlertas.Colors.Normal := $00C8C8FF;    // rojo claro
+  btnTB_PlaniAlertas.Colors.Default := btnTB_PlaniAlertas.Colors.Normal;
 end;
 
 procedure TForm1.HistogramasOperarios1Click(Sender: TObject);

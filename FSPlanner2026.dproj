@@ -494,6 +494,10 @@
             <Form>frmAlertasViewer</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uGanttShortcuts.pas">
+            <Form>frmGanttShortcuts</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uAlertConfig.pas">
             <Form>frmAlertConfig</Form>
             <FormType>dfm</FormType>

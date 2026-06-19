@@ -181,6 +181,7 @@ type
     ColordelPedido1: TMenuItem;
     ColordelProyecto1: TMenuItem;
     ResaltarOF1: TMenuItem;
+    CentrarOF1: TMenuItem;
     Info1: TMenuItem;
     SepOperarios1: TMenuItem;
     miAsignarOperarios: TMenuItem;
@@ -260,6 +261,13 @@ type
     Image3: TImage;
     Label10: TLabel;
     cxButton1: TcxButton;
+    btnCompactar: TcxButton;
+    btnCompact: TcxButton;
+    btnFoco: TcxButton;
+    btnAtajos: TcxButton;
+    procedure btnAtajosClick(Sender: TObject);
+    procedure btnFocoClick(Sender: TObject);
+    procedure btnCompactarClick(Sender: TObject);
     procedure pnlKPIAlertasClick(Sender: TObject);
     procedure pnlGanttContainerResize(Sender: TObject);
     procedure TimelineViewportChanged(Sender: TObject;
@@ -348,6 +356,7 @@ type
     procedure odalaOF1Click(Sender: TObject);
     procedure otalaOT1Click(Sender: TObject);
     procedure ResaltarOF1Click(Sender: TObject);
+    procedure CentrarOF1Click(Sender: TObject);
     procedure btnIrClick(Sender: TObject);
     procedure btnHoyClick(Sender: TObject);
     procedure btnNodeGoToLastClick(Sender: TObject);
@@ -365,6 +374,7 @@ type
     procedure btnDesasignarSelClick(Sender: TObject);
     procedure btnAutoPlanSelClick(Sender: TObject);
     procedure cxButton1Click(Sender: TObject);
+    procedure btnCompactClick(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -501,6 +511,9 @@ type
     // Recalcula las alertas de planificacion y refresca el KPI de alertas
     // (contador + color del panel segun la severidad maxima presente).
     procedure RecalcAlertas;
+    // Aplica el modo foco (cadena de dependencias del nodo seleccionado) si el
+    // boton Foco esta activo; en otro caso limpia el efecto.
+    procedure AplicarFoco;
     // Programa el recalculo de alertas con debounce (no calcula en caliente).
     procedure ScheduleRecalcAlertas;
     procedure AlertasDebounceTick(Sender: TObject);
@@ -520,6 +533,9 @@ type
     property GanttControl: TGanttControl read FGanttControl;
     property TimelineControl: TGanttTimelineControl read FTimelineControl;
     property CentrosControl: TGanttCentresControl read FCentrosControl;
+    // Abre el dialogo "Alertas de planificacion" sobre el Gantt actual. Lo usa
+    // tanto el KPI como el menu/boton del Main.
+    procedure MostrarAlertas;
     procedure Inicializar(const AFechaInicio, AFechaFin: TDateTime); overload;
     procedure Inicializar; overload;
     procedure SaveViewportPrefs;
@@ -544,7 +560,7 @@ uses
   uGanttDatesDialog, uUserPrefs, System.JSON,
   uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,
-  uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, Main;
+  uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts, Main;
 
 
 
@@ -740,6 +756,67 @@ begin
  // El boton abre el timeline visual del historico (navegar adelante/atras con
   // contador). El undo directo de un paso sigue disponible con Ctrl+Z.
   TfrmGanttHistoryTimeline.Execute(Self, FGanttControl, btnUndo);
+end;
+
+procedure TfrmVistaGantt.btnCompactarClick(Sender: TObject);
+begin
+  if FGanttControl = nil then Exit;
+  // Toggle: muestra solo los centros con nodos en el viewport actual. El boton
+  // (GroupIndex=1, AllowAllUp) refleja el estado pulsado/no pulsado.
+  FGanttControl.CompactToViewport := btnCompactar.Down;
+  if btnCompactar.Down then
+    btnCompactar.Hint := 'Mostrando solo centros con carga en la vista actual'
+  else
+    btnCompactar.Hint := 'Mostrar todos los centros';
+end;
+
+procedure TfrmVistaGantt.btnAtajosClick(Sender: TObject);
+begin
+  TfrmGanttShortcuts.Execute(Self);
+end;
+
+procedure TfrmVistaGantt.btnFocoClick(Sender: TObject);
+begin
+  // Toggle: al activar, atenua todo salvo el nodo seleccionado y su cadena de
+  // dependencias. Se reaplica al cambiar de seleccion (ver AplicarFoco).
+  AplicarFoco;
+  if btnFoco.Down then
+    btnFoco.Hint := 'Resaltando la cadena de dependencias del nodo seleccionado'
+  else
+    btnFoco.Hint := 'Modo foco desactivado';
+end;
+
+procedure TfrmVistaGantt.AplicarFoco;
+var
+  idx: Integer;
+begin
+  if FGanttControl = nil then Exit;
+  if not btnFoco.Down then
+  begin
+    // Solo limpiar si el efecto activo es nuestro (no pisar un filtro de
+    // operarios/alertas en curso).
+    FGanttControl.ClearOperarioFilter;
+    Exit;
+  end;
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then
+  begin
+    FGanttControl.ClearOperarioFilter;
+    Exit;
+  end;
+  FGanttControl.FocusChain(idx, False);   // False = atenuar (no ocultar)
+end;
+
+procedure TfrmVistaGantt.btnCompactClick(Sender: TObject);
+begin
+ if FGanttControl = nil then Exit;
+  // Toggle: muestra solo los centros con nodos en el viewport actual. El boton
+  // (GroupIndex=1, AllowAllUp) refleja el estado pulsado/no pulsado.
+  FGanttControl.CompactToViewport := btnCompact.Down;
+  if btnCompact.Down then
+    btnCompact.Hint := 'Mostrando solo centros con carga en la vista actual'
+  else
+    btnCompact.Hint := 'Mostrar todos los centros';
 end;
 
 procedure TfrmVistaGantt.btnClearOperariosClick(Sender: TObject);
@@ -998,7 +1075,13 @@ procedure TfrmVistaGantt.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
 
-  if Key = VK_F1 then
+  // Maj+F1 o '?' -> panel de atajos. F1 solo -> ayuda contextual (MD).
+  if (Key = VK_F1) and (ssShift in Shift) then
+  begin
+    TfrmGanttShortcuts.Execute(Self);
+    Key := 0;
+  end
+  else if Key = VK_F1 then
   begin
     TfrmHelpGuide.Execute;
     Key := 0;
@@ -1013,6 +1096,35 @@ begin
   begin
     FGanttControl.RedoLastAction;
     UpdateHistoryButtons;
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('H')) then
+  begin
+    cxButton1Click(nil);            // Historial (timeline visual)
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('K')) then
+  begin
+    btnCompactar.Down := not btnCompactar.Down;   // toggle Compactar
+    btnCompactarClick(nil);
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('F')) then
+  begin
+    btnFoco.Down := not btnFoco.Down;             // toggle Foco
+    btnFocoClick(nil);
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('E')) then
+  begin
+    CentrarOF1Click(nil);           // Centrar OF en pantalla
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = Ord('R')) then
+  begin
+    btnResaltarOF.SpeedButtonOptions.Down :=
+      not btnResaltarOF.SpeedButtonOptions.Down;  // toggle Resaltar OF
+    btnResaltarOFClick(btnResaltarOF);            // Sender real (usa Sender.Tag)
     Key := 0;
   end;
 end;
@@ -2450,7 +2562,10 @@ begin
    if bOF or bOT then
     GanttNodeSelected( Self )
    else
+   begin
     FGanttControl.ClearSearch;
+    FGanttControl.ClearOperarioFilter;   // quitar la atenuacion del resto
+   end;
 
 end;
 
@@ -3381,9 +3496,18 @@ begin
     Label8.Font.Color := clWhite;
     Label9.Font.Color := clWhite;
   end;
+
+  // Reflejar la salud tambien en el boton de alertas de la toolbar del Main.
+  if Assigned(Form1) then
+    Form1.ActualizarBotonAlertas(salud, total);
 end;
 
 procedure TfrmVistaGantt.pnlKPIAlertasClick(Sender: TObject);
+begin
+  MostrarAlertas;
+end;
+
+procedure TfrmVistaGantt.MostrarAlertas;
 var
   Ids: TArray<Integer>;
   Provider: TAlertasProvider;
@@ -3547,12 +3671,21 @@ begin
 
   if btnResaltarOT.SpeedButtonOptions.Down then
     FGanttControl.HighlightOT(FGanttControl.SelectedNodeIndex);
+
+  // Modo foco: reaplica la cadena de dependencias al nuevo nodo seleccionado.
+  if btnFoco.Down then
+    AplicarFoco;
 end;
 
 procedure TfrmVistaGantt.GanttVoidClick(Sender: TObject);
 begin
     // Al hacer clic en el fondo, limpiar el resaltado
   FGanttControl.ClearSearch;
+  // Al deseleccionar, mostrar todo de nuevo (los botones de foco/resaltado
+  // siguen pulsados: la proxima seleccion volvera a aplicar el efecto).
+  if btnFoco.Down or btnResaltarOF.SpeedButtonOptions.Down or
+     btnResaltarOT.SpeedButtonOptions.Down then
+    FGanttControl.ClearOperarioFilter;
 end;
 procedure TfrmVistaGantt.Gestionmarcadores1Click(Sender: TObject);
 var
@@ -3935,6 +4068,16 @@ begin
   idx := FGanttControl.SelectedNodeIndex;
   if idx < 0 then Exit;
   FGanttControl.HighlightOF(idx);
+end;
+
+procedure TfrmVistaGantt.CentrarOF1Click(Sender: TObject);
+var
+  idx: Integer;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+  // Ajusta zoom + scroll para ver toda la OF del nodo en pantalla.
+  FGanttControl.CenterOFOnScreen(idx);
 end;
 
 procedure TfrmVistaGantt.Resetduracinoriginal1Click(Sender: TObject);

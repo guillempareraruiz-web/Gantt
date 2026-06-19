@@ -1,23 +1,34 @@
-﻿unit uAlertasViewer;
+unit uAlertasViewer;
 // Dialogo modal (bsDialog) que muestra el listado de alertas de planificacion
 // detectadas por uGanttAlertas. Cada fila = un tipo de alerta con su contador y
-// una marca de color por severidad. Al hacer doble clic (o "Ver en Gantt") sobre
+// un badge de color por severidad. Al hacer doble clic (o "Ver en Gantt") sobre
 // una alerta, el form se cierra con mrOk y expone los DataIds de los nodos
 // afectados para que el caller los filtre/resalte en el Gantt.
+//
+// El estilo visual imita un panel de "excepciones detectadas": cabecera limpia,
+// barra de filtros (gravedad / familia / buscar / solo con incidencias) y una
+// tabla cxGrid con cabecera azul-gris en negrita, filas espaciadas y badges de
+// gravedad como pastillas redondeadas (Critica / Alta / Media / Baja).
+//
+// El grid es cxGrid no-bound: se puebla desde FVisibles (las alertas que pasan
+// el filtro). El badge de la columna Gravedad se pinta en OnCustomDrawCell.
 //
 // Ayuda contextual via THelpViewer (topic 'uAlertasViewer'), patron MD a disco.
 interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  System.Types, System.UITypes, System.Generics.Collections,
+  System.Types, System.UITypes, System.Variants, System.Generics.Collections,
   System.Generics.Defaults, Vcl.Graphics, Vcl.Controls, Vcl.Forms,
-  Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.ImgList,
+  Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ImgList,
   Winapi.GDIPOBJ, Winapi.GDIPAPI,
-  cxControls, cxGraphics, cxLookAndFeels, cxLookAndFeelPainters, cxListView,
-  uGanttAlertas, System.ImageList, dxSkinsCore, dxSkinBasic, dxSkinBlack,
-  dxSkinBlue, dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom,
-  dxSkinDarkSide, dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
+  cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters, cxStyles,
+  cxCustomData, cxFilter, cxData, cxDataStorage, cxEdit, cxGridLevel,
+  cxGridCustomTableView, cxGridTableView, cxGridCustomView, cxGrid, cxClasses,
+  cxContainer, uGanttAlertas, System.ImageList,
+  dxSkinsCore, dxSkinsDefaultPainters, dxSkinBasic, dxSkinBlack, dxSkinBlue,
+  dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
+  dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
   dxSkinLiquidSky, dxSkinLondonLiquidSky, dxSkinMcSkin, dxSkinMetropolis,
   dxSkinMetropolisDark, dxSkinMoneyTwins, dxSkinOffice2007Black,
@@ -31,7 +42,8 @@ uses
   dxSkinSummer2008, dxSkinTheAsphaltWorld, dxSkinTheBezier, dxSkinValentine,
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
-  dxSkinXmas2008Blue, cxContainer, cxEdit;
+  dxSkinXmas2008Blue, cxNavigator, dxDateRanges, dxScrollbarAnnotations,
+  cxTextEdit;
 
 type
   // Proveedor de alertas: el caller lo implementa (delega en uGanttAlertas).
@@ -43,42 +55,63 @@ type
     pnlTop: TPanel;
     lblTitulo: TLabel;
     lblSalud: TLabel;
-    btnVerTodas: TButton;
     btnConfig: TButton;
-    lvAlertas: TcxListView;
+    pnlFiltros: TPanel;
+    cbGravedad: TComboBox;
+    cbTipo: TComboBox;
+    edtBuscar: TEdit;
+    chkSoloIncidencias: TCheckBox;
+    Grid: TcxGrid;
+    tv: TcxGridTableView;
+    lv: TcxGridLevel;
+    colGravedad: TcxGridColumn;
+    colCodigo: TcxGridColumn;
+    colFamilia: TcxGridColumn;
+    colMotivo: TcxGridColumn;
+    colNodos: TcxGridColumn;
+    colPeso: TcxGridColumn;
     pnlBottom: TPanel;
-    lblResumen: TLabel;
+    lblMaxRecords: TLabel;
     btnFiltrar: TButton;
     btnCerrar: TButton;
-    ilSeveridad: TImageList;
+    lblResumen: TLabel;
+    Button1: TButton;
+    btnVerTodas: TButton;
     procedure FormShow(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnCerrarClick(Sender: TObject);
     procedure btnFiltrarClick(Sender: TObject);
     procedure btnVerTodasClick(Sender: TObject);
     procedure btnConfigClick(Sender: TObject);
-    procedure lvAlertasDblClick(Sender: TObject);
-    procedure lvAlertasColumnClick(Sender: TObject; Column: TListColumn);
-    procedure lvAlertasDrawItem(Sender: TCustomListView; Item: TListItem;
-      Rect: TRect; State: TOwnerDrawState);
+    procedure FiltroChange(Sender: TObject);
+    procedure tvDblClick(Sender: TObject);
+    procedure tvCustomDrawCell(Sender: TcxCustomGridTableView;
+      ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
+      var ADone: Boolean);
   private
-    FAlertas: TArray<TAlertaItem>;
+    FAlertas: TArray<TAlertaItem>;       // todas las detectadas (sin filtrar)
+    FVisibles: TArray<TAlertaItem>;      // las que pasan el filtro (lo que se pinta)
     FSelectedDataIds: TArray<Integer>;
     FVerTodas: Boolean;                  // estado del toggle "Ver todas"
     FRedetectar: TAlertasProvider;       // recalcula segun AIncluirCumplidas
-    FSortCol: Integer;                   // columna de orden (-1 = orden natural)
-    FSortDesc: Boolean;                  // True = descendente
     FOnConfig: TProc;                    // abre la config (lo provee el caller)
     FTotalNodos: Integer;                // nodos visibles, para el indice de salud
-    procedure OrdenarAlertas;            // reordena FAlertas segun FSortCol/Desc
-    procedure OcultarScrollHorizontal;   // oculta la barra horizontal del listview
+    FCargando: Boolean;                  // evita reentradas en FiltroChange
+    FStyleHeader: TcxStyle;              // estilo de cabecera (azul-gris, negrita)
+    FStyleSelection: TcxStyle;          // estilo de fila seleccionada (azul claro)
+    procedure ConfigurarEstilos;         // crea y aplica los estilos del grid
+    procedure InicializarFiltros;        // puebla los combos una sola vez
+    procedure AplicarFiltro;             // FAlertas -> FVisibles segun los filtros
     procedure Poblar;
     function ColorDeSeveridad(const ASev: TAlertaSeveridad): TColor;
+    function EtiquetaSeveridad(const ASev: TAlertaSeveridad): string;
+    function FamiliaDe(const ACodigo: string): string;
+    function AlertaDe(const ARecordIndex: Integer; out A: TAlertaItem): Boolean;
     procedure ConfirmarSeleccion;
     procedure RefrescarDesdeProveedor;
-    // Dibuja la marca de estado (icono PRO, antialias GDI+) en ARect.
-    procedure DibujarMarcaEstado(const ACanvas: TCanvas; const ARect: TRect;
-      const A: TAlertaItem; const AEsPendiente, AEsCumplida: Boolean);
+    // Dibuja un badge (pastilla redondeada) de gravedad centrado en ARect.
+    procedure DibujarBadge(const ACanvas: TCanvas; const ARect: TRect;
+      const AColor: TColor; const ATexto: string; const AAtenuado: Boolean);
   public
     // DataIds de la alerta elegida (vacio si se cerro sin elegir). Valido tras
     // ShowModal = mrOk.
@@ -107,10 +140,49 @@ uses
   uHelpViewer;
 
 const
-  COL_ALTA  = $003B3BD0;  // rojo  (BGR)
-  COL_MEDIA = $002090E8;  // naranja
-  COL_AVISO = $0020B0E0;  // amarillo/ambar
-  COL_INFO  = $00B08020;  // azul/info
+  COL_ALTA  = $003B3BD0;  // rojo  (BGR)  -> Critica
+  COL_MEDIA = $002090E8;  // naranja      -> Alta
+  COL_AVISO = $0020B0E0;  // ambar        -> Media
+  COL_INFO  = $00B08020;  // azul/info    -> Baja
+
+  CLR_TXT      = $00222222;  // texto principal
+  CLR_TXT_SOFT = $008B8378;  // texto secundario
+  CLR_LINK     = $00C77A2B;  // codigo tipo enlace (azul, BGR)
+
+// --- Helpers de color (funciones libres) -----------------------------------
+
+function GpColorA(const AColor: TColor; const AAlpha: Byte): TGPColor;
+var
+  c: Integer;
+begin
+  c := ColorToRGB(AColor);
+  Result := MakeColor(AAlpha, GetRValue(c), GetGValue(c), GetBValue(c));
+end;
+
+// Mezcla AColor con blanco (0 -> AColor, 1 -> blanco): tono pastel del fondo.
+// (La variable se llama 'c', no 'rgb', para no ombrear la funcion RGB.)
+function MezclarConBlanco(const AColor: TColor; const AFactor: Double): TColor;
+var
+  c, r, g, b: Integer;
+begin
+  c := ColorToRGB(AColor);
+  r := Round(GetRValue(c) + (255 - GetRValue(c)) * AFactor);
+  g := Round(GetGValue(c) + (255 - GetGValue(c)) * AFactor);
+  b := Round(GetBValue(c) + (255 - GetBValue(c)) * AFactor);
+  Result := RGB(r, g, b);
+end;
+
+// Oscurece AColor mezclandolo con negro: contraste del texto del badge.
+function MezclarConNegro(const AColor: TColor; const AFactor: Double): TColor;
+var
+  c, r, g, b: Integer;
+begin
+  c := ColorToRGB(AColor);
+  r := Round(GetRValue(c) * (1 - AFactor));
+  g := Round(GetGValue(c) * (1 - AFactor));
+  b := Round(GetBValue(c) * (1 - AFactor));
+  Result := RGB(r, g, b);
+end;
 
 class function TfrmAlertasViewer.Ejecutar(AOwner: TComponent;
   const ARedetectar: TAlertasProvider;
@@ -128,8 +200,6 @@ begin
     F.FTotalNodos := ATotalNodos;
     F.btnConfig.Visible := Assigned(AOnConfig);
     F.FVerTodas := False;
-    F.FSortCol := -1;       // orden natural (por severidad/estado)
-    F.FSortDesc := False;
     Result := F.ShowModal = mrOk;
     if Result then
       ADataIds := F.SelectedDataIds;
@@ -144,78 +214,37 @@ begin
     FAlertas := FRedetectar(FVerTodas)
   else
     FAlertas := nil;
-  OrdenarAlertas;   // respeta el orden de columna activo (si lo hay)
+  AplicarFiltro;    // FAlertas -> FVisibles
   Poblar;
 end;
 
-// Rango de estado para ordenar la columna de marca: incidencia(0) antes que
-// cumplida(1) antes que pendiente(2), igual que el orden natural visible.
-function RangoEstado(const A: TAlertaItem): Integer;
+// Familia legible a partir del prefijo del codigo (A=plazos, O=operarios,
+// M=material, R=recursos, C=capacidad, D=datos).
+function TfrmAlertasViewer.FamiliaDe(const ACodigo: string): string;
 begin
-  if not A.Implementada then Result := 2
-  else if A.Count > 0 then Result := 0
-  else Result := 1;
-end;
-
-procedure TfrmAlertasViewer.OrdenarAlertas;
-const
-  CAPS: array[0..4] of string = ('', 'C'#243'd.', 'Peso', 'N', 'Alerta');
-var
-  C: Integer;
-  flecha: string;
-begin
-  // Indicador visual de orden en los headers (flecha en la columna activa).
-  for C := 0 to lvAlertas.Columns.Count - 1 do
-  begin
-    if (C = FSortCol) and (FSortCol >= 0) and (C <= High(CAPS)) then
-    begin
-      if FSortDesc then flecha := '  '#$25BC else flecha := '  '#$25B2;
-      lvAlertas.Columns[C].Caption := CAPS[C] + flecha;
-    end
-    else if C <= High(CAPS) then
-      lvAlertas.Columns[C].Caption := CAPS[C];
-  end;
-
-  // FSortCol = -1 -> orden natural (el que ya trae el proveedor: por estado y
-  // peso). En otro caso, ordena por la columna clicada (asc/desc).
-  if FSortCol < 0 then Exit;
-
-  TArray.Sort<TAlertaItem>(FAlertas, TComparer<TAlertaItem>.Construct(
-    function(const L, R: TAlertaItem): Integer
-    begin
-      case FSortCol of
-        // Marca: por estado (incidencia/cumplida/pendiente) y, dentro, por peso.
-        0: begin
-             Result := RangoEstado(L) - RangoEstado(R);
-             if Result = 0 then Result := R.Peso - L.Peso;
-           end;
-        1:   Result := CompareText(L.Codigo, R.Codigo);   // codigo
-        2:   Result := L.Peso - R.Peso;                   // peso
-        3:   Result := L.Count - R.Count;                 // contador
-        4:   Result := CompareText(L.Titulo, R.Titulo);   // alerta
-      else
-        Result := 0;
-      end;
-      if Result = 0 then  // desempate estable por codigo
-        Result := CompareText(L.Codigo, R.Codigo);
-      if FSortDesc then
-        Result := -Result;
-    end));
-end;
-
-procedure TfrmAlertasViewer.lvAlertasColumnClick(Sender: TObject;
-  Column: TListColumn);
-begin
-  // Click en la misma columna -> alterna asc/desc; en otra -> asc.
-  if FSortCol = Column.Index then
-    FSortDesc := not FSortDesc
+  if ACodigo = '' then Exit('');
+  case ACodigo[1] of
+    'A': Result := 'Plazos';
+    'O': Result := 'Operarios';
+    'M': Result := 'Material';
+    'R': Result := 'Recursos';
+    'C': Result := 'Capacidad';
+    'D': Result := 'Datos';
   else
-  begin
-    FSortCol := Column.Index;
-    FSortDesc := False;
+    Result := 'Otros';
   end;
-  OrdenarAlertas;
-  Poblar;
+end;
+
+function TfrmAlertasViewer.EtiquetaSeveridad(
+  const ASev: TAlertaSeveridad): string;
+begin
+  case ASev of
+    asAlta:  Result := 'Cr'#237'tica';
+    asMedia: Result := 'Alta';
+    asAviso: Result := 'Media';
+  else
+    Result := 'Baja';
+  end;
 end;
 
 function TfrmAlertasViewer.ColorDeSeveridad(
@@ -230,293 +259,326 @@ begin
   end;
 end;
 
+// Devuelve la alerta asociada al RecordIndex del grid (mapea sobre FVisibles
+// teniendo en cuenta el orden visual actual via RowInfo no es necesario porque
+// el data controller mantiene el indice de registro = indice en FVisibles).
+function TfrmAlertasViewer.AlertaDe(const ARecordIndex: Integer;
+  out A: TAlertaItem): Boolean;
+begin
+  Result := (ARecordIndex >= 0) and (ARecordIndex <= High(FVisibles));
+  if Result then
+    A := FVisibles[ARecordIndex];
+end;
+
+procedure TfrmAlertasViewer.ConfigurarEstilos;
+begin
+  // Forzamos LookAndFeel plano en el grid: con un skin activo, el skin pinta
+  // la cabecera y la seleccion e IGNORA los colores de Styles.* -> sin esto el
+  // fondo del header no se ve. En plano (ufmFlat) si se respetan los estilos.
+  Grid.LookAndFeel.NativeStyle := False;
+  Grid.LookAndFeel.Kind := lfUltraFlat;
+
+  // Cabecera: fondo azul-gris muy claro + texto gris oscuro en negrita.
+  if FStyleHeader = nil then
+    FStyleHeader := TcxStyle.Create(Self);
+  FStyleHeader.Color := $00F8F4F1;       // azul-gris muy claro (RGB ~F1F4F8)
+  FStyleHeader.TextColor := $00504438;   // gris-azulado oscuro
+  FStyleHeader.Font.Name := 'Segoe UI';
+  FStyleHeader.Font.Height := -12;
+  FStyleHeader.Font.Style := [fsBold];
+  tv.Styles.Header := FStyleHeader;
+
+  // Seleccion: fondo azul claro en TODA la fila + texto normal.
+  if FStyleSelection = nil then
+    FStyleSelection := TcxStyle.Create(Self);
+  FStyleSelection.Color := $00F4E3D0;    // azul claro (BGR; RGB ~D0E3F4)
+  FStyleSelection.TextColor := CLR_TXT;
+  tv.Styles.Selection := FStyleSelection;
+end;
+
+procedure TfrmAlertasViewer.InicializarFiltros;
+var
+  S: TAlertaSeveridad;
+begin
+  cbGravedad.Items.BeginUpdate;
+  try
+    cbGravedad.Items.Clear;
+    cbGravedad.Items.Add('Todas las gravedades');
+    for S := High(TAlertaSeveridad) downto Low(TAlertaSeveridad) do
+      cbGravedad.Items.Add(EtiquetaSeveridad(S));
+  finally
+    cbGravedad.Items.EndUpdate;
+  end;
+  cbGravedad.ItemIndex := 0;
+
+  cbTipo.Items.BeginUpdate;
+  try
+    cbTipo.Items.Clear;
+    cbTipo.Items.Add('Todas las familias');
+    cbTipo.Items.Add('Plazos');
+    cbTipo.Items.Add('Operarios');
+    cbTipo.Items.Add('Material');
+    cbTipo.Items.Add('Recursos');
+    cbTipo.Items.Add('Capacidad');
+    cbTipo.Items.Add('Datos');
+  finally
+    cbTipo.Items.EndUpdate;
+  end;
+  cbTipo.ItemIndex := 0;
+end;
+
+procedure TfrmAlertasViewer.AplicarFiltro;
+var
+  A: TAlertaItem;
+  Res: TList<TAlertaItem>;
+  txt, fam: string;
+  okGrav, okFam, okTxt, okInc: Boolean;
+begin
+  txt := Trim(LowerCase(edtBuscar.Text));
+  Res := TList<TAlertaItem>.Create;
+  try
+    for A in FAlertas do
+    begin
+      okGrav := (cbGravedad.ItemIndex <= 0) or
+        (EtiquetaSeveridad(A.Severidad) = cbGravedad.Text);
+
+      fam := FamiliaDe(A.Codigo);
+      okFam := (cbTipo.ItemIndex <= 0) or (fam = cbTipo.Text);
+
+      okTxt := (txt = '') or
+        (Pos(txt, LowerCase(A.Codigo)) > 0) or
+        (Pos(txt, LowerCase(fam)) > 0) or
+        (Pos(txt, LowerCase(A.Titulo)) > 0);
+
+      okInc := (not chkSoloIncidencias.Checked) or
+        (A.Implementada and (A.Count > 0));
+
+      if okGrav and okFam and okTxt and okInc then
+        Res.Add(A);
+    end;
+    FVisibles := Res.ToArray;
+  finally
+    Res.Free;
+  end;
+end;
+
+procedure TfrmAlertasViewer.FiltroChange(Sender: TObject);
+begin
+  if FCargando then Exit;
+  AplicarFiltro;
+  Poblar;
+end;
+
 procedure TfrmAlertasViewer.Poblar;
 var
   A: TAlertaItem;
-  Li: TListItem;
-  totalNodos, conIncidencias, I, salud: Integer;
+  row, totalNodos, conIncidencias, salud: Integer;
+  s: string;
 begin
-  lvAlertas.Items.BeginUpdate;
+  tv.BeginUpdate;
   try
-    lvAlertas.Items.Clear;
-    totalNodos := 0;
-    conIncidencias := 0;
-    for A in FAlertas do
+    tv.DataController.RecordCount := Length(FVisibles);
+    for row := 0 to High(FVisibles) do
     begin
-      Li := lvAlertas.Items.Add;
-      Li.Caption := '';                      // col 0: marca de color (owner-draw)
-      Li.SubItems.Add(A.Codigo);             // col 1: codigo (A01...)
-      Li.SubItems.Add(IntToStr(A.Peso));     // col 2: peso
-      // Pendientes sin contador (roadmap); implementadas con su numero.
+      A := FVisibles[row];
+      // colGravedad: el texto lo pinta el badge en CustomDrawCell, pero ponemos
+      // el valor para que el sort por gravedad funcione (orden Critica..Baja).
+      tv.DataController.Values[row, colGravedad.Index] := Ord(A.Severidad);
+      tv.DataController.Values[row, colCodigo.Index]   := A.Codigo;
+      tv.DataController.Values[row, colFamilia.Index]  := FamiliaDe(A.Codigo);
       if A.Implementada then
-        Li.SubItems.Add(IntToStr(A.Count))   // col 3: contador
+        tv.DataController.Values[row, colMotivo.Index] := A.Titulo
       else
-        Li.SubItems.Add('-');
-      Li.SubItems.Add(A.Titulo);             // col 4: descripcion
-      Li.Data := Pointer(Ord(A.Tipo));
-      if A.Implementada and (A.Count > 0) then
-      begin
-        Inc(totalNodos, A.Count);
-        Inc(conIncidencias);
-      end;
+        tv.DataController.Values[row, colMotivo.Index] :=
+          A.Titulo + '  (pr'#243'ximamente)';
+      if not A.Implementada then s := '-'
+      else if A.Count = 0 then s := 'OK'
+      else s := IntToStr(A.Count);
+      tv.DataController.Values[row, colNodos.Index] := s;
+      tv.DataController.Values[row, colPeso.Index]  := A.Peso;
     end;
   finally
-    lvAlertas.Items.EndUpdate;
+    tv.EndUpdate;
   end;
 
-  // Indice de salud del plan (0..100): bajo el titulo, en color segun el grado.
-  salud := CalcularSalud(FAlertas, FTotalNodos);
-  lblSalud.Caption := Format('Salud del plan %d/100 (%s)',
-    [salud, EtiquetaSalud(salud)]);
-  if salud >= 90 then lblSalud.Font.Color := $00308828        // verde
-  else if salud >= 75 then lblSalud.Font.Color := $00208020   // verde oscuro
-  else if salud >= 50 then lblSalud.Font.Color := $002090E8   // naranja
-  else lblSalud.Font.Color := clRed;                          // rojo (malo/critico)
-
-  // En pnlBottom, solo el detalle de incidencias.
-  if conIncidencias = 0 then
-    lblResumen.Caption := 'Sin incidencias activas. '#161'Planificaci'#243'n correcta!'
-  else
-    lblResumen.Caption := Format(
-      '%d tipos con incidencias, %d nodos afectados.  ' +
-      'Doble clic para verlos en el Gantt.',
-      [conIncidencias, totalNodos]);
-
-  // Seleccionar la primera alerta con incidencias real (no una cumplida/pendiente).
-  for I := 0 to High(FAlertas) do
-    if FAlertas[I].Implementada and (FAlertas[I].Count > 0) then
+  // Contadores sobre el total (no sobre lo filtrado) para el indice de salud.
+  totalNodos := 0;
+  conIncidencias := 0;
+  for A in FAlertas do
+    if A.Implementada and (A.Count > 0) then
     begin
-      lvAlertas.Items[I].Selected := True;
+      Inc(totalNodos, A.Count);
+      Inc(conIncidencias);
+    end;
+
+  salud := CalcularSalud(FAlertas, FTotalNodos);
+
+  lblMaxRecords.Caption := Format(
+    'Mostrando %d de %d excepciones',
+    [Length(FVisibles), Length(FAlertas)]);
+
+  lblResumen.Caption := Format(
+    'Salud del plan %d/100 (%s)',
+    [salud, EtiquetaSalud(salud)]);
+
+  if salud >= 90 then lblResumen.Font.Color := $00308828
+  else if salud >= 75 then lblResumen.Font.Color := $00208020
+  else if salud >= 50 then lblResumen.Font.Color := $002090E8
+  else lblResumen.Font.Color := clRed;
+
+  // Seleccionar la primera fila con incidencias real.
+  for row := 0 to High(FVisibles) do
+    if FVisibles[row].Implementada and (FVisibles[row].Count > 0) then
+    begin
+      tv.DataController.FocusedRecordIndex := row;
       Break;
     end;
-
-  // La columna 'Alerta' es AutoSize, asi que el ancho total nunca excede el
-  // cliente; pero el listview puede mostrar igualmente la barra horizontal por
-  // calculo interno. La forzamos oculta tras repoblar.
-  OcultarScrollHorizontal;
 end;
 
-procedure TfrmAlertasViewer.OcultarScrollHorizontal;
-begin
-  // El owner-draw + AutoSize puede dejar una barra horizontal residual. La
-  // ocultamos directamente sobre el handle del listview interno del cxListView.
-  if lvAlertas.InnerListView.HandleAllocated then
-    ShowScrollBar(lvAlertas.InnerListView.Handle, SB_HORZ, False);
-end;
+// --- Badge (pastilla redondeada) -------------------------------------------
 
-// Convierte un TColor (BGR) a ARGB de GDI+ opaco.
-function GpColor(const AColor: TColor): TGPColor;
-var
-  rgb: Integer;
-begin
-  rgb := ColorToRGB(AColor);
-  Result := MakeColor(255, GetRValue(rgb), GetGValue(rgb), GetBValue(rgb));
-end;
-
-procedure TfrmAlertasViewer.DibujarMarcaEstado(const ACanvas: TCanvas;
-  const ARect: TRect; const A: TAlertaItem;
-  const AEsPendiente, AEsCumplida: Boolean);
+procedure TfrmAlertasViewer.DibujarBadge(const ACanvas: TCanvas;
+  const ARect: TRect; const AColor: TColor; const ATexto: string;
+  const AAtenuado: Boolean);
 var
   G: TGPGraphics;
-  Brush: TGPSolidBrush;
-  Pen: TGPPen;
-  cx, cy, rad: Single;
-  tri: array[0..2] of TGPPointF;
-  tick: array[0..2] of TGPPointF;
+  brush: TGPSolidBrush;
+  bx, by, bw, bh, rad, d: Single;
+  tw: Integer;
+  fondo: TColor;
 begin
-  cx := (ARect.Left + ARect.Right) / 2;
-  cy := (ARect.Top + ARect.Bottom) / 2;
+  ACanvas.Font.Style := [fsBold];
+  tw := ACanvas.TextWidth(ATexto);
+  bw := tw + 30;
+  bh := 28;
+  bx := ARect.Left + 12;                          // padding izquierdo de la celda
+  by := (ARect.Top + ARect.Bottom - bh) / 2;
   rad := 9;
+  d := rad * 2;
 
+  if AAtenuado then fondo := MezclarConBlanco(AColor, 0.90)
+  else fondo := MezclarConBlanco(AColor, 0.82);
+
+  // Rectangulo redondeado: 4 circulos en las esquinas + dos rectangulos en cruz.
   G := TGPGraphics.Create(ACanvas.Handle);
-  Brush := TGPSolidBrush.Create(MakeColor(0, 0, 0, 0));
-  Pen := TGPPen.Create(MakeColor(255, 255, 255, 255), 2.2);
+  brush := TGPSolidBrush.Create(GpColorA(fondo, 255));
   try
     G.SetSmoothingMode(SmoothingModeAntiAlias);
-    Pen.SetStartCap(LineCapRound);
-    Pen.SetEndCap(LineCapRound);
-    Pen.SetLineJoin(LineJoinRound);
-
-    if AEsPendiente then
-    begin
-      // Reloj: disco gris claro con borde gris + dos manecillas.
-      Brush.SetColor(MakeColor(255, 228, 228, 228));
-      G.FillEllipse(Brush, cx - rad, cy - rad, rad * 2, rad * 2);
-      Pen.SetColor(MakeColor(255, 130, 130, 130));
-      Pen.SetWidth(1.4);
-      G.DrawEllipse(Pen, cx - rad, cy - rad, rad * 2, rad * 2);
-      Pen.SetColor(MakeColor(255, 96, 96, 96));
-      Pen.SetWidth(1.6);
-      G.DrawLine(Pen, cx, cy, cx, cy - rad + 3);     // manecilla larga
-      G.DrawLine(Pen, cx, cy, cx + 4, cy);           // manecilla corta
-    end
-    else if AEsCumplida then
-    begin
-      // Disco verde con tic blanco.
-      Brush.SetColor(MakeColor(255, 40, 136, 48));
-      G.FillEllipse(Brush, cx - rad, cy - rad, rad * 2, rad * 2);
-      Pen.SetColor(MakeColor(255, 255, 255, 255));
-      Pen.SetWidth(2.2);
-      tick[0] := MakePoint(cx - 4.0, cy + 0.5);
-      tick[1] := MakePoint(cx - 1.0, cy + 3.5);
-      tick[2] := MakePoint(cx + 4.5, cy - 3.5);
-      G.DrawLines(Pen, PGPPointF(@tick[0]), Length(tick));
-    end
-    else if A.Severidad = asAlta then
-    begin
-      // Triangulo de aviso con "!" blanco.
-      Brush.SetColor(GpColor(ColorDeSeveridad(A.Severidad)));
-      tri[0] := MakePoint(cx, cy - rad);
-      tri[1] := MakePoint(cx - rad, cy + rad - 1);
-      tri[2] := MakePoint(cx + rad, cy + rad - 1);
-      G.FillPolygon(Brush, PGPPointF(@tri[0]), Length(tri));
-      Pen.SetColor(MakeColor(255, 255, 255, 255));
-      Pen.SetWidth(2.0);
-      G.DrawLine(Pen, cx, cy - 3, cx, cy + 2);       // barra "!"
-      Brush.SetColor(MakeColor(255, 255, 255, 255));
-      G.FillEllipse(Brush, cx - 1.1, cy + 4, 2.2, 2.2); // punto "!"
-    end
-    else
-    begin
-      // Disco de color (media/aviso/info) con "!" blanco.
-      Brush.SetColor(GpColor(ColorDeSeveridad(A.Severidad)));
-      G.FillEllipse(Brush, cx - rad, cy - rad, rad * 2, rad * 2);
-      Pen.SetColor(MakeColor(255, 255, 255, 255));
-      Pen.SetWidth(2.0);
-      G.DrawLine(Pen, cx, cy - 4, cx, cy + 1);       // barra "!"
-      Brush.SetColor(MakeColor(255, 255, 255, 255));
-      G.FillEllipse(Brush, cx - 1.1, cy + 3, 2.2, 2.2); // punto "!"
-    end;
+    G.FillEllipse(brush, bx, by, d, d);
+    G.FillEllipse(brush, bx + bw - d, by, d, d);
+    G.FillEllipse(brush, bx, by + bh - d, d, d);
+    G.FillEllipse(brush, bx + bw - d, by + bh - d, d, d);
+    G.FillRectangle(brush, bx + rad, by, bw - d, bh);
+    G.FillRectangle(brush, bx, by + rad, bw, bh - d);
   finally
-    Pen.Free;
-    Brush.Free;
+    brush.Free;
     G.Free;
   end;
+
+  ACanvas.Brush.Style := bsClear;
+  if AAtenuado then ACanvas.Font.Color := CLR_TXT_SOFT
+  else ACanvas.Font.Color := MezclarConNegro(AColor, 0.20);
+  ACanvas.TextOut(Round(bx + (bw - tw) / 2),
+    Round(by + (bh - ACanvas.TextHeight(ATexto)) / 2), ATexto);
+  ACanvas.Font.Style := [];
 end;
 
-procedure TfrmAlertasViewer.lvAlertasDrawItem(Sender: TCustomListView;
-  Item: TListItem; Rect: TRect; State: TOwnerDrawState);
+procedure TfrmAlertasViewer.tvCustomDrawCell(Sender: TcxCustomGridTableView;
+  ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo;
+  var ADone: Boolean);
 var
-  cv: TCanvas;
   A: TAlertaItem;
-  r0, r1, r2, r3, r4: TRect;
-  s: string;
   esPendiente, esCumplida: Boolean;
+  col: TcxGridColumn;
 begin
-  cv := Sender.Canvas;
+  if not AlertaDe(AViewInfo.GridRecord.RecordIndex, A) then Exit;
 
-  if (Item.Index < 0) or (Item.Index > High(FAlertas)) then
-  begin
-    cv.Brush.Color := clWhite;
-    cv.FillRect(Rect);
-    Exit;
-  end;
-  A := FAlertas[Item.Index];
-
-  // Clasificacion de la fila por estado:
-  //   pendiente  -> gris, cursiva, texto "Pendiente" (roadmap).
-  //   cumplida   -> verde tenue (implementada con Count=0).
-  //   incidencia -> color de severidad (implementada con Count>0).
   esPendiente := not A.Implementada;
   esCumplida  := A.Implementada and (A.Count = 0);
+  col := TcxGridColumn(AViewInfo.Item);
 
-  // Fondo (seleccion). Las pendientes no se resaltan al seleccionar.
-  if (odSelected in State) and not esPendiente then
-    cv.Brush.Color := $00F2E6D8   // selección suave
-  else
-    cv.Brush.Color := clWhite;
-  cv.FillRect(Rect);
-
-  // Color de texto segun estado.
-  if esPendiente then
-    cv.Font.Color := clGrayText           // desactivado
-  else if esCumplida then
-    cv.Font.Color := $00707070            // gris medio
-  else
-    cv.Font.Color := clBlack;
-
-  // Columna 0: icono de estado PRO (antialias GDI+).
-  r0 := Rect;
-  r0.Right := r0.Left + lvAlertas.Columns[0].Width;
-  DibujarMarcaEstado(cv, r0, A, esPendiente, esCumplida);
-
-  cv.Brush.Style := bsClear;
-
-  // Columna 1: codigo (A01...), en negrita.
-  r1 := Rect;
-  r1.Left := r0.Right + 4;
-  r1.Right := r0.Right + lvAlertas.Columns[1].Width;
-  cv.Font.Style := [fsBold];
-  cv.TextRect(r1, A.Codigo, [tfLeft, tfVerticalCenter, tfSingleLine]);
-
-  // Columna 2: peso (alineado a la derecha, normal).
-  r2 := Rect;
-  r2.Left := r0.Right + lvAlertas.Columns[1].Width;
-  r2.Right := r2.Left + lvAlertas.Columns[2].Width;
-  cv.Font.Style := [];
-  s := IntToStr(A.Peso);
-  cv.TextRect(r2, s, [tfRight, tfVerticalCenter, tfSingleLine]);
-
-  // Columna 3: contador (negrita; "-" en pendientes, "OK" en cumplidas).
-  r3 := Rect;
-  r3.Left := r2.Right;
-  r3.Right := r3.Left + lvAlertas.Columns[3].Width;
-  cv.Font.Style := [fsBold];
-  if esPendiente then s := '-'
-  else if esCumplida then s := 'OK'
-  else s := IntToStr(A.Count);
-  cv.TextRect(r3, s, [tfRight, tfVerticalCenter, tfSingleLine]);
-
-  // Columna 4: titulo (cursiva si pendiente).
-  r4 := Rect;
-  r4.Left := r3.Right + 8;
-  if esPendiente then
+  // Solo la columna Gravedad se pinta como badge; el resto usa el render por
+  // defecto, pero ajustamos el color de texto segun el estado de la fila.
+  if col = colGravedad then
   begin
-    cv.Font.Style := [fsItalic];
-    s := A.Titulo + '  (pr'#243'ximamente)';
-  end
-  else
-  begin
-    cv.Font.Style := [];
-    s := A.Titulo;
+    // Fondo: azul claro si la fila esta seleccionada (igual que el resto de la
+    // fila), blanco en otro caso, para que el badge no rompa la seleccion.
+    if AViewInfo.Selected and Assigned(FStyleSelection) then
+      ACanvas.FillRect(AViewInfo.Bounds, FStyleSelection.Color)
+    else
+      ACanvas.FillRect(AViewInfo.Bounds, clWhite);
+    DibujarBadge(ACanvas.Canvas, AViewInfo.Bounds,
+      ColorDeSeveridad(A.Severidad), EtiquetaSeveridad(A.Severidad),
+      esPendiente or esCumplida);
+    ADone := True;
+    Exit;
   end;
-  cv.TextRect(r4, s, [tfLeft, tfVerticalCenter, tfSingleLine, tfEndEllipsis]);
-  cv.Brush.Style := bsSolid;
+
+  // Columna Nodos con alerta cumplida (Count=0): badge verde "OK".
+  if (col = colNodos) and esCumplida then
+  begin
+    if AViewInfo.Selected and Assigned(FStyleSelection) then
+      ACanvas.FillRect(AViewInfo.Bounds, FStyleSelection.Color)
+    else
+      ACanvas.FillRect(AViewInfo.Bounds, clWhite);
+    DibujarBadge(ACanvas.Canvas, AViewInfo.Bounds, $00308828, 'OK', False);
+    ADone := True;
+    Exit;
+  end;
+
+  // Color de texto del resto de columnas segun estado.
+  if esPendiente then
+    ACanvas.Font.Color := clGrayText
+  else if esCumplida then
+    ACanvas.Font.Color := CLR_TXT_SOFT
+  else if col = colCodigo then
+    ACanvas.Font.Color := CLR_LINK            // codigo en azul (enlace)
+  else
+    ACanvas.Font.Color := CLR_TXT;
+
+  if (col = colCodigo) and not (esPendiente or esCumplida) then
+    ACanvas.Font.Style := ACanvas.Font.Style + [fsBold];
+  if (col = colNodos) and esCumplida then
+    ACanvas.Font.Color := $00308828;          // "OK" en verde
 end;
 
 procedure TfrmAlertasViewer.ConfirmarSeleccion;
 var
-  idx: Integer;
+  A: TAlertaItem;
 begin
-  idx := lvAlertas.ItemIndex;
-  if (idx < 0) or (idx > High(FAlertas)) then Exit;
+  if not AlertaDe(tv.DataController.FocusedRecordIndex, A) then Exit;
   // Solo tiene sentido "ver en el Gantt" alertas implementadas con incidencias.
-  if (not FAlertas[idx].Implementada) or (FAlertas[idx].Count = 0) then Exit;
-  FSelectedDataIds := FAlertas[idx].DataIds;
+  if (not A.Implementada) or (A.Count = 0) then Exit;
+  FSelectedDataIds := A.DataIds;
   ModalResult := mrOk;
 end;
 
 procedure TfrmAlertasViewer.btnVerTodasClick(Sender: TObject);
 begin
+  // Menu "..." : alterna entre incluir cumplidas o no (releer del proveedor).
   FVerTodas := not FVerTodas;
-  if FVerTodas then
-    btnVerTodas.Caption := 'Solo incidencias'
-  else
-    btnVerTodas.Caption := 'Ver todas';
   RefrescarDesdeProveedor;
 end;
 
 procedure TfrmAlertasViewer.btnConfigClick(Sender: TObject);
 begin
   if not Assigned(FOnConfig) then Exit;
-  FOnConfig();                  // el caller abre la config y guarda
-  RefrescarDesdeProveedor;      // releer con los nuevos pesos/activas
+  FOnConfig();
+  RefrescarDesdeProveedor;
 end;
 
 procedure TfrmAlertasViewer.FormShow(Sender: TObject);
 begin
+  FCargando := True;
+  try
+    ConfigurarEstilos;
+    InicializarFiltros;
+    lblTitulo.Caption := 'Excepciones detectadas';
+  finally
+    FCargando := False;
+  end;
   RefrescarDesdeProveedor;
-  lvAlertas.SetFocus;
+  Grid.SetFocus;
 end;
 
 procedure TfrmAlertasViewer.FormKeyDown(Sender: TObject; var Key: Word;
@@ -529,14 +591,12 @@ begin
   end
   else if Key = VK_RETURN then
   begin
-    // ConfirmarSeleccion solo actua sobre una alerta valida (implementada con
-    // incidencias); seguro llamarlo sin comprobar el foco del cxListView.
     ConfirmarSeleccion;
     Key := 0;
   end;
 end;
 
-procedure TfrmAlertasViewer.lvAlertasDblClick(Sender: TObject);
+procedure TfrmAlertasViewer.tvDblClick(Sender: TObject);
 begin
   ConfirmarSeleccion;
 end;

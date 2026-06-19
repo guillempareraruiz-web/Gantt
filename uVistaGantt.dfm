@@ -342,6 +342,34 @@ object frmVistaGantt: TfrmVistaGantt
           ParentFont = False
           OnClick = btnConfigCentrosClick
         end
+        object btnCompact: TcxButton
+          Left = 339
+          Top = 2
+          Width = 62
+          Height = 19
+          Hint = 'Ver indicadores'
+          Anchors = [akTop, akRight]
+          Caption = 'Compactar'
+          Colors.PressedText = 44544
+          LookAndFeel.Kind = lfUltraFlat
+          LookAndFeel.NativeStyle = False
+          LookAndFeel.SkinName = 'DevExpressStyle'
+          OptionsImage.Glyph.SourceHeight = 12
+          OptionsImage.Glyph.SourceWidth = 12
+          ParentShowHint = False
+          ShowHint = True
+          SpeedButtonOptions.GroupIndex = 77
+          SpeedButtonOptions.CanBeFocused = False
+          SpeedButtonOptions.AllowAllUp = True
+          TabOrder = 4
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -9
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          OnClick = btnCompactClick
+        end
       end
     end
     object pnlGanttContainer: TPanel
@@ -2697,6 +2725,71 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         OnClick = cxButton1Click
       end
+      object btnCompactar: TcxButton
+        Left = 550
+        Top = 23
+        Width = 72
+        Height = 19
+        Caption = 'Compactar'
+        Colors.PressedText = clYellow
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        SpeedButtonOptions.GroupIndex = 1
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 12
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnCompactarClick
+      end
+      object btnFoco: TcxButton
+        Left = 626
+        Top = 23
+        Width = 52
+        Height = 19
+        Caption = 'Foco'
+        Colors.PressedText = clYellow
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        SpeedButtonOptions.GroupIndex = 2
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 13
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnFocoClick
+      end
+      object btnAtajos: TcxButton
+        Left = 682
+        Top = 23
+        Width = 24
+        Height = 19
+        Caption = '?'
+        Hint = 'Atajos y gestos (May'#250's+F1)'
+        ShowHint = True
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        SpeedButtonOptions.CanBeFocused = False
+        TabOrder = 14
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnAtajosClick
+      end
     end
   end
   object popCentros: TPopupMenu
@@ -2902,6 +2995,10 @@ object frmVistaGantt: TfrmVistaGantt
     object ResaltarOF1: TMenuItem
       Caption = 'Resaltar OF'
       OnClick = ResaltarOF1Click
+    end
+    object CentrarOF1: TMenuItem
+      Caption = 'Centrar OF en pantalla'
+      OnClick = CentrarOF1Click
     end
     object Info1: TMenuItem
       Caption = 'Info'

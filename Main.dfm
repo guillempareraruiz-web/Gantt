@@ -125,7 +125,7 @@ object Form1: TForm1
     end
     object cxButton1: TcxButton
       AlignWithMargins = True
-      Left = 492
+      Left = 573
       Top = 5
       Width = 75
       Height = 23
@@ -173,7 +173,7 @@ object Form1: TForm1
       Caption = 'Gantt'
       LookAndFeel.Kind = lfOffice11
       LookAndFeel.NativeStyle = False
-      LookAndFeel.SkinName = 'Office2010Silver'
+      LookAndFeel.SkinName = 'Office2007Blue'
       SpeedButtonOptions.GroupIndex = 1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
@@ -240,6 +240,27 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 8
       OnClick = cxButton2Click
+    end
+    object btnTB_PlaniAlertas: TcxButton
+      AlignWithMargins = True
+      Left = 492
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Alertas (12)'
+      Colors.Default = 8421631
+      Colors.Normal = 8421631
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2007Pink'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 9
+      OnClick = btnTB_PlaniAlertasClick
     end
   end
   object tmr1Sec: TTimer
@@ -498,6 +519,10 @@ object Form1: TForm1
       object AnalisisPlan1: TMenuItem
         Caption = 'An'#225'lisis del plan'
         OnClick = AnalisisPlan1Click
+      end
+      object AlertasPlanificacion1: TMenuItem
+        Caption = 'Alertas de planificaci'#243'n...'
+        OnClick = AlertasPlanificacion1Click
       end
       object CuadroPlanificacionDia1: TMenuItem
         Caption = 'Cuadro Planificaci'#243'n del D'#237'a'
