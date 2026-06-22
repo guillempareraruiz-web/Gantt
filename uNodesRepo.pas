@@ -85,6 +85,8 @@ begin
       '  ISNULL(nd.NumeroOF, 0) AS NumeroOF, ' +
       '  ISNULL(nd.SerieOF, '''') AS SerieOF, ' +
       '  ISNULL(nd.NumeroTrabajo, '''') AS NumeroTrabajo, ' +
+      '  nd.FechaEntrega AS FechaEntrega, ' +
+      '  nd.FechaNecesaria AS FechaNecesaria, ' +
       '  ISNULL(nd.CodigoCliente, '''') AS CodigoCliente, ' +
       '  ISNULL(nd.CodigoArticulo, '''') AS CodigoArticulo, ' +
       '  ISNULL(nd.DescripcionArticulo, '''') AS DescripcionArticulo, ' +
@@ -173,6 +175,14 @@ begin
         D.NumeroOrdenFabricacion := Q.FieldByName('NumeroOF').AsInteger;
         D.SerieFabricacion := Q.FieldByName('SerieOF').AsString;
         D.NumeroTrabajo := Q.FieldByName('NumeroTrabajo').AsString;
+        if Q.FieldByName('FechaEntrega').IsNull then
+          D.FechaEntrega := 0
+        else
+          D.FechaEntrega := Q.FieldByName('FechaEntrega').AsDateTime;
+        if Q.FieldByName('FechaNecesaria').IsNull then
+          D.FechaNecesaria := 0
+        else
+          D.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
         D.CodigoCliente := Q.FieldByName('CodigoCliente').AsString;
         D.CodigoArticulo := Q.FieldByName('CodigoArticulo').AsString;
         D.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;

@@ -186,7 +186,11 @@ type
     FOpFilterDataIds: TDictionary<Integer, Byte>; // DataId -> 1 (nodes a resaltar)
     FOpFilterActive: Boolean;
     FOpFilterHideMode: Boolean; // True = ocultar no filtrados; False = atenuar
-    FOpFilterPulsePhase: Single; // 0..2*PI oscilación
+    // True cuando el estado de filtro proviene de FocusChain (efecto FOCO de
+    // cadena de dependencias). En ese caso los nodos de la cadena se realzan con
+    // un glow azul claro en vez del inflate del filtro de operarios.
+    FOpFilterIsFocusChain: Boolean;
+    FOpFilterPulsePhase: Single; // 0..2*PI oscilación (en desuso, sin animacion)
     FOpFilterTimer: TTimer;
     // Overlay del filtro/resaltado de operarios (marco + 2 pills).
     FOpFilterLabel: string;          // texto del pill de estado (lo pone uVistaGantt)
@@ -303,13 +307,11 @@ type
     procedure SetFechaBloqueo(const Value: TDateTime);
 
     function IsValidNodeIndex(const AIndex: Integer): Boolean;
-    function GetNodeMidTime(const AIndex: Integer): TDateTime;
     function GetReferenceTimeForNavigation: TDateTime;
     function FindFirstNodeIndex: Integer;
     function FindLastNodeIndex: Integer;
     function FindNextNodeIndex(const ARefTime: TDateTime): Integer;
     function FindPreviousNodeIndex(const ARefTime: TDateTime): Integer;
-    function CalcScrollXToCenterDate(const ADate: TDateTime): Single;
     procedure CenterNodeByIndex(const AIndex: Integer; const ASelectNode: Boolean = True);
 
 
@@ -408,7 +410,6 @@ type
     function ClientToWorld(const P: TPoint): TPointF;
     function TimeToXWorld(const T: TDateTime): Single;
     function TimeToX(const ATime: TDateTime): Single;
-    procedure GetVisibleTimeRange(out T0, T1: TDateTime);
 
     function RowTopToScreenY(const AWorldY: Single): Single;
     function WorldYToScreenY(const AWorldY: Single): Single;
@@ -625,6 +626,12 @@ type
     procedure GoToFirstNode;
     procedure GoToLastNode;
 
+    // Instante medio del nodo y rango temporal visible: usados por la pantalla
+    // (atajos de zoom/seleccion). Movidos aqui desde protected.
+    function GetNodeMidTime(const AIndex: Integer): TDateTime;
+    procedure GetVisibleTimeRange(out T0, T1: TDateTime);
+    function CalcScrollXToCenterDate(const ADate: TDateTime): Single;
+
     procedure GoToPrevOF;
     procedure GoToNextOF;
 
@@ -730,6 +737,17 @@ type
 
     function CompactOTFromNode(const ANodeIdx: Integer; const MinGapMin: Integer; const AllOT: Boolean = False; const bForce: Boolean = False): Boolean;
     function BackwardScheduleOT(const ANodeIdx: Integer; const AEndDate: TDateTime; const MinGapMin: Integer; const bForce: Boolean = False): Boolean;
+
+    // "Mover" una OF/OT/OP a una fecha. AForward = la cadena EMPIEZA en AFecha
+    // (planificacion forward); si es False, la cadena ACABA en AFecha (backward).
+    // El nivel OP mueve solo el nodo (manteniendo duracion). Devuelven True si
+    // algo cambio.
+    function MoverOFAFecha(const ANodeIdx: Integer; const AFecha: TDateTime;
+      const AForward: Boolean; const MinGapMin: Integer = 0): Boolean;
+    function MoverOTAFecha(const ANodeIdx: Integer; const AFecha: TDateTime;
+      const AForward: Boolean; const MinGapMin: Integer = 0): Boolean;
+    function MoverOPAFecha(const ANodeIdx: Integer; const AFecha: TDateTime;
+      const AForward: Boolean): Boolean;
 
     function ReplanAllFromDate(const AFromDate: TDateTime; const MinGapMin: Integer;
       out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
@@ -1936,6 +1954,7 @@ begin
   FOpFilterDataIds := TDictionary<Integer, Byte>.Create;
   FOpFilterActive := False;
   FOpFilterHideMode := False;
+  FOpFilterIsFocusChain := False;
   FOpFilterPulsePhase := 0;
   FOpFilterTimer := TTimer.Create(Self);
   FOpFilterTimer.Interval := 25; // ~40 fps
@@ -4236,10 +4255,8 @@ end;
 
 procedure TGanttControl.OpFilterTimerTick(Sender: TObject);
 begin
-  FOpFilterPulsePhase := FOpFilterPulsePhase + 0.15; // ciclo rapido ~1s
-  if FOpFilterPulsePhase > 2 * PI then
-    FOpFilterPulsePhase := FOpFilterPulsePhase - 2 * PI;
-  Invalidate;
+  // El realce del filtro de operarios ya no se anima (inflate fijo). El timer
+  // queda desactivado; este handler no hace nada si llegara a dispararse.
 end;
 
 procedure TGanttControl.SetOperarioFilter(const ADataIds: TArray<Integer>; AHideMode: Boolean);
@@ -4251,8 +4268,9 @@ begin
     FOpFilterDataIds.AddOrSetValue(ADataIds[I], 1);
   FOpFilterActive := Length(ADataIds) > 0;
   FOpFilterHideMode := AHideMode;
+  FOpFilterIsFocusChain := False;    // filtro de operarios normal (no FOCO)
   FOpFilterPulsePhase := 0;
-  FOpFilterTimer.Enabled := FOpFilterActive and (not FOpFilterHideMode);
+  FOpFilterTimer.Enabled := False;   // realce estatico: sin animacion
   Invalidate;
 end;
 
@@ -4261,6 +4279,7 @@ begin
   FOpFilterDataIds.Clear;
   FOpFilterActive := False;
   FOpFilterHideMode := False;
+  FOpFilterIsFocusChain := False;
   FOpFilterTimer.Enabled := False;
   Invalidate;
 end;
@@ -4322,6 +4341,10 @@ begin
           dataIds.Add(FNodes[nIdx].DataId);
 
     SetOperarioFilter(dataIds.ToArray, AHideMode);
+    // Marcar que este filtro es un FOCO de cadena (glow azul, no inflate).
+    // SetOperarioFilter lo pone a False, asi que lo activamos despues.
+    FOpFilterIsFocusChain := FOpFilterActive;
+    Invalidate;
   finally
     dataIds.Free;
     queue.Free;
@@ -8274,10 +8297,13 @@ var
       if not IsNodeOperarioFiltered(ANode.DataId) then
         Exit;
 
-    // Filtro operarios: inflate/pulse suave en nodos filtrados
-    if FOpFilterActive and (not FOpFilterPeeking) and (not FOpFilterHideMode) and IsNodeOperarioFiltered(ANode.DataId) then
+    // Filtro operarios: realce ESTATICO (sin animacion) de los nodos filtrados.
+    // Antes oscilaba con Sin(FOpFilterPulsePhase); ahora un inflate fijo de 2 px.
+    // En modo FOCO (cadena) NO inflamos: esos nodos llevan glow azul aparte.
+    if FOpFilterActive and (not FOpFilterPeeking) and (not FOpFilterHideMode)
+       and (not FOpFilterIsFocusChain) and IsNodeOperarioFiltered(ANode.DataId) then
     begin
-      inflate := 2.0 * (0.5 + 0.5 * Sin(FOpFilterPulsePhase)); // oscila suave entre 0 y 2 px
+      inflate := 2.0;
       ARectS.Inflate(inflate, inflate);
     end;
 
@@ -8653,25 +8679,61 @@ begin
           begin
             hlRect := FNodeLayouts[hlLayoutIdx].Rect;
             hlRect.Offset(-FScrollX, -FScrollY);
-            // Glow difuminat: capes expandides amb opacitat decreixent
-            // Capes de borde difuminat (només traç, sense fill)
+            // Glow groc INTENS i estatic: mes capes, mes opaques i mes gruixudes
+            // que abans, per a un halo ben visible al voltant del node ressaltat.
             var gi: Integer;
-            for gi := 3 downto 1 do
+            for gi := 4 downto 1 do
             begin
               var Expand: Single := gi * 2.0;
-              var GlowAlpha: Single := 0.10 + (0.20 * (1.0 - gi / 3));
+              // Capa externa (gi=4) mes tenue, interna (gi=1) mes marcada.
+              var GlowAlpha: Single := 0.14 + (0.30 * (1.0 - (gi - 1) / 4));
               var GlowR: TRectF := RectF(
                 hlRect.Left - Expand, hlRect.Top - Expand,
                 hlRect.Right + Expand, hlRect.Bottom + Expand);
               SetBrushColor(StrokeBrush, $0000D4FF, GlowAlpha); // groc daurat (BGR)
               RT.DrawRoundedRectangle(
-                RoundedRectToD2D(GlowR, 3 + Expand), StrokeBrush, 1.5);
+                RoundedRectToD2D(GlowR, 3 + Expand), StrokeBrush, 2.0);
             end;
-            // Borde groc sòlid per sobre
-            SetBrushColor(StrokeBrush, $0000CCFF, 0.85);
+            // Borde groc solid per sobre
+            SetBrushColor(StrokeBrush, $0000E0FF, 0.85);
             RT.DrawRoundedRectangle(
-              RoundedRectToD2D(hlRect, 3), StrokeBrush, 1.5);
+              RoundedRectToD2D(hlRect, 3), StrokeBrush, 2.0);
           end;
+        end;
+      end;
+
+      // Passada overlay: glow AZUL CLARO para el efecto FOCO (cadena de
+      // dependencias). Mismo halo estatico que el highlight groc, pero en azul.
+      if FOpFilterActive and FOpFilterIsFocusChain
+         and (not FOpFilterPeeking) and (not FFastPaint) then
+      begin
+        var fcLi: Integer;
+        var fcRect: TRectF;
+        var fcNodeIdx: Integer;
+        for fcLi := 0 to High(FNodeLayouts) do
+        begin
+          fcNodeIdx := FNodeLayouts[fcLi].NodeIndex;
+          if (fcNodeIdx < 0) or (fcNodeIdx > High(FNodes)) then Continue;
+          if not IsNodeOperarioFiltered(FNodes[fcNodeIdx].DataId) then Continue;
+
+          fcRect := FNodeLayouts[fcLi].Rect;
+          fcRect.Offset(-FScrollX, -FScrollY);
+          var fgi: Integer;
+          for fgi := 4 downto 1 do
+          begin
+            var fExpand: Single := fgi * 2.0;
+            var fAlpha: Single := 0.14 + (0.30 * (1.0 - (fgi - 1) / 4));
+            var fR: TRectF := RectF(
+              fcRect.Left - fExpand, fcRect.Top - fExpand,
+              fcRect.Right + fExpand, fcRect.Bottom + fExpand);
+            SetBrushColor(StrokeBrush, $00FFD466, fAlpha); // azul claro (BGR)
+            RT.DrawRoundedRectangle(
+              RoundedRectToD2D(fR, 3 + fExpand), StrokeBrush, 2.0);
+          end;
+          // Borde azul solido por encima.
+          SetBrushColor(StrokeBrush, $00FFC040, 0.85);
+          RT.DrawRoundedRectangle(
+            RoundedRectToD2D(fcRect, 3), StrokeBrush, 2.0);
         end;
       end;
 
@@ -12999,6 +13061,147 @@ begin
 
   if Result then
   begin
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+
+// ----- "Mover a fecha": wrappers de alto nivel sobre las funciones de
+// planificacion existentes (forward = compactar desde la raiz colocada en la
+// fecha; backward = BackwardSchedule que acaba en la fecha). -----
+
+function TGanttControl.MoverOFAFecha(const ANodeIdx: Integer;
+  const AFecha: TDateTime; const AForward: Boolean;
+  const MinGapMin: Integer): Boolean;
+var
+  D: TNodeData;
+  raizIdx, refIdx: Integer;
+  nuevoStart: TDateTime;
+  before: TArray<TNodePlanSnapshot>;
+begin
+  Result := False;
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+  if not TryGetNodeData(ANodeIdx, D) then Exit;
+
+  // Snapshot del plan ANTES de mover: CommitNodeMoveOrResize lo usa para detectar
+  // TODOS los nodos desplazados (cascada) y persistirlos.
+  before := CaptureAllNodesSnapshot;
+
+  refIdx := ANodeIdx;  // nodo desde el que se propagan las dependencias despues
+
+  if AForward then
+  begin
+    // Forward: la OF EMPIEZA en AFecha. Movemos la raiz (nodo mas temprano de la
+    // OF) a la fecha y compactamos el resto detras, anclando la raiz alli.
+    raizIdx := FindFirstNodeIndexOfOF(D.NumeroOrdenFabricacion, D.SerieFabricacion);
+    if raizIdx < 0 then Exit;
+    refIdx := raizIdx;
+
+    nuevoStart := ApplyNodeCalendarAndOverlay(FNodes[raizIdx].CentreId, AFecha);
+    if MoveNodeKeepingDuration(raizIdx, nuevoStart) then
+      Result := True;
+
+    // Compactar toda la OF a partir de la raiz ya recolocada.
+    if CompactOFFromNode(raizIdx, MinGapMin, False) then
+      Result := True;
+  end
+  else
+    // Backward: la OF ACABA en AFecha.
+    Result := BackwardScheduleOF(ANodeIdx, AFecha, MinGapMin);
+
+  // Resolver dependencias/colisiones con el resto del plan, registrar historico
+  // y PERSISTIR todos los nodos afectados (mismo camino que un drag manual).
+  if Result then
+  begin
+    CommitNodeMoveOrResize(refIdx, before, 'Mover OF a fecha', hatMove);
+    // CommitNodeMoveOrResize solo hace Invalidate (repinta con el layout actual);
+    // tras mover nodos hay que reconstruir el layout o el cambio no se ve hasta
+    // el siguiente zoom/scroll.
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+function TGanttControl.MoverOTAFecha(const ANodeIdx: Integer;
+  const AFecha: TDateTime; const AForward: Boolean;
+  const MinGapMin: Integer): Boolean;
+var
+  D, D2: TNodeData;
+  i, raizIdx, refIdx: Integer;
+  bestTime, nuevoStart: TDateTime;
+  before: TArray<TNodePlanSnapshot>;
+begin
+  Result := False;
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+  if not TryGetNodeData(ANodeIdx, D) then Exit;
+
+  before := CaptureAllNodesSnapshot;
+  refIdx := ANodeIdx;
+
+  if AForward then
+  begin
+    // Raiz de la OT = nodo mas temprano que comparte OF + NumeroTrabajo.
+    raizIdx := -1;
+    bestTime := 0;
+    for i := 0 to High(FNodes) do
+    begin
+      if not TryGetNodeData(i, D2) then Continue;
+      if (D2.NumeroOrdenFabricacion <> D.NumeroOrdenFabricacion) then Continue;
+      if not SameText(D2.SerieFabricacion, D.SerieFabricacion) then Continue;
+      if not SameText(D2.NumeroTrabajo, D.NumeroTrabajo) then Continue;
+      if (raizIdx = -1) or (FNodes[i].StartTime < bestTime) then
+      begin
+        raizIdx := i;
+        bestTime := FNodes[i].StartTime;
+      end;
+    end;
+    if raizIdx < 0 then Exit;
+    refIdx := raizIdx;
+
+    nuevoStart := ApplyNodeCalendarAndOverlay(FNodes[raizIdx].CentreId, AFecha);
+    if MoveNodeKeepingDuration(raizIdx, nuevoStart) then
+      Result := True;
+
+    if CompactOTFromNode(raizIdx, MinGapMin, False) then
+      Result := True;
+  end
+  else
+    Result := BackwardScheduleOT(ANodeIdx, AFecha, MinGapMin);
+
+  if Result then
+  begin
+    CommitNodeMoveOrResize(refIdx, before, 'Mover OT a fecha', hatMove);
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+function TGanttControl.MoverOPAFecha(const ANodeIdx: Integer;
+  const AFecha: TDateTime; const AForward: Boolean): Boolean;
+var
+  centreId: Integer;
+  nuevoStart: TDateTime;
+  before: TArray<TNodePlanSnapshot>;
+begin
+  Result := False;
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit;
+
+  before := CaptureAllNodesSnapshot;
+  centreId := FNodes[ANodeIdx].CentreId;
+
+  if AForward then
+    // Forward: la OP EMPIEZA en AFecha.
+    nuevoStart := ApplyNodeCalendarAndOverlay(centreId, AFecha)
+  else
+    // Backward: la OP ACABA en AFecha -> calcular el inicio a partir del fin.
+    nuevoStart := CalcStartFromEnd(centreId, AFecha, FNodes[ANodeIdx].DurationMin);
+
+  if MoveNodeKeepingDuration(ANodeIdx, nuevoStart) then
+  begin
+    Result := True;
+    // Resolver dependencias/colisiones, historico y PERSISTIR (igual que un drag).
+    CommitNodeMoveOrResize(ANodeIdx, before, 'Mover OP a fecha', hatMove);
     RebuildAfterModelChange(False);
     Invalidate;
   end;

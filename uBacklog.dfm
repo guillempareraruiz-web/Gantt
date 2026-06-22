@@ -790,13 +790,22 @@ object frmBacklog: TfrmBacklog
       TabOrder = 1
       OnClick = btnPlanificarClick
     end
+    object btnPlanificarExpress: TButton
+      Left = 244
+      Top = 6
+      Width = 130
+      Height = 28
+      Caption = 'Planificaci'#243'n Express'
+      TabOrder = 2
+      OnClick = btnPlanificarExpressClick
+    end
     object btnSyncErp: TcxButton
-      Left = 286
+      Left = 380
       Top = 6
       Width = 121
       Height = 28
       Caption = 'Sincronizar ERP...'
-      TabOrder = 2
+      TabOrder = 3
       OnClick = btnSyncErpClick
     end
     object btnDesplanificarTodo: TButton

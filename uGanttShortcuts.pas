@@ -95,7 +95,12 @@ begin
   FSections := [
     Sec('Navegaci'#243'n y vista', [
       It('Rueda',        'Zoom (alrededor del cursor)'),
+      It('Ctrl++ / -',   'Zoom (centrado en pantalla)'),
       It('Arrastre fondo','Desplazar el Gantt'),
+      It('Ctrl+J',       'Centrar el d'#237'a de hoy'),
+      It('Ctrl+Inicio',  'Ir al primer nodo del plan'),
+      It('Ctrl+Fin',     'Ir al '#250'ltimo nodo del plan'),
+      It('Tab / May'#250's+Tab','Nodo siguiente / anterior'),
       It('Ctrl+K',       'Compactar centros (solo con carga)'),
       It('Ctrl+E',       'Centrar la OF del nodo en pantalla'),
       It('Ctrl+H',       'Historial (l'#237'nea de tiempo de cambios)')
@@ -103,9 +108,14 @@ begin
     Sec('Selecci'#243'n y foco', [
       It('Clic',         'Seleccionar nodo'),
       It('Arrastre vac'#237'o','Selecci'#243'n por marco (m'#250'ltiple)'),
+      It('Ctrl+A',       'Seleccionar todos los nodos'),
+      It('Ctrl+1/2/3',   'Seleccionar d'#237'a / semana / mes'),
+      It('Ctrl+May'#250's+'#8594,'Seleccionar desde aqu'#237' en adelante'),
+      It('Ctrl+May'#250's+'#8592,'Seleccionar desde aqu'#237' hacia atr'#225's'),
+      It('Ctrl+May'#250's+O','Seleccionar toda la OF del nodo'),
       It('Ctrl+F',       'Foco: resaltar la cadena de dependencias'),
       It('Ctrl+R',       'Resaltar toda la OF del nodo'),
-      It('Clic fondo',   'Quitar resaltado / foco')
+      It('Esc',          'Quitar selecci'#243'n / resaltado / foco')
     ]),
     Sec('Edici'#243'n del plan', [
       It('Arrastrar nodo','Mover en el tiempo / de centro'),

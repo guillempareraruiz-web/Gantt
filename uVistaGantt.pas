@@ -89,7 +89,6 @@ type
     Button9: TButton;
     Button10: TButton;
     Button11: TButton;
-    ComboBox1: TComboBox;
     btnUndo: TButton;
     btnRedo: TButton;
     Button12: TButton;
@@ -265,7 +264,16 @@ type
     btnCompact: TcxButton;
     btnFoco: TcxButton;
     btnAtajos: TcxButton;
+    cxButton2: TcxButton;
+    PopOpciones: TPopupMenu;
+    Dependencias1: TMenuItem;
+    Versumario1: TMenuItem;
+    aaa1: TMenuItem;
+    ssss1: TMenuItem;
+    Noverninguna1: TMenuItem;
+    N6: TMenuItem;
     procedure btnAtajosClick(Sender: TObject);
+    procedure Versumario1Click(Sender: TObject);
     procedure btnFocoClick(Sender: TObject);
     procedure btnCompactarClick(Sender: TObject);
     procedure pnlKPIAlertasClick(Sender: TObject);
@@ -281,6 +289,9 @@ type
       out AIntensity: Single; out ABadgeCount: Integer;
       out ABadgeColor: TSummaryBadgeColor);
     procedure RebuildSummaryData;
+    // True solo si la banda de Summary esta visible: cuando esta oculta NO se
+    // computa nada (eficiencia). Es la guarda de todos los caminos de calculo.
+    function SummaryActivo: Boolean;
     procedure SetSummaryView(const AView: TSummaryView);
     // Marca el boton toggle de la vista de Summary indicada y la aplica (para
     // restaurar el Summary guardado al reabrir el Gantt).
@@ -341,7 +352,6 @@ type
     procedure Button8Click(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure Button24Click(Sender: TObject);
-    procedure ComboBox1Change(Sender: TObject);
     procedure SearchBox1InvokeSearch(Sender: TObject);
     procedure Button3Click(Sender: TObject);
     procedure btnRefreshClick(Sender: TObject);
@@ -350,6 +360,8 @@ type
     procedure LibreMovimiento1Click(Sender: TObject);
     procedure MenuItem3Click(Sender: TObject);
     procedure popNodePopup(Sender: TObject);
+    procedure selPeriodoClick(Sender: TObject);
+    procedure moverAFechaClick(Sender: TObject);
     procedure Resetduracinoriginal1Click(Sender: TObject);
     procedure ShiftRow2Click(Sender: TObject);
     procedure Colordelnode1Click(Sender: TObject);
@@ -375,6 +387,7 @@ type
     procedure btnAutoPlanSelClick(Sender: TObject);
     procedure cxButton1Click(Sender: TObject);
     procedure btnCompactClick(Sender: TObject);
+    procedure aaa1Click(Sender: TObject);
   private
 
     FCustomFieldDefs: TCustomFieldDefs;
@@ -407,6 +420,23 @@ type
     // hay seleccion o el nodo no pertenece a ningun lote). Compartido por las
     // acciones Ver lote / Desagrupar lote.
     function LoteIdDelNodoSel: Integer;
+
+    // --- Atajos de teclado del Gantt (navegacion / zoom / seleccion) ---
+    procedure ZoomGanttCentrado(const AFactor: Single);
+    procedure LimpiarSeleccionYResaltado;
+    // Selecciona los nodos que solapan el periodo natural (dia/semana/mes) que
+    // contiene la fecha de referencia ARef (por defecto, hoy).
+    procedure SeleccionarNodosDelDia(const ARef: TDateTime);
+    procedure SeleccionarNodosDeLaSemana(const ARef: TDateTime);
+    procedure SeleccionarNodosDelMes(const ARef: TDateTime);
+    // Selecciona todo lo planificado desde ARef hacia delante / hacia atras.
+    procedure SeleccionarNodosDesde(const ARef: TDateTime);
+    procedure SeleccionarNodosHasta(const ARef: TDateTime);
+    // Selecciona todos los nodos de la OF del nodo actualmente seleccionado.
+    procedure SeleccionarOFDelNodoSel;
+    // Resuelve la fecha de referencia para las selecciones por periodo: usa el
+    // inicio del nodo seleccionado si lo hay; si no, el centro del viewport.
+    function FechaReferenciaSeleccion: TDateTime;
   public
     FGanttControl: TGanttControl;
     FTimelineControl: TGanttTimelineControl;
@@ -560,7 +590,8 @@ uses
   uGanttDatesDialog, uUserPrefs, System.JSON,
   uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,
-  uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts, Main;
+  uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts,
+  uMoverFecha, Main;
 
 
 
@@ -618,15 +649,6 @@ begin
     end,
     160, 160);
 
-end;
-
-procedure TfrmVistaGantt.ComboBox1Change(Sender: TObject);
-begin
-    case ComboBox1.itemindex of
-    0:  FGanttControl.LinksVisible := lvAlways;
-    1:  FGanttControl.LinksVisible := lvSelected;
-    2:  FGanttControl.LinksVisible := lvNever;
-    end;
 end;
 
 constructor TfrmVistaGantt.CreateVista(AOwner: TComponent;
@@ -1046,6 +1068,10 @@ procedure TfrmVistaGantt.FormCreate(Sender: TObject);
 var
   Modo: string;
 begin
+  // El form ve TODAS las teclas primero (atajos del Gantt). Sin esto, cuando el
+  // foco esta en el control del Gantt, FormKeyDown no se dispara.
+  KeyPreview := True;
+
   btnFocus.Left := -300;
 
   cxDateEdit1.Date := now;
@@ -1086,6 +1112,10 @@ begin
     TfrmHelpGuide.Execute;
     Key := 0;
   end
+  // A partir de aqui todos los atajos operan sobre el Gantt: si aun no existe
+  // (form no inicializado del todo), no hacemos nada.
+  else if FGanttControl = nil then
+    // sin accion
   else if (ssCtrl in Shift) and (Key = Ord('Z')) then
   begin
     FGanttControl.UndoLastAction;
@@ -1126,7 +1156,227 @@ begin
       not btnResaltarOF.SpeedButtonOptions.Down;  // toggle Resaltar OF
     btnResaltarOFClick(btnResaltarOF);            // Sender real (usa Sender.Tag)
     Key := 0;
+  end
+  // ----- Navegacion: ir al primer / ultimo nodo del plan -----
+  else if (ssCtrl in Shift) and (Key = VK_HOME) then
+  begin
+    FGanttControl.GoToFirstNode;
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and (Key = VK_END) then
+  begin
+    FGanttControl.GoToLastNode;
+    Key := 0;
+  end
+  // ----- Hoy: centrar el dia actual en pantalla (Ctrl+J) -----
+  else if (ssCtrl in Shift) and (Key = Ord('J')) then
+  begin
+    btnHoyClick(nil);
+    Key := 0;
+  end
+  // ----- Zoom por teclado (centrado en pantalla). Ctrl + '+/-' y reset -----
+  else if (ssCtrl in Shift) and
+          ((Key = VK_ADD) or (Key = VK_OEM_PLUS)) then
+  begin
+    ZoomGanttCentrado(1.25);
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and
+          ((Key = VK_SUBTRACT) or (Key = VK_OEM_MINUS)) then
+  begin
+    ZoomGanttCentrado(0.8);
+    Key := 0;
+  end
+  // ----- Seleccion: recorrer nodos con Tab / Mayus+Tab -----
+  // Solo cuando el foco esta en el Gantt; si no, Tab navega entre controles.
+  else if (Key = VK_TAB) and (ActiveControl = FGanttControl)
+          and (ssShift in Shift) then
+  begin
+    FGanttControl.GoToPreviousNode;
+    Key := 0;
+  end
+  else if (Key = VK_TAB) and (ActiveControl = FGanttControl) then
+  begin
+    FGanttControl.GoToNextNode;
+    Key := 0;
+  end
+  // ----- Seleccion por periodo (referencia = nodo en foco o centro de vista) -----
+  // Ctrl+1 dia, Ctrl+2 semana, Ctrl+3 mes.
+  else if (ssCtrl in Shift) and not (ssShift in Shift) and (Key = Ord('1')) then
+  begin
+    SeleccionarNodosDelDia(FechaReferenciaSeleccion);
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and not (ssShift in Shift) and (Key = Ord('2')) then
+  begin
+    SeleccionarNodosDeLaSemana(FechaReferenciaSeleccion);
+    Key := 0;
+  end
+  else if (ssCtrl in Shift) and not (ssShift in Shift) and (Key = Ord('3')) then
+  begin
+    SeleccionarNodosDelMes(FechaReferenciaSeleccion);
+    Key := 0;
+  end
+  // ----- Seleccion direccional: Ctrl+Mayus+Der (desde) / Izq (hasta) -----
+  // Solo con foco en el Gantt para no pisar la seleccion de texto en edits.
+  else if (ActiveControl = FGanttControl)
+          and (ssCtrl in Shift) and (ssShift in Shift) and (Key = VK_RIGHT) then
+  begin
+    SeleccionarNodosDesde(FechaReferenciaSeleccion);
+    Key := 0;
+  end
+  else if (ActiveControl = FGanttControl)
+          and (ssCtrl in Shift) and (ssShift in Shift) and (Key = VK_LEFT) then
+  begin
+    SeleccionarNodosHasta(FechaReferenciaSeleccion);
+    Key := 0;
+  end
+  // ----- Seleccionar toda la OF del nodo en foco (Ctrl+Mayus+O) -----
+  else if (ssCtrl in Shift) and (ssShift in Shift) and (Key = Ord('O')) then
+  begin
+    SeleccionarOFDelNodoSel;
+    Key := 0;
+  end
+  // ----- Seleccionar todos los nodos visibles (Ctrl+A) -----
+  // Solo con foco en el Gantt; en un edit, Ctrl+A selecciona su texto.
+  else if (ActiveControl = FGanttControl)
+          and (ssCtrl in Shift) and (Key = Ord('A')) then
+  begin
+    FGanttControl.SelectNodesInDateRange(
+      FGanttControl.StartTime, FGanttControl.EndTime, False);
+    FGanttControl.Invalidate;
+    Key := 0;
+  end
+  // ----- Esc: limpiar seleccion, foco y resaltado de un golpe -----
+  // Solo con foco en el Gantt; si no, Esc cierra combos/edits.
+  else if (ActiveControl = FGanttControl) and (Key = VK_ESCAPE) then
+  begin
+    LimpiarSeleccionYResaltado;
+    Key := 0;
   end;
+end;
+
+// Zoom por teclado manteniendo el punto central de la pantalla. Calculamos la
+// fecha bajo el centro ANTES de cambiar el zoom y recentramos despues, para que
+// el usuario no pierda el contexto. El factor >1 acerca, <1 aleja; el clamp lo
+// aplica el propio setter de PxPerMinute (0.2..40).
+procedure TfrmVistaGantt.ZoomGanttCentrado(const AFactor: Single);
+var
+  TCentro: TDateTime;
+begin
+  TCentro := FGanttControl.StartVisibleTime +
+    (FGanttControl.EndVisibleTime - FGanttControl.StartVisibleTime) / 2;
+  FGanttControl.PxPerMinute := FGanttControl.PxPerMinute * AFactor;
+  FGanttControl.ScrollX := FGanttControl.CalcScrollXToCenterDate(TCentro);
+  FGanttControl.Invalidate;
+end;
+
+// Esc: deja el Gantt "limpio". Quita la seleccion de nodos y, si estaban
+// activos, desactiva los toggles de Foco y Resaltar OF (que ademas limpian su
+// propio estado de resaltado via su Click).
+procedure TfrmVistaGantt.LimpiarSeleccionYResaltado;
+begin
+  FGanttControl.ClearSelection;
+
+  if btnFoco.Down then
+  begin
+    btnFoco.Down := False;
+    btnFocoClick(nil);
+  end;
+
+  if btnResaltarOF.SpeedButtonOptions.Down then
+  begin
+    btnResaltarOF.SpeedButtonOptions.Down := False;
+    btnResaltarOFClick(btnResaltarOF);
+  end;
+
+  FGanttControl.Invalidate;
+end;
+
+// Fecha de referencia para las selecciones por periodo: si hay un nodo
+// seleccionado usamos su instante medio (asi "esta semana" es la del nodo en
+// foco, no la de hoy); si no, el centro del viewport visible.
+function TfrmVistaGantt.FechaReferenciaSeleccion: TDateTime;
+var
+  idx: Integer;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx >= 0 then
+    Exit(FGanttControl.GetNodeMidTime(idx));
+
+  Result := FGanttControl.StartVisibleTime +
+    (FGanttControl.EndVisibleTime - FGanttControl.StartVisibleTime) / 2;
+end;
+
+// Selecciona los nodos que tocan el dia natural de ARef.
+procedure TfrmVistaGantt.SeleccionarNodosDelDia(const ARef: TDateTime);
+var
+  d0: TDateTime;
+begin
+  d0 := DateOf(ARef);
+  FGanttControl.SelectNodesInDateRange(d0, d0 + 1, True);
+  FGanttControl.Invalidate;
+end;
+
+// Selecciona los nodos que tocan la semana natural (Lun-Dom) de ARef.
+procedure TfrmVistaGantt.SeleccionarNodosDeLaSemana(const ARef: TDateTime);
+var
+  d0, d1: TDateTime;
+begin
+  d0 := StartOfTheWeek(ARef);    // lunes 00:00 (ISO)
+  d1 := d0 + 7;                  // lunes siguiente 00:00
+  FGanttControl.SelectNodesInDateRange(d0, d1, True);
+  FGanttControl.Invalidate;
+end;
+
+// Selecciona los nodos que tocan el mes natural de ARef.
+procedure TfrmVistaGantt.SeleccionarNodosDelMes(const ARef: TDateTime);
+var
+  d0, d1: TDateTime;
+begin
+  d0 := StartOfTheMonth(ARef);
+  d1 := IncMonth(d0, 1);
+  FGanttControl.SelectNodesInDateRange(d0, d1, True);
+  FGanttControl.Invalidate;
+end;
+
+// Todo lo planificado desde ARef (incluido) hacia delante.
+procedure TfrmVistaGantt.SeleccionarNodosDesde(const ARef: TDateTime);
+begin
+  FGanttControl.SelectNodesInDateRange(ARef, FGanttControl.EndTime, True);
+  FGanttControl.Invalidate;
+end;
+
+// Todo lo planificado hasta ARef (incluido) hacia atras.
+procedure TfrmVistaGantt.SeleccionarNodosHasta(const ARef: TDateTime);
+begin
+  FGanttControl.SelectNodesInDateRange(FGanttControl.StartTime, ARef, True);
+  FGanttControl.Invalidate;
+end;
+
+// Selecciona todos los nodos (OT/OP) que comparten la OF del nodo en foco.
+procedure TfrmVistaGantt.SeleccionarOFDelNodoSel;
+var
+  idx, I: Integer;
+  node: TNode;
+  D: TNodeData;
+  Indexes: TArray<Integer>;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  node := FGanttControl.SelectedNode;
+  if not DMPlanner.NodeDataRepo.TryGetById(node.DataId, D) then Exit;
+  if D.NumeroOrdenFabricacion = 0 then Exit;
+
+  Indexes := FGanttControl.FindNodesByOF(
+    D.NumeroOrdenFabricacion, D.SerieFabricacion);
+  if Length(Indexes) = 0 then Exit;
+
+  FGanttControl.ClearSelection;
+  for I := 0 to High(Indexes) do
+    FGanttControl.SelectNodeIndex(Indexes[I], False);
+  FGanttControl.Invalidate;
 end;
 
 procedure TfrmVistaGantt.Indicadores1Click(Sender: TObject);
@@ -2368,6 +2618,106 @@ begin
     LibreMovimiento1.Checked := D.LibreMoviment;
 end;
 
+// Despacha el submenu "Seleccionar" del clic derecho. El Tag identifica el
+// criterio (mismo conjunto que los atajos Ctrl+1/2/3, Ctrl+Mayus+Der/Izq y
+// Ctrl+Mayus+O). La referencia temporal es el nodo en foco o el centro de vista.
+procedure TfrmVistaGantt.selPeriodoClick(Sender: TObject);
+var
+  ARef: TDateTime;
+begin
+  ARef := FechaReferenciaSeleccion;
+  case TMenuItem(Sender).Tag of
+    1: SeleccionarNodosDelDia(ARef);
+    2: SeleccionarNodosDeLaSemana(ARef);
+    3: SeleccionarNodosDelMes(ARef);
+    4: SeleccionarNodosDesde(ARef);
+    5: SeleccionarNodosHasta(ARef);
+    6: SeleccionarOFDelNodoSel;
+  end;
+end;
+
+// Submenu "Mover" del clic derecho. El Tag codifica nivel y direccion:
+//   11/12 = OF adelante/atras, 21/22 = OT, 31/32 = OP.
+// Abre el dialogo de fecha destino y aplica la replanificacion (con undo).
+procedure TfrmVistaGantt.moverAFechaClick(Sender: TObject);
+var
+  tag, idx: Integer;
+  n: TNode;
+  D: TNodeData;
+  esForward: Boolean;
+  nivel: string;
+  titulo, subtitulo: string;
+  fechaEntrega, fechaDefecto, fechaDestino: TDateTime;
+  hatTipo: TGanttHistoryActionType;
+  ok: Boolean;
+begin
+  idx := FGanttControl.SelectedNodeIndex;
+  if idx < 0 then Exit;
+
+  tag := TMenuItem(Sender).Tag;
+  esForward := (tag mod 10) = 1;   // ...1 = adelante (forward), ...2 = atras
+
+  case tag div 10 of
+    1: nivel := 'OF';
+    2: nivel := 'OT';
+    3: nivel := 'OP';
+  else
+    Exit;
+  end;
+
+  n := FGanttControl.SelectedNode;
+  fechaEntrega := 0;
+  if DMPlanner.NodeDataRepo.TryGetById(n.DataId, D) then
+    fechaEntrega := D.FechaEntrega;
+
+  // Valor por defecto del selector: la entrega si existe; si no, el inicio del
+  // propio nodo (para forward) o su fin (para backward).
+  if fechaEntrega > 1 then
+    fechaDefecto := fechaEntrega
+  else if esForward then
+    fechaDefecto := n.StartTime
+  else
+    fechaDefecto := n.EndTime;
+
+  titulo := 'Mover ' + nivel;
+  if esForward then
+    subtitulo := 'La ' + nivel + ' empezar'#225' en la fecha indicada'
+  else
+    subtitulo := 'La ' + nivel + ' acabar'#225' en la fecha indicada';
+
+  if not TfrmMoverFecha.Execute(titulo, subtitulo,
+       fechaEntrega, fechaDefecto, fechaDestino) then
+    Exit;
+
+  // Tipo de accion para el historico.
+  case tag div 10 of
+    1: if esForward then hatTipo := hatCompactOF else hatTipo := hatBackwardOF;
+    2: if esForward then hatTipo := hatCompactOT else hatTipo := hatBackwardOT;
+  else
+    hatTipo := hatMove;
+  end;
+
+  ok := False;
+  FGanttControl.BeginUndoBatch('Mover ' + nivel + ' a fecha', hatTipo);
+  try
+    case tag div 10 of
+      1: ok := FGanttControl.MoverOFAFecha(idx, fechaDestino, esForward, 0);
+      2: ok := FGanttControl.MoverOTAFecha(idx, fechaDestino, esForward, 0);
+      3: ok := FGanttControl.MoverOPAFecha(idx, fechaDestino, esForward);
+    end;
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+
+  UpdateHistoryButtons;
+
+  // El motor marca los nodos movidos como Modified; el autosaver los persiste
+  // (mismo patron que Compactar OF/OT). Si nada cambio, avisamos.
+  if not ok then
+    ShowMessage('No se ha podido mover la ' + nivel +
+      ' a esa fecha (restricciones de calendario, dependencias o bloqueo).');
+end;
+
 procedure TfrmVistaGantt.LibreMovimiento1Click(Sender: TObject);
 var
   idx: Integer;
@@ -2451,6 +2801,15 @@ begin
   // Refrescar cache del proyecto activo en DMPlanner (para que CurrentProjectFechaBloqueo
   // y CurrentProjectTieneBloqueo reflejen el cambio sin necesidad de reabrir).
   DMPlanner.SetCurrentProject(DMPlanner.CurrentProjectId);
+end;
+
+procedure TfrmVistaGantt.aaa1Click(Sender: TObject);
+begin
+    case TMenuItem(sender).Tag of
+    0:  FGanttControl.LinksVisible := lvSelected;
+    1:  FGanttControl.LinksVisible := lvAlways;
+    2:  FGanttControl.LinksVisible := lvNever;
+    end;
 end;
 
 procedure TfrmVistaGantt.Aadirmarcador1Click(Sender: TObject);
@@ -2689,11 +3048,37 @@ begin
   SaveViewportPrefs;
 end;
 
+function TfrmVistaGantt.SummaryActivo: Boolean;
+begin
+  Result := Assigned(pnlSummary) and pnlSummary.Visible;
+end;
+
+// Toggle de la banda de Summary. Al ocultarla NO se calcula nada (el debounce
+// timer se para y las guardas SummaryActivo cortan cualquier recalculo). Al
+// mostrarla se recalcula la ventana visible con la vista que estuviera activa.
+procedure TfrmVistaGantt.Versumario1Click(Sender: TObject);
+var
+  Mostrar: Boolean;
+begin
+  // AutoCheck ya togleo Versumario1.Checked antes de este OnClick.
+  Mostrar := Versumario1.Checked;
+
+  if Assigned(pnlSummary) then
+    pnlSummary.Visible := Mostrar;
+
+  if Mostrar then
+    // Recalcular solo si hay una vista activa; RebuildSummaryData ya lo hace.
+    ScheduleSummaryRecalc(True)
+  else if Assigned(FSummaryDebounceTimer) then
+    FSummaryDebounceTimer.Enabled := False;  // cancelar calculo pendiente
+end;
+
 procedure TfrmVistaGantt.RebuildSummaryData;
 var
   vStart, vEnd: TDateTime;
 begin
   if not Assigned(FSummaryControl) then Exit;
+  if not SummaryActivo then Exit;   // banda oculta: no computar
 
   // El compte de nodes SI es barat: el recreem cada cop sobre la finestra visible.
   // El cache d'HORES (S3) NO es destrueix aqui: es INCREMENTAL (nomes hi afegim
@@ -2897,6 +3282,7 @@ begin
   // o arrastra nodos, lo que penalizaria el Gantt), reprogramamos un timer
   // corto. Cada evento lo reinicia; solo se calcula cuando el usuario PARA.
   if not Assigned(FSummaryControl) then Exit;
+  if not SummaryActivo then Exit;   // banda oculta: no programar calculo
   if FSummaryControl.View = svNone then Exit;
   if not Assigned(FSummaryDebounceTimer) then Exit;
   // Si algun disparador pide invalidar (cambio de datos), se queda pendiente
@@ -2920,6 +3306,7 @@ end;
 procedure TfrmVistaGantt.RecalcSummaryActiva;
 begin
   if not Assigned(FSummaryControl) then Exit;
+  if not SummaryActivo then Exit;             // banda oculta: no recalcular
   if FSummaryControl.View = svNone then Exit; // nada que recalcular
   // RebuildSummaryData ya calcula SOLO la ventana visible y SOLO la vista
   // activa, y para S3 es INCREMENTAL (solo dias nuevos).

@@ -47,21 +47,27 @@ object frmBacklogSchedWizard: TfrmBacklogSchedWizard
         Top = 60
         Width = 315
         Height = 15
+        Cursor = crHandPoint
         Caption = 'Un nodo por cada operaci'#243'n. M'#225'ximo detalle y trazabilidad.'
+        OnClick = lblGranOPClick
       end
       object lblGranCentro: TLabel
         Left = 52
         Top = 92
         Width = 342
         Height = 15
+        Cursor = crHandPoint
         Caption = 'Agrupa las operaciones del mismo centro en un solo nodo (lote).'
+        OnClick = lblGranCentroClick
       end
       object lblGranTodo: TLabel
         Left = 52
         Top = 124
         Width = 331
         Height = 15
+        Cursor = crHandPoint
         Caption = 'Agrupa toda la selecci'#243'n en un '#250'nico nodo (suma duraciones).'
+        OnClick = lblGranTodoClick
       end
       object pbIlustracion: TPaintBox
         Left = 28
@@ -174,32 +180,6 @@ object frmBacklogSchedWizard: TfrmBacklogSchedWizard
           OnClick = rbModoClick
         end
       end
-      object gbOrden: TGroupBox
-        Left = 360
-        Top = 56
-        Width = 408
-        Height = 28
-        Caption = ''
-        TabOrder = 1
-        object rbOrdenFecha: TRadioButton
-          Left = 12
-          Top = 4
-          Width = 190
-          Height = 17
-          Caption = 'Por fecha de compromiso'
-          Checked = True
-          TabOrder = 0
-          TabStop = True
-        end
-        object rbOrdenPrio: TRadioButton
-          Left = 226
-          Top = 4
-          Width = 150
-          Height = 17
-          Caption = 'Por prioridad'
-          TabOrder = 1
-        end
-      end
       object dtFechaBase: TDateTimePicker
         Left = 466
         Top = 24
@@ -207,7 +187,194 @@ object frmBacklogSchedWizard: TfrmBacklogSchedWizard
         Height = 23
         Date = 45000.000000000000000000
         Time = 45000.000000000000000000
+        TabOrder = 1
+      end
+    end
+    object pgEstrategia: TdxWizardControlPage
+      Header.Description =
+        'C'#243'mo se ordena la cola de operaciones antes de apilarlas en los ' +
+        'centros.'
+      Header.Title = 'Estrategia de cola'
+      object lblEstrategiaIntro: TLabel
+        Left = 28
+        Top = 16
+        Width = 740
+        Height = 30
+        AutoSize = False
+        Caption =
+          'El orden de la cola decide qu'#233' operaci'#243'n se planifica primero cu' +
+          'ando varias compiten por el mismo centro. Elige el nivel:'
+        WordWrap = True
+      end
+      object lblEstrBasico: TLabel
+        Left = 52
+        Top = 66
+        Width = 290
+        Height = 15
+        Cursor = crHandPoint
+        Caption = 'B'#225'sico: por fecha de compromiso o por prioridad.'
+        OnClick = lblEstrBasicoClick
+      end
+      object lblEstrCanonica: TLabel
+        Left = 52
+        Top = 98
+        Width = 420
+        Height = 15
+        Cursor = crHandPoint
+        Caption =
+          'Reglas industriales: EDD, SPT, LPT, FIFO, Critical Ratio, Slack' +
+          ', Prioridad ERP.'
+        OnClick = lblEstrCanonicaClick
+      end
+      object lblEstrPersonalizada: TLabel
+        Left = 52
+        Top = 130
+        Width = 380
+        Height = 15
+        Cursor = crHandPoint
+        Caption = 'Perfiles del cliente: reglas propias multicriterio (a medida).'
+        OnClick = lblEstrPersonalizadaClick
+      end
+      object pbEstrategia: TPaintBox
+        Left = 28
+        Top = 168
+        Width = 760
+        Height = 360
+        OnPaint = pbEstrategiaPaint
+      end
+      object gbEstrategia: TGroupBox
+        Left = 28
+        Top = 56
+        Width = 21
+        Height = 104
+        Caption = ''
+        TabOrder = 0
+        object rbEstrBasico: TRadioButton
+          Left = 4
+          Top = 6
+          Width = 17
+          Height = 17
+          Checked = True
+          TabOrder = 0
+          TabStop = True
+          OnClick = rbEstrategiaClick
+        end
+        object rbEstrCanonica: TRadioButton
+          Left = 4
+          Top = 38
+          Width = 17
+          Height = 17
+          TabOrder = 1
+          OnClick = rbEstrategiaClick
+        end
+        object rbEstrPersonalizada: TRadioButton
+          Left = 4
+          Top = 70
+          Width = 17
+          Height = 17
+          TabOrder = 2
+          OnClick = rbEstrategiaClick
+        end
+      end
+    end
+    object pgRegla: TdxWizardControlPage
+      Header.Description = 'Elige la regla concreta que ordenar'#225' la cola.'
+      Header.Title = 'Detalle de la regla'
+      object lblReglaIntro: TLabel
+        Left = 28
+        Top = 16
+        Width = 740
+        Height = 30
+        AutoSize = False
+        Caption =
+          'Selecciona la regla o el perfil con el que se ordenar'#225' la cola d' +
+          'e operaciones.'
+        WordWrap = True
+      end
+      object lblReglaCanonica: TLabel
+        Left = 28
+        Top = 58
+        Width = 90
+        Height = 15
+        Caption = 'Regla industrial:'
+      end
+      object lblReglaPerfil: TLabel
+        Left = 28
+        Top = 58
+        Width = 90
+        Height = 15
+        Caption = 'Perfil del cliente:'
+      end
+      object pbRegla: TPaintBox
+        Left = 28
+        Top = 100
+        Width = 760
+        Height = 420
+        OnPaint = pbReglaPaint
+      end
+      object gbBasico: TGroupBox
+        Left = 28
+        Top = 50
+        Width = 408
+        Height = 40
+        Caption = '  Orden b'#225'sico  '
+        TabOrder = 0
+        object rbOrdenFecha: TRadioButton
+          Left = 12
+          Top = 16
+          Width = 190
+          Height = 17
+          Caption = 'Por fecha de compromiso'
+          Checked = True
+          TabOrder = 0
+          TabStop = True
+          OnClick = rbModoClick
+        end
+        object rbOrdenPrio: TRadioButton
+          Left = 226
+          Top = 16
+          Width = 150
+          Height = 17
+          Caption = 'Por prioridad'
+          TabOrder = 1
+          OnClick = rbModoClick
+        end
+      end
+      object cbReglaCanonica: TComboBox
+        Left = 130
+        Top = 54
+        Width = 300
+        Height = 23
+        Style = csDropDownList
+        TabOrder = 1
+        OnChange = rbModoClick
+      end
+      object btnConfigDesempate: TButton
+        Left = 450
+        Top = 53
+        Width = 145
+        Height = 25
+        Caption = 'Configurar desempates...'
         TabOrder = 2
+        OnClick = btnConfigDesempateClick
+      end
+      object btnCompararReglas: TButton
+        Left = 601
+        Top = 53
+        Width = 145
+        Height = 25
+        Caption = 'Comparar reglas...'
+        TabOrder = 4
+        OnClick = btnCompararReglasClick
+      end
+      object cbReglaPerfil: TComboBox
+        Left = 130
+        Top = 54
+        Width = 300
+        Height = 23
+        Style = csDropDownList
+        TabOrder = 3
+        OnChange = rbModoClick
       end
     end
     object pgAjustes: TdxWizardControlPage

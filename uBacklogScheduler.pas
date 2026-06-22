@@ -642,15 +642,21 @@ begin
     prCriticalRatio:
       begin
         // CR = (tiempo hasta vencer) / trabajo restante. Menor = mas critico.
-        // Sin fecha -> al final. Trabajo 0 -> CR infinito (no critico): detras.
+        // Sin fecha -> al final. Trabajo 0 -> CR "infinito" (no critico): detras.
+        // NO usamos Infinity en aritmetica FP (con excepciones FPU activas,
+        // Inf-Inf=NaN al comparar rompe el sort): tratamos el caso trabajo<=0
+        // de forma explicita por logica de comparacion.
         if ResolveMissingDue(Resolved) then Exit(Resolved);
         if (A.FechaCompromiso = 0) and (B.FechaCompromiso = 0) then Exit(0);
         RemA := WorkHours(A);
         RemB := WorkHours(B);
-        if RemA <= 0 then CrA := Infinity
-        else CrA := ((A.FechaCompromiso - AFechaBase) * 24.0) / RemA;
-        if RemB <= 0 then CrB := Infinity
-        else CrB := ((B.FechaCompromiso - AFechaBase) * 24.0) / RemB;
+        // Casos degenerados (trabajo 0): el de trabajo 0 es "menos critico" (CR
+        // infinito) y va detras. Si ambos son 0, empatan aqui.
+        if (RemA <= 0) and (RemB <= 0) then Exit(0);
+        if RemA <= 0 then Exit(1);    // A no critico -> detras
+        if RemB <= 0 then Exit(-1);   // B no critico -> A delante
+        CrA := ((A.FechaCompromiso - AFechaBase) * 24.0) / RemA;
+        CrB := ((B.FechaCompromiso - AFechaBase) * 24.0) / RemB;
         Result := CompareValue(CrA, CrB);
       end;
 

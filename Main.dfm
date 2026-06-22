@@ -125,7 +125,7 @@ object Form1: TForm1
     end
     object cxButton1: TcxButton
       AlignWithMargins = True
-      Left = 573
+      Left = 631
       Top = 5
       Width = 75
       Height = 23
@@ -141,6 +141,7 @@ object Form1: TForm1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
       TabOrder = 3
+      ExplicitLeft = 573
     end
     object btnTB_PlaniOperarios: TcxButton
       AlignWithMargins = True
@@ -245,7 +246,7 @@ object Form1: TForm1
       AlignWithMargins = True
       Left = 492
       Top = 5
-      Width = 75
+      Width = 133
       Height = 23
       Margins.Top = 5
       Margins.Bottom = 5

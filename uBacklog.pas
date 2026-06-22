@@ -185,6 +185,7 @@ type
     pnlSubTitulo: TPanel;
     btnDesplanificarSel: TButton;
     btnPlanificar: TButton;
+    btnPlanificarExpress: TButton;
     btnSyncErp: TcxButton;
     btnDesplanificarTodo: TButton;
     PopupMenu2: TPopupMenu;
@@ -232,6 +233,7 @@ type
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnPlanificarClick(Sender: TObject);
+    procedure btnPlanificarExpressClick(Sender: TObject);
     procedure btnLimpiarFiltrosClick(Sender: TObject);
     procedure FiltroChanged(Sender: TObject);
     procedure tvBacklogSelectionChanged(Sender: TcxCustomGridTableView);
@@ -292,6 +294,9 @@ type
     procedure EnsureNewColumnsVisible(const AKeys: array of string);
     procedure ResetLayout;
 
+    // Nucleo de planificacion compartido por el boton normal y el Express.
+    // AExpress=True abre el wizard directo al Resumen con la ultima config.
+    procedure PlanificarSeleccion(AExpress: Boolean);
     function CollectSelectedInputs: TArray<TSchedInput>;
     function BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
     function ExplodeToOpInputs(ARawId: Int64; ANivel: Integer): TArray<TSchedInput>;
@@ -328,7 +333,8 @@ uses
   uGenerarNodosDemo,
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
   uFormulaArticuloViewer, Main,
-  uErpReader, uErpReaderFactory, uSyncBacklogPreview, uOFViewer;
+  uErpReader, uErpReaderFactory, uSyncBacklogPreview, uOFViewer, uPlanLog,
+  uPlanningRules;
 
 const
   BACKLOG_MOD = 'BACKLOG';
@@ -558,12 +564,14 @@ begin
   Result.SeriePedido := '';
   // El check correcte es per familia ERP (TipoOrigen), no per nivell del leaf
   // (Origen). Per a una operacio Nivel=3, Origen val 'OP' i la familia pot
-  // ser 'OF ', 'PED' o 'PRJ'. La view V048 ja propaga NumeroDoc/SerieDoc
-  // heredats del pare per a Nivel=3.
+  // ser 'OF ', 'PED' o 'PRJ'.
   if Trim(Row.TipoOrigen) = 'OF' then
   begin
-    Result.NumeroOF := Row.NumeroDoc;
-    Result.SerieOF := Row.SerieDoc;
+    // IMPORTANTE: usar NumeroOF/SerieOF (que la vista calcula con CASE por nivel,
+    // tomando el valor de la OF raiz/abuelo), NO NumeroDoc/SerieDoc, que vienen
+    // de COALESCE y devuelven 0 porque OT/OP tienen NumeroDoc=0 (no NULL).
+    Result.NumeroOF := Row.NumeroOF;
+    Result.SerieOF := Row.SerieOF;
   end
   else if Trim(Row.TipoOrigen) = 'PED' then
   begin
@@ -575,7 +583,11 @@ begin
   Result.CodigoArticulo := Row.CodigoArticulo;
   Result.DescripcionArticulo := Row.DescripcionArticulo;
   Result.UnidadesAFabricar := Row.Cantidad;
-  Result.NumeroTrabajo := Row.CodigoProyecto;
+  // NumeroTrabajo = codigo de la OT (heredado por la OP). Antes CodigoProyecto,
+  // que queda vacio si el cliente no usa proyectos.
+  Result.NumeroTrabajo := Row.CodigoOT;
+  if Result.NumeroTrabajo = '' then
+    Result.NumeroTrabajo := Row.CodigoProyecto;
   Result.FechaEntrega := Row.FechaCompromiso;
   Result.FechaNecesaria := Row.FechaNecesaria;
   Result.TiempoUnidadFabSecs := Row.TiempoUnidadFabSecs;
@@ -589,6 +601,16 @@ begin
   // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
   Result.RawItemClaveERP := Row.ClaveERP;
   Result.RawItemTipoOrigen := Row.TipoOrigen;
+
+  PlanLog.Linea('BUILD_FROM_ROW: Tipo=[%s] Nivel=%d | Row.NumeroOF=%d ' +
+    'Row.SerieOF=%s Row.NumeroDoc=%d Row.CodigoOT=%s Row.CodigoProyecto=%s | ' +
+    'Row.FCompromiso=%s Row.FNecesaria=%s -> NumOF=%d SerieOF=%s NumTrab=%s ' +
+    'FEntrega=%s FNecesaria=%s',
+    [Row.TipoOrigen, Row.Nivel, Row.NumeroOF, Row.SerieOF, Row.NumeroDoc,
+     Row.CodigoOT, Row.CodigoProyecto,
+     DateToStr(Row.FechaCompromiso), DateToStr(Row.FechaNecesaria),
+     Result.NumeroOF, Result.SerieOF, Result.NumeroTrabajo,
+     DateToStr(Result.FechaEntrega), DateToStr(Result.FechaNecesaria)]);
 end;
 
 // Explosiona un nodo Nivel 1 (OF/PED/PRJ) o Nivel 2 (OT/LINEA/TAREA) a la lista
@@ -643,8 +665,10 @@ begin
 
       if Trim(Q.FieldByName('TipoOrigen').AsString) = 'OF' then
       begin
-        Inp.NumeroOF := Q.FieldByName('NumeroDoc').AsInteger;
-        Inp.SerieOF := Q.FieldByName('SerieDoc').AsString;
+        // NumeroOF/SerieOF: la vista ya los expone explicitos para la OP (heredados
+        // del abuelo OF). Usarlos directamente es mas fiable que NumeroDoc.
+        Inp.NumeroOF := Q.FieldByName('NumeroOF').AsInteger;
+        Inp.SerieOF := Q.FieldByName('SerieOF').AsString;
       end
       else if Trim(Q.FieldByName('TipoOrigen').AsString) = 'PED' then
       begin
@@ -656,7 +680,11 @@ begin
       Inp.CodigoArticulo := Q.FieldByName('CodigoArticulo').AsString;
       Inp.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
       Inp.UnidadesAFabricar := Q.FieldByName('Cantidad').AsFloat;
-      Inp.NumeroTrabajo := Q.FieldByName('CodigoProyecto').AsString;
+      // NumeroTrabajo = codigo de la OT (la ruta/orden de trabajo), heredado por
+      // la OP. Antes se usaba CodigoProyecto, que queda vacio si no hay proyectos.
+      Inp.NumeroTrabajo := Q.FieldByName('CodigoOT').AsString;
+      if Inp.NumeroTrabajo = '' then
+        Inp.NumeroTrabajo := Q.FieldByName('CodigoProyecto').AsString;
       if not Q.FieldByName('FechaCompromiso').IsNull then
         Inp.FechaEntrega := Q.FieldByName('FechaCompromiso').AsDateTime;
       if not Q.FieldByName('FechaNecesaria').IsNull then
@@ -672,6 +700,22 @@ begin
 
       Inp.RawItemClaveERP := Q.FieldByName('ClaveERP').AsString;
       Inp.RawItemTipoOrigen := Q.FieldByName('TipoOrigen').AsString;
+
+      // Diagnostico: que trae la vista (crudo) vs que asignamos al input.
+      PlanLog.Linea('EXPLODE leido de vista: TipoOrigen=[%s] Nivel=%s ' +
+        'NumeroOF(crudo)=[%s] SerieOF(crudo)=[%s] NumeroDoc=[%s] CodigoOT=[%s] ' +
+        'CodigoProyecto=[%s] FCompromiso=[%s] FNecesaria=[%s] -> asignado: ' +
+        'NumOF=%d SerieOF=%s NumTrab=%s',
+        [Q.FieldByName('TipoOrigen').AsString,
+         Q.FieldByName('Nivel').AsString,
+         Q.FieldByName('NumeroOF').AsString,
+         Q.FieldByName('SerieOF').AsString,
+         Q.FieldByName('NumeroDoc').AsString,
+         Q.FieldByName('CodigoOT').AsString,
+         Q.FieldByName('CodigoProyecto').AsString,
+         Q.FieldByName('FechaCompromiso').AsString,
+         Q.FieldByName('FechaNecesaria').AsString,
+         Inp.NumeroOF, Inp.SerieOF, Inp.NumeroTrabajo]);
 
       L.Add(Inp);
       Q.Next;
@@ -805,14 +849,20 @@ begin
         UdsStr := FloatToStr(Item.Input.UnidadesAFabricar, TFormatSettings.Invariant)
       else
         UdsStr := '1';
-      if Item.Input.FechaEntrega > 0 then
+      // FechaEntrega y FechaNecesaria del nodo = FechaCompromiso del backlog
+      // (la fecha objetivo de la OF). Si no hay compromiso, caemos a los campos
+      // especificos del input como respaldo.
+      if Item.Input.FechaCompromiso > 0 then
+        FEntStr := FmtDT(Item.Input.FechaCompromiso)
+      else if Item.Input.FechaEntrega > 0 then
         FEntStr := FmtDT(Item.Input.FechaEntrega)
       else
         FEntStr := 'NULL';
-      if Item.Input.FechaNecesaria > 0 then
-        FNecStr := FmtDT(Item.Input.FechaNecesaria)
-      else if Item.Input.FechaCompromiso > 0 then
+
+      if Item.Input.FechaCompromiso > 0 then
         FNecStr := FmtDT(Item.Input.FechaCompromiso)
+      else if Item.Input.FechaNecesaria > 0 then
+        FNecStr := FmtDT(Item.Input.FechaNecesaria)
       else
         FNecStr := 'NULL';
       if Item.Input.TiempoUnidadFabSecs > 0 then
@@ -848,6 +898,11 @@ begin
         Cmd.Free;
       end;
 
+      PlanLog.Linea('COMMIT NodeData NodeId=%d: NumeroOF=%d SerieOF=%s ' +
+        'NumTrabajo=%s FechaEntrega=%s FechaNecesaria=%s | Centro=%d ClaveERP=%s',
+        [NodeId, Item.Input.NumeroOF, Item.Input.SerieOF, Item.Input.NumeroTrabajo,
+         FEntStr, FNecStr, Item.CenterId, Item.Input.RawItemClaveERP]);
+
       Creados.Add(TPair<Integer, Integer>.Create(NodeId, Item.CenterId));
       Inc(NumCreats);
     end;
@@ -865,6 +920,9 @@ begin
   finally
     Creados.Free;
   end;
+
+  PlanLog.Linea('=== COMMIT terminado: %d nodos creados ===', [NumCreats]);
+  PlanLog.Fin;
 
   ShowMessage(Format(
     'Planificacion confirmada: %d nodos creados en el plan actual.' + sLineBreak +
@@ -968,12 +1026,36 @@ begin
 end;
 
 procedure TfrmBacklog.btnPlanificarClick(Sender: TObject);
+begin
+  PlanificarSeleccion(False);
+end;
+
+procedure TfrmBacklog.btnPlanificarExpressClick(Sender: TObject);
+begin
+  // Express: salta el paso a paso y abre el wizard en el Resumen con la ultima
+  // configuracion. Si aun no hay ninguna guardada, cae al asistente completo.
+  if not TfrmBacklogSchedWizard.HayConfigExpress then
+  begin
+    ShowMessage('A'#250'n no hay una configuraci'#243'n guardada. Planifica una vez con '+
+      'el asistente y la "Planificaci'#243'n Express" recordar'#225' tus opciones.');
+    PlanificarSeleccion(False);
+    Exit;
+  end;
+  PlanificarSeleccion(True);
+end;
+
+procedure TfrmBacklog.PlanificarSeleccion(AExpress: Boolean);
 var
   Inputs: TArray<TSchedInput>;
   Params: TSchedParams;
   SR: TSchedResult;
   MR: TModalResult;
   Creados: TArray<TPair<Integer, Integer>>;
+  LogI: Integer;
+  RuleSet, EddRuleSet: TPriorityRuleSet;
+  PerfilesCustom, CentrosPlan: TArray<string>;
+  PerfilSel, PCI: Integer;
+  C: TCentreTreball;
 begin
   if tvBacklog.Controller.SelectedRowCount = 0 then
   begin
@@ -987,7 +1069,21 @@ begin
     Exit;
   end;
 
+  PlanLog.Inicio(Format('PLANIFICAR  -  %d filas seleccionadas, ProjectId=%d',
+    [tvBacklog.Controller.SelectedRowCount, DMPlanner.CurrentProjectId]));
+
   Inputs := CollectSelectedInputs;
+
+  // Volcado de lo que se ha recogido de la seleccion (post explosion a OP).
+  PlanLog.Linea('--- INPUTS recogidos: %d operaciones (OP) ---', [Length(Inputs)]);
+  for LogI := 0 to High(Inputs) do
+    PlanLog.Linea('  [%d] Tipo=%s ClaveERP=%s | NumeroOF=%d SerieOF=%s ' +
+      'NumTrabajo=%s | FCompromiso=%s FEntrega=%s FNecesaria=%s | Centro=%s Doc=%s',
+      [LogI, Inputs[LogI].RawItemTipoOrigen, Inputs[LogI].RawItemClaveERP,
+       Inputs[LogI].NumeroOF, Inputs[LogI].SerieOF, Inputs[LogI].NumeroTrabajo,
+       DateToStr(Inputs[LogI].FechaCompromiso), DateToStr(Inputs[LogI].FechaEntrega),
+       DateToStr(Inputs[LogI].FechaNecesaria),
+       Inputs[LogI].CentroPreferente, Inputs[LogI].CodigoDocumento]);
   if Length(Inputs) = 0 then
   begin
     // A Nivel 1/2 puede pasar que la seleccion no tenga OP pendientes (todas ya
@@ -997,12 +1093,41 @@ begin
     Exit;
   end;
 
+  // Perfiles del cliente (motor de reglas) para el paso "Estrategia de cola"
+  // del wizard: nombres de los perfiles guardados en "Reglas de Planificacion".
+  PerfilesCustom := nil;
+  if Assigned(Main.Form1) and Assigned(Main.Form1.PlanningRuleEngine) then
+  begin
+    SetLength(PerfilesCustom, Main.Form1.PlanningRuleEngine.ProfileCount);
+    for PCI := 0 to Main.Form1.PlanningRuleEngine.ProfileCount - 1 do
+      PerfilesCustom[PCI] := Main.Form1.PlanningRuleEngine.GetProfile(PCI).Name;
+  end;
+
+  // Centros del plan (para overrides por centro en el dialogo de desempates).
+  CentrosPlan := nil;
+  if DMPlanner.CentresRepo <> nil then
+    for C in DMPlanner.CentresRepo.GetAll do
+      if Trim(C.CodiCentre) <> '' then
+        CentrosPlan := CentrosPlan + [Trim(C.CodiCentre)];
+
+  RuleSet := DefaultRuleSet;
+  // RuleSet de fallback para perfiles custom: EDD puro (fecha de compromiso).
+  EddRuleSet.Principal := prEDD;
+  EddRuleSet.Desempate1 := prEDD;
+  EddRuleSet.Desempate2 := prEDD;
+  PerfilSel := -1;
+
   Params := Default(TSchedParams);
   while True do
   begin
     // Asistente visual: analiza la seleccion y deja que el usuario decida COMO
-    // planificar (granularidad/agrupacion + direccion + fecha + ajustes).
-    if not TfrmBacklogSchedWizard.Execute(Inputs, Params) then Exit;
+    // planificar (granularidad/agrupacion + direccion + fecha + ajustes +
+    // estrategia de cola: orden basico / regla canonica / perfil del cliente).
+    if not TfrmBacklogSchedWizard.Execute(Inputs, Params, RuleSet,
+       PerfilesCustom, CentrosPlan, PerfilSel, AExpress) then Exit;
+    // El salto-a-Resumen solo aplica a la PRIMERA apertura: si el bucle reabre
+    // el wizard (fecha invalida o preview no aceptado), va paso a paso normal.
+    AExpress := False;
 
     // Validacion: la fecha base no puede ser anterior a la fecha de bloqueo
     // del proyecto activo (si la tiene). La fecha de bloqueo marca el corte
@@ -1020,7 +1145,46 @@ begin
       Continue;  // vuelve a abrir el modal de params
     end;
 
+    // Estrategia de cola: si el wizard pidio orden PREordenado, la cola se
+    // ordena AQUI (antes del FCS, que respeta soPreordenado y no reordena).
+    //   PerfilSel < 0  -> regla canonica via SortInputsByRuleSet (RuleSet).
+    //   PerfilSel >= 0 -> perfil del cliente: ordena NODOS, no inputs; en esta
+    //                     primera planificacion aplicamos un orden equivalente
+    //                     por fecha de compromiso (EDD) como aproximacion y el
+    //                     perfil completo se aplicara al re-planificar el Gantt.
+    if Params.Order = soPreordenado then
+    begin
+      if PerfilSel < 0 then
+      begin
+        SortInputsByRuleSet(Inputs, RuleSet, Params.FechaBase);
+        PlanLog.Linea('--- COLA: regla canonica Principal=%d (preordenado) ---',
+          [Ord(RuleSet.Principal)]);
+      end
+      else
+      begin
+        // Perfil del cliente: ordena NODOS (no inputs). En la 1a planificacion
+        // aproximamos con EDD (fecha de compromiso asc.) via el RuleSet publico.
+        SortInputsByRuleSet(Inputs, EddRuleSet, Params.FechaBase);
+        PlanLog.Linea('--- COLA: perfil cliente #%d (fallback EDD en 1a planif.) ---',
+          [PerfilSel]);
+      end;
+    end;
+
+    PlanLog.Linea('--- SCHEDULING: Mode=%d Order=%d FechaBase=%s Agrupacion=%d ---',
+      [Ord(Params.Mode), Ord(Params.Order), DateToStr(Params.FechaBase),
+       Ord(Params.Agrupacion)]);
     SR := RunAutoScheduling(Inputs, Params);
+    PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados ---',
+      [Length(SR.Items), SR.TotalPlanificados]);
+    for LogI := 0 to High(SR.Items) do
+      PlanLog.Linea('  out[%d] Status=%d Centro=%d Ini=%s Fin=%s | Input.NumeroOF=%d ' +
+        'Input.SerieOF=%s Input.FCompromiso=%s Input.FEntrega=%s',
+        [LogI, Ord(SR.Items[LogI].Status), SR.Items[LogI].CenterId,
+         DateToStr(SR.Items[LogI].FechaInicio), DateToStr(SR.Items[LogI].FechaFin),
+         SR.Items[LogI].Input.NumeroOF, SR.Items[LogI].Input.SerieOF,
+         DateToStr(SR.Items[LogI].Input.FechaCompromiso),
+         DateToStr(SR.Items[LogI].Input.FechaEntrega)]);
+
     MR := TfrmBacklogSchedPreview.Execute(SR);
 
     case MR of

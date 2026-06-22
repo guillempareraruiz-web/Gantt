@@ -245,6 +245,11 @@ type
   public
     { Public declarations }
 
+    // Motor de reglas de planificacion del cliente (perfiles custom). Solo
+    // lectura: lo consumen forms hijos (p.ej. el wizard del Backlog) para
+    // listar/aplicar perfiles. La instancia la posee y libera el Main.
+    property PlanningRuleEngine: TPlanningRuleEngine read FPlanningRuleEngine;
+
     // Envoltorio para abrir forms desde la toolbar: ignora clics nuevos
     // mientras hay una apertura en curso y muestra el BusyDialog si AShowBusy.
     // AAction recibe lo que normalmente harias en el OnClick: crear / mostrar

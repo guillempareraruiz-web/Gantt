@@ -928,22 +928,6 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         TabOrder = 15
       end
-      object ComboBox1: TComboBox
-        Left = 819
-        Top = 80
-        Width = 253
-        Height = 23
-        Style = csDropDownList
-        Anchors = [akTop, akRight]
-        ItemIndex = 1
-        TabOrder = 16
-        Text = 'Solo ver dependencias del seleccionado'
-        OnChange = ComboBox1Change
-        Items.Strings = (
-          'Ver todas las dependencias'
-          'Solo ver dependencias del seleccionado'
-          'Nunca ver dependencias')
-      end
       object btnUndo: TButton
         Tag = 1
         Left = 9
@@ -957,7 +941,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 17
+        TabOrder = 16
         OnClick = btnUndoClick
       end
       object btnRedo: TButton
@@ -973,7 +957,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 18
+        TabOrder = 17
         OnClick = btnRedoClick
       end
       object Button12: TButton
@@ -989,7 +973,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 19
+        TabOrder = 18
         OnClick = Button12Click
       end
       object Button25: TButton
@@ -999,7 +983,7 @@ object frmVistaGantt: TfrmVistaGantt
         Height = 25
         Anchors = [akTop, akRight]
         Caption = 'BUSCAR'
-        TabOrder = 20
+        TabOrder = 19
       end
       object Button26: TButton
         Left = 997
@@ -1014,7 +998,7 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = []
         ParentFont = False
-        TabOrder = 21
+        TabOrder = 20
       end
       object Panel5: TPanel
         Left = 411
@@ -1024,7 +1008,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 7699523
         ParentBackground = False
-        TabOrder = 22
+        TabOrder = 21
       end
       object Panel16: TPanel
         Left = 548
@@ -1034,7 +1018,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 9404016
         ParentBackground = False
-        TabOrder = 23
+        TabOrder = 22
       end
       object Panel17: TPanel
         Left = 506
@@ -1044,7 +1028,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 8220514
         ParentBackground = False
-        TabOrder = 24
+        TabOrder = 23
       end
       object Panel18: TPanel
         Left = 381
@@ -1054,7 +1038,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 7041597
         ParentBackground = False
-        TabOrder = 25
+        TabOrder = 24
       end
       object Panel19: TPanel
         Left = 356
@@ -1064,7 +1048,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 3553567
         ParentBackground = False
-        TabOrder = 26
+        TabOrder = 25
       end
       object Panel20: TPanel
         Left = 464
@@ -1074,7 +1058,7 @@ object frmVistaGantt: TfrmVistaGantt
         BevelOuter = bvNone
         Color = 6313290
         ParentBackground = False
-        TabOrder = 27
+        TabOrder = 26
       end
     end
     object Panel3: TPanel
@@ -1416,45 +1400,6 @@ object frmVistaGantt: TfrmVistaGantt
         TabOrder = 10
         OnClick = Button24Click
       end
-      object btnResaltarOF: TcxButton
-        Left = 346
-        Top = 6
-        Width = 66
-        Height = 19
-        Anchors = [akTop, akRight]
-        Caption = 'RESALTAR OF'
-        SpeedButtonOptions.GroupIndex = 2
-        SpeedButtonOptions.CanBeFocused = False
-        SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 11
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        OnClick = btnResaltarOFClick
-      end
-      object btnResaltarOT: TcxButton
-        Tag = 1
-        Left = 346
-        Top = 26
-        Width = 66
-        Height = 19
-        Anchors = [akTop, akRight]
-        Caption = 'RESALTAR OT'
-        SpeedButtonOptions.GroupIndex = 1
-        SpeedButtonOptions.CanBeFocused = False
-        SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 12
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        OnClick = btnResaltarOFClick
-      end
     end
     object pnlTitulo: TPanel
       Left = 0
@@ -1502,7 +1447,7 @@ object frmVistaGantt: TfrmVistaGantt
         AutoSize = False
         Caption = '01.01.2026  -  31.12.2026'
         Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWhite
+        Font.Color = 8454143
         Font.Height = -16
         Font.Name = 'Segoe UI Semilight'
         Font.Style = []
@@ -1936,6 +1881,52 @@ object frmVistaGantt: TfrmVistaGantt
           OnClick = pnlKPIAlertasClick
           ExplicitTop = 8
         end
+      end
+      object btnAtajos: TcxButton
+        Left = 382
+        Top = 12
+        Width = 24
+        Height = 19
+        Hint = 'Atajos y gestos (May'#250's+F1)'
+        Caption = '?'
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.CanBeFocused = False
+        TabOrder = 8
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnAtajosClick
+      end
+      object cxButton2: TcxButton
+        Left = 412
+        Top = 12
+        Width = 76
+        Height = 19
+        Hint = 'Opciones del Gantt'
+        Caption = 'Opciones'
+        DropDownMenu = PopOpciones
+        Kind = cxbkOfficeDropDown
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.CanBeFocused = False
+        TabOrder = 9
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnAtajosClick
       end
     end
     object pnlSubTitulo: TPanel
@@ -2769,18 +2760,19 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         OnClick = btnFocoClick
       end
-      object btnAtajos: TcxButton
-        Left = 682
+      object btnResaltarOF: TcxButton
+        Left = 714
         Top = 23
-        Width = 24
+        Width = 66
         Height = 19
-        Caption = '?'
-        Hint = 'Atajos y gestos (May'#250's+F1)'
-        ShowHint = True
+        Caption = 'Resaltar OF'
+        Colors.PressedText = clYellow
         LookAndFeel.Kind = lfUltraFlat
         LookAndFeel.NativeStyle = False
         LookAndFeel.SkinName = 'Sharp'
+        SpeedButtonOptions.GroupIndex = 66
         SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
         TabOrder = 14
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
@@ -2788,7 +2780,30 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Name = 'Segoe UI'
         Font.Style = [fsBold]
         ParentFont = False
-        OnClick = btnAtajosClick
+        OnClick = btnResaltarOFClick
+      end
+      object btnResaltarOT: TcxButton
+        Tag = 1
+        Left = 784
+        Top = 23
+        Width = 66
+        Height = 19
+        Caption = 'Resaltar OT'
+        Colors.PressedText = clYellow
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        SpeedButtonOptions.GroupIndex = 66
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 15
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnResaltarOFClick
       end
     end
   end
@@ -2892,6 +2907,87 @@ object frmVistaGantt: TfrmVistaGantt
       AutoCheck = True
       Caption = 'Libre Movimiento'
       OnClick = LibreMovimiento1Click
+    end
+    object Mover1: TMenuItem
+      Caption = 'Mover'
+      object MoverOF1: TMenuItem
+        Caption = 'Mover OF'
+        object movOFAdelante1: TMenuItem
+          Tag = 11
+          Caption = 'A fecha (empieza en fecha)'
+          OnClick = moverAFechaClick
+        end
+        object movOFAtras1: TMenuItem
+          Tag = 12
+          Caption = 'A fecha (acaba en fecha)'
+          OnClick = moverAFechaClick
+        end
+      end
+      object MoverOT1: TMenuItem
+        Caption = 'Mover OT'
+        object movOTAdelante1: TMenuItem
+          Tag = 21
+          Caption = 'A fecha (empieza en fecha)'
+          OnClick = moverAFechaClick
+        end
+        object movOTAtras1: TMenuItem
+          Tag = 22
+          Caption = 'A fecha (acaba en fecha)'
+          OnClick = moverAFechaClick
+        end
+      end
+      object MoverOP1: TMenuItem
+        Caption = 'Mover OP'
+        object movOPAdelante1: TMenuItem
+          Tag = 31
+          Caption = 'A fecha (empieza en fecha)'
+          OnClick = moverAFechaClick
+        end
+        object movOPAtras1: TMenuItem
+          Tag = 32
+          Caption = 'A fecha (acaba en fecha)'
+          OnClick = moverAFechaClick
+        end
+      end
+    end
+    object Seleccionar1: TMenuItem
+      Caption = 'Seleccionar'
+      object selDia1: TMenuItem
+        Tag = 1
+        Caption = 'Nodos del d'#237'a'
+        OnClick = selPeriodoClick
+      end
+      object selSemana1: TMenuItem
+        Tag = 2
+        Caption = 'Nodos de la semana'
+        OnClick = selPeriodoClick
+      end
+      object selMes1: TMenuItem
+        Tag = 3
+        Caption = 'Nodos del mes'
+        OnClick = selPeriodoClick
+      end
+      object selSep1: TMenuItem
+        Caption = '-'
+      end
+      object selDesde1: TMenuItem
+        Tag = 4
+        Caption = 'Desde aqu'#237' en adelante'
+        OnClick = selPeriodoClick
+      end
+      object selHasta1: TMenuItem
+        Tag = 5
+        Caption = 'Desde aqu'#237' hacia atr'#225's'
+        OnClick = selPeriodoClick
+      end
+      object selSep2: TMenuItem
+        Caption = '-'
+      end
+      object selOF1: TMenuItem
+        Tag = 6
+        Caption = 'Toda la OF'
+        OnClick = selPeriodoClick
+      end
     end
     object Resetduracinoriginal1: TMenuItem
       Caption = 'Restablecer duraci'#243'n original'
@@ -4434,5 +4530,42 @@ object frmVistaGantt: TfrmVistaGantt
           0D0A}
         FileName = 'D:\PROJECTES\GANTT\Gantt\Assets\Icons\range-semana-disabled.svg'
       end>
+  end
+  object PopOpciones: TPopupMenu
+    Left = 800
+    Top = 312
+    object Dependencias1: TMenuItem
+      Caption = 'Dependencias'
+      object aaa1: TMenuItem
+        AutoCheck = True
+        Caption = 'Solo ver del nodo seleccionado'
+        Checked = True
+        GroupIndex = 1
+        OnClick = aaa1Click
+      end
+      object ssss1: TMenuItem
+        Tag = 1
+        AutoCheck = True
+        Caption = 'Ver todas'
+        GroupIndex = 1
+        OnClick = aaa1Click
+      end
+      object Noverninguna1: TMenuItem
+        Tag = 2
+        AutoCheck = True
+        Caption = 'No ver ninguna'
+        GroupIndex = 1
+        OnClick = aaa1Click
+      end
+    end
+    object N6: TMenuItem
+      Caption = '-'
+    end
+    object Versumario1: TMenuItem
+      AutoCheck = True
+      Caption = 'Ver sumario'
+      Checked = True
+      OnClick = Versumario1Click
+    end
   end
 end
