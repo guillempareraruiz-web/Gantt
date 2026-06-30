@@ -268,7 +268,8 @@ type
     FFirstShow: Boolean;
     FNivelVista: Integer;   // 1=OF/PED/PRJ, 2=OT/LINEA/TAREA, 3=OP. Tab Pendientes.
 
-    procedure VerOFActual;
+    procedure VerOFActual(ARecordIndex: Integer = -1);
+    procedure VerNodeManual(ANodeId: Integer);
     procedure BuildBaseColumns;
     procedure LoadCustomColumnDefs;
     procedure BuildCustomColumns;
@@ -334,7 +335,7 @@ uses
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
   uFormulaArticuloViewer, Main,
   uErpReader, uErpReaderFactory, uSyncBacklogPreview, uOFViewer, uPlanLog,
-  uPlanningRules;
+  uPlanningRules, uNodeInspector;
 
 const
   BACKLOG_MOD = 'BACKLOG';
@@ -2263,12 +2264,15 @@ begin
   Result := False;
   if cmbOrigen.ItemIndex > 0 then
   begin
-    // Row.Origen para hojas Nivel=3 siempre es 'OP'; el combo filtra por familia
-    // (OF/PEDIDO/PROYECTO), que se deriva del TipoOrigen heredado del padre.
+    // Row.Origen para hojas Nivel=3 ERP siempre es 'OP'; el combo filtra por
+    // familia (OF/PEDIDO/PROYECTO), derivada del TipoOrigen heredado del padre.
+    // Los nodos MANUALES (V067) no tienen TipoOrigen: se filtran por Origen.
     S := UpperCase(Trim(Row.TipoOrigen));
     if      (cmbOrigen.ItemIndex = 1) and (S <> 'OF')  then Exit
     else if (cmbOrigen.ItemIndex = 2) and (S <> 'PED') then Exit
-    else if (cmbOrigen.ItemIndex = 3) and (S <> 'PRJ') then Exit;
+    else if (cmbOrigen.ItemIndex = 3) and (S <> 'PRJ') then Exit
+    else if (cmbOrigen.ItemIndex = 4) and
+            (UpperCase(Trim(Row.Origen)) <> 'MANUAL')  then Exit;
   end;
 
   S := Trim(edtCliente.Text);
@@ -2316,9 +2320,12 @@ begin
 
         if Key = 'TipoOrigen' then
         begin
-          // Mapeo CHAR(3) -> etiqueta legible (OF/PEDIDO/PROYECTO)
+          // Mapeo CHAR(3) -> etiqueta legible (OF/PEDIDO/PROYECTO). Los nodos
+          // manuales no tienen TipoOrigen: se etiquetan por su Origen='MANUAL'.
           S := UpperCase(Trim(Row.TipoOrigen));
-          if      S = 'OF'  then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'OF'
+          if      UpperCase(Trim(Row.Origen)) = 'MANUAL' then
+                            tvBacklog.DataController.Values[RowIdx, Col.Index] := 'MANUAL'
+          else if S = 'OF'  then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'OF'
           else if S = 'PED' then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'PEDIDO'
           else if S = 'PRJ' then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'PROYECTO'
           else                   tvBacklog.DataController.Values[RowIdx, Col.Index] := S;
@@ -2515,11 +2522,21 @@ end;
 procedure TfrmBacklog.tvBacklogCellDblClick(Sender: TcxCustomGridTableView;
   ACellViewInfo: TcxGridTableDataCellViewInfo; AButton: TMouseButton;
   AShift: TShiftState; var AHandled: Boolean);
+var
+  RecIdx: Integer;
 begin
   // Doble-clic en una fila de OF abre el Visor de OF (jerarquia OF/OT/OP).
   // No interferir con la columna de botones "Ver" (que tiene su propio editor).
   if AButton <> mbLeft then Exit;
-  VerOFActual;
+
+  // Usar el RecordIndex de la CELDA clicada (no FocusedRecordIndex): con sort u
+  // orden activo el foco puede no coincidir con la fila pulsada y se abria la OF
+  // de OTRA fila. ACellViewInfo apunta exactamente a la fila del doble-clic.
+  RecIdx := -1;
+  if (ACellViewInfo <> nil) and (ACellViewInfo.GridRecord <> nil) then
+    RecIdx := ACellViewInfo.GridRecord.RecordIndex;
+
+  VerOFActual(RecIdx);
   AHandled := True;
 end;
 
@@ -3186,12 +3203,17 @@ end;
 
 // Abre el Visor de OF para la fila enfocada del grid. El visor resuelve la OF
 // raiz a partir del RawId (sea OF/OT/OP) y muestra toda la jerarquia.
-procedure TfrmBacklog.VerOFActual;
+procedure TfrmBacklog.VerOFActual(ARecordIndex: Integer);
 var
   GridIdx, RowIdx: Integer;
   Row: TBacklogRow;
 begin
-  GridIdx := tvBacklog.Controller.FocusedRecordIndex;
+  // ARecordIndex < 0 (llamada sin fila concreta, p.ej. desde un boton): caemos
+  // al record enfocado. En el doble-clic siempre llega el RecordIndex de la celda.
+  if ARecordIndex >= 0 then
+    GridIdx := ARecordIndex
+  else
+    GridIdx := tvBacklog.Controller.FocusedRecordIndex;
   RowIdx := GetRowFromGridIndex(GridIdx);
   if (RowIdx < 0) or (RowIdx >= FRows.Count) then
   begin
@@ -3199,6 +3221,14 @@ begin
     Exit;
   end;
   Row := FRows[RowIdx];
+
+  // Nodo manual (no tiene OF detras): abrimos el NodeInspector en consulta.
+  if UpperCase(Trim(Row.Origen)) = 'MANUAL' then
+  begin
+    VerNodeManual(Row.NodeId);
+    Exit;
+  end;
+
   if Trim(Row.TipoOrigen) <> 'OF' then
   begin
     ShowMessage('El visor de OF solo aplica a filas de '#243'rdenes de fabricaci'#243'n.');
@@ -3210,6 +3240,76 @@ begin
     Exit;
   end;
   TfrmOFViewer.Execute(Row.RawId);
+end;
+
+// Abre el NodeInspector (solo lectura) para un nodo manual del tab Planificados.
+// Lee el TNodeData de BD por NodeId; la edicion real del nodo se hace en el Gantt.
+procedure TfrmBacklog.VerNodeManual(ANodeId: Integer);
+var
+  D: TNodeData;
+  Q: TADOQuery;
+  Ini, Fin: TDateTime;
+begin
+  if ANodeId <= 0 then
+  begin
+    ShowMessage('Este nodo manual no tiene un identificador v'#225'lido.');
+    Exit;
+  end;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT n.FechaInicio, n.FechaFin, ' +
+      '  ISNULL(nd.Operacion, ISNULL(n.Caption, '''')) AS Operacion, ' +
+      '  ISNULL(nd.DuracionMin, n.DuracionMin) AS DuracionMin, ' +
+      '  ISNULL(nd.DuracionMinOriginal, n.DuracionMin) AS DuracionMinOriginal, ' +
+      '  nd.FechaEntrega, nd.FechaNecesaria, ' +
+      '  ISNULL(nd.CodigoArticulo, '''') AS CodigoArticulo, ' +
+      '  ISNULL(nd.DescripcionArticulo, '''') AS DescripcionArticulo, ' +
+      '  ISNULL(nd.CodigoCliente, '''') AS CodigoCliente, ' +
+      '  ISNULL(nd.Prioridad, 0) AS Prioridad, ' +
+      '  ISNULL(nd.Estado, 0) AS Estado, ' +
+      '  ISNULL(nd.OperariosNecesarios, 0) AS OperariosNecesarios, ' +
+      '  ISNULL(nd.OperariosAsignados, 0) AS OperariosAsignados, ' +
+      '  ISNULL(nd.LibreMovimiento, 1) AS LibreMovimiento ' +
+      'FROM FS_PL_Node n ' +
+      'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
+      '  AND nd.NodeId = n.NodeId ' +
+      'WHERE n.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
+      '  AND n.NodeId = ' + IntToStr(ANodeId);
+    Q.Open;
+    if Q.Eof then
+    begin
+      ShowMessage('No se ha encontrado el nodo manual.');
+      Exit;
+    end;
+
+    FillChar(D, SizeOf(D), 0);
+    D.DataId := ANodeId;
+    D.Operacion := Q.FieldByName('Operacion').AsString;
+    D.DurationMin := Q.FieldByName('DuracionMin').AsFloat;
+    D.DurationMinOriginal := Q.FieldByName('DuracionMinOriginal').AsFloat;
+    if not Q.FieldByName('FechaEntrega').IsNull then
+      D.FechaEntrega := Q.FieldByName('FechaEntrega').AsDateTime;
+    if not Q.FieldByName('FechaNecesaria').IsNull then
+      D.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
+    D.CodigoArticulo := Q.FieldByName('CodigoArticulo').AsString;
+    D.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
+    D.CodigoCliente := Q.FieldByName('CodigoCliente').AsString;
+    D.Prioridad := Q.FieldByName('Prioridad').AsInteger;
+    D.Estado := TNodoEstado(Q.FieldByName('Estado').AsInteger);
+    D.OperariosNecesarios := Q.FieldByName('OperariosNecesarios').AsInteger;
+    D.OperariosAsignados := Q.FieldByName('OperariosAsignados').AsInteger;
+    D.LibreMoviment := Q.FieldByName('LibreMovimiento').AsBoolean;
+    Ini := Q.FieldByName('FechaInicio').AsDateTime;
+    Fin := Q.FieldByName('FechaFin').AsDateTime;
+  finally
+    Q.Free;
+  end;
+
+  // Read-only (consulta) + marcado como MANUAL. La edicion se hace en el Gantt.
+  TfrmNodeInspector.Execute(D, Ini, Fin, True, nil, True);
 end;
 
 procedure TfrmBacklog.Guardar1Click(Sender: TObject);

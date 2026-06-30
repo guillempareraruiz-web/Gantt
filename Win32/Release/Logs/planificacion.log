@@ -148,3 +148,10 @@
 2026-06-23 00:01:24.155    [3] Tipo=OF  ClaveERP=OP|2024|1736|5 | NumeroOF=1 SerieOF=3085 NumTrabajo=1736 | FCompromiso=08/02/2024 FEntrega=08/02/2024 FNecesaria=30/12/1899 | Centro=FAB AUT 5 Doc=-0/5 MONTAJE
 2026-06-23 00:01:24.155    [4] Tipo=OF  ClaveERP=OP|2024|2367|2 | NumeroOF=1 SerieOF=ZZZ260 NumTrabajo=2367 | FCompromiso=01/03/2024 FEntrega=01/03/2024 FNecesaria=30/12/1899 | Centro=PUE MARCHA Doc=-0/2 PROGRAMA
 2026-06-23 00:01:24.155    [5] Tipo=OF  ClaveERP=OP|2024|3555|5 | NumeroOF=1 SerieOF=ZZZ270 NumTrabajo=3555 | FCompromiso=25/04/2024 FEntrega=25/04/2024 FNecesaria=30/12/1899 | Centro=PUE MARCHS Doc=-0/5 VERIFIS
+2026-06-29 18:58:09.279  
+2026-06-29 18:58:09.555  ========================================================
+2026-06-29 18:58:09.556  === PLANIFICAR  -  1 filas seleccionadas, ProjectId=3
+2026-06-29 18:58:09.557  ========================================================
+2026-06-29 18:58:09.559  BUILD_FROM_ROW: Tipo=[OF ] Nivel=3 | Row.NumeroOF=1 Row.SerieOF=3072 Row.NumeroDoc=0 Row.CodigoOT=1206 Row.CodigoProyecto= | Row.FCompromiso=24/01/2024 Row.FNecesaria=30/12/1899 -> NumOF=1 SerieOF=3072 NumTrab=1206 FEntrega=24/01/2024 FNecesaria=30/12/1899
+2026-06-29 18:58:09.560  --- INPUTS recogidos: 1 operaciones (OP) ---
+2026-06-29 18:58:09.562    [0] Tipo=OF  ClaveERP=OP|2024|1206|5 | NumeroOF=1 SerieOF=3072 NumTrabajo=1206 | FCompromiso=24/01/2024 FEntrega=24/01/2024 FNecesaria=30/12/1899 | Centro=FAB AUT 5 Doc=-0/5 MONTAJE

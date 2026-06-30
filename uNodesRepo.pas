@@ -75,6 +75,7 @@ begin
     Q.SQL.Text :=
       'SELECT n.NodeId, n.CenterId, n.FechaInicio, n.FechaFin, n.DuracionMin, ' +
       '  ISNULL(n.LoteId, 0) AS LoteId, ' +
+      '  ISNULL(n.Source, ''ERP'') AS Source, ' +
       '  ISNULL(n.Caption, '''') AS Caption, ' +
       '  ISNULL(n.ColorFondo, 0) AS ColorFondo, ' +
       '  ISNULL(n.ColorBorde, 0) AS ColorBorde, ' +
@@ -131,6 +132,7 @@ begin
       N.Id := Q.FieldByName('NodeId').AsInteger;
       N.DataId := N.Id; // usamos el mismo ID para el lookup a NodeData
       N.LoteId := Q.FieldByName('LoteId').AsInteger;
+      N.Source := Q.FieldByName('Source').AsString;
 
       if Q.FieldByName('CenterId').IsNull then
         N.CentreId := -1

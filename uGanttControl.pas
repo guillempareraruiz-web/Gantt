@@ -2199,7 +2199,7 @@ begin
     'Fecha Necesaria: ' + FormatDateTime('dd/mm/yyyy', d.FechaNecesaria) + sLineBreak +
     'Unidades A Fabricar: ' + FormatFloat('0.##', d.UnidadesAFabricar) + sLineBreak +
     'Unidades Fabricadas: ' + FormatFloat('0.##', d.UnidadesFAbricadas) + sLineBreak +
-    'Porcentaje fabricado: ' + FormatFloat('0.##', (d.UnidadesFAbricadas / d.UnidadesAFabricar) * 100) +'%' + sLineBreak +
+    'Porcentaje fabricado: ' + FormatFloat('0.##', SafeDiv(d.UnidadesFAbricadas, d.UnidadesAFabricar) * 100) +'%' + sLineBreak +
     'Tiempo Fabricacion Unidad (sec): ' + FormatFloat('0.##', d.TiempoUnidadFabSecs) + sLineBreak +
     'Duración (min): ' + FormatFloat('0.##', d.DurationMin) + sLineBreak +
     'DuraciónOriginal (min): ' + FormatFloat('0.##', d.DurationMinOriginal) + sLineBreak +

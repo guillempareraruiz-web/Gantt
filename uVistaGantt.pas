@@ -39,7 +39,7 @@ uses
   System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
   dxGDIPlusClasses, cxImage, System.ImageList, Vcl.ImgList, cxImageList,
-  Vcl.Buttons, Winapi.GDIPOBJ, Winapi.GDIPAPI;
+  Vcl.Buttons, Winapi.GDIPOBJ, Winapi.GDIPAPI, uCrearNodoManual;
 type
   // Items agregados de nodos usados para calculo de KPIs por centro.
   TNodeKPIItem = record
@@ -393,6 +393,8 @@ type
     FCustomFieldDefs: TCustomFieldDefs;
     FPlanningRuleEngine: TPlanningRuleEngine;
 
+
+
     FUpdatingViewport: Boolean;
     FLoadingPrefs: Boolean;
     FLoadingFechaBloqueo: Boolean;
@@ -402,6 +404,20 @@ type
     FHasPendingViewport: Boolean;
     FCentreKPIs: TDictionary<Integer, TCentreKPI>;
     FCentreKPIRanges: TCentresKPIRanges;
+
+    // Crear nodo manual (V066): item del popup de zona vacia + su handler.
+    // FPopGanttPos guarda la posicion (cliente del Gantt) del right-click,
+    // capturada en popGantt.OnPopup ANTES de que el menu se muestre. Sin esto,
+    // al pulsar el item el cursor ya esta sobre el menu y el centro resuelto
+    // seria erroneo.
+    FPopGanttPos: TPoint;
+    procedure ConfigurarPopupCrearNodoManual;
+    procedure popGanttPopup(Sender: TObject);
+    procedure CrearNodoManualClick(Sender: TObject);
+    // Ajusta el inicio/fin del nodo manual a calendario laboral + sin colision,
+    // via RunAutoScheduling. Si no puede, devuelve las fechas crudas del dialogo.
+    procedure ColocarNodoManual(const AData: TNodoManualData;
+      out AFechaInicio, AFechaFin: TDateTime);
 
     procedure UpdateHistoryButtons;
 
@@ -591,7 +607,13 @@ uses
   uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,
   uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts,
-  uMoverFecha, Main;
+  uMoverFecha, Main, uBacklogScheduler;
+
+const
+  // Colores distintivos de los nodos MANUALES (V066), para diferenciarlos a
+  // simple vista de los nodos ERP (amarillo). Valores TColor (BGR).
+  MANUAL_NODE_FILL   = 16444380;  // azul muy claro
+  MANUAL_NODE_BORDER = 13135400;  // azul medio
 
 
 
@@ -727,6 +749,9 @@ begin
   FGanttControl.ShowHint := True;
   FGanttControl.NodePopupMenu := popNode;
   FGanttControl.PopupMenu := popGantt;
+  // Item "Crear nodo manual" en el popup de zona vacia del Gantt. Se crea en
+  // codigo (no en el DFM) para no tocar el DFM grande de la vista. (V066)
+  ConfigurarPopupCrearNodoManual;
   // Importante: el Gantt necesita el repo para resolver NodeData al pintar.
   // Sin esto, BuildDataIdIndex/RebuildLayout acceden a puntero nil.
   FGanttControl.SetNodeRepo(DMPlanner.NodeDataRepo);
@@ -2598,6 +2623,236 @@ begin
 
 end;
 
+// Anade el item "Crear nodo manual..." al popup de la zona vacia del Gantt.
+// Se construye en codigo para no tocar el DFM grande de la vista. (V066)
+procedure TfrmVistaGantt.ConfigurarPopupCrearNodoManual;
+var
+  mi: TMenuItem;
+begin
+  if popGantt = nil then Exit;
+
+  mi := TMenuItem.Create(popGantt);
+  mi.Caption := 'Crear nodo manual...';
+  mi.OnClick := CrearNodoManualClick;
+  popGantt.Items.Add(mi);
+
+  // Capturar la posicion del right-click ANTES de mostrar el menu, cuando el
+  // cursor todavia esta sobre el Gantt (no sobre el item del menu).
+  popGantt.OnPopup := popGanttPopup;
+end;
+
+// Se dispara justo antes de mostrar popGantt: el cursor aun esta en el punto del
+// right-click. Guardamos su posicion en coords cliente del Gantt para que
+// CrearNodoManualClick resuelva el centro y la fecha correctos. (V066)
+procedure TfrmVistaGantt.popGanttPopup(Sender: TObject);
+begin
+  FPopGanttPos := FGanttControl.ScreenToClient(Mouse.CursorPos);
+end;
+
+// Ajusta el inicio/fin del nodo manual respetando el calendario laboral del
+// centro y las colisiones con los nodos existentes, usando el mismo motor que
+// la planificacion del Backlog (RunAutoScheduling, Forward + rellenar huecos).
+// Si el motor no logra colocarlo, devuelve las fechas crudas del dialogo. (V066)
+procedure TfrmVistaGantt.ColocarNodoManual(const AData: TNodoManualData;
+  out AFechaInicio, AFechaFin: TDateTime);
+var
+  Centros: TArray<TCentreTreball>;
+  C: TCentreTreball;
+  CodiCentre: string;
+  Inp: TSchedInput;
+  Params: TSchedParams;
+  Res: TSchedResult;
+begin
+  // Fechas crudas como fallback (inicio del dialogo + duracion de reloj).
+  AFechaInicio := AData.FechaInicio;
+  AFechaFin := AData.FechaInicio + (AData.DuracionMin / (24 * 60));
+
+  // Resolver el codigo del centro a partir del CenterId elegido.
+  CodiCentre := '';
+  Centros := DMPlanner.CentresRepo.GetAll;
+  for C in Centros do
+    if C.Id = AData.CenterId then
+    begin
+      CodiCentre := C.CodiCentre;
+      Break;
+    end;
+
+  // Input para el motor: la duracion sale de HorasEstimadas (cascada V054 cae
+  // ahi cuando no hay tiempos de operacion ERP). El resto de campos, vacios.
+  Inp := Default(TSchedInput);
+  Inp.Origen := 'MANUAL';
+  Inp.CodigoDocumento := AData.Caption;
+  Inp.CentroPreferente := CodiCentre;
+  Inp.HorasEstimadas := AData.DuracionMin / 60.0;
+  Inp.FechaCompromiso := AData.FechaCompromiso;
+
+  Params := Default(TSchedParams);
+  Params.Mode := smForward;
+  Params.Order := soPreordenado;        // un solo input, sin reordenar
+  Params.FechaBase := AData.FechaInicio; // arrancar en el punto del click
+  Params.Placement := ppHueco;          // respetar calendario + primer hueco valido
+  Params.HuecoMinimoMin := 1;           // permitir cualquier hueco (nodo manual)
+  Params.PorcentajeMinNodo := 100;      // el nodo debe caber entero
+  Params.DistanciaMinNodos := 0;
+
+  Res := RunAutoScheduling([Inp], Params);
+  if (Length(Res.Items) > 0) and
+     (Res.Items[0].Status = ssOK) and
+     (Res.Items[0].FechaInicio > 1) and
+     (Res.Items[0].FechaFin > Res.Items[0].FechaInicio) then
+  begin
+    AFechaInicio := Res.Items[0].FechaInicio;
+    AFechaFin := Res.Items[0].FechaFin;
+  end;
+  // Si Status <> ssOK (sin centro/calendario, saturado): nos quedamos con las
+  // fechas crudas ya asignadas arriba.
+end;
+
+// Abre el dialogo de creacion de nodo manual, persiste el nodo (Source='MAN')
+// con su NodeData y recarga el plan. El nodo nace LIBRE (LibreMovimiento=1), por
+// lo que el recalculo automatico puede moverlo como a cualquier nodo ERP. (V066)
+procedure TfrmVistaGantt.CrearNodoManualClick(Sender: TObject);
+var
+  Data: TNodoManualData;
+  FIni, FFin, FechaClick: TDateTime;
+  NodeId, CentreIdClick: Integer;
+  ptClient: TPoint;
+  Q: TADOQuery;
+  Cmd: TADOCommand;
+  CE, PID: string;
+
+  function QS(const S: string): string;
+  begin
+    Result := QuotedStr(S);
+  end;
+  function DT(const V: TDateTime): string;
+  begin
+    Result := QuotedStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', V));
+  end;
+  // Fecha SQL, o 'NULL' literal si no hay fecha (V < 1).
+  function DTorNull(const V: TDateTime): string;
+  begin
+    if V >= 1 then
+      Result := DT(V)
+    else
+      Result := 'NULL';
+  end;
+  function Flt(const V: Double): string;
+  begin
+    Result := FloatToStr(V, TFormatSettings.Invariant);
+  end;
+  // Devuelve la clave SQL entre comillas, o 'NULL' literal si esta vacia.
+  function StrOrNull(const S: string): string;
+  begin
+    if S <> '' then
+      Result := QuotedStr(S)
+    else
+      Result := 'NULL';
+  end;
+  // CenterId SQL: el valor, o 'NULL' literal si es "Sin Centro" (<0).
+  function CenterOrNull(const ACenterId: Integer): string;
+  begin
+    if ACenterId >= 0 then
+      Result := IntToStr(ACenterId)
+    else
+      Result := 'NULL';
+  end;
+
+begin
+  // Posicion del right-click capturada en popGanttPopup (cuando el cursor aun
+  // estaba sobre el Gantt). Resolvemos (a) el CenterId de esa fila y (b) la
+  // fecha/hora bajo el cursor, para preseleccionar centro e inicio en el dialogo.
+  ptClient := FPopGanttPos;
+  CentreIdClick := FGanttControl.GetCentreIdFromPoint(ptClient.X, ptClient.Y);
+  FechaClick := FGanttControl.GetDateTimeFromPoint(ptClient.X, ptClient.Y);
+  if FechaClick < 1 then
+    FechaClick := FechaReferenciaSeleccion;  // fallback: centro de la vista
+
+  if not TfrmCrearNodoManual.Execute(DMPlanner.CentresRepo.GetAll,
+       FechaClick, CentreIdClick, Data) then
+    Exit;
+
+  // Colocar el nodo respetando calendario laboral del centro y colisiones con
+  // los nodos existentes (mismo motor que la planificacion del Backlog). Si el
+  // motor no puede colocarlo, caemos a las fechas crudas del dialogo. (V066)
+  ColocarNodoManual(Data, FIni, FFin);
+
+  CE  := IntToStr(DMPlanner.CodigoEmpresa);
+  PID := IntToStr(DMPlanner.CurrentProjectId);
+
+  DMPlanner.ADOConnection.BeginTrans;
+  try
+    // 1) FS_PL_Node con Source='MAN'. CenterId NULL si es "Sin Centro" (<0).
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText :=
+        'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, ' +
+        '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde, ' +
+        '  Visible, Habilitado, Source) VALUES (' +
+        CE + ', ' + PID + ', ' +
+        CenterOrNull(Data.CenterId) + ', ' +
+        DT(FIni) + ', ' + DT(FFin) + ', ' + Flt(Data.DuracionMin) + ', ' +
+        // Color distintivo para nodos manuales (azul claro / borde azul), para
+        // diferenciarlos de un vistazo de los nodos ERP (amarillo). (V066)
+        QS(Data.Caption) + ', ' + IntToStr(MANUAL_NODE_FILL) + ', ' +
+        IntToStr(MANUAL_NODE_BORDER) + ', 1, 1, ''MAN'')';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    // 2) Recuperar el NodeId creado (MAX dentro del mismo proyecto).
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
+        'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+      Q.Open;
+      NodeId := Q.FieldByName('NewId').AsInteger;
+    finally
+      Q.Free;
+    end;
+
+    // 3) FS_PL_NodeData: caption como Operacion, duracion y vinculo ERP opcional.
+    //    LibreMovimiento=1 -> el nodo manual entra en el recalculo automatico.
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := DMPlanner.ADOConnection;
+      Cmd.CommandText :=
+        'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
+        '  DuracionMin, DuracionMinOriginal, OperariosNecesarios, ' +
+        '  LibreMovimiento, FechaEntrega, FechaNecesaria, ' +
+        '  RawItemClaveERP, RawItemTipoOrigen, ' +
+        '  ColorFondoOp, ColorBordeOp) VALUES (' +
+        CE + ', ' + IntToStr(NodeId) + ', ' + QS(Data.Operacion) + ', ' +
+        Flt(Data.DuracionMin) + ', ' + Flt(Data.DuracionMin) + ', 0, 1, ' +
+        DTorNull(Data.FechaCompromiso) + ', ' +
+        DTorNull(Data.FechaCompromiso) + ', ' +
+        StrOrNull(Data.RawItemClaveERP) + ', ' +
+        StrOrNull(Data.RawItemTipoOrigen) + ', ' +
+        '15251072, 11166760)';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    DMPlanner.ADOConnection.CommitTrans;
+  except
+    on E: Exception do
+    begin
+      DMPlanner.ADOConnection.RollbackTrans;
+      ShowMessage('Error al crear el nodo manual: ' + E.Message);
+      Exit;
+    end;
+  end;
+
+  // Recargar el plan completo para que el nuevo nodo aparezca en el Gantt.
+  if Assigned(Form1) then
+    Form1.LoadActivePlan;
+end;
+
 procedure TfrmVistaGantt.popNodePopup(Sender: TObject);
 var
   idx: Integer;
@@ -4121,7 +4376,10 @@ begin
   FechaIni := node.StartTime;
   FechaFin := node.EndTime;
 
-  if TfrmNodeInspector.Execute(ANodeData, FechaIni, FechaFin, False, FCustomFieldDefs) then
+  // Nodo manual (Source='MAN'): el inspector lo marca visualmente y habilita
+  // TODOS los campos para edicion (no hay ERP detras que proteger). (V066)
+  if TfrmNodeInspector.Execute(ANodeData, FechaIni, FechaFin, False,
+       FCustomFieldDefs, SameText(node.Source, 'MAN')) then
   begin
     ANodeData.Modified := True;
     DMPlanner.NodeDataRepo.AddOrUpdate(ANodeData);

@@ -464,6 +464,9 @@
         <DCCReference Include="uMoverFecha.pas">
             <Form>frmMoverFecha</Form>
         </DCCReference>
+        <DCCReference Include="uCrearNodoManual.pas">
+            <Form>frmCrearNodoManual</Form>
+        </DCCReference>
         <DCCReference Include="uPlanLog.pas"/>
         <DCCReference Include="uAppConfig.pas"/>
         <DCCReference Include="uDBConfig.pas">

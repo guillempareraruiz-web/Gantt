@@ -49,6 +49,8 @@ type
     DataId: Integer; // clau cap a les dades de domini
 
     LoteId: Integer; // lote (batch) al que pertany el node; 0 = node lliure
+
+    Source: string;  // origen del node: 'ERP' (ve del ERP) o 'MAN' (manual, creat per l'usuari)
   end;
 
   TNodoTipo   = (ntOF, ntPedido, ntProyecto, ntOferta);

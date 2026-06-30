@@ -60,6 +60,7 @@ type
     FFechaInicioPlan: TDateTime;  // StartTime del TNode (planificacion)
     FFechaFinPlan: TDateTime;     // EndTime del TNode (planificacion)
     FReadOnly: Boolean;
+    FIsManual: Boolean;           // True = nodo MANUAL (Source='MAN'): TODO editable
     FCustomFieldDefs: TCustomFieldDefs;
     FCustomRows: TArray<TcxEditorRow>;
     FCatCustom: TcxCategoryRow;
@@ -129,6 +130,15 @@ type
     // Aplica colores de fondo a una fila: columna 0 (caption) SIEMPRE gris claro;
     // columna 1 (valor) gris si read-only, blanco si editable.
     procedure ApplyRowStyle(ARow: TcxEditorRow; AIsReadOnly: Boolean);
+    // Read-only efectivo de una fila. En modo MANUAL, los campos marcados como
+    // read-only "porque vienen del ERP" pasan a editables (no hay ERP detras).
+    // El read-only global (FReadOnly, visores) SIEMPRE manda.
+    function EffectiveReadOnly(ARowReadOnly: Boolean): Boolean;
+    // Marca visualmente el inspector como nodo MANUAL (badge + color cabecera).
+    procedure MarcarComoManual;
+    // Lista de operaciones del catalogo (FS_PL_OperationType) para el combo de
+    // Operacion en nodos manuales. Incluye AValorActual si no esta en el catalogo.
+    function CargarOperaciones(const AValorActual: string): TArray<string>;
     procedure BuildCustomRows;
     procedure ApplyCustomFields;
     procedure ApplyToNodeData;
@@ -146,7 +156,8 @@ type
     class function Execute(var ANodeData: TNodeData;
       var AFechaInicioPlan, AFechaFinPlan: TDateTime;
       AReadOnly: Boolean = False;
-      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean; overload;
+      ACustomFieldDefs: TCustomFieldDefs = nil;
+      AIsManual: Boolean = False): Boolean; overload;
     // Sobrecarga para llamadores que NO gestionan las fechas de planificacion
     // (visores read-only, LoteViewer...). Las filas Inicio/Final saldran a 0.
     class function Execute(var ANodeData: TNodeData; AReadOnly: Boolean = False;
@@ -158,13 +169,17 @@ var
 
 implementation
 
+uses
+  Data.Win.ADODB, uDMPlanner;
+
 {$R *.dfm}
 
 { TfrmNodeInspector }
 
 class function TfrmNodeInspector.Execute(var ANodeData: TNodeData;
   var AFechaInicioPlan, AFechaFinPlan: TDateTime;
-  AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs): Boolean;
+  AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs;
+  AIsManual: Boolean): Boolean;
 var
   F: TfrmNodeInspector;
 begin
@@ -174,12 +189,23 @@ begin
     F.FFechaInicioPlan := AFechaInicioPlan;
     F.FFechaFinPlan := AFechaFinPlan;
     F.FReadOnly := AReadOnly;
+    F.FIsManual := AIsManual;
     F.FCustomFieldDefs := ACustomFieldDefs;
 
-    // Header
-    F.lblTitle.Caption := 'OF ' + ANodeData.NumeroOrdenFabricacion.ToString +
-      ' - ' + ANodeData.Operacion;
-    F.lblSubtitle.Caption := ANodeData.CodigoArticulo + '  ' + ANodeData.DescripcionArticulo;
+    // Header: para nodos manuales mostramos su descripcion (Caption del nodo),
+    // no la nomenclatura de OF/operacion del ERP. Ademas marcamos "MANUAL".
+    if AIsManual then
+    begin
+      F.lblTitle.Caption := 'Nodo manual: ' + ANodeData.Operacion;
+      F.lblSubtitle.Caption := 'Creado por el usuario - todos los campos editables';
+      F.MarcarComoManual;
+    end
+    else
+    begin
+      F.lblTitle.Caption := 'OF ' + ANodeData.NumeroOrdenFabricacion.ToString +
+        ' - ' + ANodeData.Operacion;
+      F.lblSubtitle.Caption := ANodeData.CodigoArticulo + '  ' + ANodeData.DescripcionArticulo;
+    end;
 
     if AReadOnly then
     begin
@@ -248,6 +274,92 @@ end;
 
 { --- Row creation helpers --- }
 
+function TfrmNodeInspector.EffectiveReadOnly(ARowReadOnly: Boolean): Boolean;
+begin
+  // Visor read-only global -> todo bloqueado, gane quien gane.
+  if FReadOnly then
+    Exit(True);
+  // Nodo manual -> ignoramos el read-only "por ERP" de cada campo: todo editable.
+  if FIsManual then
+    Exit(False);
+  // Modo normal: el read-only por campo manda.
+  Result := ARowReadOnly;
+end;
+
+procedure TfrmNodeInspector.MarcarComoManual;
+var
+  Badge: TLabel;
+begin
+  // Cabecera en azul muy claro (coherente con el color de los nodos manuales
+  // en el Gantt), para distinguir de un vistazo que es un nodo manual.
+  pnlHeader.Color := $00F5E6D2;  // azul claro (BGR)
+
+  // Badge "MANUAL" a la derecha de la cabecera.
+  Badge := TLabel.Create(Self);
+  Badge.Parent := pnlHeader;
+  Badge.Caption := '  MANUAL  ';
+  Badge.AutoSize := True;
+  Badge.Transparent := False;
+  Badge.Color := $00C87828;        // azul medio (BGR)
+  Badge.Font.Color := clWhite;
+  Badge.Font.Style := [fsBold];
+  Badge.Font.Name := 'Segoe UI';
+  Badge.Font.Height := -12;
+  Badge.Top := 8;
+  Badge.Left := pnlHeader.Width - Badge.Width - 16;
+  Badge.Anchors := [akTop, akRight];
+end;
+
+function TfrmNodeInspector.CargarOperaciones(
+  const AValorActual: string): TArray<string>;
+var
+  Q: TADOQuery;
+  L: TList<string>;
+  Op: string;
+  YaEsta: Boolean;
+begin
+  L := TList<string>.Create;
+  try
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT Operacion FROM FS_PL_OperationType ' +
+        'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) + ' ' +
+        'ORDER BY Operacion';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Op := Trim(Q.FieldByName('Operacion').AsString);
+        if Op <> '' then
+          L.Add(Op);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    // Asegurar que el valor actual del nodo aparece en la lista (un nodo manual
+    // puede tener una Operacion libre que no este en el catalogo).
+    if Trim(AValorActual) <> '' then
+    begin
+      YaEsta := False;
+      for Op in L do
+        if SameText(Op, Trim(AValorActual)) then
+        begin
+          YaEsta := True;
+          Break;
+        end;
+      if not YaEsta then
+        L.Insert(0, Trim(AValorActual));
+    end;
+
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
 procedure TfrmNodeInspector.ApplyRowStyle(ARow: TcxEditorRow; AIsReadOnly: Boolean);
 begin
   // Columna 0 (caption): SIEMPRE gris claro.
@@ -277,9 +389,9 @@ begin
   Result := G.AddChild(AParent, TcxEditorRow) as TcxEditorRow;
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxTextEditProperties';
-  (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := AReadOnly or FReadOnly;
+  (Result.Properties.EditProperties as TcxTextEditProperties).ReadOnly := EffectiveReadOnly(AReadOnly);
   Result.Properties.Value := AValue;
-  ApplyRowStyle(Result, AReadOnly or FReadOnly);
+  ApplyRowStyle(Result, EffectiveReadOnly(AReadOnly));
 end;
 
 function TfrmNodeInspector.AddIntRow(AParent: TcxCategoryRow;
@@ -296,9 +408,9 @@ begin
   Props.ValueType := vtInt;
   Props.MinValue := -MaxInt;
   Props.MaxValue := MaxInt;
-  Props.ReadOnly := AReadOnly or FReadOnly;
+  Props.ReadOnly := EffectiveReadOnly(AReadOnly);
   Result.Properties.Value := AValue;
-  ApplyRowStyle(Result, AReadOnly or FReadOnly);
+  ApplyRowStyle(Result, EffectiveReadOnly(AReadOnly));
 end;
 
 function TfrmNodeInspector.AddFloatRow(AParent: TcxCategoryRow;
@@ -316,9 +428,9 @@ begin
   Props.MinValue := -1E18;
   Props.MaxValue := 1E18;
   Props.Increment := 0.1;
-  Props.ReadOnly := AReadOnly or FReadOnly;
+  Props.ReadOnly := EffectiveReadOnly(AReadOnly);
   Result.Properties.Value := AValue;
-  ApplyRowStyle(Result, AReadOnly or FReadOnly);
+  ApplyRowStyle(Result, EffectiveReadOnly(AReadOnly));
 end;
 
 function TfrmNodeInspector.AddBoolRow(AParent: TcxCategoryRow;
@@ -334,9 +446,9 @@ begin
   Props := Result.Properties.EditProperties as TcxCheckBoxProperties;
   Props.DisplayChecked := 'S'#237;
   Props.DisplayUnchecked := 'No';
-  Props.ReadOnly := AReadOnly or FReadOnly;
+  Props.ReadOnly := EffectiveReadOnly(AReadOnly);
   Result.Properties.Value := AValue;
-  ApplyRowStyle(Result, AReadOnly or FReadOnly);
+  ApplyRowStyle(Result, EffectiveReadOnly(AReadOnly));
 end;
 
 function TfrmNodeInspector.AddDateRow(AParent: TcxCategoryRow;
@@ -350,13 +462,13 @@ begin
   Result.Properties.Caption := ACaption;
   Result.Properties.EditPropertiesClassName := 'TcxDateEditProperties';
   Props := Result.Properties.EditProperties as TcxDateEditProperties;
-  Props.ReadOnly := AReadOnly or FReadOnly;
+  Props.ReadOnly := EffectiveReadOnly(AReadOnly);
   Props.SaveTime := True;
   Props.ShowTime := True;
   Props.DateButtons := [btnNow, btnClear];
   Props.Kind := ckDateTime;
   Result.Properties.Value := AValue;
-  ApplyRowStyle(Result, AReadOnly or FReadOnly);
+  ApplyRowStyle(Result, EffectiveReadOnly(AReadOnly));
 end;
 
 function TfrmNodeInspector.AddComboRow(AParent: TcxCategoryRow;
@@ -373,11 +485,11 @@ begin
   Result.Properties.EditPropertiesClassName := 'TcxComboBoxProperties';
   Props := Result.Properties.EditProperties as TcxComboBoxProperties;
   Props.DropDownListStyle := lsFixedList;
-  Props.ReadOnly := AReadOnly or FReadOnly;
+  Props.ReadOnly := EffectiveReadOnly(AReadOnly);
   for I := Low(AItems) to High(AItems) do
     Props.Items.Add(AItems[I]);
   Result.Properties.Value := AValue;
-  ApplyRowStyle(Result, AReadOnly or FReadOnly);
+  ApplyRowStyle(Result, EffectiveReadOnly(AReadOnly));
 end;
 
 function TfrmNodeInspector.AddColorRow(AParent: TcxCategoryRow;
@@ -431,7 +543,14 @@ begin
     // ── Identidad ──
     FCatIdentitat := AddCategory('Identificaci'#243'n');
     FRowDataId        := AddIntRow(FCatIdentitat, 'DataId', D.DataId, True);
-    FRowOperacion     := AddTextRow(FCatIdentitat, 'Operaci'#243'n', D.Operacion);
+    // Operacion: en nodos MANUALES es un combo editable con el catalogo de
+    // operaciones (FS_PL_OperationType). En nodos ERP es solo lectura (el valor
+    // viene del ERP y no debe cambiarse a mano).
+    if FIsManual then
+      FRowOperacion := AddComboRow(FCatIdentitat, 'Operaci'#243'n', D.Operacion,
+                                   CargarOperaciones(D.Operacion), False)
+    else
+      FRowOperacion := AddTextRow(FCatIdentitat, 'Operaci'#243'n', D.Operacion, True);
     FRowCentresTrabajo := AddTextRow(FCatIdentitat, 'Centros Trabajo', ArrayToStr(D.CentresTrabajo), True);
     FRowCentresPermesos := AddTextRow(FCatIdentitat, 'Centros Permitidos', IntArrayToStr(D.CentresPermesos), True);
 
@@ -740,6 +859,13 @@ end;
 
 procedure TfrmNodeInspector.btnOKClick(Sender: TObject);
 begin
+  // Forzar el commit del editor inplace activo (combo/edit) antes de leer los
+  // valores: si no, el cambio en edicion (p.ej. la Operacion elegida en el
+  // combo) aun no esta en Properties.Value y se perderia. HideEdit (sin params)
+  // internamente hace EditingController.HideEdit(True) -> guarda el valor.
+  vg.HideEdit;
+  vgCustom.HideEdit;
+
   ApplyToNodeData;
   ModalResult := mrOk;
 end;

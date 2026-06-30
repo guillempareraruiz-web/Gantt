@@ -437,7 +437,8 @@ object frmBacklog: TfrmBacklog
         '(Todos)'
         'OF'
         'PEDIDO'
-        'PROYECTO')
+        'PROYECTO'
+        'MANUAL')
     end
     object edtCliente: TEdit
       Left = 12

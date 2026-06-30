@@ -1470,6 +1470,11 @@ begin
     begin
       N := ANodes[I];
 
+      // Origen del nodo: 'ERP' (default) o 'MAN' (manual). Nodos cargados antes
+      // de V066 llegan con Source vacio -> normalizamos a 'ERP'.
+      if N.Source = '' then
+        N.Source := 'ERP';
+
       // MERGE Node (clave (CodigoEmpresa, NodeId))
       ExecSQL(
         'IF EXISTS (SELECT 1 FROM FS_PL_Node WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
@@ -1484,7 +1489,8 @@ begin
           'ColorFondo = ' + ColorToSQL(N.FillColor) + ', ' +
           'ColorBorde = ' + ColorToSQL(N.BorderColor) + ', ' +
           'Visible = ' + IfThen(N.Visible, '1', '0') + ', ' +
-          'Habilitado = ' + IfThen(N.Enabled, '1', '0') +
+          'Habilitado = ' + IfThen(N.Enabled, '1', '0') + ', ' +
+          'Source = ' + QuotedStr(N.Source) +
         ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
         '   AND NodeId = ' + IntToStr(N.Id) + ' ' +
         // El ELSE necesita BEGIN...END: sin el bloque, T-SQL solo asocia la
@@ -1495,7 +1501,7 @@ begin
         'ELSE BEGIN ' +
         'SET IDENTITY_INSERT FS_PL_Node ON; ' +
         'INSERT INTO FS_PL_Node (CodigoEmpresa, NodeId, ProjectId, CenterId, FechaInicio, FechaFin, ' +
-          'DuracionMin, Caption, ColorFondo, ColorBorde, Visible, Habilitado) VALUES (' +
+          'DuracionMin, Caption, ColorFondo, ColorBorde, Visible, Habilitado, Source) VALUES (' +
           IntToStr(FCodigoEmpresa) + ', ' +
           IntToStr(N.Id) + ', ' +
           IntToStr(AProjectId) + ', ' +
@@ -1507,7 +1513,8 @@ begin
           ColorToSQL(N.FillColor) + ', ' +
           ColorToSQL(N.BorderColor) + ', ' +
           IfThen(N.Visible, '1', '0') + ', ' +
-          IfThen(N.Enabled, '1', '0') + '); ' +
+          IfThen(N.Enabled, '1', '0') + ', ' +
+          QuotedStr(N.Source) + '); ' +
         'SET IDENTITY_INSERT FS_PL_Node OFF; END;'
       );
 
