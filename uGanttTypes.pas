@@ -101,6 +101,12 @@ type
   TNodeData = record
     DataId: Integer;
 
+    // Origen del nodo: 'ERP' (del ERP) o 'MAN' (creado manualmente por el
+    // usuario, V066). Espejo de TNode.Source; lo usan las pantallas que solo
+    // tienen el TNodeData (p.ej. el Kanban de capacidad finita) para distinguir
+    // los nodos manuales sin tener el TNode.
+    Source: string;
+
     Operacion: String;
     NumeroPedido: Integer;
     SeriePedido: string;

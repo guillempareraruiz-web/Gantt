@@ -130,6 +130,7 @@ type
     btnTB_Help: TcxButton;
     Label29: TLabel;
     btnLinkERP: TcxButton;
+    btnTB_Demo: TcxButton;
     cxButton2: TcxButton;
     btnTB_PlaniAlertas: TcxButton;
 
@@ -227,6 +228,7 @@ type
     procedure Indicadoresdecentros1Click(Sender: TObject);
     procedure btnTB_HelpClick(Sender: TObject);
     procedure btnLinkERPClick(Sender: TObject);
+    procedure btnTB_DemoClick(Sender: TObject);
     procedure cxButton2Click(Sender: TObject);
   private
     { Private declarations }
@@ -300,7 +302,7 @@ implementation
 
 uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList,
   uAlertConfig, uRestorePoints,
-  uDemoBacklog,
+  uDemoBacklog, uDemoMode,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
   uBacklogScheduler, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
@@ -726,6 +728,14 @@ end;
 procedure TForm1.btnLinkERPClick(Sender: TObject);
 begin
   ShowMessage('Enlace directo hacia el ERP');
+end;
+
+procedure TForm1.btnTB_DemoClick(Sender: TObject);
+begin
+  // Boton sticky (GroupIndex=2, AllowAllUp): su estado Down define el modo.
+  // Al conmutar, DemoMode avisa a las pantallas suscritas para que se
+  // repinten con datos ficticios (Down) o reales (Up). No toca la BD.
+  uDemoMode.DemoMode.Active := btnTB_Demo.Down;
 end;
 
 procedure TForm1.btnTB_HelpClick(Sender: TObject);
@@ -1322,7 +1332,11 @@ begin
     FDashboard.Parent := Self;
     FDashboard.Align := alClient;
   end;
-  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then
+  begin
+    FFiniteCapacity.SaveNow;  // persistir asignaciones ANTES de ocultar (OnHide no es fiable en embebido)
+    FFiniteCapacity.Visible := False;
+  end;
   if Assigned(FVistaGantt) then    FVistaGantt.Visible := False;
   if Assigned(FBacklog) then       FBacklog.Visible := False;
   if Assigned(FFiniteOps) then     FFiniteOps.Visible := False;
@@ -1359,7 +1373,11 @@ begin
 
   // Ocultar los demas childs hermanos.
   if Assigned(FDashboard) then      FDashboard.Visible := False;
-  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then
+  begin
+    FFiniteCapacity.SaveNow;  // persistir asignaciones ANTES de ocultar (OnHide no es fiable en embebido)
+    FFiniteCapacity.Visible := False;
+  end;
   if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
   if Assigned(FBacklog) then        FBacklog.Visible := False;
   if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
@@ -1400,7 +1418,11 @@ begin
   if Assigned(FVistaGantt.GanttControl) then
     FVistaGantt.GanttControl.OnLinksModified := GanttLinksModified;
 
-  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then
+  begin
+    FFiniteCapacity.SaveNow;  // persistir asignaciones ANTES de ocultar (OnHide no es fiable en embebido)
+    FFiniteCapacity.Visible := False;
+  end;
   if Assigned(FDashboard) then      FDashboard.Visible := False;
   if Assigned(FBacklog) then        FBacklog.Visible := False;
   if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
@@ -1446,6 +1468,19 @@ begin
         Exit;
       end;
     end;
+  end
+  else
+  begin
+    // Ya inicializado: re-sincronizar con BD. Al volver desde el Gantt, su
+    // LoadActivePlan/LoadNodes hace Clear del NodeDataRepo compartido y solo
+    // repuebla planificados, perdiendo las pendientes del Backlog del Kanban.
+    try
+      FFiniteCapacity.RecargarDatos;
+    except
+      on E: Exception do
+        ShowMessage('Error al recargar FiniteCapacity: ' + sLineBreak +
+          E.ClassName + ': ' + E.Message);
+    end;
   end;
   if Assigned(FDashboard) then  FDashboard.Visible := False;
   if Assigned(FVistaGantt) then FVistaGantt.Visible := False;
@@ -1471,7 +1506,11 @@ begin
   end;
   if Assigned(FDashboard) then      FDashboard.Visible := False;
   if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
-  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then
+  begin
+    FFiniteCapacity.SaveNow;  // persistir asignaciones ANTES de ocultar (OnHide no es fiable en embebido)
+    FFiniteCapacity.Visible := False;
+  end;
   if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
   FBacklog.Visible := True;
   FBacklog.BringToFront;
@@ -1515,7 +1554,11 @@ begin
   end;
   if Assigned(FDashboard) then      FDashboard.Visible := False;
   if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
-  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FFiniteCapacity) then
+  begin
+    FFiniteCapacity.SaveNow;  // persistir asignaciones ANTES de ocultar (OnHide no es fiable en embebido)
+    FFiniteCapacity.Visible := False;
+  end;
   if Assigned(FBacklog) then        FBacklog.Visible := False;
   FFiniteOps.Visible := True;
   FFiniteOps.BringToFront;

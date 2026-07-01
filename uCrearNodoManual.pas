@@ -82,14 +82,18 @@ type
     FCentros: TArray<TCentreTreball>;
     procedure CargarCentros;
     procedure CargarOperaciones;
+    procedure AplicarModoKanban;
   public
     // Abre el dialogo. AFechaInicioDefecto es la fecha sugerida (p.ej. el centro
     // de la vista del Gantt). APreselectCenterId es el centro a preseleccionar
     // (el que esta bajo el cursor del right-click); -1 = ninguno -> primer centro.
+    // AOcultarFechas oculta los campos de inicio y compromiso: en el Kanban de
+    // capacidad finita la posicion temporal la determina el centro/lane, no una
+    // hora concreta (la fecha de inicio devuelta sera AFechaInicioDefecto).
     // Devuelve True si el usuario acepto, rellenando AData con los valores.
     class function Execute(const ACentros: TArray<TCentreTreball>;
       AFechaInicioDefecto: TDateTime; APreselectCenterId: Integer;
-      out AData: TNodoManualData): Boolean;
+      out AData: TNodoManualData; AOcultarFechas: Boolean = False): Boolean;
   end;
 
 implementation
@@ -102,7 +106,7 @@ uses
 class function TfrmCrearNodoManual.Execute(
   const ACentros: TArray<TCentreTreball>;
   AFechaInicioDefecto: TDateTime; APreselectCenterId: Integer;
-  out AData: TNodoManualData): Boolean;
+  out AData: TNodoManualData; AOcultarFechas: Boolean): Boolean;
 var
   F: TfrmCrearNodoManual;
   iSel, i: Integer;
@@ -133,6 +137,12 @@ begin
     F.dtpCompromiso.Date := DateOf(AFechaInicioDefecto);
     F.chkUsaCompromisoClick(nil);
 
+    // Modo Kanban (capacidad finita): la posicion temporal la da el centro/lane,
+    // no una hora concreta -> ocultamos los campos de inicio y compromiso y
+    // compactamos el dialogo.
+    if AOcultarFechas then
+      F.AplicarModoKanban;
+
     if F.ShowModal <> mrOk then Exit;
 
     AData := Default(TNodoManualData);
@@ -152,13 +162,23 @@ begin
 
     AData.DuracionMin := F.seDuracion.Value;  // TcxSpinEdit.Value (Variant numerico)
 
-    AData.FechaInicio := DateOf(F.dtpFecha.Date) + TimeOf(F.dtpHora.Time);
-
-    // Fecha compromiso/entrega: 0 si el usuario no la activo.
-    if F.chkUsaCompromiso.Checked then
-      AData.FechaCompromiso := DateOf(F.dtpCompromiso.Date)
-    else
+    if AOcultarFechas then
+    begin
+      // Sin campos de fecha visibles: el inicio es la fecha sugerida y no hay
+      // compromiso (el Kanban resuelve la ventana via el centro/lane).
+      AData.FechaInicio := AFechaInicioDefecto;
       AData.FechaCompromiso := 0;
+    end
+    else
+    begin
+      AData.FechaInicio := DateOf(F.dtpFecha.Date) + TimeOf(F.dtpHora.Time);
+
+      // Fecha compromiso/entrega: 0 si el usuario no la activo.
+      if F.chkUsaCompromiso.Checked then
+        AData.FechaCompromiso := DateOf(F.dtpCompromiso.Date)
+      else
+        AData.FechaCompromiso := 0;
+    end;
 
     // Vinculo: ItemIndex 0 = Ninguno; 1 = OF; 2 = Pedido; 3 = Proyecto.
     case F.cbVinculo.ItemIndex of
@@ -177,6 +197,34 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TfrmCrearNodoManual.AplicarModoKanban;
+const
+  DELTA = 42;  // px que se compacta el dialogo al quitar el bloque de compromiso
+begin
+  // 1) Ocultar los campos de inicio (la fecha la fija el centro/lane).
+  lblInicio.Visible := False;
+  dtpFecha.Visible := False;
+  dtpHora.Visible := False;
+
+  // 2) Ocultar el bloque de fecha compromiso/entrega.
+  chkUsaCompromiso.Visible := False;
+  dtpCompromiso.Visible := False;
+
+  // 3) Subir el bloque de Vinculo ERP para ocupar el hueco del compromiso, justo
+  //    debajo de la fila de Duracion (la etiqueta queda alineada con su combo).
+  lblVinculo.Top := lblDuracion.Top + 54;          // ~226
+  cbVinculo.Top := lblVinculo.Top + 19;            // ~245
+  lblClaveERP.Top := lblVinculo.Top;
+  edtClaveERP.Top := cbVinculo.Top;
+
+  // 4) Compactar el dialogo: el panel cliente encoge y los botones suben con el.
+  pnlBody.Height := pnlBody.Height - DELTA;
+  ClientHeight := ClientHeight - DELTA;
+
+  // Subtitulo acorde al contexto Kanban.
+  lblHeaderSub.Caption := 'Tarea propia del plan, asignada al centro';
 end;
 
 procedure TfrmCrearNodoManual.CargarCentros;

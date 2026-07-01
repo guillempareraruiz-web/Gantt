@@ -171,6 +171,7 @@ begin
       begin
         FillChar(D, SizeOf(D), 0);
         D.DataId := N.Id;
+        D.Source := N.Source;  // 'ERP' / 'MAN' (espejo de TNode.Source)
         D.Operacion := Q.FieldByName('Operacion').AsString;
         D.NumeroPedido := Q.FieldByName('NumeroPedido').AsInteger;
         D.SeriePedido := Q.FieldByName('SeriePedido').AsString;

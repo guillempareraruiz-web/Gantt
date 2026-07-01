@@ -159,9 +159,12 @@ type
       ACustomFieldDefs: TCustomFieldDefs = nil;
       AIsManual: Boolean = False): Boolean; overload;
     // Sobrecarga para llamadores que NO gestionan las fechas de planificacion
-    // (visores read-only, LoteViewer...). Las filas Inicio/Final saldran a 0.
+    // (visores read-only, LoteViewer, Kanban...). Las filas Inicio/Final saldran
+    // a 0. AIsManual habilita la cabecera/edicion de nodo manual igual que la
+    // sobrecarga larga.
     class function Execute(var ANodeData: TNodeData; AReadOnly: Boolean = False;
-      ACustomFieldDefs: TCustomFieldDefs = nil): Boolean; overload;
+      ACustomFieldDefs: TCustomFieldDefs = nil;
+      AIsManual: Boolean = False): Boolean; overload;
   end;
 
 var
@@ -232,13 +235,14 @@ begin
 end;
 
 class function TfrmNodeInspector.Execute(var ANodeData: TNodeData;
-  AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs): Boolean;
+  AReadOnly: Boolean; ACustomFieldDefs: TCustomFieldDefs;
+  AIsManual: Boolean): Boolean;
 var
   Ini, Fin: TDateTime;
 begin
   Ini := 0;
   Fin := 0;
-  Result := Execute(ANodeData, Ini, Fin, AReadOnly, ACustomFieldDefs);
+  Result := Execute(ANodeData, Ini, Fin, AReadOnly, ACustomFieldDefs, AIsManual);
 end;
 
 procedure TfrmNodeInspector.FormCreate(Sender: TObject);

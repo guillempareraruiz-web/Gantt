@@ -59,7 +59,8 @@ type
 
   TPlanningRange = (pr1Dia, pr2Dies, pr3Dies, pr5Dies, pr1Setmana, pr2Setmanes, pr1Mes);
 
-  TFCPActionKind = (akAssign, akUnassign, akMove, akAutoLoad, akClearAll);
+  TFCPActionKind = (akAssign, akUnassign, akMove, akAutoLoad, akClearAll,
+    akCreateManual);
 
   TFCPAction = record
     Kind: TFCPActionKind;
@@ -108,6 +109,14 @@ type
     FDragStartPt: TPoint;
     FDragPending: Boolean;    // mouse down, esperant threshold
 
+    // Panning (arrastrar para hacer scroll vertical sin tocar el scrollbar).
+    // Boton central siempre, o izquierdo sobre zona vacia.
+    FPanning: Boolean;
+    FPanPending: Boolean;
+    FPanButton: TMouseButton;
+    FPanStartPt: TPoint;
+    FPanGrabScrollY: Integer;
+
     FOnBeginDrag: TNotifyEvent;
 
     function IdxAtY(const Y: Integer): Integer;
@@ -154,8 +163,8 @@ type
     CARD_MARGIN = 6;
     CAP_BAR_H = 6;
     VSCROLLBAR_W = 8;
-    DAY_SEP_H = 28;
-    DAY_SEP_BAND_H = 20;  // alçada del badge/franja; la resta (8px) és aire
+    DAY_SEP_H = 36;       // alçada total reservada per al separador de dia
+    DAY_SEP_BAND_H = 20;  // alçada del badge/franja; la resta (16px) és aire
     HSCROLLBAR_H = 14;
   private
     FNodeRepo: TNodeDataRepo;
@@ -170,6 +179,7 @@ type
     FGetCalendar: TGetCalendarFunc;
     FPlanningStart: TDateTime;
     FPlanningEnd: TDateTime;
+    FShowDaySep: Boolean;         // mostrar separadores de día entre cards
     FVisibleIds: TList<Integer>;  // nil = tots visibles
 
     // Asignaciones: CentreId -> lista ordenada de DataIds
@@ -199,6 +209,18 @@ type
     FHSBGrabX: Single;
     FHSBGrabScrollX: Single;
 
+    // Panning (arrastrar el board para hacer scroll H+V sin tocar scrollbars).
+    // Se activa con el boton central SIEMPRE, o con el izquierdo sobre zona vacia
+    // (no card, no scrollbar, no header). FPanCentreId = columna donde empezo el
+    // pan (su scroll vertical es el que se mueve).
+    FPanning: Boolean;
+    FPanPending: Boolean;       // boton abajo en zona valida, esperando threshold
+    FPanButton: TMouseButton;
+    FPanStartPt: TPoint;
+    FPanGrabScrollX: Single;
+    FPanCentreId: Integer;
+    FPanGrabScrollY: Integer;
+
     // Drag desde columna
     FDragCentreId: Integer;
     FDragCardIdx: Integer;
@@ -208,6 +230,7 @@ type
 
     // Right click
     FRightClickDataId: Integer;
+    FRightClickCentreId: Integer;  // CentreId de la columna bajo el clic derecho (-1 = ninguna)
 
     // Drag de reordenació de columnes
     FColDragPending: Boolean;
@@ -257,6 +280,9 @@ type
     procedure DrawHScrollbar(const ACanvas: TCanvas);
 
     function IsOnHScrollbar(const Y: Integer): Boolean;
+    // Arma el panning: guarda el punto y los scrolls actuales (X global + Y de la
+    // columna bajo el cursor). El pan real arranca al superar el threshold.
+    procedure BeginPanPending(AButton: TMouseButton; X, Y: Integer);
   protected
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -282,6 +308,7 @@ type
     property DropTargetCentreId: Integer read FDropTargetCentreId;
     property DropTargetIdx: Integer read FDropTargetIdx;
     property DropActive: Boolean read FDropActive;
+    property ShowDaySep: Boolean read FShowDaySep write FShowDaySep;
     property Assignments: TDictionary<Integer, TList<Integer>> read FAssignments;
     function DragDataId: Integer;
     function DragDataIds: TArray<Integer>;
@@ -298,6 +325,7 @@ type
     procedure SwapCentres(const IdA, IdB: Integer);
     property OnBeginDrag: TNotifyEvent read FOnBeginDrag write FOnBeginDrag;
     property RightClickDataId: Integer read FRightClickDataId;
+    property RightClickCentreId: Integer read FRightClickCentreId;
     property OptionsCentreId: Integer read FOptionsCentreId;
     property Centres: TArray<TCentreTreball> read FCentres write FCentres;
     property OnHeaderOptionsClick: TNotifyEvent read FOnHeaderOptionsClick write FOnHeaderOptionsClick;
@@ -362,6 +390,7 @@ type
     procedure lblSearchClearClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure OnBtnOptionsClick(Sender: TObject);
+    procedure OnToggleDaySepClick(Sender: TObject);
     procedure OnUndoClick(Sender: TObject);
     procedure OnRedoClick(Sender: TObject);
     procedure OnRangeChange(Sender: TObject);
@@ -396,6 +425,7 @@ type
 
     // Botón opciones pendientes (popup dinàmic; FBtnOptions ja és al DFM)
     FPendingPopup: TPopupMenu;
+    FMnuShowDaySep: TMenuItem;  // ítem checkable "Mostrar separador días"
 
     // Menú contextual centros (cards)
     FCentrePopup: TPopupMenu;
@@ -482,6 +512,11 @@ type
     procedure OnCentrePopupShow(Sender: TObject);
     procedure OnCentrePopupUnassign(Sender: TObject);
     procedure OnCentrePopupAssignOperaris(Sender: TObject);
+    procedure OnCentrePopupCrearManual(Sender: TObject);
+    procedure OnPendingCrearManual(Sender: TObject);
+    // Abre el dialogo de nodo manual (modo Kanban: sin fechas) y crea la card.
+    // ACenterId >= 0 -> nace asignada a ese centro; < 0 -> nace en pendientes.
+    procedure CrearCardManual(ACenterId: Integer);
     procedure BuildCentreHeaderPopup;
     procedure OnCentreHeaderViewFicha(Sender: TObject);
     procedure OnCentreHeaderOptionsClick(Sender: TObject);
@@ -544,6 +579,13 @@ type
       AOperariosRepo: TOperariosRepo;
       ARuleEngine: TPlanningRuleEngine = nil;
       ACustomFieldDefs: TCustomFieldDefs = nil);
+    // Re-sincroniza los datos con BD (planificados + pendientes del Backlog) sin
+    // recrear los controles. Necesario al VOLVER al Kanban desde el Gantt: este
+    // llama a DMPlanner.LoadNodes que hace Clear del NodeDataRepo compartido y lo
+    // repuebla SOLO con FS_PL_Node (planificados), perdiendo las pendientes
+    // sintéticas del Backlog que solo añade LoadBacklogPending. El Main lo invoca
+    // cada vez que muestra el form (no solo en la primera apertura).
+    procedure RecargarDatos;
     procedure SaveNow;
   end;
 
@@ -551,8 +593,10 @@ implementation
 
 uses
   Data.Win.ADODB,
+  Winapi.GDIPOBJ, Winapi.GDIPAPI,
   uDMPlanner, uCentresRepo, uNodesRepo, uHelpViewer,
-  uCardLayoutEditor, uCardLayoutSetManager, uModalOverlay;
+  uCardLayoutEditor, uCardLayoutSetManager, uModalOverlay, uCrearNodoManual,
+  Main;
 
 {$R *.dfm}
 
@@ -566,6 +610,73 @@ end;
 { ========================================================= }
 {                   Funciones auxiliares                      }
 { ========================================================= }
+
+{ Los helpers de dibujo GDI+ (GpColor, GpRoundRect, GpRoundRectPath,
+  GpFillEllipse) viven en uCardLayout y se reusan desde aqui. }
+
+// Pinta el badge "MANUAL" en la esquina superior DERECHA de la card: pildora
+// azul (mismo azul que los nodos manuales del Gantt) con texto blanco. GDI+ para
+// el fondo redondeado (anti-aliasing) + GDI para el texto (ClearType). Usado por
+// los dos DrawCard (pendientes y centros) cuando D.Source='MAN'. (V066)
+procedure DrawManualBadge(const ACanvas: TCanvas; const R: TRect);
+const
+  TXT = 'MANUAL';
+var
+  BadgeR: TRect;
+  TextW: Integer;
+  G: TGPGraphics;
+begin
+  ACanvas.Font.Name := 'Segoe UI';
+  ACanvas.Font.Size := 7;
+  ACanvas.Font.Style := [fsBold];
+  TextW := ACanvas.TextWidth(TXT);
+
+  // Pildora de alto fijo (15px, igual que los badges del layout) pegada a la
+  // esquina sup-DER con 6px de margen.
+  BadgeR := Rect(R.Right - 6 - (TextW + 12), R.Top + 6, R.Right - 6, R.Top + 6 + 15);
+
+  G := TGPGraphics.Create(ACanvas.Handle);
+  try
+    G.SetSmoothingMode(SmoothingModeAntiAlias);
+    // Azul medio de los manuales (MANUAL_NODE_BORDER de uDMPlanner).
+    GpRoundRect(G, BadgeR, 7, GpColor(MANUAL_NODE_BORDER), 0, 0);
+  finally
+    G.Free;
+  end;
+
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Color := clWhite;
+  DrawText(ACanvas.Handle, TXT, -1, BadgeR,
+    DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
+end;
+
+// Abre el NodeInspector para una card del Kanban, detectando si es manual
+// (Source='MAN') igual que el Gantt: las manuales se abren EDITABLES con
+// cabecera/badge MANUAL; las ERP, en solo lectura. Si era manual y el usuario
+// guardo cambios, persiste el NodeData (AddOrUpdate + NotifyPlanModified via el
+// AutoSaver del Main, que comparte FS_PL_NodeData con el Gantt). Devuelve True
+// si hubo cambios guardados (para que el control repinte la card). (V066)
+function AbrirInspectorNodo(ARepo: TNodeDataRepo; var AData: TNodeData;
+  ACustomFieldDefs: TCustomFieldDefs): Boolean;
+var
+  EsManual: Boolean;
+begin
+  Result := False;
+  EsManual := SameText(AData.Source, 'MAN');
+
+  // ERP: solo lectura (la edicion real va por el Gantt). Manual: editable.
+  if not TfrmNodeInspector.Execute(AData, {AReadOnly=}not EsManual,
+       ACustomFieldDefs, {AIsManual=}EsManual) then
+    Exit;
+  if not EsManual then Exit;  // ERP read-only: nunca devuelve cambios
+
+  AData.Modified := True;
+  ARepo.AddOrUpdate(AData);
+  // Persistir en BD via el AutoSaver del Main (mismo camino que el Gantt).
+  if Assigned(Form1) then
+    Form1.NotifyPlanModified([AData.DataId]);
+  Result := True;
+end;
 
 function PrioridadColor(const P: Integer): TColor;
 begin
@@ -700,6 +811,8 @@ begin
   FDragIdx := -1;
   FDragPending := False;
   FDraggingSB := False;
+  FPanning := False;
+  FPanPending := False;
   FSelectedIds := TList<Integer>.Create;
   FCardLayout := DefaultPendingCardLayout;
 end;
@@ -737,7 +850,7 @@ begin
   else
   begin
     DId := DragDataId;
-    if DId >= 0 then
+    if DId <> 0 then   // 0 = sin drag; negativos (pendientes Backlog) son válidos
       Result := TArray<Integer>.Create(DId)
     else
       Result := nil;
@@ -756,10 +869,12 @@ end;
 
 function TPendingListControl.DragDataId: Integer;
 begin
+  // 0 = sin drag. Los pendientes del Backlog tienen DataId NEGATIVO (sintético),
+  // así que NO se puede usar <0 como centinela: rechazaría arrastrar pendientes.
   if (FDragIdx >= 0) and (FDragIdx <= High(FItems)) then
     Result := FItems[FDragIdx]
   else
-    Result := -1;
+    Result := 0;
 end;
 
 function TPendingListControl.EffCardH: Integer;
@@ -830,53 +945,68 @@ begin
     L := FCardLayout;
 
   // Fons: del layout per defecte, amb override per vencida/hover
+  var FillCol: TColor;
   if Vencida then
-    ACanvas.Brush.Color := $00E8E0F0
+    FillCol := $00E8E0F0
   else if IsHover then
-    ACanvas.Brush.Color := BlendColor(IfThen(L.BgColor <> 0, L.BgColor, clWhite),
+    FillCol := BlendColor(IfThen(L.BgColor <> 0, L.BgColor, clWhite),
       $00E0D8D0, 80)
   else if L.BgColor <> 0 then
-    ACanvas.Brush.Color := L.BgColor
+    FillCol := L.BgColor
   else
-    ACanvas.Brush.Color := clWhite;
+    FillCol := clWhite;
   // Border: del layout, amb override per vencida/urgent
+  var BorderCol: TColor;
   if Vencida then
-    ACanvas.Pen.Color := $004040FF
+    BorderCol := $004040FF
   else if Urgente then
-    ACanvas.Pen.Color := $000080FF
+    BorderCol := $000080FF
   else if L.BorderColor <> 0 then
-    ACanvas.Pen.Color := L.BorderColor
+    BorderCol := L.BorderColor
   else
-    ACanvas.Pen.Color := $00E0E0E0;
+    BorderCol := $00E0E0E0;
+  var BorderW: Single;
   if IsSelected(D.DataId) then
-    ACanvas.Pen.Width := 3
+    BorderW := 3
   else if L.BorderWidth > 0 then
-    ACanvas.Pen.Width := L.BorderWidth
+    BorderW := L.BorderWidth
   else
-    ACanvas.Pen.Width := 1;
+    BorderW := 1;
 
-  ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
-    L.CornerRadius, L.CornerRadius);
-  ACanvas.Pen.Width := 1;
+  // Marc de la card amb GDI+ (anti-aliasing, cantonades suaus).
+  var G: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+  try
+    G.SetSmoothingMode(SmoothingModeAntiAlias);
+    GpRoundRect(G, R, L.CornerRadius, GpColor(FillCol), GpColor(BorderCol), BorderW);
+  finally
+    G.Free;
+  end;
 
   // Renderizar contenido con el layout configurable
   Resolver := MakeNodeDataResolver(D);
   RenderCard(ACanvas, R, L, Resolver);
 
-  // Indicador de dependencias pendientes (siempre visible)
+  // Badge "MANUAL" para nodos creados a mano (Source='MAN'), esquina sup-izq.
+  if SameText(D.Source, 'MAN') then
+    DrawManualBadge(ACanvas, R);
+
+  // Indicador de dependencias pendientes (siempre visible), badge redondo GDI+.
   if HasPendingPredecessors(D.DataId, FLinks, FNodeRepo) then
   begin
     BadgeR := Rect(R.Right - 22, R.Top + 6, R.Right - 6, R.Top + 22);
-    ACanvas.Brush.Color := $0000AAFF;
-    ACanvas.Pen.Style := psClear;
-    ACanvas.Ellipse(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom);
+    var G2: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+    try
+      G2.SetSmoothingMode(SmoothingModeAntiAlias);
+      GpFillEllipse(G2, BadgeR, GpColor($0000AAFF));
+    finally
+      G2.Free;
+    end;
     ACanvas.Font.Size := 8;
     ACanvas.Font.Style := [fsBold];
     ACanvas.Font.Color := clWhite;
     ACanvas.Brush.Style := bsClear;
     DrawText(ACanvas.Handle, '!', -1, BadgeR,
       DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
-    ACanvas.Pen.Style := psSolid;
   end;
 end;
 
@@ -949,10 +1079,22 @@ procedure TPendingListControl.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited;
-  if Button <> mbLeft then Exit;
 
-  // No iniciar drag en doble clic
+  // No iniciar nada en doble clic
   if ssDouble in Shift then Exit;
+
+  // Panning con boton central: siempre, en cualquier punto.
+  if Button = mbMiddle then
+  begin
+    FPanPending := True;
+    FPanButton := mbMiddle;
+    FPanStartPt := Point(X, Y);
+    FPanGrabScrollY := FScrollY;
+    MouseCapture := True;
+    Exit;
+  end;
+
+  if Button <> mbLeft then Exit;
 
   if IsOnScrollbar(X) then
   begin
@@ -994,12 +1136,17 @@ begin
   end
   else
   begin
-    // Clic en zona vacía: limpiar selección
+    // Clic en zona vacía: limpiar selección + armar panning (izquierdo).
     if not (ssCtrl in Shift) then
     begin
       FSelectedIds.Clear;
       Invalidate;
     end;
+    FPanPending := True;
+    FPanButton := mbLeft;
+    FPanStartPt := Point(X, Y);
+    FPanGrabScrollY := FScrollY;
+    MouseCapture := True;
   end;
 end;
 
@@ -1008,6 +1155,23 @@ var
   NewHover, MxSY: Integer;
 begin
   inherited;
+
+  // Panning — confirmar al superar el threshold.
+  if FPanPending then
+  begin
+    if (Abs(X - FPanStartPt.X) > 4) or (Abs(Y - FPanStartPt.Y) > 4) then
+    begin
+      FPanPending := False;
+      FPanning := True;
+      Cursor := crSizeAll;
+    end;
+  end;
+  if FPanning then
+  begin
+    FScrollY := Max(0, Min(FPanGrabScrollY - (Y - FPanStartPt.Y), MaxScrollY));
+    Invalidate;
+    Exit;
+  end;
 
   if FDraggingSB then
   begin
@@ -1062,6 +1226,13 @@ procedure TPendingListControl.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited;
+  if FPanPending or FPanning then
+  begin
+    FPanPending := False;
+    FPanning := False;
+    Cursor := crDefault;
+    MouseCapture := False;
+  end;
   if FDraggingSB or FDragPending then
     MouseCapture := False;
   FDraggingSB := False;
@@ -1102,7 +1273,8 @@ begin
   Pt := ScreenToClient(Mouse.CursorPos);
   Idx := IdxAtY(Pt.Y);
   if (Idx >= 0) and (FNodeRepo <> nil) and FNodeRepo.TryGetById(FItems[Idx], D) then
-    TfrmNodeInspector.Execute(D, True, FCustomFieldDefs);
+    if AbrirInspectorNodo(FNodeRepo, D, FCustomFieldDefs) then
+      Invalidate;
 end;
 
 { ========================================================= }
@@ -1133,6 +1305,7 @@ begin
   FDragCardIdx := -1;
   FDragPending := False;
   FRightClickDataId := -1;
+  FRightClickCentreId := -1;
   FColDragPending := False;
   FColDragging := False;
   FColDragCentreId := -1;
@@ -1141,6 +1314,10 @@ begin
   FDraggingVSB := False;
   FCardLayout := DefaultCardLayout;
   FVSBCentreId := -1;
+  FPanning := False;
+  FPanPending := False;
+  FPanCentreId := -1;
+  FShowDaySep := True;
   ShowHint := True;
 end;
 
@@ -1378,6 +1555,7 @@ var
   PrevDay, CurDay: Integer;
 begin
   Result := 0;
+  if not FShowDaySep then Exit;  // separadores desactivados: cards seguidas
   if not Assigned(FGetNodeTimes) then Exit;
   if not FAssignments.TryGetValue(CentreId, L) then Exit;
 
@@ -1427,28 +1605,27 @@ begin
   X1 := CX + 6;
   X2 := CX + COL_WIDTH - VSCROLLBAR_W - 6;
 
-  // Fons del separador — franja subtil
-  R := Rect(X1, BandTop + 2, X2, BandBot - 2);
-  ACanvas.Brush.Color := $00F0ECE8;
-  ACanvas.Pen.Style := psClear;
-  ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom, 4, 4);
-  ACanvas.Pen.Style := psSolid;
-
-  // Badge del dia (fons color accent)
   ACanvas.Font.Size := 7;
   ACanvas.Font.Style := [fsBold];
   TextW := ACanvas.TextWidth(S);
+  R := Rect(X1, BandTop + 2, X2, BandBot - 2);
   BadgeR := Rect(X1 + 4, BandTop + 3, X1 + TextW + 14, BandBot - 3);
-  ACanvas.Brush.Color := $00D0C8C0;
-  ACanvas.Pen.Style := psClear;
-  ACanvas.RoundRect(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom, 6, 6);
 
-  // Text
+  // Franja de fons + badge del dia amb GDI+ (cantonades suaus, anti-aliasing).
+  var G: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+  try
+    G.SetSmoothingMode(SmoothingModeAntiAlias);
+    GpRoundRect(G, R, 4, GpColor($00F0ECE8), 0, 0);          // franja subtil
+    GpRoundRect(G, BadgeR, 6, GpColor($00D0C8C0), 0, 0);     // badge accent
+  finally
+    G.Free;
+  end;
+
+  // Text del badge
   ACanvas.Font.Color := clWhite;
   ACanvas.Brush.Style := bsClear;
   DrawText(ACanvas.Handle, PChar(S), -1, BadgeR,
     DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
-  ACanvas.Pen.Style := psSolid;
 
   // Línia horitzontal a la dreta del badge
   ACanvas.Pen.Color := $00D0C8C0;
@@ -1756,11 +1933,12 @@ begin
   DrawText(ACanvas.Handle, PChar(S), -1, R,
     DT_SINGLELINE or DT_RIGHT or DT_NOPREFIX);
 
-  // Resumen horas + capacitat + operaris (fila inferior del header)
+  // Resumen horas + capacitat + operaris (fila inferior del header).
+  // Tamaño +1 y negrita para que se lea mejor (era 7, normal).
   var TotalMin: Double := ColTotalMinutes(CentreId);
   var WorkMin: Double := ColWorkingMinutes(CentreId);
-  ACanvas.Font.Size := 7;
-  ACanvas.Font.Style := [];
+  ACanvas.Font.Size := 8;
+  ACanvas.Font.Style := [fsBold];
 
   if (WorkMin > 0) then
   begin
@@ -1803,9 +1981,9 @@ begin
       S := S + Format('  |  %d/%d op.', [TotalOpAssig, TotalOpNec]);
   end;
 
-  R := Rect(CX + 10, 40, CX + COL_WIDTH - 6, 54);
+  R := Rect(CX + 10, 38, CX + COL_WIDTH - 6, 56);
   DrawText(ACanvas.Handle, PChar(S), -1, R,
-    DT_SINGLELINE or DT_END_ELLIPSIS or DT_NOPREFIX);
+    DT_SINGLELINE or DT_VCENTER or DT_END_ELLIPSIS or DT_NOPREFIX);
 
   // Barra de capacidad
   R := Rect(CX + 6, HEADER_H + 2, CX + COL_WIDTH - 6, HEADER_H + 2 + CAP_BAR_H);
@@ -1824,6 +2002,7 @@ begin
     var CurDay: Integer;
     var DNode: TNodeData;
     var NStart2, NEnd2: TDateTime;
+    var PrevCardBottom: Integer := -1;  // Y inferior de la card anterior pintada
 
     for I := 0 to L.Count - 1 do
     begin
@@ -1836,19 +2015,32 @@ begin
       else
         CurDay := -1;
 
-      if (CurDay > 0) and (PrevDay > 0) and (CurDay <> PrevDay) then
+      // Separador entre dos cards de dias distintos. Se posiciona a partir del
+      // hueco reservado JUSTO encima de la card nueva (CardY-DAY_SEP_H), pero la
+      // banda se ancla al borde inferior de la card ANTERIOR para que nunca la
+      // solape (cards que abarcan varios dias dejaban el separador pegado/dentro).
+      if FShowDaySep and (CurDay > 0) and (PrevDay > 0) and (CurDay <> PrevDay) then
       begin
         var SepY: Integer := CardY - DAY_SEP_H;
+        // Garantizar que la banda arranca debajo de la card anterior (con su
+        // aire), aunque el calculo de offsets se desincronice por algun motivo.
+        if (PrevCardBottom >= 0) and (SepY < PrevCardBottom + CARD_GAP) then
+          SepY := PrevCardBottom + CARD_GAP;
         if (SepY + DAY_SEP_H >= CardsTop) and (SepY < ClientHeight) then
           DrawDaySeparator(ACanvas, CX, SepY, NStart2);
       end;
       PrevDay := CurDay;
 
-      if CardY + EffCardH < CardsTop then Continue;
+      if CardY + EffCardH < CardsTop then
+      begin
+        PrevCardBottom := CardY + EffCardH;
+        Continue;
+      end;
       if CardY > ClientHeight then Break;
 
       R := Rect(CX + CARD_MARGIN, CardY, CX + COL_WIDTH - CARD_MARGIN - VSCROLLBAR_W, CardY + EffCardH);
       DrawCard(ACanvas, CentreId, I, R, (CentreId = FHoverCentreId) and (I = FHoverCardIdx));
+      PrevCardBottom := CardY + EffCardH;
     end;
 
     // Drop indicator line
@@ -1932,50 +2124,65 @@ begin
     LayBg := BlendColor(Lay.BgColor, BaseBg, 40)
   else
     LayBg := BaseBg;
+  var FillCol: TColor;
   if Vencida then
-    ACanvas.Brush.Color := $00E8E0F0
+    FillCol := $00E8E0F0
   else if IsHover then
-    ACanvas.Brush.Color := BlendColor(LayBg, $00E0D8D0, 80)
+    FillCol := BlendColor(LayBg, $00E0D8D0, 80)
   else
-    ACanvas.Brush.Color := LayBg;
+    FillCol := LayBg;
   // Border: del layout amb override per vencida/urgent
+  var BorderCol: TColor;
   if Vencida then
-    ACanvas.Pen.Color := $004040FF
+    BorderCol := $004040FF
   else if Urgente then
-    ACanvas.Pen.Color := $000080FF
+    BorderCol := $000080FF
   else if Lay.BorderColor <> 0 then
-    ACanvas.Pen.Color := Lay.BorderColor
+    BorderCol := Lay.BorderColor
   else
-    ACanvas.Pen.Color := $00E0E0E0;
+    BorderCol := $00E0E0E0;
+  var BorderW: Single;
   if IsSelectedItem(DataId) then
-    ACanvas.Pen.Width := 3
+    BorderW := 3
   else if Lay.BorderWidth > 0 then
-    ACanvas.Pen.Width := Lay.BorderWidth
+    BorderW := Lay.BorderWidth
   else
-    ACanvas.Pen.Width := 1;
+    BorderW := 1;
 
-  ACanvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom,
-    Lay.CornerRadius, Lay.CornerRadius);
-  ACanvas.Pen.Width := 1;
+  // Marc de la card amb GDI+ (anti-aliasing, cantonades suaus).
+  var G: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+  try
+    G.SetSmoothingMode(SmoothingModeAntiAlias);
+    GpRoundRect(G, R, Lay.CornerRadius, GpColor(FillCol), GpColor(BorderCol), BorderW);
+  finally
+    G.Free;
+  end;
 
   // Renderizar contenido con el layout configurable
   Resolver := MakeNodeDataResolver(D);
   RenderCard(ACanvas, R, Lay, Resolver);
 
-  // Indicador de dependencias pendientes (siempre visible)
+  // Badge "MANUAL" para nodos creados a mano (Source='MAN'), esquina sup-izq.
+  if SameText(D.Source, 'MAN') then
+    DrawManualBadge(ACanvas, R);
+
+  // Indicador de dependencias pendientes (siempre visible), badge redondo GDI+.
   if HasPendingPredecessors(DataId, FLinks, FNodeRepo) then
   begin
     BadgeR := Rect(R.Right - 18, R.Top + 6, R.Right - 4, R.Top + 20);
-    ACanvas.Brush.Color := $0000AAFF;
-    ACanvas.Pen.Style := psClear;
-    ACanvas.Ellipse(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom);
+    var G2: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+    try
+      G2.SetSmoothingMode(SmoothingModeAntiAlias);
+      GpFillEllipse(G2, BadgeR, GpColor($0000AAFF));
+    finally
+      G2.Free;
+    end;
     ACanvas.Font.Size := 7;
     ACanvas.Font.Style := [fsBold];
     ACanvas.Font.Color := clWhite;
     ACanvas.Brush.Style := bsClear;
     DrawText(ACanvas.Handle, '!', -1, BadgeR,
       DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
-    ACanvas.Pen.Style := psSolid;
   end;
 end;
 
@@ -2131,6 +2338,22 @@ begin
   DrawHScrollbar(Canvas);
 end;
 
+procedure TCentreColumnControl.BeginPanPending(AButton: TMouseButton;
+  X, Y: Integer);
+begin
+  FPanPending := True;
+  FPanButton := AButton;
+  FPanStartPt := Point(X, Y);
+  FPanGrabScrollX := FScrollX;
+  // El scroll vertical es por columna: el pan mueve el de la columna donde empezo.
+  FPanCentreId := CentreIdAtX(X);
+  if FPanCentreId >= 0 then
+    FPanGrabScrollY := ColScrollY(FPanCentreId)
+  else
+    FPanGrabScrollY := 0;
+  MouseCapture := True;
+end;
+
 procedure TCentreColumnControl.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
@@ -2232,19 +2455,27 @@ begin
       end
       else
       begin
-        // Clic en zona vacía de columna: limpiar selección
+        // Clic en zona vacía de columna: limpiar selección + armar panning con el
+        // boton izquierdo (se confirma al superar el threshold en MouseMove).
         if not (ssCtrl in Shift) then
         begin
           FSelectedIds.Clear;
           Invalidate;
         end;
+        BeginPanPending(mbLeft, X, Y);
       end;
     end;
+  end
+  else if Button = mbMiddle then
+  begin
+    // Panning con el boton central: siempre, en cualquier punto del board.
+    BeginPanPending(mbMiddle, X, Y);
   end
   else if Button = mbRight then
   begin
     FRightClickDataId := -1;
     CId := CentreIdAtX(X);
+    FRightClickCentreId := CId;  // columna bajo el cursor (aunque no haya card)
     if CId >= 0 then
     begin
       CardIdx := CardIdxAtPoint(CId, Y);
@@ -2262,6 +2493,27 @@ var
   TargetCId: Integer;
 begin
   inherited;
+
+  // Panning — confirmar al superar el threshold (evita robar clics simples).
+  if FPanPending then
+  begin
+    if (Abs(X - FPanStartPt.X) > 4) or (Abs(Y - FPanStartPt.Y) > 4) then
+    begin
+      FPanPending := False;
+      FPanning := True;
+      Cursor := crSizeAll;
+    end;
+  end;
+
+  // Panning activo: mover scroll horizontal (global) y vertical (de su columna).
+  if FPanning then
+  begin
+    FScrollX := Max(0, Min(FPanGrabScrollX - (X - FPanStartPt.X), MaxScrollX));
+    if FPanCentreId >= 0 then
+      SetColScrollY(FPanCentreId, FPanGrabScrollY - (Y - FPanStartPt.Y));
+    Invalidate;
+    Exit;
+  end;
 
   // Drag reordenació de columnes — pending threshold
   if FColDragPending and (FColDragCentreId >= 0) then
@@ -2384,6 +2636,17 @@ procedure TCentreColumnControl.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   inherited;
+
+  // Fin del panning (o de un pan armado que nunca llego al threshold = clic simple).
+  if FPanPending or FPanning then
+  begin
+    FPanPending := False;
+    FPanning := False;
+    FPanCentreId := -1;
+    Cursor := crDefault;
+    MouseCapture := False;
+  end;
+
   FDraggingHSB := False;
   if FColDragPending then
   begin
@@ -2464,7 +2727,8 @@ begin
   if CardIdx >= L.Count then Exit;
   DataId := L[CardIdx];
   if (FNodeRepo <> nil) and FNodeRepo.TryGetById(DataId, D) then
-    TfrmNodeInspector.Execute(D, True, FCustomFieldDefs);
+    if AbrirInspectorNodo(FNodeRepo, D, FCustomFieldDefs) then
+      Invalidate;
 end;
 
 function TCentreColumnControl.DragDataId: Integer;
@@ -2772,12 +3036,79 @@ begin
     Frm.UpdatePendingCount;
 end;
 
+procedure TfrmFiniteCapacityPlanner.RecargarDatos;
+var
+  Q: TADOQuery;
+  Iv: TAbsInterval;
+  Pair: TPair<Integer, TList<Integer>>;
+begin
+  // Solo tras la inicializacion (si aun no hay controles, no hay nada que hacer).
+  if FCentreColumns = nil then Exit;
+  if (DMPlanner = nil) or not DMPlanner.IsConnected then Exit;
+
+  // 1) Recargar planificados al repo compartido (Clear + FS_PL_Node).
+  DMPlanner.LoadNodes;
+
+  // 2) Recargar cache de fechas (inicio/fin) desde BD para el proyecto activo.
+  if FNodeTimesCache = nil then
+    FNodeTimesCache := TDictionary<Integer, TAbsInterval>.Create
+  else
+    FNodeTimesCache.Clear;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT NodeId, FechaInicio, FechaFin FROM FS_PL_Node ' +
+      'WHERE CodigoEmpresa = :CodigoEmpresa AND ProjectId = :ProjectId';
+    Q.Parameters.ParamByName('CodigoEmpresa').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('ProjectId').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if Q.FieldByName('FechaInicio').IsNull then Iv.S := 0
+      else Iv.S := Q.FieldByName('FechaInicio').AsDateTime;
+      if Q.FieldByName('FechaFin').IsNull then Iv.E := 0
+      else Iv.E := Q.FieldByName('FechaFin').AsDateTime;
+      FNodeTimesCache.AddOrSetValue(Q.FieldByName('NodeId').AsInteger, Iv);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // 3) Vaciar asignaciones de columnas y estado derivado (se reconstruye abajo).
+  for Pair in FCentreColumns.Assignments do
+    Pair.Value.Clear;
+  FInitiallyAssignedDataIds.Clear;
+  FBacklogRawItemIdByDataId.Clear;
+  FCalculatedTimes.Clear;
+
+  // 4) Re-poblar columnas con los nodos ya planificados (CenterId asignado).
+  if DMPlanner.NodesRepo <> nil then
+  begin
+    var ExistingNodes := DMPlanner.NodesRepo.GetAll;
+    for var NI := 0 to High(ExistingNodes) do
+      if (ExistingNodes[NI].CentreId >= 0) and (ExistingNodes[NI].DataId > 0) then
+      begin
+        FCentreColumns.AssignItem(ExistingNodes[NI].DataId, ExistingNodes[NI].CentreId);
+        FInitiallyAssignedDataIds.Add(ExistingNodes[NI].DataId);
+      end;
+  end;
+
+  // 5) Recargar pendientes del Backlog (DataIds sinteticos) y refrescar.
+  LoadBacklogPending;
+  BuildPendingList;
+  UpdatePendingCount;
+  FCentreColumns.Invalidate;
+  FPendingList.Invalidate;
+end;
+
 procedure TfrmFiniteCapacityPlanner.FormCreate(Sender: TObject);
 begin
   FInterDragging := False;
   FColDragging := False;
   FColGhostForm := nil;
-  FInterDragDataId := -1;
+  FInterDragDataId := 0;  // 0 = sin drag (los pendientes pueden tener DataId -1)
   FInterDragDataIds := nil;
   FDragFromCentre := False;
   FPopupDataId := -1;
@@ -2846,7 +3177,7 @@ var
   Pt: TPoint;
 begin
   DataId := FPendingList.DragDataId;
-  if DataId < 0 then Exit;
+  if DataId = 0 then Exit;  // 0 = sin drag; negativos (Backlog) son válidos
 
   FInterDragging := True;
   FInterDragDataId := DataId;
@@ -3000,7 +3331,7 @@ begin
 
   HandleDrop(ScreenPt);
   FInterDragging := False;
-  FInterDragDataId := -1;
+  FInterDragDataId := 0;  // 0 = sin drag (los pendientes pueden tener DataId -1)
   FInterDragDataIds := nil;
   FCentreColumns.ClearDropTarget;
   FCentreColumns.EndDragContext;
@@ -3020,24 +3351,27 @@ begin
   C := FGhostBmp.Canvas;
   R := Rect(0, 0, FGhostBmp.Width, FGhostBmp.Height);
 
+  // Fons blanc (el ghost form va amb AlphaBlend sobre clWhite) + marc i badge de
+  // prioritat amb GDI+ (anti-aliasing, cantonades suaus).
   C.Brush.Color := clWhite;
-  C.Pen.Color := $00E89040;
-  C.Pen.Width := 2;
-  C.RoundRect(R.Left, R.Top, R.Right, R.Bottom, 8, 8);
-  C.Pen.Width := 1;
+  C.FillRect(R);
 
-  // Prioridad badge
   BadgeR := Rect(6, 6, 46, 22);
-  C.Brush.Color := PrioridadColor(D.Prioridad);
-  C.Pen.Style := psClear;
-  C.RoundRect(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom, 4, 4);
+  var G: TGPGraphics := TGPGraphics.Create(C.Handle);
+  try
+    G.SetSmoothingMode(SmoothingModeAntiAlias);
+    GpRoundRect(G, R, 8, GpColor(clWhite), GpColor($00E89040), 2);   // marc
+    GpRoundRect(G, BadgeR, 4, GpColor(PrioridadColor(D.Prioridad)), 0, 0); // prioridad
+  finally
+    G.Free;
+  end;
+
   C.Font.Size := 7;
   C.Font.Style := [fsBold];
   C.Font.Color := clWhite;
   C.Brush.Style := bsClear;
   DrawText(C.Handle, PChar(PrioridadText(D.Prioridad)), -1, BadgeR,
     DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
-  C.Pen.Style := psSolid;
 
   // OF
   C.Font.Size := 9;
@@ -3057,20 +3391,23 @@ begin
   DrawText(C.Handle, PChar(D.CodigoArticulo + ' ' + D.DescripcionArticulo), -1, TR,
     DT_SINGLELINE or DT_END_ELLIPSIS or DT_NOPREFIX);
 
-  // Badge de cantidad si multi-selección
+  // Badge de cantidad si multi-selección (badge redondo GDI+).
   if Length(FInterDragDataIds) > 1 then
   begin
     BadgeR := Rect(FGhostBmp.Width - 28, 0, FGhostBmp.Width, 22);
-    C.Brush.Color := $00E89040;
-    C.Pen.Style := psClear;
-    C.Ellipse(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom);
+    var G2: TGPGraphics := TGPGraphics.Create(C.Handle);
+    try
+      G2.SetSmoothingMode(SmoothingModeAntiAlias);
+      GpFillEllipse(G2, BadgeR, GpColor($00E89040));
+    finally
+      G2.Free;
+    end;
     C.Font.Size := 8;
     C.Font.Style := [fsBold];
     C.Font.Color := clWhite;
     C.Brush.Style := bsClear;
     DrawText(C.Handle, PChar(IntToStr(Length(FInterDragDataIds))), -1, BadgeR,
       DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
-    C.Pen.Style := psSolid;
   end;
 end;
 
@@ -3298,7 +3635,7 @@ var
   Act: TFCPAction;
 begin
   if not FInterDragging then Exit;
-  if FInterDragDataId < 0 then Exit;
+  if FInterDragDataId = 0 then Exit;  // 0 = sin drag; negativos (Backlog) válidos
 
   // Comprobar si se soltó sobre el panel de pendientes
   LocalPt := pnlPending.ScreenToClient(ScreenPt);
@@ -3386,6 +3723,16 @@ var
   Mi, Sub, Parent: TMenuItem;
 begin
   FPendingPopup := TPopupMenu.Create(Self);
+
+  // --- Crear card manual (V066): nace en pendientes (sin centro) ---
+  Mi := TMenuItem.Create(FPendingPopup);
+  Mi.Caption := 'Crear card manual...';
+  Mi.OnClick := OnPendingCrearManual;
+  FPendingPopup.Items.Add(Mi);
+
+  Mi := TMenuItem.Create(FPendingPopup);
+  Mi.Caption := '-';
+  FPendingPopup.Items.Add(Mi);
 
   // --- Carga automática (submenú) ---
   Parent := TMenuItem.Create(FPendingPopup);
@@ -3491,10 +3838,17 @@ begin
   Mi.OnClick := OnDeselectAllClick;
   FPendingPopup.Items.Add(Mi);
 
-  // --- Separador + Card Layout ---
+  // --- Separador + Vista ---
   Mi := TMenuItem.Create(FPendingPopup);
   Mi.Caption := '-';
   FPendingPopup.Items.Add(Mi);
+
+  // Mostrar separador de días (checkable). Guardamos la referencia para
+  // sincronizar el check con el estado real al abrir el menú.
+  FMnuShowDaySep := TMenuItem.Create(FPendingPopup);
+  FMnuShowDaySep.Caption := 'Mostrar separador d'#$00ED'as';
+  FMnuShowDaySep.OnClick := OnToggleDaySepClick;
+  FPendingPopup.Items.Add(FMnuShowDaySep);
 
   Mi := TMenuItem.Create(FPendingPopup);
   Mi.Caption := 'Editar layout de cards...';
@@ -3506,8 +3860,18 @@ procedure TfrmFiniteCapacityPlanner.OnBtnOptionsClick(Sender: TObject);
 var
   Pt: TPoint;
 begin
+  // Sincronizar el check con el estado actual antes de mostrar el menú.
+  if Assigned(FMnuShowDaySep) and Assigned(FCentreColumns) then
+    FMnuShowDaySep.Checked := FCentreColumns.ShowDaySep;
   Pt := FBtnOptions.ClientToScreen(Point(0, FBtnOptions.Height));
   FPendingPopup.Popup(Pt.X, Pt.Y);
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnToggleDaySepClick(Sender: TObject);
+begin
+  if not Assigned(FCentreColumns) then Exit;
+  FCentreColumns.ShowDaySep := not FCentreColumns.ShowDaySep;
+  FCentreColumns.Invalidate;
 end;
 
 { --- Filtro de centros (TcxCheckComboBox) --- }
@@ -4068,6 +4432,16 @@ begin
   FCentrePopup := TPopupMenu.Create(Self);
   FCentrePopup.OnPopup := OnCentrePopupShow;
 
+  // Crear card manual ya asignada a este centro (V066). Siempre visible.
+  Mi := TMenuItem.Create(FCentrePopup);
+  Mi.Caption := 'Crear card manual...';
+  Mi.OnClick := OnCentrePopupCrearManual;
+  FCentrePopup.Items.Add(Mi);
+
+  Mi := TMenuItem.Create(FCentrePopup);
+  Mi.Caption := '-';
+  FCentrePopup.Items.Add(Mi);
+
   Mi := TMenuItem.Create(FCentrePopup);
   Mi.Caption := 'Devolver a pendientes';
   Mi.OnClick := OnCentrePopupUnassign;
@@ -4090,13 +4464,14 @@ var
 begin
   FPopupDataId := FCentreColumns.RightClickDataId;
   HasCard := FPopupDataId >= 0;
-  FCentrePopup.Items[0].Visible := HasCard;  // Devolver a pendientes
-  FCentrePopup.Items[1].Visible := HasCard;  // Separador
+  // Items[0]=Crear card manual (siempre visible), Items[1]=Separador.
+  FCentrePopup.Items[2].Visible := HasCard;  // Devolver a pendientes
+  FCentrePopup.Items[3].Visible := HasCard;  // Separador
   // Asignar operarios: solo si tiene operarios necesarios
   if HasCard and FNodeRepo.TryGetById(FPopupDataId, D) then
-    FCentrePopup.Items[2].Visible := D.OperariosNecesarios > 0
+    FCentrePopup.Items[4].Visible := D.OperariosNecesarios > 0
   else
-    FCentrePopup.Items[2].Visible := False;
+    FCentrePopup.Items[4].Visible := False;
 end;
 
 procedure TfrmFiniteCapacityPlanner.OnCentrePopupUnassign(Sender: TObject);
@@ -4137,6 +4512,100 @@ begin
 
   FCentreColumns.Invalidate;
   FPendingList.Invalidate;
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnCentrePopupCrearManual(Sender: TObject);
+begin
+  // Crear card manual asignada al centro bajo el clic derecho.
+  CrearCardManual(FCentreColumns.RightClickCentreId);
+end;
+
+procedure TfrmFiniteCapacityPlanner.OnPendingCrearManual(Sender: TObject);
+begin
+  // Crear card manual sin centro: nace en el panel de pendientes.
+  CrearCardManual(-1);
+end;
+
+// Abre el dialogo de nodo manual en modo Kanban (sin campos de fecha: aqui la
+// posicion temporal la da el centro/lane) y crea la card. Persiste el nodo en
+// BD (Source='MAN', via DMPlanner) y lo inserta en memoria (FNodeRepo) para que
+// aparezca sin recargar toda la pantalla, preservando la simulacion en curso.
+// ACenterId >= 0 -> nace asignada a ese centro; < 0 -> nace en pendientes. (V066)
+procedure TfrmFiniteCapacityPlanner.CrearCardManual(ACenterId: Integer);
+var
+  Data: TNodoManualData;
+  FechaBase, PE: TDateTime;
+  NewId: Integer;
+  D: TNodeData;
+  Act: TFCPAction;
+begin
+  // Fecha base = inicio del rango de planificacion del Kanban (el dialogo no
+  // pide hora; el nodo nace con esta fecha y el centro/lane resuelve la ventana).
+  GetPlanningDates(FechaBase, PE);
+
+  if not TfrmCrearNodoManual.Execute(DMPlanner.CentresRepo.GetAll,
+       FechaBase, ACenterId, Data, {AOcultarFechas=}True) then
+    Exit;
+
+  // El dialogo permite cambiar el centro; si se creo desde una columna y el
+  // usuario lo mantuvo, ACenterId y Data.CenterId coinciden. Mandamos el centro
+  // elegido en el dialogo (Data.CenterId) tanto a la asignacion como al nodo.
+  ACenterId := Data.CenterId;
+
+  // 1) Persistir en BD. Las fechas crudas (inicio + duracion de reloj) bastan;
+  //    al recargar el plan en el Gantt el motor las afina. Aqui no necesitamos
+  //    el motor de colocacion: el Kanban no usa la hora exacta.
+  try
+    NewId := DMPlanner.CrearNodoManual(Data.Caption, Data.Operacion,
+      Data.CenterId, Data.DuracionMin,
+      FechaBase, FechaBase + (Data.DuracionMin / (24 * 60)),
+      Data.FechaCompromiso, Data.RawItemTipoOrigen, Data.RawItemClaveERP);
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Error al crear la card manual: ' + E.Message);
+      Exit;
+    end;
+  end;
+  if NewId <= 0 then Exit;
+
+  // 2) Insertar el NodeData en memoria para que la card sea visible al instante.
+  D := Default(TNodeData);
+  D.DataId := NewId;
+  D.Source := 'MAN';                      // card manual (detectada en el doble-clic)
+  D.Operacion := Data.Operacion;
+  D.DescripcionArticulo := Data.Caption;  // texto visible en la card
+  D.DurationMin := Data.DuracionMin;
+  D.DurationMinOriginal := Data.DuracionMin;
+  D.Estado := nePendiente;
+  D.Prioridad := 50;                      // prioridad media por defecto
+  D.LibreMoviment := True;                // nodo manual: movible a cualquier centro
+  D.FechaEntrega := Data.FechaCompromiso;
+  D.FechaNecesaria := Data.FechaCompromiso;
+  D.RawItemClaveERP := Data.RawItemClaveERP;
+  D.RawItemTipoOrigen := Data.RawItemTipoOrigen;
+  if Data.CenterId >= 0 then
+    D.CentresPermesos := [Data.CenterId];  // preferente, pero LibreMoviment=True
+  FNodeRepo.AddOrUpdate(D);
+
+  // 3) Undo: snapshot de asignaciones ANTES de asignar la nueva card. Deshacer
+  //    devuelve la card a pendientes (no borra el nodo de BD, igual que el resto
+  //    de acciones del Kanban nunca borran nodos).
+  Act.Kind := akCreateManual;
+  Act.Snapshot := TakeSnapshot;
+
+  // 4) Si nace asignada a un centro, colocarla en su columna; si no, a pendientes.
+  if ACenterId >= 0 then
+  begin
+    FCentreColumns.AssignItem(NewId, ACenterId);
+    MarkUserMoved(NewId);
+  end;
+
+  BuildPendingList;
+  UpdatePendingCount;
+  FCentreColumns.Invalidate;
+  FPendingList.Invalidate;
+  PushUndo(Act);
 end;
 
 procedure TfrmFiniteCapacityPlanner.OnAutoLoadClick(Sender: TObject);
@@ -5385,14 +5854,20 @@ end;
 
 procedure TfrmFiniteCapacityPlanner.FormHide(Sender: TObject);
 begin
-  // Auto-save quan es canvia de vista (Dashboard/Gantt). Si no s'ha
-  // inicialitzat encara (FCentreColumns=nil), no fa res.
-  if FCentreColumns <> nil then
-    SaveNow;
+  // El guardado al cambiar de vista lo hace el Main llamando SaveNow ANTES de
+  // ocultar (OnHide no se dispara de forma fiable en un form embebido). Mantenemos
+  // este handler como red de seguridad por si el form llega a usarse como
+  // top-level; SaveNow ya es idempotente y seguro (no-op si no inicializado).
+  SaveNow;
 end;
 
 procedure TfrmFiniteCapacityPlanner.SaveNow;
 begin
+  // Seguro de llamar siempre: si aún no se ha inicializado (no hay controles ni
+  // datos), no hay nada que persistir. El Main lo llama explícitamente al cambiar
+  // de vista porque OnHide NO se dispara de forma fiable en un form embebido
+  // (Parent=Form1) con Visible:=False.
+  if FCentreColumns = nil then Exit;
   try
     PersistAssignments;
   except

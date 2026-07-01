@@ -16,7 +16,7 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes,
   System.Generics.Collections, System.JSON, System.IOUtils, System.Variants,
   System.Math, System.DateUtils, System.StrUtils,
-  Winapi.Windows,
+  Winapi.Windows, Winapi.GDIPOBJ, Winapi.GDIPAPI,
   Vcl.Graphics,
   uGanttTypes;
 
@@ -90,9 +90,31 @@ type
     Layouts: array[TCardCategory] of TCardLayout;
   end;
 
+  TCardFieldResolver = reference to function(const FieldName: string): Variant;
+
+  // --- Helpers de dibujo GDI+ (anti-aliasing, esquinas redondeadas suaves) ---
+  // Misma tecnica que uVistaGantt (TGPGraphics + SmoothingModeAntiAlias). Las
+  // cards y badges se pintaban con TCanvas.RoundRect/Ellipse (GDI sin anti-
+  // aliasing -> pixelado). Estos helpers dan un acabado "PRO". Publicos para que
+  // las pantallas que dibujan cards (Kanban...) reusen la misma tecnica.
+
+  // Convierte un TColor (BGR) a TGPColor (ARGB) con el alfa indicado.
+  function GpColor(C: TColor; Alpha: Byte = 255): TGPColor;
+
+  // Path de rectangulo redondeado (4 arcos + cierre). Radius limitado al lado menor.
+  function GpRoundRectPath(X, Y, W, H, Radius: Single): TGPGraphicsPath;
+
+  // Rellena y/o traza un rect redondeado con anti-aliasing. AFill/ABorder con
+  // alfa 0 se omiten. ABorderW = grosor en px.
+  procedure GpRoundRect(AGraphics: TGPGraphics; const R: TRect; Radius: Integer;
+    AFill, ABorder: TGPColor; ABorderW: Single = 1);
+
+  // Rellena un circulo (badge redondo) con anti-aliasing.
+  procedure GpFillEllipse(AGraphics: TGPGraphics; const R: TRect; AFill: TGPColor);
+
   // --- Renderer ---
 
-  TCardFieldResolver = reference to function(const FieldName: string): Variant;
+
 
   procedure RenderCard(const ACanvas: TCanvas; const R: TRect;
     const ALayout: TCardLayout; AResolver: TCardFieldResolver);
@@ -153,6 +175,89 @@ type
   function LoadCardLayoutSetFromFile(const AFileName: string): TCardLayoutSet;
 
 implementation
+
+{ ---- Helpers de dibujo GDI+ ---- }
+
+function GpColor(C: TColor; Alpha: Byte = 255): TGPColor;
+var
+  RGBv: Longint;
+begin
+  RGBv := ColorToRGB(C);
+  Result := MakeColor(Alpha,
+    GetRValue(RGBv), GetGValue(RGBv), GetBValue(RGBv));
+end;
+
+function GpRoundRectPath(X, Y, W, H, Radius: Single): TGPGraphicsPath;
+var
+  D: Single;
+begin
+  Result := TGPGraphicsPath.Create;
+  D := Radius * 2;
+  if D < 0 then D := 0;
+  if D > W then D := W;
+  if D > H then D := H;
+  if D <= 0 then
+  begin
+    Result.AddRectangle(MakeRect(X, Y, W, H));
+    Exit;
+  end;
+  Result.AddArc(X, Y, D, D, 180, 90);               // sup-izq
+  Result.AddArc(X + W - D, Y, D, D, 270, 90);       // sup-der
+  Result.AddArc(X + W - D, Y + H - D, D, D, 0, 90); // inf-der
+  Result.AddArc(X, Y + H - D, D, D, 90, 90);        // inf-izq
+  Result.CloseFigure;
+end;
+
+procedure GpRoundRect(AGraphics: TGPGraphics; const R: TRect; Radius: Integer;
+  AFill, ABorder: TGPColor; ABorderW: Single = 1);
+var
+  Path: TGPGraphicsPath;
+  Brush: TGPSolidBrush;
+  Pen: TGPPen;
+  Inset: Single;
+begin
+  // Insetear medio grosor para que el borde no se recorte en los lados del rect.
+  Inset := 0;
+  if ABorderW > 1 then
+    Inset := ABorderW / 2;
+
+  Path := GpRoundRectPath(R.Left + Inset, R.Top + Inset,
+    R.Width - 2 * Inset, R.Height - 2 * Inset, Radius);
+  try
+    if (AFill shr 24) <> 0 then
+    begin
+      Brush := TGPSolidBrush.Create(AFill);
+      try
+        AGraphics.FillPath(Brush, Path);
+      finally
+        Brush.Free;
+      end;
+    end;
+    if (ABorder shr 24) <> 0 then
+    begin
+      Pen := TGPPen.Create(ABorder, ABorderW);
+      try
+        AGraphics.DrawPath(Pen, Path);
+      finally
+        Pen.Free;
+      end;
+    end;
+  finally
+    Path.Free;
+  end;
+end;
+
+procedure GpFillEllipse(AGraphics: TGPGraphics; const R: TRect; AFill: TGPColor);
+var
+  Brush: TGPSolidBrush;
+begin
+  Brush := TGPSolidBrush.Create(AFill);
+  try
+    AGraphics.FillEllipse(Brush, R.Left, R.Top, R.Width, R.Height);
+  finally
+    Brush.Free;
+  end;
+end;
 
 { ---- Resolver de expresiones ---- }
 
@@ -289,6 +394,23 @@ begin
     else if VarToStr(V) = 'FIN' then Result := $0040B040
     else if VarToStr(V) = 'BLOQ' then Result := $004040E0
     else Result := $00B0B0B0;
+  end
+  else if FN = 'operarios' then
+  begin
+    // Color del badge de operarios (asignados/necesarios). El campo sintético
+    // 'operarios' no produce texto; solo determina el color del badge:
+    //   asignados = 0 y necesarios > 0  -> rojo  (sin cubrir)
+    //   asignados < necesarios           -> amarillo (parcial)
+    //   asignados >= necesarios          -> verde (cubierto)
+    // (necesarios = 0 no muestra badge, via ConditionField del elemento).
+    var Nec: Integer := StrToIntDef(VarToStr(AResolver('OperariosNecesarios')), 0);
+    var Asig: Integer := StrToIntDef(VarToStr(AResolver('OperariosAsignados')), 0);
+    if (Asig = 0) and (Nec > 0) then
+      Result := $004040FF   // rojo (BGR)
+    else if Asig < Nec then
+      Result := $0000C0FF   // amarillo/ambar
+    else
+      Result := $0040B040;  // verde
   end
   else
     Result := $00808080;
@@ -482,20 +604,42 @@ begin
 
         ceBadge:
         begin
+          // Altura fija del badge (centrada en la fila) para que TODOS los badges
+          // tengan el MISMO tamaño y queden ~2px separados entre filas contiguas,
+          // en vez de ocupar cada uno toda la altura de su fila (alturas dispares).
+          const BADGE_H = 15;
           BadgeR := TR;
+          if BadgeR.Height > BADGE_H then
+          begin
+            var Cy: Integer := (BadgeR.Top + BadgeR.Bottom) div 2;
+            BadgeR.Top := Cy - BADGE_H div 2;
+            BadgeR.Bottom := BadgeR.Top + BADGE_H;
+          end;
           // Fondo
+          var BadgeBg: TColor;
           if OvElemBgColor <> Elem.BgColor then
-            ACanvas.Brush.Color := OvElemBgColor
+            BadgeBg := OvElemBgColor
           else if Elem.BgColorField <> '' then
-            ACanvas.Brush.Color := ResolveFieldBgColor(Elem.BgColorField, AResolver)
+            BadgeBg := ResolveFieldBgColor(Elem.BgColorField, AResolver)
+          // Badge de operarios (asignados/necesarios): color por cobertura
+          // (rojo/amarillo/verde) aunque el layout no tenga BgColorField, para
+          // que aplique también a layouts ya guardados. Detecta por la expresión.
+          else if ContainsText(Elem.FieldExpr, '{OperariosAsignados}') then
+            BadgeBg := ResolveFieldBgColor('Operarios', AResolver)
           else if Elem.BgColor <> 0 then
-            ACanvas.Brush.Color := Elem.BgColor
+            BadgeBg := Elem.BgColor
           else
-            ACanvas.Brush.Color := $00808080;
-          ACanvas.Pen.Style := psClear;
+            BadgeBg := $00808080;
           var RR: Integer := Elem.RoundRadius;
           if RR <= 0 then RR := 4;
-          ACanvas.RoundRect(BadgeR.Left, BadgeR.Top, BadgeR.Right, BadgeR.Bottom, RR, RR);
+          // Fondo redondeado con GDI+ (anti-aliasing).
+          var GB: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+          try
+            GB.SetSmoothingMode(SmoothingModeAntiAlias);
+            GpRoundRect(GB, BadgeR, RR, GpColor(BadgeBg), 0, 0);
+          finally
+            GB.Free;
+          end;
           // Texto
           ACanvas.Font.Size := Elem.FontSize;
           ACanvas.Font.Style := FS;
@@ -503,7 +647,6 @@ begin
           ACanvas.Brush.Style := bsClear;
           DrawText(ACanvas.Handle, PChar(S), -1, BadgeR,
             DT_SINGLELINE or DT_VCENTER or DT_CENTER or DT_NOPREFIX);
-          ACanvas.Pen.Style := psSolid;
         end;
 
         ceProgressBar:
@@ -511,21 +654,23 @@ begin
           var Pct: Double := 0;
           try Pct := StrToFloatDef(S, 0); except end;
           if Pct > 100 then Pct := 100;
-          // Fondo
-          ACanvas.Brush.Color := $00E0E0E0;
-          ACanvas.Pen.Style := psClear;
-          ACanvas.RoundRect(TR.Left, TR.Top + 2, TR.Right, TR.Bottom - 2, 4, 4);
-          // Barra
-          if Pct > 0 then
-          begin
-            var BarW: Integer := MulDiv(TR.Right - TR.Left, Round(Pct), 100);
-            if Elem.BgColor <> 0 then
-              ACanvas.Brush.Color := Elem.BgColor
-            else
-              ACanvas.Brush.Color := $00FF8000;
-            ACanvas.RoundRect(TR.Left, TR.Top + 2, TR.Left + BarW, TR.Bottom - 2, 4, 4);
+          var TrackR: TRect := Rect(TR.Left, TR.Top + 2, TR.Right, TR.Bottom - 2);
+          var BarColor: TColor;
+          if Elem.BgColor <> 0 then BarColor := Elem.BgColor else BarColor := $00FF8000;
+          var GP: TGPGraphics := TGPGraphics.Create(ACanvas.Handle);
+          try
+            GP.SetSmoothingMode(SmoothingModeAntiAlias);
+            // Pista de fondo + barra de progreso, ambas redondeadas (GDI+).
+            GpRoundRect(GP, TrackR, 4, GpColor($00E0E0E0), 0, 0);
+            if Pct > 0 then
+            begin
+              var BarW: Integer := MulDiv(TR.Right - TR.Left, Round(Pct), 100);
+              GpRoundRect(GP, Rect(TrackR.Left, TrackR.Top, TrackR.Left + BarW, TrackR.Bottom),
+                4, GpColor(BarColor), 0, 0);
+            end;
+          finally
+            GP.Free;
           end;
-          ACanvas.Pen.Style := psSolid;
         end;
 
         ceSpacer: ; // no pinta nada

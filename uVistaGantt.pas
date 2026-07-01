@@ -609,14 +609,6 @@ uses
   uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts,
   uMoverFecha, Main, uBacklogScheduler;
 
-const
-  // Colores distintivos de los nodos MANUALES (V066), para diferenciarlos a
-  // simple vista de los nodos ERP (amarillo). Valores TColor (BGR).
-  MANUAL_NODE_FILL   = 16444380;  // azul muy claro
-  MANUAL_NODE_BORDER = 13135400;  // azul medio
-
-
-
 procedure TfrmVistaGantt.Colordelnode1Click(Sender: TObject);
  var
   P: TPoint;
@@ -2715,49 +2707,8 @@ procedure TfrmVistaGantt.CrearNodoManualClick(Sender: TObject);
 var
   Data: TNodoManualData;
   FIni, FFin, FechaClick: TDateTime;
-  NodeId, CentreIdClick: Integer;
+  CentreIdClick: Integer;
   ptClient: TPoint;
-  Q: TADOQuery;
-  Cmd: TADOCommand;
-  CE, PID: string;
-
-  function QS(const S: string): string;
-  begin
-    Result := QuotedStr(S);
-  end;
-  function DT(const V: TDateTime): string;
-  begin
-    Result := QuotedStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', V));
-  end;
-  // Fecha SQL, o 'NULL' literal si no hay fecha (V < 1).
-  function DTorNull(const V: TDateTime): string;
-  begin
-    if V >= 1 then
-      Result := DT(V)
-    else
-      Result := 'NULL';
-  end;
-  function Flt(const V: Double): string;
-  begin
-    Result := FloatToStr(V, TFormatSettings.Invariant);
-  end;
-  // Devuelve la clave SQL entre comillas, o 'NULL' literal si esta vacia.
-  function StrOrNull(const S: string): string;
-  begin
-    if S <> '' then
-      Result := QuotedStr(S)
-    else
-      Result := 'NULL';
-  end;
-  // CenterId SQL: el valor, o 'NULL' literal si es "Sin Centro" (<0).
-  function CenterOrNull(const ACenterId: Integer): string;
-  begin
-    if ACenterId >= 0 then
-      Result := IntToStr(ACenterId)
-    else
-      Result := 'NULL';
-  end;
-
 begin
   // Posicion del right-click capturada en popGanttPopup (cuando el cursor aun
   // estaba sobre el Gantt). Resolvemos (a) el CenterId de esa fila y (b) la
@@ -2777,72 +2728,14 @@ begin
   // motor no puede colocarlo, caemos a las fechas crudas del dialogo. (V066)
   ColocarNodoManual(Data, FIni, FFin);
 
-  CE  := IntToStr(DMPlanner.CodigoEmpresa);
-  PID := IntToStr(DMPlanner.CurrentProjectId);
-
-  DMPlanner.ADOConnection.BeginTrans;
+  // Persistencia compartida con el Kanban de capacidad finita (DMPlanner).
   try
-    // 1) FS_PL_Node con Source='MAN'. CenterId NULL si es "Sin Centro" (<0).
-    Cmd := TADOCommand.Create(nil);
-    try
-      Cmd.Connection := DMPlanner.ADOConnection;
-      Cmd.CommandText :=
-        'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, ' +
-        '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde, ' +
-        '  Visible, Habilitado, Source) VALUES (' +
-        CE + ', ' + PID + ', ' +
-        CenterOrNull(Data.CenterId) + ', ' +
-        DT(FIni) + ', ' + DT(FFin) + ', ' + Flt(Data.DuracionMin) + ', ' +
-        // Color distintivo para nodos manuales (azul claro / borde azul), para
-        // diferenciarlos de un vistazo de los nodos ERP (amarillo). (V066)
-        QS(Data.Caption) + ', ' + IntToStr(MANUAL_NODE_FILL) + ', ' +
-        IntToStr(MANUAL_NODE_BORDER) + ', 1, 1, ''MAN'')';
-      Cmd.Execute;
-    finally
-      Cmd.Free;
-    end;
-
-    // 2) Recuperar el NodeId creado (MAX dentro del mismo proyecto).
-    Q := TADOQuery.Create(nil);
-    try
-      Q.Connection := DMPlanner.ADOConnection;
-      Q.SQL.Text :=
-        'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
-        'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
-      Q.Open;
-      NodeId := Q.FieldByName('NewId').AsInteger;
-    finally
-      Q.Free;
-    end;
-
-    // 3) FS_PL_NodeData: caption como Operacion, duracion y vinculo ERP opcional.
-    //    LibreMovimiento=1 -> el nodo manual entra en el recalculo automatico.
-    Cmd := TADOCommand.Create(nil);
-    try
-      Cmd.Connection := DMPlanner.ADOConnection;
-      Cmd.CommandText :=
-        'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
-        '  DuracionMin, DuracionMinOriginal, OperariosNecesarios, ' +
-        '  LibreMovimiento, FechaEntrega, FechaNecesaria, ' +
-        '  RawItemClaveERP, RawItemTipoOrigen, ' +
-        '  ColorFondoOp, ColorBordeOp) VALUES (' +
-        CE + ', ' + IntToStr(NodeId) + ', ' + QS(Data.Operacion) + ', ' +
-        Flt(Data.DuracionMin) + ', ' + Flt(Data.DuracionMin) + ', 0, 1, ' +
-        DTorNull(Data.FechaCompromiso) + ', ' +
-        DTorNull(Data.FechaCompromiso) + ', ' +
-        StrOrNull(Data.RawItemClaveERP) + ', ' +
-        StrOrNull(Data.RawItemTipoOrigen) + ', ' +
-        '15251072, 11166760)';
-      Cmd.Execute;
-    finally
-      Cmd.Free;
-    end;
-
-    DMPlanner.ADOConnection.CommitTrans;
+    DMPlanner.CrearNodoManual(Data.Caption, Data.Operacion, Data.CenterId,
+      Data.DuracionMin, FIni, FFin, Data.FechaCompromiso,
+      Data.RawItemTipoOrigen, Data.RawItemClaveERP);
   except
     on E: Exception do
     begin
-      DMPlanner.ADOConnection.RollbackTrans;
       ShowMessage('Error al crear el nodo manual: ' + E.Message);
       Exit;
     end;

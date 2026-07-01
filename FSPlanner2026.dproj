@@ -484,6 +484,16 @@
         <DCCReference Include="uModalOverlayAuto.pas"/>
         <DCCReference Include="uHelpAutoInstall.pas"/>
         <DCCReference Include="uKPICard.pas"/>
+        <DCCReference Include="uDemoMode.pas"/>
+        <DCCReference Include="uDashWidgets.pas"/>
+        <DCCReference Include="uDashboardConfig.pas">
+            <Form>frmDashboardConfig</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uKPIDetail.pas">
+            <Form>frmKPIDetail</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uNodeLayoutEditor.pas">
             <Form>frmNodeLayoutEditor</Form>
             <FormType>dfm</FormType>

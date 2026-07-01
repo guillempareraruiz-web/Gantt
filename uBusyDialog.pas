@@ -89,6 +89,9 @@ end;
 constructor TfrmBusyDialog.Create(AOwner: TComponent);
 begin
   inherited;
+  // Siempre centrado en la PANTALLA (no en el owner, que puede estar
+  // descentrado o embebido).
+  Position := poScreenCenter;
   FAngle := 0;
   FTimer := TTimer.Create(Self);
   FTimer.Interval := 30;

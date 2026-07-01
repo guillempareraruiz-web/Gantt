@@ -11,6 +11,13 @@ uses
 
 function UserCanAccessProject(AUserId, AProjectId: Integer): Boolean;
 
+const
+  // Colores distintivos de los nodos manuales (Source='MAN', V066), para
+  // diferenciarlos de un vistazo de los nodos ERP. Compartidos por todas las
+  // pantallas que crean nodos manuales.
+  MANUAL_NODE_FILL   = 16444380;  // azul muy claro (relleno)
+  MANUAL_NODE_BORDER = 13135400;  // azul medio (borde)
+
 type
   TEstructuraNodos = (enSimple, enCompleja);
     // enSimple   : 1 OF = 1 OT = 1 OP
@@ -94,6 +101,18 @@ type
     // No comprueba bloqueo (eso es responsabilidad del llamador). Devuelve el
     // numero de nodos borrados. Compartida por Backlog y Gantt.
     function DesplanificarNodes(const ANodeIds: TArray<Integer>): Integer;
+
+    // Crea un nodo manual (Source='MAN', V066) en el proyecto activo: inserta
+    // FS_PL_Node + FS_PL_NodeData en una transaccion y devuelve el NodeId creado
+    // (0 si fallo). El llamador calcula las fechas como quiera (el Gantt via el
+    // motor de colocacion; el Kanban de capacidad finita via el centro/lane), por
+    // eso AFechaInicio/AFechaFin llegan ya resueltas. ACenterId < 0 = "Sin Centro"
+    // (CenterId NULL). El nodo nace LIBRE (LibreMovimiento=1). Compartida por
+    // uVistaGantt y uFiniteCapacityPlanner para no duplicar la persistencia.
+    function CrearNodoManual(const ACaption, AOperacion: string;
+      ACenterId: Integer; ADuracionMin: Double;
+      AFechaInicio, AFechaFin, AFechaCompromiso: TDateTime;
+      const ARawItemTipoOrigen, ARawItemClaveERP: string): Integer;
 
     // --- Lotes (batch) de planificacion (V057) -----------------------------
     // Agrupa varios nodos en un lote: valida mismo centro, crea el lote, asigna
@@ -354,6 +373,125 @@ begin
     ADOConnection.CommitTrans;
   except
     ADOConnection.RollbackTrans;
+    raise;
+  end;
+end;
+
+function TDMPlanner.CrearNodoManual(const ACaption, AOperacion: string;
+  ACenterId: Integer; ADuracionMin: Double;
+  AFechaInicio, AFechaFin, AFechaCompromiso: TDateTime;
+  const ARawItemTipoOrigen, ARawItemClaveERP: string): Integer;
+var
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  CE, PID: string;
+
+  function QS(const S: string): string;
+  begin
+    Result := QuotedStr(S);
+  end;
+  function DT(const V: TDateTime): string;
+  begin
+    Result := QuotedStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', V));
+  end;
+  // Fecha SQL, o 'NULL' literal si no hay fecha (V < 1).
+  function DTorNull(const V: TDateTime): string;
+  begin
+    if V >= 1 then
+      Result := DT(V)
+    else
+      Result := 'NULL';
+  end;
+  function Flt(const V: Double): string;
+  begin
+    Result := FloatToStr(V, TFormatSettings.Invariant);
+  end;
+  // Devuelve la clave SQL entre comillas, o 'NULL' literal si esta vacia.
+  function StrOrNull(const S: string): string;
+  begin
+    if S <> '' then
+      Result := QuotedStr(S)
+    else
+      Result := 'NULL';
+  end;
+  // CenterId SQL: el valor, o 'NULL' literal si es "Sin Centro" (<0).
+  function CenterOrNull(const ACId: Integer): string;
+  begin
+    if ACId >= 0 then
+      Result := IntToStr(ACId)
+    else
+      Result := 'NULL';
+  end;
+
+begin
+  Result := 0;
+  if not IsConnected then Exit;
+
+  CE  := IntToStr(FCodigoEmpresa);
+  PID := IntToStr(FCurrentProjectId);
+
+  ADOConnection.BeginTrans;
+  try
+    // 1) FS_PL_Node con Source='MAN'. CenterId NULL si es "Sin Centro" (<0).
+    //    Color distintivo (azul claro / borde azul) para diferenciarlos de un
+    //    vistazo de los nodos ERP (amarillo). (V066)
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+      Cmd.CommandText :=
+        'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, ' +
+        '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde, ' +
+        '  Visible, Habilitado, Source) VALUES (' +
+        CE + ', ' + PID + ', ' +
+        CenterOrNull(ACenterId) + ', ' +
+        DT(AFechaInicio) + ', ' + DT(AFechaFin) + ', ' + Flt(ADuracionMin) + ', ' +
+        QS(ACaption) + ', ' + IntToStr(MANUAL_NODE_FILL) + ', ' +
+        IntToStr(MANUAL_NODE_BORDER) + ', 1, 1, ''MAN'')';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    // 2) Recuperar el NodeId creado (MAX dentro del mismo proyecto).
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := ADOConnection;
+      Q.SQL.Text :=
+        'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
+        'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+      Q.Open;
+      Result := Q.FieldByName('NewId').AsInteger;
+    finally
+      Q.Free;
+    end;
+
+    // 3) FS_PL_NodeData: caption como Operacion, duracion y vinculo ERP opcional.
+    //    LibreMovimiento=1 -> el nodo manual entra en el recalculo automatico.
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+      Cmd.CommandText :=
+        'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
+        '  DuracionMin, DuracionMinOriginal, OperariosNecesarios, ' +
+        '  LibreMovimiento, FechaEntrega, FechaNecesaria, ' +
+        '  RawItemClaveERP, RawItemTipoOrigen, ' +
+        '  ColorFondoOp, ColorBordeOp) VALUES (' +
+        CE + ', ' + IntToStr(Result) + ', ' + QS(AOperacion) + ', ' +
+        Flt(ADuracionMin) + ', ' + Flt(ADuracionMin) + ', 0, 1, ' +
+        DTorNull(AFechaCompromiso) + ', ' +
+        DTorNull(AFechaCompromiso) + ', ' +
+        StrOrNull(ARawItemClaveERP) + ', ' +
+        StrOrNull(ARawItemTipoOrigen) + ', ' +
+        '15251072, 11166760)';
+      Cmd.Execute;
+    finally
+      Cmd.Free;
+    end;
+
+    ADOConnection.CommitTrans;
+  except
+    ADOConnection.RollbackTrans;
+    Result := 0;
     raise;
   end;
 end;

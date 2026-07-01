@@ -31,8 +31,8 @@ object Form1: TForm1
       1092
       33)
     object Label28: TLabel
-      Left = 760
-      Top = 2
+      Left = 714
+      Top = 3
       Width = 240
       Height = 19
       Alignment = taRightJustify
@@ -48,8 +48,8 @@ object Form1: TForm1
       Layout = tlCenter
     end
     object Label29: TLabel
-      Left = 904
-      Top = 12
+      Left = 858
+      Top = 13
       Width = 96
       Height = 19
       Alignment = taRightJustify
@@ -141,7 +141,6 @@ object Form1: TForm1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
       TabOrder = 3
-      ExplicitLeft = 573
     end
     object btnTB_PlaniOperarios: TcxButton
       AlignWithMargins = True
@@ -183,12 +182,12 @@ object Form1: TForm1
     end
     object btnTB_Help: TcxButton
       AlignWithMargins = True
-      Left = 1005
-      Top = 5
+      Left = 961
+      Top = 6
       Width = 25
-      Height = 23
-      Margins.Top = 5
-      Margins.Bottom = 5
+      Height = 21
+      Margins.Top = 6
+      Margins.Bottom = 6
       Align = alRight
       Caption = '?'
       LookAndFeel.Kind = lfOffice11
@@ -198,6 +197,9 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 6
       OnClick = btnTB_HelpClick
+      ExplicitLeft = 950
+      ExplicitTop = 5
+      ExplicitHeight = 23
     end
     object btnLinkERP: TcxButton
       AlignWithMargins = True
@@ -222,6 +224,32 @@ object Form1: TForm1
       Font.Style = [fsBold]
       ParentFont = False
       OnClick = btnLinkERPClick
+    end
+    object btnTB_Demo: TcxButton
+      AlignWithMargins = True
+      Left = 992
+      Top = 6
+      Width = 37
+      Height = 21
+      Margins.Top = 6
+      Margins.Right = 4
+      Margins.Bottom = 6
+      Align = alRight
+      Caption = 'Demo'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 2
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.AllowAllUp = True
+      TabOrder = 10
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      OnClick = btnTB_DemoClick
     end
     object cxButton2: TcxButton
       AlignWithMargins = True
