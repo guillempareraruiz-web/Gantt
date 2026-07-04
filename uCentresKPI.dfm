@@ -110,25 +110,52 @@ object frmCentresKPI: TfrmCentresKPI
       Caption = '  C - Todo el Gantt  '
       ImageIndex = 2
     end
-  end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 750
-    Width = 1120
-    Height = 50
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 2
-    object btnCerrar: TButton
-      Left = 1010
-      Top = 10
-      Width = 95
-      Height = 30
-      Cancel = True
-      Caption = 'Cerrar'
-      ModalResult = 2
-      TabOrder = 0
-      OnClick = btnCerrarClick
+    object tsBloqueD: TTabSheet
+      Caption = '  D - Fecha personalizada  '
+      ImageIndex = 3
+      object pnlFechaD: TPanel
+        Left = 0
+        Top = 0
+        Width = 772
+        Height = 44
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 0
+        object lblDesdeD: TLabel
+          Left = 14
+          Top = 14
+          Width = 41
+          Height = 15
+          Caption = 'Desde:'
+        end
+        object lblHastaD: TLabel
+          Left = 232
+          Top = 14
+          Width = 38
+          Height = 15
+          Caption = 'Hasta:'
+        end
+        object dtDesdeD: TDateTimePicker
+          Left = 62
+          Top = 10
+          Width = 150
+          Height = 23
+          Date = 46204.000000000000000000
+          Time = 46204.000000000000000000
+          TabOrder = 0
+          OnChange = FechaDChange
+        end
+        object dtHastaD: TDateTimePicker
+          Left = 276
+          Top = 10
+          Width = 150
+          Height = 23
+          Date = 46234.000000000000000000
+          Time = 46234.000000000000000000
+          TabOrder = 1
+          OnChange = FechaDChange
+        end
+      end
     end
   end
 end

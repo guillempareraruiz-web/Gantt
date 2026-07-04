@@ -55,17 +55,16 @@ object frmDashboard: TfrmDashboard
       ParentFont = False
     end
     object lblFechaHora: TLabel
-      Left = 644
+      Left = 777
       Top = 2
-      Width = 240
-      Height = 28
+      Width = 107
+      Height = 23
       Alignment = taRightJustify
       Anchors = [akTop, akRight]
-      AutoSize = False
       Caption = '--/--/---- --:--'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWhite
-      Font.Height = -19
+      Font.Height = -17
       Font.Name = 'Segoe UI'
       Font.Style = []
       ParentFont = False
@@ -89,6 +88,7 @@ object frmDashboard: TfrmDashboard
       ParentFont = False
       Transparent = True
       Layout = tlCenter
+      Visible = False
       OnClick = lblPendingSyncClick
     end
     object imgSection: TcxImage
@@ -134,7 +134,7 @@ object frmDashboard: TfrmDashboard
     end
     object btnConfig: TcxButton
       Left = 867
-      Top = 47
+      Top = 46
       Width = 24
       Height = 19
       Cursor = crHandPoint

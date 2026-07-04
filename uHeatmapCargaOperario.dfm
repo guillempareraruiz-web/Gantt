@@ -5,7 +5,7 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
   BorderStyle = bsDialog
   Caption = 'Heatmap de carga por operario'
   ClientHeight = 620
-  ClientWidth = 1320
+  ClientWidth = 1100
   Color = 16317660
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -21,13 +21,14 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 1320
+    Width = 1100
     Height = 64
     Align = alTop
     BevelOuter = bvNone
     Color = 3553567
     ParentBackground = False
     TabOrder = 0
+    ExplicitWidth = 1320
     object lblTitle: TLabel
       Left = 16
       Top = 8
@@ -44,9 +45,9 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
     object lblSubtitle: TLabel
       Left = 16
       Top = 38
-      Width = 460
+      Width = 404
       Height = 15
-      Caption =
+      Caption = 
         '% de ocupaci'#243'n por operario y periodo. Datos del plan activo (as' +
         'ignaciones).'
       Font.Charset = DEFAULT_CHARSET
@@ -60,15 +61,16 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
   object pnlToolbar: TPanel
     Left = 0
     Top = 64
-    Width = 1320
+    Width = 1100
     Height = 65
     Align = alTop
     BevelOuter = bvNone
     Color = 16317660
     ParentBackground = False
     TabOrder = 1
+    ExplicitWidth = 1320
     DesignSize = (
-      1320
+      1100
       65)
     object lblGran: TLabel
       Left = 16
@@ -78,30 +80,30 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
       Caption = 'Granularidad:'
     end
     object lblNum: TLabel
-      Left = 238
+      Left = 150
       Top = 15
-      Width = 96
+      Width = 49
       Height = 15
-      Caption = 'N'#250'mero periodos:'
+      Caption = 'Periodos:'
     end
     object lblDesde: TLabel
-      Left = 368
-      Top = 15
+      Left = 227
+      Top = 16
       Width = 35
       Height = 15
       Caption = 'Desde:'
     end
     object lblOperarios: TLabel
-      Left = 520
-      Top = 14
-      Width = 53
+      Left = 379
+      Top = 15
+      Width = 54
       Height = 15
       Caption = 'Operarios:'
     end
     object cmbGranularidad: TComboBox
       Left = 16
       Top = 31
-      Width = 200
+      Width = 110
       Height = 23
       Style = csDropDownList
       TabOrder = 0
@@ -112,9 +114,9 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
         'Meses')
     end
     object spNumPeriodos: TSpinEdit
-      Left = 238
+      Left = 150
       Top = 31
-      Width = 107
+      Width = 55
       Height = 24
       MaxValue = 52
       MinValue = 1
@@ -123,8 +125,8 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
       OnChange = ParametrosChange
     end
     object dtDesde: TDateTimePicker
-      Left = 368
-      Top = 31
+      Left = 227
+      Top = 32
       Width = 130
       Height = 23
       Date = 46163.000000000000000000
@@ -132,21 +134,33 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
       TabOrder = 2
       OnChange = ParametrosChange
     end
-    object btnRecalcular: TButton
-      Left = 1186
+    object btnRecalcular: TcxButton
+      Left = 966
       Top = 24
       Width = 110
       Height = 28
       Anchors = [akTop, akRight]
       Caption = 'Recalcular'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
       TabOrder = 3
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
       OnClick = btnRecalcularClick
+      ExplicitLeft = 1186
     end
     object cbOperarios: TcxCheckComboBox
-      Left = 520
-      Top = 30
+      Left = 379
+      Top = 31
       AutoSize = False
       Properties.EmptySelectionText = 'Todos los operarios'
+      Properties.EditValueFormat = cvfIndices
       Properties.Items = <>
       Properties.OnEditValueChanged = cbOperariosChange
       TabOrder = 4
@@ -157,13 +171,14 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
   object pnlLegend: TPanel
     Left = 0
     Top = 129
-    Width = 1320
+    Width = 1100
     Height = 40
     Align = alTop
     BevelOuter = bvNone
     Color = 16317660
     ParentBackground = False
     TabOrder = 2
+    ExplicitWidth = 1320
     object pbLegend: TPaintBox
       Left = 16
       Top = 6
@@ -175,13 +190,14 @@ object frmHeatmapCargaOperario: TfrmHeatmapCargaOperario
   object sbMatrix: TScrollBox
     Left = 0
     Top = 169
-    Width = 1320
-    Height = 411
+    Width = 1100
+    Height = 451
     Align = alClient
     BorderStyle = bsNone
     Color = 16317660
     ParentColor = False
-    TabOrder = 4
+    TabOrder = 3
+    ExplicitWidth = 1320
     object pbMatrix: TPaintBox
       Left = 0
       Top = 0

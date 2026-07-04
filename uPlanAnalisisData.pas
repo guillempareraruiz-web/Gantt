@@ -43,6 +43,19 @@ type
     function OcupacionPct: Double;   // total carga / total capacidad * 100
   end;
 
+  // Carga (horas) y capacidad (horas) de un operario, periodo a periodo.
+  // Analogo a TCargaCentro pero la carga sale de FS_PL_OperatorAssignment
+  // (horas asignadas al operario) y la capacidad del calendario del operario.
+  TCargaOperario = record
+    OperatorId: Integer;
+    Nombre: string;
+    HorasCarga: TArray<Double>;     // por periodo
+    HorasCapacidad: TArray<Double>; // por periodo (-1 si no hay calendario)
+    function TotalCarga: Double;
+    function TotalCapacidad: Double;
+    function OcupacionPct: Double;
+  end;
+
   TOtdResultado = record
     Total: Integer;
     ATiempo: Integer;
@@ -89,6 +102,7 @@ type
   TPlanAnalisis = record
     Periodos: TArray<TPeriodoPlan>;
     Centros: TArray<TCargaCentro>;
+    Operarios: TArray<TCargaOperario>;   // RECURSOS: carga/capacidad por operario
     Otd: TOtdResultado;
     CargaTotalPorPeriodo: TArray<Double>;
     CapacidadTotalPorPeriodo: TArray<Double>;
@@ -135,6 +149,31 @@ begin
 end;
 
 function TCargaCentro.OcupacionPct: Double;
+var Cap: Double;
+begin
+  Cap := TotalCapacidad;
+  if Cap <= 0 then Exit(0);
+  Result := TotalCarga / Cap * 100.0;
+end;
+
+{ TCargaOperario }
+
+function TCargaOperario.TotalCarga: Double;
+var V: Double;
+begin
+  Result := 0;
+  for V in HorasCarga do Result := Result + V;
+end;
+
+function TCargaOperario.TotalCapacidad: Double;
+var V: Double;
+begin
+  Result := 0;
+  for V in HorasCapacidad do
+    if V > 0 then Result := Result + V;
+end;
+
+function TCargaOperario.OcupacionPct: Double;
 var Cap: Double;
 begin
   Cap := TotalCapacidad;
@@ -285,6 +324,156 @@ begin
     end;
   finally
     IdxById.Free;
+  end;
+end;
+
+{ Carga por operario (prorrateo) + capacidad }
+// Misma logica que CalcularCarga (centros) pero la carga sale de las horas
+// asignadas al operario en FS_PL_OperatorAssignment (prorrateadas por el
+// solapamiento temporal del nodo con cada periodo) y la capacidad del
+// calendario del operario (FS_PL_Operator.CalendarId). Mismo patron que
+// uHeatmapCargaOperario.
+
+procedure CalcularCargaOperario(const APeriodos: TArray<TPeriodoPlan>;
+  var AOperarios: TArray<TCargaOperario>);
+var
+  Q: TADOQuery;
+  IdxById: TDictionary<Integer, Integer>;
+  CalIds: TDictionary<Integer, Integer>;   // OperatorId -> CalendarId
+  List: TList<TCargaOperario>;
+  Op: TCargaOperario;
+  I, J, OIdx, ProjectId, OperatorId, CalId: Integer;
+  HIni, HFin, NodeIni, NodeFin: TDateTime;
+  Horas, NodeDur, OvStart, OvEnd, OverlapMin, HorasParte: Double;
+  Cal: TCentreCalendar;
+  CapMin: Integer;
+begin
+  SetLength(AOperarios, 0);
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) or
+     (not DMPlanner.ADOConnection.Connected) then Exit;
+
+  // 1. Operarios activos (id, nombre, calendario).
+  List := TList<TCargaOperario>.Create;
+  IdxById := TDictionary<Integer, Integer>.Create;
+  CalIds := TDictionary<Integer, Integer>.Create;
+  try
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT OperatorId, Nombre, ISNULL(CalendarId, 0) AS CalendarId ' +
+        'FROM FS_PL_Operator ' +
+        'WHERE CodigoEmpresa = :CE AND ISNULL(Activo, 1) = 1 ' +
+        'ORDER BY Nombre';
+      Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+      try
+        Q.Open;
+        while not Q.Eof do
+        begin
+          Op := Default(TCargaOperario);
+          Op.OperatorId := Q.FieldByName('OperatorId').AsInteger;
+          Op.Nombre := Q.FieldByName('Nombre').AsString;
+          if Trim(Op.Nombre) = '' then
+            Op.Nombre := 'Operario #' + IntToStr(Op.OperatorId);
+          SetLength(Op.HorasCarga, Length(APeriodos));
+          SetLength(Op.HorasCapacidad, Length(APeriodos));
+          IdxById.AddOrSetValue(Op.OperatorId, List.Count);
+          CalIds.AddOrSetValue(Op.OperatorId,
+            Q.FieldByName('CalendarId').AsInteger);
+          List.Add(Op);
+          Q.Next;
+        end;
+      except
+        // Si FS_PL_Operator no existe (instalacion sin V019), sin operarios.
+      end;
+    finally
+      Q.Free;
+    end;
+
+    AOperarios := List.ToArray;
+    if (Length(AOperarios) = 0) or (Length(APeriodos) = 0) then Exit;
+
+    HIni := APeriodos[0].Inicio;
+    HFin := APeriodos[High(APeriodos)].Fin;
+    ProjectId := DMPlanner.CurrentProjectId;
+
+    // 2. Prorrateo de las horas asignadas por periodo.
+    if ProjectId > 0 then
+    begin
+      Q := TADOQuery.Create(nil);
+      try
+        Q.Connection := DMPlanner.ADOConnection;
+        Q.SQL.Text :=
+          'SELECT oa.OperatorId, oa.Horas, n.FechaInicio, n.FechaFin ' +
+          'FROM FS_PL_OperatorAssignment oa ' +
+          'INNER JOIN FS_PL_Node n ON n.CodigoEmpresa = oa.CodigoEmpresa ' +
+          '                       AND n.NodeId = oa.NodeId ' +
+          'WHERE oa.CodigoEmpresa = :CE AND n.ProjectId = :PID ' +
+          '  AND n.FechaInicio IS NOT NULL AND n.FechaFin IS NOT NULL ' +
+          '  AND n.FechaFin >= :HInicio AND n.FechaInicio < :HFin';
+        Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+        Q.Parameters.ParamByName('PID').Value := ProjectId;
+        Q.Parameters.ParamByName('HInicio').Value := HIni;
+        Q.Parameters.ParamByName('HFin').Value := HFin;
+        try
+          Q.Open;
+          while not Q.Eof do
+          begin
+            OperatorId := Q.FieldByName('OperatorId').AsInteger;
+            if IdxById.TryGetValue(OperatorId, OIdx) then
+            begin
+              NodeIni := Q.FieldByName('FechaInicio').AsDateTime;
+              NodeFin := Q.FieldByName('FechaFin').AsDateTime;
+              Horas   := Q.FieldByName('Horas').AsFloat;
+              NodeDur := MinutesBetween(NodeFin, NodeIni);
+              if (NodeDur > 0) and (Horas > 0) then
+                for J := 0 to High(APeriodos) do
+                begin
+                  OvStart := APeriodos[J].Inicio;
+                  if NodeIni > OvStart then OvStart := NodeIni;
+                  OvEnd := APeriodos[J].Fin;
+                  if NodeFin < OvEnd then OvEnd := NodeFin;
+                  if OvEnd <= OvStart then Continue;
+                  OverlapMin := MinutesBetween(OvEnd, OvStart);
+                  HorasParte := Horas * (OverlapMin / NodeDur);
+                  AOperarios[OIdx].HorasCarga[J] :=
+                    AOperarios[OIdx].HorasCarga[J] + HorasParte;
+                end;
+            end;
+            Q.Next;
+          end;
+        except
+          // Si FS_PL_OperatorAssignment no existe, dejamos la carga a 0.
+        end;
+      finally
+        Q.Free;
+      end;
+    end;
+
+    // 3. Capacidad por operario/periodo via calendario.
+    for I := 0 to High(AOperarios) do
+    begin
+      Cal := nil;
+      CalId := 0;
+      CalIds.TryGetValue(AOperarios[I].OperatorId, CalId);
+      if (DMPlanner.CalendarsRepo <> nil) and (CalId > 0) then
+        DMPlanner.CalendarsRepo.TryGetById(CalId, Cal);
+      for J := 0 to High(APeriodos) do
+      begin
+        if Cal = nil then
+        begin
+          AOperarios[I].HorasCapacidad[J] := -1;
+          Continue;
+        end;
+        CapMin := Cal.WorkingMinutesBetween(APeriodos[J].Inicio, APeriodos[J].Fin);
+        if CapMin <= 0 then AOperarios[I].HorasCapacidad[J] := -1
+        else AOperarios[I].HorasCapacidad[J] := CapMin / 60.0;
+      end;
+    end;
+  finally
+    IdxById.Free;
+    CalIds.Free;
+    List.Free;
   end;
 end;
 
@@ -677,6 +866,7 @@ begin
   Result := Default(TPlanAnalisis);
   Result.Periodos := APeriodos;
   CalcularCarga(APeriodos, Result.Centros);
+  CalcularCargaOperario(APeriodos, Result.Operarios);
   Result.Otd := CalcularOTD;
 
   // Totales por periodo (curva temporal).

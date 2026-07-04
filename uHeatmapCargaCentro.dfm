@@ -78,21 +78,21 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
       Caption = 'Granularidad:'
     end
     object lblNum: TLabel
-      Left = 238
+      Left = 150
       Top = 15
-      Width = 96
+      Width = 49
       Height = 15
-      Caption = 'N'#250'mero periodos:'
+      Caption = 'Periodos:'
     end
     object lblDesde: TLabel
-      Left = 368
-      Top = 15
+      Left = 227
+      Top = 16
       Width = 35
       Height = 15
       Caption = 'Desde:'
     end
     object lblCentros: TLabel
-      Left = 520
+      Left = 379
       Top = 14
       Width = 44
       Height = 15
@@ -101,7 +101,7 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
     object cmbGranularidad: TComboBox
       Left = 16
       Top = 31
-      Width = 200
+      Width = 110
       Height = 23
       Style = csDropDownList
       TabOrder = 0
@@ -112,9 +112,9 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
         'Meses')
     end
     object spNumPeriodos: TSpinEdit
-      Left = 238
+      Left = 150
       Top = 31
-      Width = 107
+      Width = 55
       Height = 24
       MaxValue = 52
       MinValue = 1
@@ -123,8 +123,8 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
       OnChange = ParametrosChange
     end
     object dtDesde: TDateTimePicker
-      Left = 368
-      Top = 31
+      Left = 227
+      Top = 32
       Width = 130
       Height = 23
       Date = 46163.000000000000000000
@@ -132,21 +132,32 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
       TabOrder = 2
       OnChange = ParametrosChange
     end
-    object btnRecalcular: TButton
+    object btnRecalcular: TcxButton
       Left = 1186
       Top = 24
       Width = 110
       Height = 28
       Anchors = [akTop, akRight]
       Caption = 'Recalcular'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
       TabOrder = 3
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
       OnClick = btnRecalcularClick
     end
     object cbCentros: TcxCheckComboBox
-      Left = 520
-      Top = 30
+      Left = 379
+      Top = 31
       AutoSize = False
       Properties.EmptySelectionText = 'Todos los centros'
+      Properties.EditValueFormat = cvfIndices
       Properties.Items = <>
       Properties.OnEditValueChanged = cbCentrosChange
       TabOrder = 4
@@ -164,7 +175,6 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
     Color = 16317660
     ParentBackground = False
     TabOrder = 2
-    ExplicitTop = 108
     object pbLegend: TPaintBox
       Left = 16
       Top = 6
@@ -173,25 +183,79 @@ object frmHeatmapCargaCentro: TfrmHeatmapCargaCentro
       OnPaint = pbLegendPaint
     end
   end
-  object sbMatrix: TScrollBox
+  object pcVistas: TPageControl
     Left = 0
     Top = 169
     Width = 1320
-    Height = 411
-    VertScrollBar.Position = 38
+    Height = 451
+    ActivePage = tabMatriz
     Align = alClient
-    BorderStyle = bsNone
-    Color = 16317660
-    ParentColor = False
-    TabOrder = 4
-    ExplicitTop = 148
-    ExplicitHeight = 432
-    object pbMatrix: TPaintBox
-      Left = 0
-      Top = -38
-      Width = 1320
-      Height = 432
-      OnPaint = pbMatrixPaint
+    TabOrder = 3
+    OnChange = pcVistasChange
+    object tabMatriz: TTabSheet
+      Caption = 'Matriz'
+      object sbMatrix: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 421
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbMatrix: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 421
+          OnPaint = pbMatrixPaint
+        end
+      end
+    end
+    object tabPareto: TTabSheet
+      Caption = 'Pareto de sobrecarga'
+      ImageIndex = 1
+      object sbPareto: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 421
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbPareto: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 421
+          OnPaint = pbParetoPaint
+        end
+      end
+    end
+    object tabAnalisis: TTabSheet
+      Caption = 'Capacidad (cascada)'
+      ImageIndex = 2
+      object sbAnalisis: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 421
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbAnalisis: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 421
+          OnPaint = pbAnalisisPaint
+        end
+      end
     end
   end
 end

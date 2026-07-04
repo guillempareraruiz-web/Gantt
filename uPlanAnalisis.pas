@@ -76,6 +76,8 @@ type
     // Pintores implementados
     procedure PintarCargaVsCapacidad(Ch: TChart);
     procedure PintarOcupacion(Ch: TChart);
+    procedure PintarCargaVsCapacidadOperario(Ch: TChart);
+    procedure PintarOcupacionOperario(Ch: TChart);
     procedure PintarCurva(Ch: TChart);
     procedure PintarOtd(Ch: TChart);
     procedure PintarCargaApilada(Ch: TChart);
@@ -187,8 +189,8 @@ begin
   Reg('Mix',       'N'#186' operaciones por centro',        PintarOpsPorCentro);
 
   // --- RECURSOS ---
-  Reg('Recursos',  'Carga vs capacidad por operario',  nil);  // pendiente
-  Reg('Recursos',  'Ocupaci'#243'n de operarios',          nil);  // pendiente
+  Reg('Recursos',  'Carga vs capacidad por operario',  PintarCargaVsCapacidadOperario);
+  Reg('Recursos',  'Ocupaci'#243'n de operarios',          PintarOcupacionOperario);
 
   // --- EFICIENCIA ---
   Reg('Eficiencia','% tiempo productivo vs setup',     PintarProductivoSetup);
@@ -460,6 +462,78 @@ begin
     else if Pct >= 80 then Color := CLR_WARN
     else Color := CLR_OK;
     Bar.Add(Pct, C.Nombre, Color);
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// Recursos 1. Carga vs capacidad por operario
+// ---------------------------------------------------------------------------
+procedure TfrmPlanAnalisis.PintarCargaVsCapacidadOperario(Ch: TChart);
+var
+  Bar: TBarSeries;
+  Lin: TLineSeries;
+  I: Integer;
+  O: TCargaOperario;
+  Carga, Cap: Double;
+  Color: TColor;
+begin
+  Ch.RemoveAllSeries;
+  Ch.Title.Text.Text := 'Carga vs capacidad por operario (h)';
+
+  Bar := TBarSeries.Create(Ch);
+  Bar.Title := 'Carga';
+  Bar.Marks.Visible := False;
+  Bar.BarWidthPercent := 70;
+  Ch.AddSeries(Bar);
+
+  Lin := TLineSeries.Create(Ch);
+  Lin.Title := 'Capacidad';
+  Lin.Color := CLR_CAP;
+  Lin.LinePen.Width := 2;
+  Lin.Pointer.Visible := False;
+  Ch.AddSeries(Lin);
+
+  for I := 0 to High(FData.Operarios) do
+  begin
+    O := FData.Operarios[I];
+    Carga := O.TotalCarga;
+    Cap := O.TotalCapacidad;
+    if (Carga <= 0) and (Cap <= 0) then Continue;
+    if (Cap > 0) and (Carga > Cap) then Color := CLR_BAD else Color := CLR_CARGA;
+    Bar.Add(Carga, O.Nombre, Color);
+    Lin.Add(Cap, O.Nombre, CLR_CAP);
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// Recursos 2. Ocupacion de operarios
+// ---------------------------------------------------------------------------
+procedure TfrmPlanAnalisis.PintarOcupacionOperario(Ch: TChart);
+var
+  Bar: THorizBarSeries;
+  I: Integer;
+  O: TCargaOperario;
+  Pct: Double;
+  Color: TColor;
+begin
+  Ch.RemoveAllSeries;
+  Ch.Title.Text.Text := 'Ocupaci'#243'n de operarios (%)';
+
+  Bar := THorizBarSeries.Create(Ch);
+  Bar.Marks.Visible := True;
+  Bar.Marks.Style := smsValue;
+  Bar.BarWidthPercent := 60;
+  Ch.AddSeries(Bar);
+
+  for I := 0 to High(FData.Operarios) do
+  begin
+    O := FData.Operarios[I];
+    if O.TotalCapacidad <= 0 then Continue;
+    Pct := O.OcupacionPct;
+    if Pct >= 100 then Color := CLR_BAD
+    else if Pct >= 80 then Color := CLR_WARN
+    else Color := CLR_OK;
+    Bar.Add(Pct, O.Nombre, Color);
   end;
 end;
 

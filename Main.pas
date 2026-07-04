@@ -714,15 +714,28 @@ end;
 
 procedure TForm1.Indicadoresdecentros1Click(Sender: TObject);
 begin
+  // Los indicadores se calculan sobre los nodos cargados en el Gantt. Si la
+  // vista Gantt aun no se ha abierto (FVistaGantt = nil), acceder a su control
+  // provocaria un Access Violation, asi que avisamos al usuario.
+  if not HasActivePlan then
+  begin
+    ShowMessage('Primero selecciona un plan activo para ver los indicadores de centros.');
+    Exit;
+  end;
+  if (FVistaGantt = nil) or (FVistaGantt.GanttControl = nil) then
+  begin
+    ShowMessage('Abre primero la vista Gantt (Cronograma) para cargar el plan; '
+      + 'despu'#233's podr'#225's consultar los indicadores de centros.');
+    Exit;
+  end;
 
- TfrmCentresKPI.Execute(
+  TfrmCentresKPI.Execute(
     Self,
     DMPlanner.CentresRepo.GetAll,
-    FVistaGantt.FGanttControl,
+    FVistaGantt.GanttControl,
     DMPlanner.NodeDataRepo,
     FVistaGantt.FOperariosRepo,
     0);
-
 end;
 
 procedure TForm1.btnLinkERPClick(Sender: TObject);

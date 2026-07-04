@@ -176,7 +176,9 @@ type
     FWDonutPedidos: TObject;
     FWGaugeSaturacion: TObject; // TGaugeWidget
     FWTimeline: TObject;      // TTimelineWidget
-    FWStripH: Integer;        // alto de la franja de widgets (para el layout)
+    // El cronograma es una seccion propia (tarjeta blanca), hermana de las
+    // demas. pnlProyectoActivo queda solo con los indicadores (donuts+gauge).
+    FCardCronograma: TPanel;
 
     // Builder generico del menu "Auto" (lo comparten ambas secciones).
     procedure BuildAutoMenu(APopup: TPopupMenu; AHandler: TNotifyEvent);
@@ -197,6 +199,7 @@ type
 
     procedure BuildProyectoWidgets;
     procedure LayoutProyectoWidgets;
+    function LayoutCronogramaSection(AX, AY, AContentW: Integer): Integer;
     procedure BuildErpSection;
     procedure LayoutErpSection(ATop: Integer);
     procedure ComprobarErp(Sender: TObject);
@@ -207,7 +210,6 @@ type
     procedure ComprobarMaestros(Sender: TObject);
     procedure SincronizarMaestros(Sender: TObject);
     procedure BuildRangoSelector;
-    procedure ReorganizarDetalleProyecto;
     procedure AbrirConfigCards;
     procedure SetCardVisible(const AKey: string; AVisible: Boolean);
     procedure BuildScrollContainer;
@@ -271,6 +273,7 @@ implementation
 {$R *.dfm}
 uses
   Vcl.Dialogs, System.DateUtils, System.Math, System.JSON, System.StrUtils,
+  System.Generics.Collections, System.Generics.Defaults,
   cxScrollBox,
   Data.Win.ADODB, Data.DB,
   uDMPlanner, uLogin, uGestionAreas, uGestionDepartamentos, uGestionCalendarios,
@@ -293,13 +296,16 @@ procedure TfrmDashboard.FormCreate(Sender: TObject);
 begin
   FRangoDias := 14;   // periodo por defecto (se puede sobreescribir por pref)
   // Orden por defecto de las secciones (reordenable por el usuario).
-  FSectionOrder := ['header', 'kpis', 'proyecto', 'erp', 'maestros', 'acciones'];
+  FSectionOrder := ['header', 'kpis', 'proyecto', 'cronograma', 'erp', 'maestros', 'acciones'];
   BuildScrollContainer;
   BuildRangoSelector;
   BuildErpSection;   // antes de BuildKPICards: LoadCardOrder lee el intervalo ERP
   BuildMaestrosSection;
-  BuildKPICards;
+  // BuildProyectoWidgets crea FCardCronograma (seccion 'cronograma'); debe ir
+  // ANTES de BuildKPICards -> LoadCardOrder, para que SectionControl('cronograma')
+  // ya resuelva al reconciliar el orden guardado (si no, la clave se descarta).
   BuildProyectoWidgets;
+  BuildKPICards;
   BuildSectionHandles;
   HideOldMetricLabels;
   // Relayout tambien desde el OnResize del FORM (maximize/restore/minimize no
@@ -340,7 +346,8 @@ begin
   FHandles := TStringList.Create;
   NewHandle('header');    // en pnlEmpresa
   NewHandle('kpis');      // en pnlMetricas
-  NewHandle('proyecto');  // en pnlProyectoActivo
+  NewHandle('proyecto');    // en pnlProyectoActivo (indicadores)
+  NewHandle('cronograma');  // en FCardCronograma
   NewHandle('erp');       // en FPnlErp
   NewHandle('maestros');  // en FPnlMaestros
   NewHandle('acciones');  // en pnlAcciones
@@ -351,6 +358,7 @@ begin
   if AKey = 'header' then Result := pnlEmpresa
   else if AKey = 'kpis' then Result := pnlMetricas
   else if AKey = 'proyecto' then Result := pnlProyectoActivo
+  else if AKey = 'cronograma' then Result := FCardCronograma
   else if AKey = 'erp' then Result := FPnlErp
   else if AKey = 'maestros' then Result := FPnlMaestros
   else if AKey = 'acciones' then Result := pnlAcciones
@@ -490,8 +498,6 @@ end;
 // del proyecto. Se crean en la parte superior de pnlProyectoActivo y se empuja
 // hacia abajo el texto existente (que queda como detalle).
 procedure TfrmDashboard.BuildProyectoWidgets;
-const
-  StripH = 210;   // franja para: fila de donuts/gauge (130) + timeline (70) + aire
 var
   I: Integer;
   Ctrl: TControl;
@@ -499,23 +505,22 @@ var
   function NewDonut(const ACaption: string; ATone: TDashTone): TDonutWidget;
   begin
     Result := TDonutWidget.Create(Self);
-    Result.Parent := pnlProyectoActivo;
+    Result.Parent := pnlProyectoActivo;   // seccion "indicadores" (blanca)
     Result.Caption := ACaption;
     Result.Tone := ATone;
     Result.BackColor := pnlProyectoActivo.Color;
   end;
 
 begin
-  FWStripH := StripH;
-
-  // Empujar hacia abajo el contenido textual actual del panel, para dejar
-  // sitio arriba a la franja de widgets. Ampliar el panel otro tanto.
+  // La seccion "Proyecto activo" queda solo con los indicadores (donuts+gauge).
+  // Ocultamos el titulo y todo el detalle textual (peticion del usuario).
+  lblProyectoActivoCap.Visible := False;
   for I := 0 to pnlProyectoActivo.ControlCount - 1 do
   begin
     Ctrl := pnlProyectoActivo.Controls[I];
-    Ctrl.Top := Ctrl.Top + StripH;
+    if Ctrl is TLabel then Ctrl.Visible := False;
   end;
-  pnlProyectoActivo.Height := pnlProyectoActivo.Height + StripH;
+  pnlProyectoActivo.Color := clWhite;   // se mantiene como tarjeta blanca
 
   FWDonutNodos   := NewDonut('Nodos planificados', dtAzul);
   FWDonutOFs     := NewDonut(#211'rdenes de fabricaci'#243'n', dtVerde);
@@ -527,94 +532,62 @@ begin
   Gauge.BackColor := pnlProyectoActivo.Color;
   FWGaugeSaturacion := Gauge;
 
+  // El cronograma es una SECCION PROPIA (tarjeta blanca), hermana de las demas
+  // (parent = scrollbox), colocada en RelayoutAll justo tras "Proyecto activo".
+  FCardCronograma := TPanel.Create(Self);
+  FCardCronograma.Parent := TWinControl(FScroll);
+  FCardCronograma.BevelOuter := bvNone;
+  FCardCronograma.Color := clWhite;
+  FCardCronograma.ParentBackground := False;
+
   var Tl := TTimelineWidget.Create(Self);
-  Tl.Parent := pnlProyectoActivo;
-  Tl.Caption := 'Cronograma del proyecto';
+  Tl.Parent := FCardCronograma;
+  Tl.Caption := 'Cronograma carga semanal';
   Tl.Tone := dtAzul;
-  Tl.BackColor := pnlProyectoActivo.Color;
+  Tl.BackColor := FCardCronograma.Color;
   FWTimeline := Tl;
 
-  ReorganizarDetalleProyecto;   // desduplicar y recolocar el detalle textual
   LayoutProyectoWidgets;
 end;
 
-// Desduplica el detalle textual: oculta los datos que YA se ven en los widgets
-// de arriba (fechas -> timeline; nodos/OFs/pedidos -> donuts; operarios -> card)
-// y recoloca en 2 columnas SOLO lo que no se repite: centros utilizados,
-// duracion total, dependencias, marcadores y pendientes de ERP (OF/OT).
-procedure TfrmDashboard.ReorganizarDetalleProyecto;
-const
-  ColL_Cap = 16;  ColL_Val = 170;
-  ColR_Cap = 470; ColR_Val = 624;
-  RowH = 22;
-var
-  BaseY: Integer;
-
-  procedure Ocultar(ACap, AVal: TLabel);
-  begin
-    if ACap <> nil then ACap.Visible := False;
-    if AVal <> nil then AVal.Visible := False;
-  end;
-
-  // Coloca un par Cap/Val en (columna, fila) y lo hace visible.
-  procedure Poner(ACap, AVal: TLabel; ACol, ARow: Integer);
-  var
-    CapX, ValX: Integer;
-  begin
-    if ACol = 0 then begin CapX := ColL_Cap; ValX := ColL_Val; end
-    else begin CapX := ColR_Cap; ValX := ColR_Val; end;
-    ACap.Left := CapX;  ACap.Top := BaseY + ARow * RowH;  ACap.Visible := True;
-    AVal.Left := ValX;  AVal.Top := BaseY + ARow * RowH;  AVal.Visible := True;
-  end;
-
-begin
-  // El titulo del bloque marca la base; el detalle empieza debajo.
-  BaseY := lblProyectoActivoCap.Top + 28;
-
-  // --- Ocultar lo que ya esta en los widgets de arriba ---
-  Ocultar(lblCapFechaInicio, lblValFechaInicio);
-  Ocultar(lblCapFechaFin, lblValFechaFin);
-  Ocultar(lblCapFechaBloqueo, lblValFechaBloqueo);
-  Ocultar(lblCapNodos, lblValNodos);
-  Ocultar(lblCapOFs, lblValOFs);
-  Ocultar(lblCapPedidos, lblValPedidos);
-  Ocultar(lblCapOperariosAsignados, lblValOperariosAsignados);
-
-  // --- Recolocar lo que SI aporta (2 columnas limpias) ---
-  Poner(lblCapCentrosUsados,   lblValCentrosUsados,   0, 0);
-  Poner(lblCapDuracionTotal,   lblValDuracionTotal,   0, 1);
-  Poner(lblCapDependencias,    lblValDependencias,    0, 2);
-  Poner(lblCapMarcadores,      lblValMarcadores,      1, 0);
-  Poner(lblCapOFsPendientes,   lblValOFsPendientes,   1, 1);
-  Poner(lblCapOTsPendientes,   lblValOTsPendientes,   1, 2);
-
-  // El bloque de detalle ahora es mas corto: ajustar alto del panel para no
-  // dejar un hueco enorme (base + 3 filas + margen).
-  pnlProyectoActivo.Height := BaseY + 3 * RowH + 16;
-end;
-
-// Coloca la franja de widgets: 4 columnas arriba (3 donuts + gauge) y el
-// timeline a ancho completo debajo de ellos.
+// Coloca los indicadores (donuts + gauge) dentro de la seccion "Proyecto
+// activo" (tarjeta blanca). El cronograma es seccion aparte (LayoutCronogramaSection).
 procedure TfrmDashboard.LayoutProyectoWidgets;
 const
-  M = 16; Gap = 12; RowH = 130; RowGap = 10; TlH = 70;
+  CardPad = 8;    // padding interior de la tarjeta
+  Gap = 12;       // separacion entre donuts
+  RowH = 130;     // alto de un donut/gauge
 var
   ContentW, ColW, X, Y: Integer;
 begin
   if FWDonutNodos = nil then Exit;
-  ContentW := pnlProyectoActivo.ClientWidth - M * 2;
+
+  // Seccion "Proyecto activo" = solo indicadores (donuts + gauge), tarjeta blanca.
+  ContentW := pnlProyectoActivo.ClientWidth - CardPad * 2;
   if ContentW < 400 then ContentW := 400;
 
   ColW := (ContentW - Gap * 3) div 4;
-  Y := 8;
-  X := M;
+  Y := CardPad;
+  X := CardPad;
   TDonutWidget(FWDonutNodos).SetBounds(X, Y, ColW, RowH);   Inc(X, ColW + Gap);
   TDonutWidget(FWDonutOFs).SetBounds(X, Y, ColW, RowH);     Inc(X, ColW + Gap);
   TDonutWidget(FWDonutPedidos).SetBounds(X, Y, ColW, RowH); Inc(X, ColW + Gap);
   TGaugeWidget(FWGaugeSaturacion).SetBounds(X, Y, ColW, RowH);
 
-  // Timeline a ancho completo bajo la fila de donuts, con separacion.
-  TTimelineWidget(FWTimeline).SetBounds(M, Y + RowH + RowGap, ContentW, TlH);
+  pnlProyectoActivo.Height := RowH + CardPad * 2;
+end;
+
+// Coloca la seccion propia del cronograma (tarjeta blanca) en (AX, AY) con el
+// ancho de contenido dado. Devuelve su alto para que RelayoutAll avance la Y.
+function TfrmDashboard.LayoutCronogramaSection(AX, AY, AContentW: Integer): Integer;
+const
+  CardPad = 8; TlH = 178;
+begin
+  Result := TlH + CardPad * 2;
+  if FCardCronograma = nil then Exit;
+  FCardCronograma.SetBounds(AX, AY, AContentW, Result);
+  TTimelineWidget(FWTimeline).SetBounds(CardPad, CardPad,
+    AContentW - CardPad * 2, TlH);
 end;
 
 // El modo DEMO ha cambiado: repintar KPIs (usaran serie ficticia o real).
@@ -1623,6 +1596,11 @@ begin
         LayoutProyectoWidgets;
         Y := pnlProyectoActivo.Top + pnlProyectoActivo.Height + 16;
       end
+      else if (Key = 'cronograma') and (FCardCronograma <> nil) then
+      begin
+        // Seccion propia y dragable (tarjeta blanca con el mini-Gantt).
+        Y := Y + LayoutCronogramaSection(M, Y, ContentW) + 16;
+      end
       else if (Key = 'erp') and (FPnlErp <> nil) then
       begin
         LayoutErpSection(Y);
@@ -2016,7 +1994,7 @@ begin
 end;
 procedure TfrmDashboard.ActualizarReloj;
 begin
-  lblFechaHora.Caption := FormatDateTime('dddd, d" de "mmmm" de "yyyy   hh:nn:ss', Now);
+  lblFechaHora.Caption := FormatDateTime('dddd d" de "mmmm" de "yyyy   hh:nn:ss', Now);
 end;
 procedure TfrmDashboard.Refrescar;
 var
@@ -2083,6 +2061,163 @@ begin
     lblUsuarioRol.Caption := 'Rol: --';
   end;
 end;
+
+// Resumen del plan para el mini-Gantt del cronograma: por cada centro con
+// carga, su ocupacion (%) semana a semana, y la saturacion global por semana.
+// Ocupacion = horas_carga / horas_capacidad. Capacidad aproximada a 40h/semana
+// por centro (vision indicativa, coherente con el KPI de saturacion del panel).
+// Devuelve hasta AMaxCentros filas, ordenadas por carga total desc.
+// Centros ficticios para el modo DEMO: 6 centros, 12 semanas, ocupacion variada
+// y determinista (incluye tramos vacios y sobrecarga roja). Sin BD.
+function DemoGanttCentros: TArray<TTimelineCentroRow>;
+const
+  NOMBRES: array[0..5] of string =
+    ('Torno CNC', 'Fresadora', 'Soldadura', 'Montaje', 'Pintura', 'Control');
+var
+  I, J: Integer;
+  Base, Onda: Double;
+begin
+  SetLength(Result, 6);
+  for I := 0 to 5 do
+  begin
+    Result[I].Nombre := NOMBRES[I];
+    SetLength(Result[I].OcupPct, 12);
+    Base := 40 + I * 14;   // cada centro parte de un nivel distinto
+    for J := 0 to 11 do
+    begin
+      Onda := Base + 55 * Sin((J + I) * 0.6) + 20 * Cos(J * 0.9 + I);
+      // Algunos huecos al principio/final segun el centro (escalonado).
+      if (J < I - 1) or (J > 11 - (5 - I)) then
+        Result[I].OcupPct[J] := -1
+      else if Onda < 0 then
+        Result[I].OcupPct[J] := 5
+      else
+        Result[I].OcupPct[J] := Onda;
+    end;
+  end;
+end;
+
+procedure GanttResumenPlan(const AInicio, AFin: TDateTime;
+  const ACE, APID: string; AMaxCentros: Integer;
+  out ACentros: TArray<TTimelineCentroRow>; out ASatur: TArray<Double>);
+const
+  CAP_SEMANA_H = 40.0;   // capacidad aproximada por centro y semana
+var
+  Q: TADOQuery;
+  NumSem, Idx, Sem, NumCen, I: Integer;
+  CenId: Integer;
+  Horas: Double;
+  // acumuladores por centro
+  Nombres: TDictionary<Integer, string>;
+  CargaCen: TDictionary<Integer, TArray<Double>>;
+  TotalCen: TDictionary<Integer, Double>;
+  Arr: TArray<Double>;
+  Orden: TList<Integer>;
+  CargaGlobal: TArray<Double>;
+begin
+  SetLength(ACentros, 0);
+  SetLength(ASatur, 0);
+  NumSem := Max(1, Ceil((Trunc(AFin) - Trunc(AInicio) + 1) / 7));
+  if NumSem > 104 then NumSem := 104;
+
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) or
+     (not DMPlanner.ADOConnection.Connected) then Exit;
+
+  Nombres := TDictionary<Integer, string>.Create;
+  CargaCen := TDictionary<Integer, TArray<Double>>.Create;
+  TotalCen := TDictionary<Integer, Double>.Create;
+  Orden := TList<Integer>.Create;
+  SetLength(CargaGlobal, NumSem);
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT n.CenterId, ' +
+      '  DATEDIFF(day, :Ini, n.FechaInicio) / 7 AS Semana, ' +
+      '  SUM(ISNULL(n.DuracionMin, 0)) / 60.0 AS Horas ' +
+      'FROM FS_PL_Node n ' +
+      'WHERE n.CodigoEmpresa = ' + ACE + ' AND n.ProjectId = ' + APID +
+      '  AND n.FechaInicio IS NOT NULL AND n.CenterId IS NOT NULL ' +
+      'GROUP BY n.CenterId, DATEDIFF(day, :Ini, n.FechaInicio) / 7';
+    Q.Parameters.ParamByName('Ini').Value := Trunc(AInicio);
+    try
+      Q.Open;
+      while not Q.Eof do
+      begin
+        CenId := Q.FieldByName('CenterId').AsInteger;
+        Sem := Q.FieldByName('Semana').AsInteger;
+        Horas := Q.FieldByName('Horas').AsFloat;
+        if (Sem >= 0) and (Sem < NumSem) then
+        begin
+          if not CargaCen.TryGetValue(CenId, Arr) then
+          begin
+            SetLength(Arr, NumSem);
+            Orden.Add(CenId);
+          end;
+          Arr[Sem] := Arr[Sem] + Horas;
+          CargaCen.AddOrSetValue(CenId, Arr);
+          var TAcum: Double := 0;
+          TotalCen.TryGetValue(CenId, TAcum);
+          TotalCen.AddOrSetValue(CenId, TAcum + Horas);
+          CargaGlobal[Sem] := CargaGlobal[Sem] + Horas;
+        end;
+        Q.Next;
+      end;
+    except
+      // tabla ausente o error: devolvemos vacio
+    end;
+
+    // Nombres de centro (desde el repo, evita otra query).
+    if DMPlanner.CentresRepo <> nil then
+    begin
+      var Todos := DMPlanner.CentresRepo.GetAll;
+      for I := 0 to High(Todos) do
+        if Trim(Todos[I].Titulo) <> '' then
+          Nombres.AddOrSetValue(Todos[I].Id, Todos[I].Titulo)
+        else
+          Nombres.AddOrSetValue(Todos[I].Id, Todos[I].CodiCentre);
+    end;
+
+    // Ordenar centros por carga total desc.
+    Orden.Sort(TComparer<Integer>.Construct(
+      function(const A, B: Integer): Integer
+      var TA, TB: Double;
+      begin
+        TA := 0; TB := 0;
+        TotalCen.TryGetValue(A, TA); TotalCen.TryGetValue(B, TB);
+        Result := CompareValue(TB, TA);
+      end));
+
+    NumCen := Orden.Count;
+    if NumCen > AMaxCentros then NumCen := AMaxCentros;
+    SetLength(ACentros, NumCen);
+    for I := 0 to NumCen - 1 do
+    begin
+      CenId := Orden[I];
+      if not Nombres.TryGetValue(CenId, ACentros[I].Nombre) then
+        ACentros[I].Nombre := 'Centro ' + IntToStr(CenId);
+      CargaCen.TryGetValue(CenId, Arr);
+      SetLength(ACentros[I].OcupPct, NumSem);
+      for Idx := 0 to NumSem - 1 do
+        if Arr[Idx] <= 0 then ACentros[I].OcupPct[Idx] := -1  // sin actividad
+        else ACentros[I].OcupPct[Idx] := Arr[Idx] / CAP_SEMANA_H * 100.0;
+    end;
+
+    // Saturacion global por semana = carga total / (nº centros activos * 40h).
+    NumCen := Orden.Count;
+    SetLength(ASatur, NumSem);
+    for Idx := 0 to NumSem - 1 do
+      if (NumCen <= 0) or (CargaGlobal[Idx] <= 0) then ASatur[Idx] := -1
+      else ASatur[Idx] := CargaGlobal[Idx] / (NumCen * CAP_SEMANA_H) * 100.0;
+  finally
+    Q.Free;
+    Nombres.Free;
+    CargaCen.Free;
+    TotalCen.Free;
+    Orden.Free;
+  end;
+end;
+
 procedure TfrmDashboard.RefrescarProyectoActivo;
   function FmtDate(const AV: Variant): string;
   begin
@@ -2265,6 +2400,27 @@ begin
       Satur := Min(100, DuracionTotal / MinutosDisponibles * 100);
   end;
 
+  // ---- Modo DEMO: datos ficticios ricos para el bloque "Proyecto activo" ----
+  // Sin tocar la BD. El objetivo es que el mini-Gantt del cronograma LUZCA aunque
+  // el proyecto real sea pequeno (o vacio): rango amplio (~3 meses), varios
+  // centros con ocupacion variada (incluida sobrecarga roja). Determinista.
+  var DemoInicio, DemoFin: TDateTime;
+  var DemoCentros: TArray<TTimelineCentroRow> := nil;
+  var DemoSatur: TArray<Double> := nil;
+  if DemoMode.Active then
+  begin
+    DemoInicio := Trunc(Date) - 21;          // empezo hace 3 semanas
+    DemoFin := Trunc(Date) + 63;             // ~12 semanas totales
+    NodosTotal := 128; NodosPlan := 112;
+    OFsTotal := 24;    OFsPlan := 21;
+    PedidosTotal := 17; PedidosPlan := 15;
+    Satur := 82;
+    DemoCentros := DemoGanttCentros;         // helper local
+    SetLength(DemoSatur, 12);
+    for var K := 0 to 11 do
+      DemoSatur[K] := 55 + 45 * Abs(Sin((K + 1) * 0.7));  // ola 55..100
+  end;
+
   // ---- Widgets visuales del bloque "Proyecto activo" (Fase 4) ----
   if FWDonutNodos <> nil then
   begin
@@ -2272,13 +2428,28 @@ begin
     TDonutWidget(FWDonutOFs).SetData(OFsPlan, OFsTotal);
     TDonutWidget(FWDonutPedidos).SetData(PedidosPlan, PedidosTotal);
     TGaugeWidget(FWGaugeSaturacion).SetData(Satur, '%');
-    if VarIsNull(FInicio) or VarIsNull(FFin) then
+    if DemoMode.Active then
+    begin
+      TTimelineWidget(FWTimeline).SetData(DemoInicio, DemoFin, False, 0);
+      TTimelineWidget(FWTimeline).SetGantt(DemoCentros, DemoSatur);
+    end
+    else if VarIsNull(FInicio) or VarIsNull(FFin) then
+    begin
       TTimelineWidget(FWTimeline).SetData(0, 0,
-        DMPlanner.CurrentProjectTieneBloqueo, DMPlanner.CurrentProjectFechaBloqueo)
+        DMPlanner.CurrentProjectTieneBloqueo, DMPlanner.CurrentProjectFechaBloqueo);
+      TTimelineWidget(FWTimeline).SetGantt(nil, nil);
+    end
     else
+    begin
       TTimelineWidget(FWTimeline).SetData(VarToDateTime(FInicio),
         VarToDateTime(FFin), DMPlanner.CurrentProjectTieneBloqueo,
         DMPlanner.CurrentProjectFechaBloqueo);
+      var RCentros: TArray<TTimelineCentroRow>;
+      var RSatur: TArray<Double>;
+      GanttResumenPlan(VarToDateTime(FInicio), VarToDateTime(FFin), CE, PID,
+        6, RCentros, RSatur);
+      TTimelineWidget(FWTimeline).SetGantt(RCentros, RSatur);
+    end;
   end;
 
   // ---- KPI 7: OFs en riesgo (entrega <= hoy+7 y no finalizadas) ----
@@ -2478,8 +2649,10 @@ var
   Q: TADOQuery;
   NumOFs, NumOTs: Integer;
 begin
-  lblPendingSync.Visible := True;
-  lblPendingSync.Caption := '(comprobando pendientes ERP...)';
+  // El label de estado de sincronizacion ya no se muestra en el header (la
+  // informacion vive en los KPIs OFs/OTs pendientes). Se mantiene oculto; el
+  // resto de la logica sigue actualizando los KPIs.
+  lblPendingSync.Visible := False;
   lblValOFsPendientes.Caption := '--';
   lblValOFsPendientes.Font.Color := clBlack;
   lblValOTsPendientes.Caption := '--';

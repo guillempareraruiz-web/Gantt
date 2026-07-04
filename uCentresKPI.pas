@@ -11,7 +11,7 @@ uses
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls,
   Vcl.ComCtrls,
   cxCheckComboBox, cxCheckBox, cxEdit, cxLookAndFeelPainters,
-  uGanttTypes, uGanttControl, uCentreCalendar,
+  uGanttTypes, uGanttControl, uCentreCalendar, uDemoMode,
   uNodeDataRepo, uOperariosRepo, uOperariosTypes, cxGraphics, cxControls,
   cxLookAndFeels, cxContainer, dxSkinsCore, dxSkinBasic, dxSkinBlack,
   dxSkinBlue, dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom,
@@ -46,6 +46,7 @@ type
     procedure DoPaint(Sender: TObject);
     function GetValueColor: TColor;
     function GetBarColorFill: TColor;
+    function GetCardBgColor: TColor;
   public
     FPaintBox: TPaintBox;  // publico: usado por el panel info para ocultar/mostrar
     constructor Create(AParent: TWinControl; const ALeft, ATop, AWidth: Integer;
@@ -64,6 +65,8 @@ type
     NumNodes, DuracionMedia, NodoMasLargo, NodoMasCorto: TKPICard;
     PrimerNodo, UltimoNodo: TKPICard;
     NodosOriginales, NodosOptimizados, NodosNoOptimizados: TKPICard;
+    // Origen / estado / agrupacion (V066 manuales, estado, lotes)
+    NodosManuales, NodosBloqueados, NodosAgrupados: TKPICard;
     // Recursos
     OperariosTotal, OperariosDistinct: TKPICard;
     MoldesTotal, MoldesDistinct: TKPICard;
@@ -81,32 +84,51 @@ type
     tsBloqueA: TTabSheet;
     tsBloqueB: TTabSheet;
     tsBloqueC: TTabSheet;
-    pnlBottom: TPanel;
-    btnCerrar: TButton;
+    tsBloqueD: TTabSheet;
+    pnlFechaD: TPanel;
+    lblDesdeD: TLabel;
+    lblHastaD: TLabel;
+    dtDesdeD: TDateTimePicker;
+    dtHastaD: TDateTimePicker;
     procedure FormCreate(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure cbCentrosChange(Sender: TObject);
-    procedure btnCerrarClick(Sender: TObject);
     procedure btnToggleAllClick(Sender: TObject);
+    procedure FechaDChange(Sender: TObject);
   private
     FCentres: TArray<TCentreTreball>;
     FGanttControl: TGanttControl;
     FNodeRepo: TNodeDataRepo;
     FOperariosRepo: TOperariosRepo;
-    FBlockA, FBlockB, FBlockC: TBlockCards;
+    FBlockA, FBlockB, FBlockC, FBlockD: TBlockCards;
     FCards: TList<TKPICard>;
     FInfoCards: TList<TKPICard>;
     FInfoCentroCards: array[0..4] of TKPICard;   // Id, Codigo, Titulo, Subtitulo, Area
     FInfoCalCards:    array[0..2] of TKPICard;   // Nombre, Horario LV, Fin semana
-    FInfoResumenCard: TKPICard;                  // "Agregado de N centros"
+    // Resumen multi-centro: en vez de una card de una linea (que desbordaba con
+    // muchos nombres), un titulo + un label multilinea con la lista.
+    FInfoResumenPanel: TPanel;
+    FInfoResumenTitulo: TLabel;
+    FInfoResumenLista: TLabel;
+    FInfoCalHdr: TLabel;                          // separador "Calendario asociado"
+    FCmbArea: TComboBox;                          // filtro por area
+    FLblArea: TLabel;
+    FAreaSel: string;                             // area activa ('' = todas)
+    FUpdatingCentros: Boolean;                    // guard reentrada al refiltrar
     procedure BuildInfoPanel;
     procedure BuildBlockTab(ATab: TTabSheet; const AWindowCaption: string;
-      var ABlock: TBlockCards);
+      var ABlock: TBlockCards; AOffsetTop: Integer = 0);
     function GetSelectedCentres: TArray<TCentreTreball>;
     procedure FillInfo(const ASelected: TArray<TCentreTreball>);
     procedure FillBlock(const ASelected: TArray<TCentreTreball>;
       const AWindowStart, AWindowEnd: TDateTime;
       var ABlock: TBlockCards);
+    procedure FillBlockDemo(const ASelected: TArray<TCentreTreball>;
+      const AWindowStart, AWindowEnd: TDateTime; ASeed: Integer;
+      var ABlock: TBlockCards);
+    procedure CargarAreasCombo;
+    procedure AreaChange(Sender: TObject);
+    procedure RellenarComboCentros(AInitialIdx: Integer = -1);
     procedure RecalcularTodo;
   public
     destructor Destroy; override;
@@ -214,9 +236,9 @@ begin
   FPaintBox.Top    := ATop;
   FPaintBox.Width  := AWidth;
   if AShowBar then
-    FPaintBox.Height := 62
+    FPaintBox.Height := 50
   else
-    FPaintBox.Height := 44;
+    FPaintBox.Height := 34;
   FPaintBox.OnPaint := DoPaint;
 end;
 function TKPICard.GetValueColor: TColor;
@@ -241,6 +263,21 @@ begin
     Result := TColor($00808080);
   end;
 end;
+function TKPICard.GetCardBgColor: TColor;
+const
+  CLR_NEUTRAL_BG = TColor($00F8F8F8);   // gris muy claro (cards sin color)
+  MEZCLA_BLANCO  = 0.88;                 // 88% hacia blanco -> tinte suave
+begin
+  // Para las cards con color significativo (semaforo/estado), el fondo es un
+  // tinte MUY claro del color del valor -> mas PRO que el gris uniforme.
+  // Las neutras/muted quedan grises.
+  case FColoring of
+    kcCarga, kcDisponibilidad, kcOriginal, kcOptimizado, kcNoOptimizado:
+      Result := LerpColor(GetValueColor, clWhite, MEZCLA_BLANCO);
+  else
+    Result := CLR_NEUTRAL_BG;
+  end;
+end;
 procedure TKPICard.DoPaint(Sender: TObject);
 var
   R, BarBG, BarFill: TRect;
@@ -248,23 +285,23 @@ var
   ValueFont: TFont;
 begin
   R := FPaintBox.ClientRect;
-  // Fondo card
-  FPaintBox.Canvas.Brush.Color := TColor($00F8F8F8);
+  // Fondo card: tinte claro del color del valor (o gris neutro si no aplica).
+  FPaintBox.Canvas.Brush.Color := GetCardBgColor;
   FPaintBox.Canvas.Pen.Style := psClear;
   FPaintBox.Canvas.RoundRect(R.Left, R.Top, R.Right, R.Bottom, 6, 6);
   FPaintBox.Canvas.Pen.Style := psSolid;
   // Caption (negrita, esq sup izq)
   FPaintBox.Canvas.Brush.Style := bsClear;
   FPaintBox.Canvas.Font.Name := 'Segoe UI';
-  FPaintBox.Canvas.Font.Size := 9;
+  FPaintBox.Canvas.Font.Size := 8;
   FPaintBox.Canvas.Font.Style := [fsBold];
   FPaintBox.Canvas.Font.Color := TColor($00606060);
-  FPaintBox.Canvas.TextOut(R.Left + 10, R.Top + 8, FCaption);
-  // Value (a la derecha arriba, grande, color segun tipo)
+  FPaintBox.Canvas.TextOut(R.Left + 10, R.Top + 7, FCaption);
+  // Value (a la derecha, grande, color segun tipo)
   ValueFont := TFont.Create;
   try
     ValueFont.Assign(FPaintBox.Canvas.Font);
-    ValueFont.Size := 13;
+    ValueFont.Size := 11;
     ValueFont.Style := [fsBold];
     ValueFont.Color := GetValueColor;
     FPaintBox.Canvas.Font.Assign(ValueFont);
@@ -278,8 +315,8 @@ begin
   begin
     BarBG.Left   := R.Left + 10;
     BarBG.Right  := R.Right - 10;
-    BarBG.Top    := R.Bottom - 18;
-    BarBG.Bottom := R.Bottom - 8;
+    BarBG.Top    := R.Bottom - 14;
+    BarBG.Bottom := R.Bottom - 7;
     // Fondo barra
     DrawRoundBar(FPaintBox.Canvas, BarBG, TColor($00E4E4E4), 4);
     // Relleno segun FValueF (0..100)
@@ -331,25 +368,42 @@ class procedure TfrmCentresKPI.Execute(AOwner: TComponent;
   ANodeRepo: TNodeDataRepo;
   AOperariosRepo: TOperariosRepo;
   AInitialCentreIdx: Integer);
+const
+  DEMO_NOMBRES: array[0..7] of string = (
+    'Torno CNC 1', 'Fresadora 2', 'Centro Mecanizado', 'Rectificadora',
+    'Soldadura', 'Corte L'#225'ser', 'Pintura', 'Montaje');
+  DEMO_AREAS: array[0..7] of string = (
+    'Mecanizado', 'Mecanizado', 'Mecanizado', 'Mecanizado',
+    'Conformado', 'Conformado', 'Acabado', 'Acabado');
 var
   F: TfrmCentresKPI;
   I: Integer;
+  Centres: TArray<TCentreTreball>;
 begin
+  Centres := ACentres;
+  // En modo demo, si no llegan centros reales, generamos un catalogo ficticio
+  // para que la pantalla se vea poblada (los KPIs se generan sinteticos).
+  if DemoMode.Active and (Length(Centres) = 0) then
+  begin
+    SetLength(Centres, Length(DEMO_NOMBRES));
+    for I := 0 to High(DEMO_NOMBRES) do
+    begin
+      Centres[I] := Default(TCentreTreball);
+      Centres[I].Id := 9000 + I;
+      Centres[I].CodiCentre := 'C' + IntToStr(I + 1);
+      Centres[I].Titulo := DEMO_NOMBRES[I];
+      Centres[I].Area := DEMO_AREAS[I];
+    end;
+  end;
+
   F := TfrmCentresKPI.Create(AOwner);
   try
-    F.FCentres       := ACentres;
+    F.FCentres       := Centres;
     F.FGanttControl  := AGanttControl;
     F.FNodeRepo      := ANodeRepo;
     F.FOperariosRepo := AOperariosRepo;
-    F.cbCentros.Properties.Items.Clear;
-    for I := 0 to High(ACentres) do
-      F.cbCentros.Properties.Items.AddCheckItem(
-        Format('[%d] %s', [ACentres[I].Id, ACentres[I].Titulo]));
-    // Marcar el centro inicial (o el primero si no se especifica).
-    if (AInitialCentreIdx >= 0) and (AInitialCentreIdx <= High(ACentres)) then
-      F.cbCentros.States[AInitialCentreIdx] := cbsChecked
-    else if Length(ACentres) > 0 then
-      F.cbCentros.States[0] := cbsChecked;
+    F.CargarAreasCombo;
+    F.RellenarComboCentros(AInitialCentreIdx);
     F.RecalcularTodo;
     F.ShowModal;
   finally
@@ -361,10 +415,43 @@ begin
   KeyPreview := True;
   FCards := TList<TKPICard>.Create;
   FInfoCards := TList<TKPICard>.Create;
+
+  // Filtro por area: label + combo, sobre el combo de centros. Ampliamos el
+  // panel de seleccion para hacerle sitio y bajamos el cbCentros.
+  pnlCentroSel.Height := 106;
+  FLblArea := TLabel.Create(Self);
+  FLblArea.Parent := pnlCentroSel;
+  FLblArea.SetBounds(4, 34, 40, 15);
+  FLblArea.Caption := #193'rea:';
+  FCmbArea := TComboBox.Create(Self);
+  FCmbArea.Parent := pnlCentroSel;
+  FCmbArea.SetBounds(46, 30, 262, 23);
+  FCmbArea.Style := csDropDownList;
+  FCmbArea.OnChange := AreaChange;
+  cbCentros.Top := 60;   // debajo del combo de area
+
   BuildInfoPanel;
   BuildBlockTab(tsBloqueA, 'Ventana visible del Gantt', FBlockA);
   BuildBlockTab(tsBloqueB, 'Desde ahora hasta fin del Gantt', FBlockB);
   BuildBlockTab(tsBloqueC, 'Todo el Gantt (inicio a fin)', FBlockC);
+  // Bloque D: ventana de fechas elegida por el usuario. Deja hueco arriba
+  // para la banda de selectores (pnlFechaD, alto 44).
+  BuildBlockTab(tsBloqueD, 'Fecha personalizada', FBlockD, 44);
+  pnlFechaD.BringToFront;
+  // Defaults del rango D: hoy .. hoy + 30 dias.
+  dtDesdeD.Date := Trunc(Now);
+  dtHastaD.Date := Trunc(Now) + 30;
+end;
+
+procedure TfrmCentresKPI.FechaDChange(Sender: TObject);
+begin
+  // Recalcular solo el bloque D (los demas no dependen de estas fechas).
+  if DemoMode.Active then
+    FillBlockDemo(GetSelectedCentres,
+      Trunc(dtDesdeD.Date), Trunc(dtHastaD.Date) + 1, 404, FBlockD)
+  else
+    FillBlock(GetSelectedCentres,
+      Trunc(dtDesdeD.Date), Trunc(dtHastaD.Date) + 1, FBlockD);
 end;
 destructor TfrmCentresKPI.Destroy;
 var
@@ -389,10 +476,6 @@ procedure TfrmCentresKPI.FormKeyDown(Sender: TObject; var Key: Word;
 begin
   if Key = VK_ESCAPE then
     Close;
-end;
-procedure TfrmCentresKPI.btnCerrarClick(Sender: TObject);
-begin
-  Close;
 end;
 procedure TfrmCentresKPI.btnToggleAllClick(Sender: TObject);
 var
@@ -422,10 +505,11 @@ begin
 end;
 procedure TfrmCentresKPI.cbCentrosChange(Sender: TObject);
 begin
+  if FUpdatingCentros then Exit;
   RecalcularTodo;
 end;
 procedure TfrmCentresKPI.BuildBlockTab(ATab: TTabSheet;
-  const AWindowCaption: string; var ABlock: TBlockCards);
+  const AWindowCaption: string; var ABlock: TBlockCards; AOffsetTop: Integer);
   function NewCard(AParent: TWinControl; ALeft, ATop, AWidth: Integer;
     const ACap: string; AKind: TKPIKind; AColoring: TKPIColoring;
     ABar: Boolean): TKPICard;
@@ -439,8 +523,8 @@ const
   GAP     = 14;
   MARGIN  = 14;
   GB_W    = 2 * COL_W + GAP + 2 * MARGIN;   // ancho interno GroupBox
-  DY_CARD = 54;   // altura card sin barra + separacion
-  DY_BAR  = 72;   // altura card con barra + separacion
+  DY_CARD = 42;   // altura card sin barra + separacion
+  DY_BAR  = 58;   // altura card con barra + separacion
 var
   gbCarga, gbActividad, gbRecursos: TGroupBox;
   Hdr: TLabel;
@@ -455,7 +539,7 @@ begin
   Hdr.Font.Size := 10;
   Hdr.Font.Color := TColor($00404040);
   Hdr.Left := 14;
-  Hdr.Top  := 8;
+  Hdr.Top  := 8 + AOffsetTop;
   LeftCol  := MARGIN;
   RightCol := MARGIN + COL_W + GAP;
   // --- Grupo Carga ---
@@ -464,9 +548,9 @@ begin
   gbCarga.Caption := ' Carga del centro ';
   gbCarga.Font.Style := [fsBold];
   gbCarga.Left := 10;
-  gbCarga.Top  := 34;
+  gbCarga.Top  := 34 + AOffsetTop;
   gbCarga.Width := GB_W + 4;
-  gbCarga.Height := 180;
+  gbCarga.Height := 122;
   Y1 := 26;
   ABlock.PercCarga := NewCard(gbCarga, LeftCol, Y1, COL_W,
     '% Carga', kkPercent, kcCarga, True);
@@ -485,7 +569,7 @@ begin
   gbActividad.Left := 10;
   gbActividad.Top  := gbCarga.Top + gbCarga.Height + 10;
   gbActividad.Width := GB_W + 4;
-  gbActividad.Height := 290;
+  gbActividad.Height := 322;   // 7 filas de cards (ultima: agrupados)
   Y2 := 26;
   ABlock.NumNodes := NewCard(gbActividad, LeftCol, Y2, COL_W,
     'Num. de nodos', kkInt, kcNeutral, False);
@@ -511,6 +595,14 @@ begin
     'Primer nodo', kkText, kcNeutral, False);
   ABlock.UltimoNodo := NewCard(gbActividad, RightCol, Y2, COL_W,
     'Ultimo nodo', kkText, kcNeutral, False);
+  Y2 := Y2 + DY_CARD;
+  ABlock.NodosManuales := NewCard(gbActividad, LeftCol, Y2, COL_W,
+    'Nodos manuales', kkInt, kcOriginal, False);
+  ABlock.NodosBloqueados := NewCard(gbActividad, RightCol, Y2, COL_W,
+    'Nodos bloqueados', kkInt, kcNoOptimizado, False);
+  Y2 := Y2 + DY_CARD;
+  ABlock.NodosAgrupados := NewCard(gbActividad, LeftCol, Y2, COL_W,
+    'Nodos agrupados (lotes)', kkText, kcOptimizado, False);
   // --- Grupo Recursos ---
   gbRecursos := TGroupBox.Create(ATab);
   gbRecursos.Parent := ATab;
@@ -519,7 +611,7 @@ begin
   gbRecursos.Left := 10;
   gbRecursos.Top  := gbActividad.Top + gbActividad.Height + 10;
   gbRecursos.Width := GB_W + 4;
-  gbRecursos.Height := 190;
+  gbRecursos.Height := 156;
   Y2 := 26;
   ABlock.OperariosTotal := NewCard(gbRecursos, LeftCol, Y2, COL_W,
     'Operarios asignados (total)', kkInt, kcNeutral, False);
@@ -563,29 +655,66 @@ begin
   Hdr2.Font.Color := 4210752;
   Hdr2.Left := 8;
   Hdr2.Top  := Y;
+  FInfoCalHdr := Hdr2;
   Inc(Y, 26);
   FInfoCalCards[0] := AddCard('Nombre',        Y, kcNeutral);  Inc(Y, 50);
   FInfoCalCards[1] := AddCard('Horario L-V',   Y, kcNeutral);  Inc(Y, 50);
   FInfoCalCards[2] := AddCard('Fin de semana', Y, kcNeutral);
-  // Card de resumen multi-centro (inicialmente oculta)
-  FInfoResumenCard := TKPICard.Create(pnlInfo, 8, 36, 290,
-    'Centros seleccionados', kkText, kcOriginal, False);
-  FInfoCards.Add(FInfoResumenCard);
-  FInfoResumenCard.FPaintBox.Visible := False;
+  // Resumen multi-centro (inicialmente oculto): panel con titulo grande
+  // (nº centros) + lista multilinea de nombres, ajustada al ancho.
+  FInfoResumenPanel := TPanel.Create(pnlInfo);
+  FInfoResumenPanel.Parent := pnlInfo;
+  FInfoResumenPanel.SetBounds(8, 36, 296, 560);
+  FInfoResumenPanel.BevelOuter := bvNone;
+  FInfoResumenPanel.ParentBackground := False;
+  FInfoResumenPanel.Color := TColor($00F4EFE7);   // beige suave
+  FInfoResumenPanel.Visible := False;
+
+  FInfoResumenTitulo := TLabel.Create(FInfoResumenPanel);
+  FInfoResumenTitulo.Parent := FInfoResumenPanel;
+  FInfoResumenTitulo.SetBounds(12, 12, 272, 24);
+  FInfoResumenTitulo.Font.Name := 'Segoe UI';
+  FInfoResumenTitulo.Font.Size := 12;
+  FInfoResumenTitulo.Font.Style := [fsBold];
+  FInfoResumenTitulo.Font.Color := TColor($00AA6428);
+  FInfoResumenTitulo.Caption := '';
+
+  FInfoResumenLista := TLabel.Create(FInfoResumenPanel);
+  FInfoResumenLista.Parent := FInfoResumenPanel;
+  FInfoResumenLista.SetBounds(12, 42, 272, 500);
+  FInfoResumenLista.Font.Name := 'Segoe UI';
+  FInfoResumenLista.Font.Size := 9;
+  FInfoResumenLista.Font.Color := TColor($00404040);
+  FInfoResumenLista.WordWrap := True;
+  FInfoResumenLista.AutoSize := True;
+  FInfoResumenLista.Caption := '';
 end;
 function TfrmCentresKPI.GetSelectedCentres: TArray<TCentreTreball>;
 var
-  I, N: Integer;
+  I, J, N, Id, P1, P2: Integer;
+  Cap: string;
 begin
+  // El texto de cada item es "[Id] Titulo". Extraemos el Id y buscamos el
+  // centro en FCentres por Id (no por indice: con el filtro de area el combo
+  // puede tener menos items que FCentres y los indices NO coinciden).
   SetLength(Result, cbCentros.Properties.Items.Count);
   N := 0;
   for I := 0 to cbCentros.Properties.Items.Count - 1 do
     if cbCentros.States[I] = cbsChecked then
     begin
-      if I <= High(FCentres) then
+      Cap := cbCentros.Properties.Items[I].Description;
+      P1 := Pos('[', Cap);
+      P2 := Pos(']', Cap);
+      if (P1 = 1) and (P2 > P1) then
       begin
-        Result[N] := FCentres[I];
-        Inc(N);
+        Id := StrToIntDef(Copy(Cap, P1 + 1, P2 - P1 - 1), -1);
+        for J := 0 to High(FCentres) do
+          if FCentres[J].Id = Id then
+          begin
+            Result[N] := FCentres[J];
+            Inc(N);
+            Break;
+          end;
       end;
     end;
   SetLength(Result, N);
@@ -599,6 +728,7 @@ procedure TfrmCentresKPI.FillInfo(const ASelected: TArray<TCentreTreball>);
       FInfoCentroCards[I].FPaintBox.Visible := AVisible;
     for I := 0 to High(FInfoCalCards) do
       FInfoCalCards[I].FPaintBox.Visible := AVisible;
+    if FInfoCalHdr <> nil then FInfoCalHdr.Visible := AVisible;
   end;
 var
   C: TCentreTreball;
@@ -613,27 +743,29 @@ begin
   if Length(ASelected) = 0 then
   begin
     ShowCards(False);
-    FInfoResumenCard.FPaintBox.Visible := True;
-    FInfoResumenCard.SetValueText('(ninguno)');
+    FInfoResumenPanel.Visible := True;
+    FInfoResumenTitulo.Caption := 'Ning'#250'n centro';
+    FInfoResumenLista.Caption := 'Selecciona uno o varios centros en la lista.';
     Exit;
   end;
-  // Multi-seleccion: resumen
+  // Multi-seleccion: resumen (titulo + lista multilinea, una por linea).
   if Length(ASelected) > 1 then
   begin
     ShowCards(False);
-    FInfoResumenCard.FPaintBox.Visible := True;
+    FInfoResumenPanel.Visible := True;
+    FInfoResumenTitulo.Caption := Format('%d centros seleccionados',
+      [Length(ASelected)]);
     Names := '';
     for I := 0 to High(ASelected) do
     begin
-      if I > 0 then Names := Names + ', ';
-      Names := Names + ASelected[I].Titulo;
+      if I > 0 then Names := Names + sLineBreak;
+      Names := Names + Format('•  %s', [ASelected[I].Titulo]);
     end;
-    FInfoResumenCard.SetValueText(
-      Format('%d centros: %s', [Length(ASelected), Names]));
+    FInfoResumenLista.Caption := Names;
     Exit;
   end;
   // Un solo centro: mostrar detalle
-  FInfoResumenCard.FPaintBox.Visible := False;
+  FInfoResumenPanel.Visible := False;
   ShowCards(True);
   C := ASelected[0];
   FInfoCentroCards[0].SetValueText(IntToStr(C.Id));
@@ -641,6 +773,14 @@ begin
   FInfoCentroCards[2].SetValueText(C.Titulo);
   FInfoCentroCards[3].SetValueText(C.Subtitulo);
   FInfoCentroCards[4].SetValueText(C.Area);
+  // Modo demo: calendario ficticio coherente (sin GanttControl real).
+  if DemoMode.Active then
+  begin
+    FInfoCalCards[0].SetValueText('Turno estandar (demo)');
+    FInfoCalCards[1].SetValueText('No lab: 00:00-06:00 | 22:00-24:00');
+    FInfoCalCards[2].SetValueText('Cerrado (S+D)');
+    Exit;
+  end;
   if FGanttControl = nil then
   begin
     FInfoCalCards[0].SetValueText('(sin Gantt)');
@@ -709,6 +849,8 @@ var
   Asign: TArray<TOperario>;
   PercCarga, PercDisp: Double;
   NodosOriginales, NodosOptimizados, NodosNoOptimizados: Integer;
+  NodosManuales, NodosBloqueados, NodosAgrupados: Integer;
+  LotesSet: TDictionary<Integer, Byte>;
   HasData: Boolean;
 begin
   // Defaults — estado "sin datos" con barras a 0 y texto '-'
@@ -724,6 +866,9 @@ begin
   ABlock.NodosOriginales.SetValueText('0');
   ABlock.NodosOptimizados.SetValueText('0');
   ABlock.NodosNoOptimizados.SetValueText('0');
+  ABlock.NodosManuales.SetValueText('0');
+  ABlock.NodosBloqueados.SetValueText('0');
+  ABlock.NodosAgrupados.SetValueText('0');
   ABlock.PrimerNodo.SetValueText('-');
   ABlock.UltimoNodo.SetValueText('-');
   ABlock.OperariosTotal.SetValueText('0');
@@ -744,8 +889,12 @@ begin
   NodosOriginales := 0;
   NodosOptimizados := 0;
   NodosNoOptimizados := 0;
+  NodosManuales := 0;
+  NodosBloqueados := 0;
+  NodosAgrupados := 0;
   OperariosDistinct := TDictionary<Integer, Byte>.Create;
   CentreIdSet := TDictionary<Integer, Byte>.Create;
+  LotesSet := TDictionary<Integer, Byte>.Create;
   try
     for K := 0 to High(ASelected) do
       CentreIdSet.AddOrSetValue(ASelected[K].Id, 1);
@@ -808,6 +957,14 @@ begin
       end
       else
         Inc(NodosOriginales);
+      // Origen manual (V066), estado bloqueado y agrupacion en lotes.
+      if SameText(N.Source, 'MAN') then Inc(NodosManuales);
+      if HasData and (D.Estado = neBloqueado) then Inc(NodosBloqueados);
+      if N.LoteId > 0 then
+      begin
+        Inc(NodosAgrupados);
+        LotesSet.AddOrSetValue(N.LoteId, 1);
+      end;
       if FOperariosRepo <> nil then
       begin
         Asign := FOperariosRepo.GetOperarisAssignatsAlNode(N.DataId);
@@ -832,6 +989,14 @@ begin
     ABlock.NodosOriginales.SetValueText(IntToStr(NodosOriginales));
     ABlock.NodosOptimizados.SetValueText(IntToStr(NodosOptimizados));
     ABlock.NodosNoOptimizados.SetValueText(IntToStr(NodosNoOptimizados));
+    ABlock.NodosManuales.SetValueText(IntToStr(NodosManuales));
+    ABlock.NodosBloqueados.SetValueText(IntToStr(NodosBloqueados));
+    // Agrupados: nº de nodos en lotes + nº de lotes distintos.
+    if NodosAgrupados > 0 then
+      ABlock.NodosAgrupados.SetValueText(
+        Format('%d  (%d lotes)', [NodosAgrupados, LotesSet.Count]))
+    else
+      ABlock.NodosAgrupados.SetValueText('0');
     if NumNodes > 0 then
     begin
       ABlock.DuracionMedia.SetValueText(FormatFloat('0.00', SumDur / NumNodes));
@@ -843,17 +1008,200 @@ begin
   finally
     OperariosDistinct.Free;
     CentreIdSet.Free;
+    LotesSet.Free;
   end;
 end;
+procedure TfrmCentresKPI.FillBlockDemo(const ASelected: TArray<TCentreTreball>;
+  const AWindowStart, AWindowEnd: TDateTime; ASeed: Integer;
+  var ABlock: TBlockCards);
+// Rellena un bloque con KPIs ficticios deterministas (sin Random) para el modo
+// demo. Escala con el numero de centros seleccionados y el ancho de la ventana.
+var
+  NCen: Integer;
+  DiasVentana: Double;
+  HorasLab, PctCarga, PctDisp, HorasOcup, HorasNoLab: Double;
+  NumNodos, NodOrig, NodOpt, NodNoOpt, NodMan, NodBloq, NodAgr, NLotes: Integer;
+  OperTot, OperDist: Integer;
+  Serie: TArray<Double>;
+begin
+  NCen := Length(ASelected);
+  if (NCen = 0) or (AWindowEnd <= AWindowStart) then
+  begin
+    // Mismo estado "sin datos" que FillBlock.
+    ABlock.PercCarga.SetValueText('0.00 %', 0);
+    ABlock.PercDisponibilidad.SetValueText('0.00 %', 0);
+    ABlock.HorasOcupadas.SetValueText('0.00 h');
+    ABlock.HorasLaborables.SetValueText('0.00 h');
+    ABlock.HorasNoLaborables.SetValueText('0.00 h');
+    ABlock.NumNodes.SetValueText('0');
+    ABlock.DuracionMedia.SetValueText('0.00');
+    ABlock.NodoMasLargo.SetValueText('0.00');
+    ABlock.NodoMasCorto.SetValueText('0.00');
+    ABlock.NodosOriginales.SetValueText('0');
+    ABlock.NodosOptimizados.SetValueText('0');
+    ABlock.NodosNoOptimizados.SetValueText('0');
+    ABlock.NodosManuales.SetValueText('0');
+    ABlock.NodosBloqueados.SetValueText('0');
+    ABlock.NodosAgrupados.SetValueText('0');
+    ABlock.PrimerNodo.SetValueText('-');
+    ABlock.UltimoNodo.SetValueText('-');
+    ABlock.OperariosTotal.SetValueText('0');
+    ABlock.OperariosDistinct.SetValueText('0');
+    ABlock.MoldesTotal.SetMuted;   ABlock.MoldesDistinct.SetMuted;
+    ABlock.UtilajesTotal.SetMuted; ABlock.UtilajesDistinct.SetMuted;
+    Exit;
+  end;
+
+  DiasVentana := AWindowEnd - AWindowStart;
+  if DiasVentana < 1 then DiasVentana := 1;
+
+  // Capacidad ~8 h laborables por dia habil (5/7 del rango) x nº centros.
+  HorasLab := DiasVentana * (5.0 / 7.0) * 8.0 * NCen;
+
+  // % carga objetivo determinista alrededor de un valor que depende del seed
+  // y del nº de centros; oscila un poco para variar entre bloques.
+  Serie := DemoSerieHaciaValor(58 + (ASeed mod 40), 1, 0.25, ASeed + NCen);
+  if Length(Serie) > 0 then PctCarga := Serie[0] else PctCarga := 65;
+  if PctCarga < 0 then PctCarga := 0;
+  PctDisp := 100 - PctCarga; if PctDisp < 0 then PctDisp := 0;
+  HorasOcup := HorasLab * PctCarga / 100.0;
+  HorasNoLab := DiasVentana * 24.0 * NCen - HorasLab;
+  if HorasNoLab < 0 then HorasNoLab := 0;
+
+  // Nodos y clasificacion (deterministas, proporcional a ventana y centros).
+  NumNodos := Max(1, Round(DiasVentana / 3) * NCen);
+  NodOrig  := Round(NumNodos * 0.55);
+  NodOpt   := Round(NumNodos * 0.30);
+  NodNoOpt := NumNodos - NodOrig - NodOpt; if NodNoOpt < 0 then NodNoOpt := 0;
+  NodMan   := Max(0, (NumNodos div 8) + (ASeed mod 3));
+  NodBloq  := Max(0, (NumNodos div 12) + (ASeed mod 2));
+  NLotes   := Max(1, NumNodos div 10);
+  NodAgr   := Min(NumNodos, NLotes * 3);
+  OperTot  := NumNodos + (NumNodos div 2);
+  OperDist := Max(1, Min(OperTot, 4 + NCen * 2));
+
+  ABlock.PercCarga.SetValueText(FormatFloat('0.00', PctCarga) + ' %', PctCarga);
+  ABlock.PercDisponibilidad.SetValueText(FormatFloat('0.00', PctDisp) + ' %', PctDisp);
+  ABlock.HorasOcupadas.SetValueText(FormatFloat('0.00', HorasOcup) + ' h');
+  ABlock.HorasLaborables.SetValueText(FormatFloat('0.00', HorasLab) + ' h');
+  ABlock.HorasNoLaborables.SetValueText(FormatFloat('0.00', HorasNoLab) + ' h');
+  ABlock.NumNodes.SetValueText(IntToStr(NumNodos));
+  ABlock.DuracionMedia.SetValueText(FormatFloat('0.00', 90 + (ASeed mod 60)));
+  ABlock.NodoMasLargo.SetValueText(FormatFloat('0.00', 240 + (ASeed mod 120)));
+  ABlock.NodoMasCorto.SetValueText(FormatFloat('0.00', 15 + (ASeed mod 20)));
+  ABlock.NodosOriginales.SetValueText(IntToStr(NodOrig));
+  ABlock.NodosOptimizados.SetValueText(IntToStr(NodOpt));
+  ABlock.NodosNoOptimizados.SetValueText(IntToStr(NodNoOpt));
+  ABlock.NodosManuales.SetValueText(IntToStr(NodMan));
+  ABlock.NodosBloqueados.SetValueText(IntToStr(NodBloq));
+  if NodAgr > 0 then
+    ABlock.NodosAgrupados.SetValueText(Format('%d  (%d lotes)', [NodAgr, NLotes]))
+  else
+    ABlock.NodosAgrupados.SetValueText('0');
+  ABlock.PrimerNodo.SetValueText(FormatDateTime('dd/mm/yy hh:nn', AWindowStart + 0.3));
+  ABlock.UltimoNodo.SetValueText(FormatDateTime('dd/mm/yy hh:nn', AWindowEnd - 0.5));
+  ABlock.OperariosTotal.SetValueText(IntToStr(OperTot));
+  ABlock.OperariosDistinct.SetValueText(IntToStr(OperDist));
+  ABlock.MoldesTotal.SetMuted;   ABlock.MoldesDistinct.SetMuted;
+  ABlock.UtilajesTotal.SetMuted; ABlock.UtilajesDistinct.SetMuted;
+end;
+
+procedure TfrmCentresKPI.CargarAreasCombo;
+var
+  Vistas: TDictionary<string, Byte>;
+  I: Integer;
+  Ar: string;
+begin
+  FCmbArea.Items.BeginUpdate;
+  Vistas := TDictionary<string, Byte>.Create;
+  try
+    FCmbArea.Items.Clear;
+    FCmbArea.Items.Add('(Todas las '#225'reas)');
+    for I := 0 to High(FCentres) do
+    begin
+      Ar := Trim(FCentres[I].Area);
+      if Ar = '' then Continue;
+      if not Vistas.ContainsKey(AnsiUpperCase(Ar)) then
+      begin
+        Vistas.Add(AnsiUpperCase(Ar), 1);
+        FCmbArea.Items.Add(Ar);
+      end;
+    end;
+    FCmbArea.ItemIndex := 0;
+    FAreaSel := '';
+  finally
+    Vistas.Free;
+    FCmbArea.Items.EndUpdate;
+  end;
+end;
+
+procedure TfrmCentresKPI.AreaChange(Sender: TObject);
+begin
+  if FCmbArea.ItemIndex <= 0 then
+    FAreaSel := ''
+  else
+    FAreaSel := FCmbArea.Items[FCmbArea.ItemIndex];
+  RellenarComboCentros(-1);
+  RecalcularTodo;
+end;
+
+procedure TfrmCentresKPI.RellenarComboCentros(AInitialIdx: Integer);
+var
+  I, PrimerVisible: Integer;
+begin
+  // Rellena el CheckComboBox con los centros del area activa (o todos si
+  // FAreaSel=''). Los indices del combo mapean 1:1 con FCentres visibles;
+  // GetSelectedCentres asume que el orden coincide con FCentres, asi que
+  // mantenemos el mismo orden y ocultamos por indice los que no son del area.
+  FUpdatingCentros := True;
+  try
+    cbCentros.Properties.Items.Clear;
+    PrimerVisible := -1;
+    for I := 0 to High(FCentres) do
+    begin
+      if (FAreaSel <> '') and
+         (not SameText(Trim(FCentres[I].Area), FAreaSel)) then
+        Continue;   // fuera del area -> no se anade
+      cbCentros.Properties.Items.AddCheckItem(
+        Format('[%d] %s', [FCentres[I].Id, FCentres[I].Titulo]));
+      if PrimerVisible < 0 then PrimerVisible := cbCentros.Properties.Items.Count - 1;
+    end;
+    // Marcar seleccion inicial: el indice pedido si es valido, si no el primero.
+    if cbCentros.Properties.Items.Count > 0 then
+    begin
+      if (AInitialIdx >= 0) and (AInitialIdx < cbCentros.Properties.Items.Count) then
+        cbCentros.States[AInitialIdx] := cbsChecked
+      else
+        cbCentros.States[0] := cbsChecked;
+    end;
+  finally
+    FUpdatingCentros := False;
+  end;
+end;
+
 procedure TfrmCentresKPI.RecalcularTodo;
 var
   Selected: TArray<TCentreTreball>;
 begin
-  if FGanttControl = nil then Exit;
   Selected := GetSelectedCentres;
   FillInfo(Selected);
+
+  // Modo demo: generar KPIs sinteticos (no depende del GanttControl, que en
+  // demo puede no existir). Cada bloque con un seed distinto para variar.
+  if DemoMode.Active then
+  begin
+    var HoyD: TDateTime := Trunc(Now);
+    FillBlockDemo(Selected, HoyD - 7, HoyD + 7, 101, FBlockA);
+    FillBlockDemo(Selected, HoyD, HoyD + 30, 202, FBlockB);
+    FillBlockDemo(Selected, HoyD - 30, HoyD + 60, 303, FBlockC);
+    FillBlockDemo(Selected, Trunc(dtDesdeD.Date), Trunc(dtHastaD.Date) + 1, 404, FBlockD);
+    Exit;
+  end;
+
+  if FGanttControl = nil then Exit;
   FillBlock(Selected, FGanttControl.StartVisibleTime, FGanttControl.EndVisibleTime, FBlockA);
   FillBlock(Selected, Now, FGanttControl.EndTime, FBlockB);
   FillBlock(Selected, FGanttControl.StartTime, FGanttControl.EndTime, FBlockC);
+  FillBlock(Selected, Trunc(dtDesdeD.Date), Trunc(dtHastaD.Date) + 1, FBlockD);
 end;
 end.

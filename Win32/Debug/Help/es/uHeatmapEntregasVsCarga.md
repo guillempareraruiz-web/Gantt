@@ -17,10 +17,13 @@ Una **matriz** con los centros de trabajo en las filas y los periodos en las col
 ### Filtros (barra superior)
 
 - **Granularidad**: Días, Semanas (por defecto) o Meses.
-- **Número periodos**: cuántos periodos mostrar.
-- **Desde**: fecha del primer periodo.
+- **Periodos**: cuántos periodos mostrar.
+- **Desde**: fecha del primer periodo. Para semanas se ajusta al lunes; para meses al día 1.
 - **Centros**: combo con selección múltiple. La opción "(Todos)" marca o desmarca el resto.
-- **Recalcular**: fuerza el recálculo manual.
+- **Área**: muestra solo los centros de un área concreta de la empresa. Elige "(Todas las áreas)" para volver a verlos todos.
+- **Ver detalle**: activa una vista ampliada donde cada celda muestra, además del %, las horas comprometidas frente a las disponibles y el número de entregas.
+- **Exportar CSV / Exportar PNG** (arriba a la derecha): guardan la matriz tal como se ve, para llevarla a una hoja de cálculo o incrustarla en un informe o presentación.
+- **Recalcular**: fuerza el recálculo manual (también se recalcula al cambiar cualquier filtro).
 
 ### Lectura de la matriz
 
@@ -28,6 +31,14 @@ Una **matriz** con los centros de trabajo en las filas y los periodos en las col
 - **Columnas**: periodos consecutivos.
 - **Celda**: % de compromiso del centro en ese periodo (horas prometidas vs capacidad disponible).
 - **"---"**: el centro no tiene calendario o no tiene horas laborables en ese periodo.
+- **Columna Promedio** (derecha): compromiso medio del centro en todo el horizonte mostrado.
+- **Columna Tendencia** (derecha): una minigráfica que resume de un vistazo si el centro sube o baja de compromiso a lo largo de los periodos, con una guía en el 100%.
+- **Fila RESUMEN TOTALES** (abajo): compromiso global del conjunto de centros seleccionados en cada periodo, y el total general alineado con la columna Promedio.
+
+### Interacción
+
+- **Pasa el ratón** sobre cualquier celda para ver un detalle emergente con las horas comprometidas, la capacidad disponible, el número de entregas y, si procede, el exceso de compromiso.
+- **Haz clic en la cabecera "Centro"** para ordenar las filas por nombre, o en **"Promedio"** para ordenarlas por compromiso (de más a menos comprometido). Un segundo clic invierte el orden; una flecha indica el sentido.
 
 ### Leyenda de colores
 

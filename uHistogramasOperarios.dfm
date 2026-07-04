@@ -116,20 +116,31 @@ object frmHistogramasOperarios: TfrmHistogramasOperarios
       Top = 30
       AutoSize = False
       Properties.EmptySelectionText = 'Todos los operarios'
+      Properties.EditValueFormat = cvfIndices
       Properties.Items = <>
       Properties.OnEditValueChanged = cbOperariosChange
       TabOrder = 2
       Height = 25
       Width = 240
     end
-    object btnRecalcular: TButton
+    object btnRecalcular: TcxButton
       Left = 1186
       Top = 24
       Width = 110
       Height = 28
       Anchors = [akTop, akRight]
       Caption = 'Recalcular'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
       TabOrder = 3
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
       OnClick = btnRecalcularClick
     end
   end
@@ -204,6 +215,116 @@ object frmHistogramasOperarios: TfrmHistogramasOperarios
           Width = 1312
           Height = 461
           OnPaint = pbCostePaint
+        end
+      end
+    end
+    object tabComparativa: TTabSheet
+      Caption = 'Plan vs Capacidad'
+      ImageIndex = 3
+      object sbComparativa: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 461
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbComparativa: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 461
+          OnPaint = pbComparativaPaint
+        end
+      end
+    end
+    object tabEvolucion: TTabSheet
+      Caption = 'Evoluci'#243'n temporal'
+      ImageIndex = 4
+      object sbEvolucion: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 461
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbEvolucion: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 461
+          OnPaint = pbEvolucionPaint
+        end
+      end
+    end
+    object tabProyeccion: TTabSheet
+      Caption = 'Proyecci'#243'n'
+      ImageIndex = 5
+      object sbProyeccion: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 461
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbProyeccion: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 461
+          OnPaint = pbProyeccionPaint
+        end
+      end
+    end
+    object tabPareto: TTabSheet
+      Caption = 'Pareto'
+      ImageIndex = 6
+      object sbPareto: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 461
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbPareto: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 461
+          OnPaint = pbParetoPaint
+        end
+      end
+    end
+    object tabScatter: TTabSheet
+      Caption = 'Ocupaci'#243'n vs Coste'
+      ImageIndex = 7
+      object sbScatter: TScrollBox
+        Left = 0
+        Top = 0
+        Width = 1312
+        Height = 461
+        Align = alClient
+        BorderStyle = bsNone
+        Color = 16317660
+        ParentColor = False
+        TabOrder = 0
+        object pbScatter: TPaintBox
+          Left = 0
+          Top = 0
+          Width = 1312
+          Height = 461
+          OnPaint = pbScatterPaint
         end
       end
     end

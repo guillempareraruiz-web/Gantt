@@ -5,7 +5,7 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
   BorderStyle = bsDialog
   Caption = 'Heatmap de entregas vs capacidad'
   ClientHeight = 620
-  ClientWidth = 1320
+  ClientWidth = 1214
   Color = 16317660
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -21,17 +21,18 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
   object pnlHeader: TPanel
     Left = 0
     Top = 0
-    Width = 1320
+    Width = 1214
     Height = 64
     Align = alTop
     BevelOuter = bvNone
     Color = 3553567
     ParentBackground = False
     TabOrder = 0
+    ExplicitWidth = 1320
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 290
+      Width = 298
       Height = 25
       Caption = 'Heatmap de entregas vs capacidad'
       Font.Charset = DEFAULT_CHARSET
@@ -44,9 +45,9 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
     object lblSubtitle: TLabel
       Left = 16
       Top = 38
-      Width = 520
+      Width = 518
       Height = 15
-      Caption =
+      Caption = 
         '% compromiso por centro y periodo: horas de entrega comprometida' +
         's / capacidad del calendario.'
       Font.Charset = DEFAULT_CHARSET
@@ -60,15 +61,16 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
   object pnlToolbar: TPanel
     Left = 0
     Top = 64
-    Width = 1320
+    Width = 1214
     Height = 65
     Align = alTop
     BevelOuter = bvNone
     Color = 16317660
     ParentBackground = False
     TabOrder = 1
+    ExplicitWidth = 1320
     DesignSize = (
-      1320
+      1214
       65)
     object lblGran: TLabel
       Left = 16
@@ -78,21 +80,21 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
       Caption = 'Granularidad:'
     end
     object lblNum: TLabel
-      Left = 238
+      Left = 150
       Top = 15
-      Width = 96
+      Width = 49
       Height = 15
-      Caption = 'N'#250'mero periodos:'
+      Caption = 'Periodos:'
     end
     object lblDesde: TLabel
-      Left = 368
-      Top = 15
+      Left = 227
+      Top = 16
       Width = 35
       Height = 15
       Caption = 'Desde:'
     end
     object lblCentros: TLabel
-      Left = 520
+      Left = 379
       Top = 14
       Width = 44
       Height = 15
@@ -101,7 +103,7 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
     object cmbGranularidad: TComboBox
       Left = 16
       Top = 31
-      Width = 200
+      Width = 110
       Height = 23
       Style = csDropDownList
       TabOrder = 0
@@ -112,9 +114,9 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
         'Meses')
     end
     object spNumPeriodos: TSpinEdit
-      Left = 238
+      Left = 150
       Top = 31
-      Width = 107
+      Width = 55
       Height = 24
       MaxValue = 52
       MinValue = 1
@@ -123,8 +125,8 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
       OnChange = ParametrosChange
     end
     object dtDesde: TDateTimePicker
-      Left = 368
-      Top = 31
+      Left = 227
+      Top = 32
       Width = 130
       Height = 23
       Date = 46163.000000000000000000
@@ -132,21 +134,33 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
       TabOrder = 2
       OnChange = ParametrosChange
     end
-    object btnRecalcular: TButton
-      Left = 1186
+    object btnRecalcular: TcxButton
+      Left = 1080
       Top = 24
       Width = 110
       Height = 28
       Anchors = [akTop, akRight]
       Caption = 'Recalcular'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
       TabOrder = 3
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
       OnClick = btnRecalcularClick
+      ExplicitLeft = 1186
     end
     object cbCentros: TcxCheckComboBox
-      Left = 520
-      Top = 30
+      Left = 379
+      Top = 31
       AutoSize = False
       Properties.EmptySelectionText = 'Todos los centros'
+      Properties.EditValueFormat = cvfIndices
       Properties.Items = <>
       Properties.OnEditValueChanged = cbCentrosChange
       TabOrder = 4
@@ -157,13 +171,14 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
   object pnlLegend: TPanel
     Left = 0
     Top = 129
-    Width = 1320
+    Width = 1214
     Height = 40
     Align = alTop
     BevelOuter = bvNone
     Color = 16317660
     ParentBackground = False
     TabOrder = 2
+    ExplicitWidth = 1320
     object pbLegend: TPaintBox
       Left = 16
       Top = 6
@@ -175,18 +190,19 @@ object frmHeatmapEntregasVsCarga: TfrmHeatmapEntregasVsCarga
   object sbMatrix: TScrollBox
     Left = 0
     Top = 169
-    Width = 1320
-    Height = 411
+    Width = 1214
+    Height = 451
     Align = alClient
     BorderStyle = bsNone
     Color = 16317660
     ParentColor = False
-    TabOrder = 4
+    TabOrder = 3
+    ExplicitWidth = 1320
     object pbMatrix: TPaintBox
       Left = 0
       Top = 0
       Width = 1320
-      Height = 411
+      Height = 432
       OnPaint = pbMatrixPaint
     end
   end
