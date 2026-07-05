@@ -58,6 +58,7 @@ type
     SincronizarERP1: TMenuItem;
     AsistenteInstalacion1: TMenuItem;
     GenerarNodosDemo1: TMenuItem;
+    RegenerarGanttDemo1: TMenuItem;
     Salir1: TMenuItem;
     N3: TMenuItem;
     Entidades1: TMenuItem;
@@ -123,16 +124,14 @@ type
     btnTB_Dashboard: TcxButton;
     btnTB_BackLog: TcxButton;
     btnTB_PlaniCentros: TcxButton;
-    cxButton1: TcxButton;
-
-    Label28: TLabel;  btnTB_PlaniOperarios: TcxButton;
+    cxButton1: TcxButton;  btnTB_PlaniOperarios: TcxButton;
     btnTB_PlaniGantt: TcxButton;
     btnTB_Help: TcxButton;
-    Label29: TLabel;
     btnLinkERP: TcxButton;
     btnTB_Demo: TcxButton;
     cxButton2: TcxButton;
     btnTB_PlaniAlertas: TcxButton;
+    N7: TMenuItem;
 
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
@@ -148,6 +147,7 @@ type
     procedure DashboardOperativo1Click(Sender: TObject);
     procedure AsistenteInstalacion1Click(Sender: TObject);
     procedure GenerarNodosDemo1Click(Sender: TObject);
+    procedure RegenerarGanttDemo1Click(Sender: TObject);
     procedure Dashboard1Click(Sender: TObject);
     procedure Areas1Click(Sender: TObject);
     procedure Departamentos1Click(Sender: TObject);
@@ -160,6 +160,8 @@ type
     procedure PesosScoring1Click(Sender: TObject);
     procedure MostrarDashboard;
     procedure OcultarDashboard;
+    procedure AplicarModoDemoGantt;   // entra/sale del proyecto demo y recarga
+    procedure ActualizarCaption;      // "FSPlanner 2026 - Empresa - Proyecto"
     procedure MostrarBacklog;
     procedure OcultarBacklog;
     procedure MostrarFiniteCapacityOperaris;
@@ -743,12 +745,67 @@ begin
   ShowMessage('Enlace directo hacia el ERP');
 end;
 
+procedure TForm1.AplicarModoDemoGantt;
+var
+  DemoId, NumNodos, Generados: Integer;
+  S: string;
+begin
+  // El modo demo del GANTT vive en un proyecto propio (EsDemo=1), aislado de
+  // los datos reales. Entrar = cambiar el proyecto activo al demo; salir =
+  // volver al real. Distinto del DemoMode "en memoria" de KPIs/graficos.
+  if not DMPlanner.IsConnected then Exit;
+
+  if uDemoMode.DemoMode.Active then
+  begin
+    DemoId := DMPlanner.EntrarModoDemo;
+    if DemoId <= 0 then
+    begin
+      ShowMessage('No se ha podido preparar el proyecto de demostraci'#243'n.');
+      Exit;
+    end;
+    // Si el proyecto demo esta vacio, preguntar cuantos nodos generar.
+    if DMPlanner.ContarNodosProyecto(DemoId) = 0 then
+    begin
+      S := '200';
+      if InputQuery('Gantt en modo demostraci'#243'n',
+           'El Gantt de demostraci'#243'n est'#225' vac'#237'o.'#13#10 +
+           #191'Cu'#225'ntos nodos ficticios quieres generar? (10-2000)', S) then
+      begin
+        NumNodos := StrToIntDef(Trim(S), 0);
+        if NumNodos < 10 then NumNodos := 10;
+        if NumNodos > 2000 then NumNodos := 2000;
+        Generados := 0;
+        ShowBusy(Self, 'Generando ' + IntToStr(NumNodos) + ' nodos de demostraci'#243'n...',
+          procedure
+          begin
+            Generados := DMPlanner.GenerarNodosDemoEnProyecto(DemoId, NumNodos);
+          end);
+        if Generados <= 0 then
+          ShowMessage('No se han podido generar los nodos de demostraci'#243'n.');
+      end;
+    end;
+  end
+  else
+    DMPlanner.SalirModoDemo;
+
+  // Recargar el plan activo (demo o real) recien conmutado. Usamos
+  // LoadActivePlan y NO solo FVistaGantt.Inicializar porque este ultimo NO
+  // recarga las asignaciones de operarios (FOperariosRepo) ni los centros: eso
+  // lo hace LoadActivePlan. Si no, los nodos demo apareceran sin operarios
+  // aunque esten en BD.
+  LoadActivePlan;
+
+  ActualizarCaption;   // refleja "... - ★ DEMOSTRACIÓN" o el proyecto real
+end;
+
 procedure TForm1.btnTB_DemoClick(Sender: TObject);
 begin
   // Boton sticky (GroupIndex=2, AllowAllUp): su estado Down define el modo.
   // Al conmutar, DemoMode avisa a las pantallas suscritas para que se
-  // repinten con datos ficticios (Down) o reales (Up). No toca la BD.
+  // repinten con datos ficticios (Down) o reales (Up).
   uDemoMode.DemoMode.Active := btnTB_Demo.Down;
+  // Ademas, el GANTT usa un proyecto demo aislado: entrar/salir de el y recargar.
+  AplicarModoDemoGantt;
 end;
 
 procedure TForm1.btnTB_HelpClick(Sender: TObject);
@@ -1604,20 +1661,27 @@ begin
   begin
     if Assigned(DMPlanner) and Assigned(DMPlanner.NodeDataRepo) then
       DMPlanner.NodeDataRepo.Clear;
+    ActualizarCaption;
     MostrarDashboard;
     Exit;
   end;
 
   DMPlanner.NodeDataRepo.Clear;
 
-  // Resolver proyecto activo del usuario logueado
-  if CurrentSession.UserId > 0 then
-    DMPlanner.LoadUserActiveProject(CurrentSession.UserId)
-  else
-    DMPlanner.LoadMasterProject;
+  // Resolver proyecto activo del usuario logueado. EXCEPCION: en modo demo el
+  // proyecto activo ya es el proyecto demo (fijado por EntrarModoDemo); NO hay
+  // que re-resolverlo desde la sesion/master o se perderia el demo.
+  if not DMPlanner.EnModoDemo then
+  begin
+    if CurrentSession.UserId > 0 then
+      DMPlanner.LoadUserActiveProject(CurrentSession.UserId)
+    else
+      DMPlanner.LoadMasterProject;
+  end;
 
   if DMPlanner.CurrentProjectId <= 0 then
   begin
+    ActualizarCaption;
     MostrarDashboard;
     Exit;
   end;
@@ -1633,6 +1697,10 @@ begin
   // Cargar asignaciones de operarios del proyecto activo
   if Assigned(FOperariosRepo) then
   begin
+    // Vaciar las asignaciones previas: LoadActivePlan puede llamarse varias
+    // veces (cambio de proyecto, entrar/salir de demo, regenerar) y sin este
+    // Clear las asignaciones se ACUMULAN -> operarios duplicados por nodo.
+    FOperariosRepo.ClearTodasAsignaciones;
     FOperariosRepo.BulkLoadMode := True;
     var QAsig := TADOQuery.Create(nil);
     try
@@ -1710,6 +1778,25 @@ begin
   // Si la VistaGantt ya existe, refrescarla con los nuevos datos
   if Assigned(FVistaGantt) and FVistaGantt.Visible then
     FVistaGantt.Inicializar;
+
+  ActualizarCaption;
+end;
+
+procedure TForm1.ActualizarCaption;
+const
+  BASE = 'FSPlanner 2026';
+var
+  S: string;
+begin
+  S := BASE;
+  if Assigned(DMPlanner) and DMPlanner.IsConnected then
+  begin
+    if DMPlanner.CurrentEmpresaNombre <> '' then
+      S := S + '  -  ' + DMPlanner.CurrentEmpresaNombre;
+    if DMPlanner.CurrentProjectName <> '' then
+      S := S + '  -  ' + DMPlanner.CurrentProjectName;
+  end;
+  Caption := S;
 end;
 
 { ========================================================= }
@@ -2058,6 +2145,62 @@ begin
     Exit;
   end;
   TfrmGenerarNodosDemo.Execute;
+end;
+
+procedure TForm1.RegenerarGanttDemo1Click(Sender: TObject);
+var
+  DemoId, Actual, NumNodos, Generados: Integer;
+  S: string;
+begin
+  if not DMPlanner.IsConnected then
+  begin
+    ShowMessage('No hay conexi'#243'n con la base de datos.');
+    Exit;
+  end;
+
+  DemoId := DMPlanner.GetOrCreateDemoProjectId;
+  if DemoId <= 0 then
+  begin
+    ShowMessage('No se ha podido preparar el proyecto de demostraci'#243'n.');
+    Exit;
+  end;
+
+  Actual := DMPlanner.ContarNodosProyecto(DemoId);
+  if Actual > 0 then
+    S := IntToStr(Actual)
+  else
+    S := '200';
+
+  if not InputQuery('Regenerar Gantt de demostraci'#243'n',
+       'Esto BORRA los nodos actuales del Gantt demo y crea otros nuevos.'#13#10 +
+       'Solo afecta al proyecto de demostraci'#243'n, nunca a tus datos reales.'#13#10 +
+       #191'Cu'#225'ntos nodos ficticios quieres generar? (10-2000)', S) then
+    Exit;
+
+  NumNodos := StrToIntDef(Trim(S), 0);
+  if NumNodos < 10 then NumNodos := 10;
+  if NumNodos > 2000 then NumNodos := 2000;
+
+  Generados := 0;
+  ShowBusy(Self, 'Generando ' + IntToStr(NumNodos) + ' nodos de demostraci'#243'n...',
+    procedure
+    begin
+      Generados := DMPlanner.GenerarNodosDemoEnProyecto(DemoId, NumNodos);
+    end);
+
+  if Generados <= 0 then
+  begin
+    ShowMessage('No se han podido generar los nodos de demostraci'#243'n. '
+      + #191'Hay centros de trabajo activos?');
+    Exit;
+  end;
+
+  // Si estamos en modo demo, recargar el plan (LoadActivePlan recarga tambien
+  // las asignaciones de operarios; FVistaGantt.Inicializar solo no basta).
+  if uDemoMode.DemoMode.Active then
+    LoadActivePlan;
+
+  ShowMessage(Format('Gantt de demostraci'#243'n regenerado: %d nodos.', [Generados]));
 end;
 
 procedure TForm1.Dashboard1Click(Sender: TObject);

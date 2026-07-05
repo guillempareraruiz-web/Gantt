@@ -228,15 +228,6 @@ type
     pnlKPI0: TPanel;
     LblKPITitle0: TLabel;
     LblKPIValue0: TLabel;
-    pnlOperarios: TPanel;
-    Label23: TLabel;
-    Shape3: TShape;
-    Label19: TLabel;
-    btnHighlightOperarios: TcxButton;
-    btnFilterOperarios: TcxButton;
-    FcxFilterOperarios: TcxCheckComboBox;
-    cbDepartamentos: TcxCheckComboBox;
-    btnClearOperarios: TcxButton;
     pnlSummary: TPanel;
     pnlSummaryToolbar: TPanel;
     Shape4: TShape;
@@ -246,8 +237,6 @@ type
     btnS4: TcxButton;
     btnS1: TcxButton;
     btnS2: TcxButton;
-    btnAutoPlanSel: TcxButton;
-    btnDesasignarSel: TcxButton;
     LblKPITitle1: TLabel;
     LblKPITitle2: TLabel;
     LblKPITitle3: TLabel;
@@ -263,17 +252,30 @@ type
     btnCompactar: TcxButton;
     btnCompact: TcxButton;
     btnFoco: TcxButton;
-    btnAtajos: TcxButton;
-    cxButton2: TcxButton;
     PopOpciones: TPopupMenu;
     Dependencias1: TMenuItem;
     Versumario1: TMenuItem;
+    miVerOperarios: TMenuItem;
     aaa1: TMenuItem;
     ssss1: TMenuItem;
     Noverninguna1: TMenuItem;
     N6: TMenuItem;
+    pnlOperarios: TPanel;
+    Label23: TLabel;
+    Shape3: TShape;
+    Label19: TLabel;
+    btnHighlightOperarios: TcxButton;
+    btnFilterOperarios: TcxButton;
+    FcxFilterOperarios: TcxCheckComboBox;
+    cbDepartamentos: TcxCheckComboBox;
+    btnClearOperarios: TcxButton;
+    btnAutoPlanSel: TcxButton;
+    btnDesasignarSel: TcxButton;
+    btnAtajos: TcxButton;
+    cxButton2: TcxButton;
     procedure btnAtajosClick(Sender: TObject);
     procedure Versumario1Click(Sender: TObject);
+    procedure miVerOperariosClick(Sender: TObject);
     procedure btnFocoClick(Sender: TObject);
     procedure btnCompactarClick(Sender: TObject);
     procedure pnlKPIAlertasClick(Sender: TObject);
@@ -585,6 +587,7 @@ type
     procedure Inicializar(const AFechaInicio, AFechaFin: TDateTime); overload;
     procedure Inicializar; overload;
     procedure SaveViewportPrefs;
+    procedure AplicarPanelOperarios(AVisible: Boolean);
     procedure RestoreViewportPrefs;
     procedure ApplyPendingViewport;
     procedure CargarCentros;
@@ -1836,7 +1839,7 @@ var
   GanttStart, GanttEnd: TDateTime;
   PxPerMin, ScrollX, ScrollY: Double;
   VistaIndex, SummaryViewInt: Integer;
-  HideWeekends: Boolean;
+  HideWeekends, OperariosVisible: Boolean;
   HasGanttRange, HasViewport, HasVista: Boolean;
 begin
   // Llenar los combos de filtro (operarios / departamentos). Va FUERA del flujo
@@ -1861,6 +1864,7 @@ begin
     ScrollY := 0;
     VistaIndex := 0;
     HideWeekends := False;
+    OperariosVisible := False;   // por defecto el panel Operarios esta oculto
 
     Js := DMPlanner.UserPrefs.Load(SCREEN_KEY_VISTA_GANTT);
     if Js <> '' then
@@ -1897,6 +1901,7 @@ begin
           HasVista := True;
 
         Root.TryGetValue<Boolean>('hideWeekends', HideWeekends);
+        Root.TryGetValue<Boolean>('operariosPanel', OperariosVisible);
         Root.TryGetValue<Integer>('summaryView', SummaryViewInt);
       finally
         Root.Free;
@@ -1949,6 +1954,13 @@ begin
       end;
       cbVistasPropertiesChange(cbVistas);
     end;
+
+    // Restaurar visibilidad del panel Operarios (eleccion del usuario) y
+    // sincronizar el check del item de menu Opciones. AplicarPanelOperarios
+    // ajusta tambien la altura del contenedor (si no, el panel no se veria).
+    AplicarPanelOperarios(OperariosVisible);
+    if Assigned(miVerOperarios) then
+      miVerOperarios.Checked := OperariosVisible;
 
     // Restaurar la vista del Summary (banda KPIs): pulsar el boton toggle
     // correspondiente para que quede marcado y SetSummaryView recalcule.
@@ -2051,6 +2063,9 @@ begin
     Root.AddPair('scrollY', TJSONNumber.Create(FGanttControl.ScrollY));
     Root.AddPair('vistaIndex', TJSONNumber.Create(cbVistas.ItemIndex));
     Root.AddPair('hideWeekends', TJSONBool.Create(FGanttControl.HideWeekends));
+    // Panel Operarios: visible u oculto (eleccion del usuario en Opciones).
+    if Assigned(pnlOperarios) then
+      Root.AddPair('operariosPanel', TJSONBool.Create(pnlOperarios.Visible));
     // Vista del Summary (banda KPIs por dia) para restaurarla al reabrir.
     if Assigned(FSummaryControl) then
       Root.AddPair('summaryView', TJSONNumber.Create(Ord(FSummaryControl.View)));
@@ -2610,9 +2625,11 @@ end;
 
 procedure TfrmVistaGantt.lblTituloClick(Sender: TObject);
 begin
-  pnlOperarios.Visible := true;
-  pnlOperarios.BringTofront;
-
+  // Atajo: clic en el titulo muestra el panel Operarios. Mantener coherente el
+  // check del menu Opciones y persistir la eleccion (mismo estado que miVerOperarios).
+  AplicarPanelOperarios(True);
+  if Assigned(miVerOperarios) then miVerOperarios.Checked := True;
+  SaveViewportPrefs;
 end;
 
 // Anade el item "Crear nodo manual..." al popup de la zona vacia del Gantt.
@@ -3219,6 +3236,59 @@ begin
     ScheduleSummaryRecalc(True)
   else if Assigned(FSummaryDebounceTimer) then
     FSummaryDebounceTimer.Enabled := False;  // cancelar calculo pendiente
+end;
+
+// Muestra u oculta el panel Operarios. Como pnlOperarios es alTop DENTRO de
+// Panel1 (contenedor de altura FIJA), no basta con Visible: hay que ampliar/
+// reducir la altura de Panel1 en la altura del panel, o quedaria fuera del area
+// visible del contenedor (por eso "no se veia").
+procedure TfrmVistaGantt.AplicarPanelOperarios(AVisible: Boolean);
+var
+  Cont: TWinControl;
+  I: Integer;
+  C: TControl;
+  AlturaFijos: Integer;
+begin
+  if not Assigned(pnlOperarios) then Exit;
+  Cont := pnlOperarios.Parent;   // = Panel1
+  if Cont = nil then
+  begin
+    pnlOperarios.Visible := AVisible;
+    Exit;
+  end;
+
+  // Altura base = suma de las alturas de TODOS los hijos alTop del contenedor
+  // que NO son el panel Operarios (titulo, subtitulo, toolbar...). Se calcula
+  // en cada llamada leyendo el estado real, para no depender de un valor inicial
+  // fragil ni ocultar por error otros paneles (p.ej. pnlSubTitulo).
+  AlturaFijos := 0;
+  for I := 0 to Cont.ControlCount - 1 do
+  begin
+    C := Cont.Controls[I];
+    // Solo los hijos alTop VISIBLES y distintos del panel Operarios (algunos,
+    // como Panel3, estan ocultos en el DFM y no ocupan altura).
+    if (C <> pnlOperarios) and (C.Align = alTop) and C.Visible then
+      Inc(AlturaFijos, C.Height);
+  end;
+
+  // El contenedor debe medir siempre lo suficiente para los paneles fijos, y
+  // sumar el de Operarios solo cuando esta visible. Asi pnlSubTitulo (y el
+  // resto) quedan SIEMPRE dentro del area visible.
+  pnlOperarios.Visible := AVisible;
+  if AVisible then
+  begin
+    Cont.Height := AlturaFijos + pnlOperarios.Height;
+    pnlOperarios.BringToFront;
+  end
+  else
+    Cont.Height := AlturaFijos;
+end;
+
+procedure TfrmVistaGantt.miVerOperariosClick(Sender: TObject);
+begin
+  // AutoCheck ya togleo miVerOperarios.Checked antes de este OnClick.
+  AplicarPanelOperarios(miVerOperarios.Checked);
+  SaveViewportPrefs;   // persistir la eleccion (save-on-change)
 end;
 
 procedure TfrmVistaGantt.RebuildSummaryData;

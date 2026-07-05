@@ -82,6 +82,7 @@ type
     function GetAsignacionsByOperario(OperarioId: Integer): TArray<TAsignacionOperario>;
     function GetAllAsignacions: TArray<TAsignacionOperario>;
     procedure ClearAsignacionsByNode(DataId: Integer);
+    procedure ClearTodasAsignaciones;   // vacia TODAS (para recargar de BD sin duplicar)
 
     // --- Consultes ---
     function GetOperarisDisponiblesPerNode(DataId: Integer; const Operacion: string): TArray<TOperario>;
@@ -497,6 +498,14 @@ begin
       FAsignacions.Delete(I);
   if (not FBulkLoadMode) and Assigned(FOnAsignacionsNodeCleared) then
     FOnAsignacionsNodeCleared(DataId);
+end;
+
+// Vacia TODAS las asignaciones en memoria. Necesario antes de recargar de BD
+// (LoadActivePlan): si no, cada recarga las acumula sobre las anteriores y
+// aparecen operarios DUPLICADOS en cada nodo.
+procedure TOperariosRepo.ClearTodasAsignaciones;
+begin
+  FAsignacions.Clear;
 end;
 
 { --- Consultes --- }

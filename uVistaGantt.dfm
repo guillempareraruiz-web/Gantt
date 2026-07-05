@@ -668,7 +668,7 @@ object frmVistaGantt: TfrmVistaGantt
     TabOrder = 1
     object pnlToolbar: TPanel
       Left = 0
-      Top = 118
+      Top = 166
       Width = 1130
       Height = 109
       Align = alTop
@@ -676,6 +676,7 @@ object frmVistaGantt: TfrmVistaGantt
       ParentBackground = False
       TabOrder = 0
       Visible = False
+      ExplicitTop = 118
       DesignSize = (
         1130
         109)
@@ -1063,7 +1064,7 @@ object frmVistaGantt: TfrmVistaGantt
     end
     object Panel3: TPanel
       Left = 0
-      Top = 227
+      Top = 275
       Width = 1130
       Height = 50
       Align = alTop
@@ -1071,6 +1072,7 @@ object frmVistaGantt: TfrmVistaGantt
       ParentBackground = False
       TabOrder = 1
       Visible = False
+      ExplicitTop = 227
       DesignSize = (
         1130
         50)
@@ -1413,7 +1415,7 @@ object frmVistaGantt: TfrmVistaGantt
       TabOrder = 2
       object lblTitulo: TLabel
         Left = 69
-        Top = 5
+        Top = 1
         Width = 122
         Height = 32
         Caption = 'Vista Gantt'
@@ -1427,7 +1429,7 @@ object frmVistaGantt: TfrmVistaGantt
       end
       object lblSubtitulo: TLabel
         Left = 69
-        Top = 39
+        Top = 28
         Width = 148
         Height = 15
         Caption = 'Resumen de la sesi'#243'n actual'
@@ -1439,11 +1441,10 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
       end
       object lblFechaHora: TLabel
-        Left = 223
-        Top = 31
+        Left = 93
+        Top = 40
         Width = 240
         Height = 29
-        Alignment = taRightJustify
         AutoSize = False
         Caption = '01.01.2026  -  31.12.2026'
         Font.Charset = DEFAULT_CHARSET
@@ -1522,8 +1523,8 @@ object frmVistaGantt: TfrmVistaGantt
         Width = 56
       end
       object btnGanttDates: TcxButton
-        Left = 468
-        Top = 37
+        Left = 67
+        Top = 46
         Width = 20
         Height = 19
         Caption = '...'
@@ -1881,52 +1882,6 @@ object frmVistaGantt: TfrmVistaGantt
           OnClick = pnlKPIAlertasClick
           ExplicitTop = 8
         end
-      end
-      object btnAtajos: TcxButton
-        Left = 382
-        Top = 12
-        Width = 24
-        Height = 19
-        Hint = 'Atajos y gestos (May'#250's+F1)'
-        Caption = '?'
-        LookAndFeel.Kind = lfUltraFlat
-        LookAndFeel.NativeStyle = False
-        LookAndFeel.SkinName = 'Sharp'
-        ParentShowHint = False
-        ShowHint = True
-        SpeedButtonOptions.CanBeFocused = False
-        TabOrder = 8
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWhite
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        OnClick = btnAtajosClick
-      end
-      object cxButton2: TcxButton
-        Left = 412
-        Top = 12
-        Width = 76
-        Height = 19
-        Hint = 'Opciones del Gantt'
-        Caption = 'Opciones'
-        DropDownMenu = PopOpciones
-        Kind = cxbkOfficeDropDown
-        LookAndFeel.Kind = lfUltraFlat
-        LookAndFeel.NativeStyle = False
-        LookAndFeel.SkinName = 'Sharp'
-        ParentShowHint = False
-        ShowHint = True
-        SpeedButtonOptions.CanBeFocused = False
-        TabOrder = 9
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWhite
-        Font.Height = -9
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        OnClick = btnAtajosClick
       end
     end
     object pnlSubTitulo: TPanel
@@ -2337,366 +2292,6 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         OnClick = btnShowWeekendsClick
       end
-      object pnlOperarios: TPanel
-        Left = 630
-        Top = 0
-        Width = 500
-        Height = 48
-        Align = alRight
-        BevelOuter = bvNone
-        Color = 9404016
-        ParentBackground = False
-        TabOrder = 10
-        object Label23: TLabel
-          Left = 24
-          Top = 6
-          Width = 39
-          Height = 12
-          Caption = 'Operarios'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = 4800824
-          Font.Height = -9
-          Font.Name = 'Segoe UI Semibold'
-          Font.Style = []
-          ParentFont = False
-        end
-        object Shape3: TShape
-          Left = 0
-          Top = 0
-          Width = 1
-          Height = 48
-          Align = alLeft
-          Brush.Color = 6313290
-          Pen.Color = 6313290
-          ExplicitHeight = 500
-        end
-        object Label19: TLabel
-          Left = 191
-          Top = 6
-          Width = 62
-          Height = 12
-          Caption = 'Departamentos'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = 4800824
-          Font.Height = -9
-          Font.Name = 'Segoe UI Semibold'
-          Font.Style = []
-          ParentFont = False
-        end
-        object btnHighlightOperarios: TcxButton
-          Left = 379
-          Top = 21
-          Width = 21
-          Height = 19
-          Hint = 'Resaltar operarios'
-          Colors.PressedText = 7136979
-          Enabled = False
-          LookAndFeel.Kind = lfUltraFlat
-          LookAndFeel.NativeStyle = False
-          LookAndFeel.SkinName = 'Sharp'
-          OptionsImage.Glyph.SourceDPI = 96
-          OptionsImage.Glyph.SourceHeight = 14
-          OptionsImage.Glyph.SourceWidth = 14
-          OptionsImage.Glyph.Data = {
-            89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
-            610000003F744558745469746C6500436F6E646974696F6E616C466F726D6174
-            74696E7349636F6E5365745374617273333B436F6E646974696F6E616C466F72
-            6D617474696E673BBD1216EC0000032C49444154785E45926D485B571CC69F73
-            131793D4248B26EB5A496A8BA26E6E3ACA46192BD889C3B1C98476AC30F61206
-            5DCBFAA576C240987BB5DD8B1F4A999B038BF8C142EBC656B73A669DB8B56C85
-            958C2AAD7496D48A1A6B6362D47B73EF3DE7BF136F322F3C3CFC9F737FCFE1DE
-            73D8A5F6DD2002400C04211DB999D078F21A1B7EF709CA06042BA3FFD7AD9951
-            6606F9C74AD986334758193A56DBF94257F43DCAC4C42605E477196A6B817D33
-            DC5C60853BD8E0D1C75EF604C36DE70E9B51E6D87196D45B395AE41082E0801D
-            C437E19C1F7DB6D4E9F5074E3EF97A2BFEE8FEE044E4E9FB3F9230D798458248
-            582E28574016CC5C150C8072EED0A36F57EC6B09398C1B28AF7F29D4383F7F48
-            71579D02C0A520D251923404B73845CADEDA18F2F447AAF70DBCF548EBD8A7CD
-            29BEF0039993ED64CE7D47A31FBD98EA7FA3F278CFC1F286C89EAD3E00055236
-            29C6060FD77C52E42F39E82BDD59E67D3804EFF630BC8107615BFD1330328062
-            87B9E529A41613589E8D2139378344EC762CB9B434F06AFF54BB32757BF94CE2
-            5EDA5D59DF805DB5611417DD83B27C05B49E86D033202D2DE7DF651EC7AEC7B7
-            A1AA7E2F12F7D3EE7FA697FBACC307948E866D7555655B479E3F72C057A0CF02
-            DCB07E14114848877428306C0FE1A79EA164F456FCB9CFAF2CFEFD55532957CC
-            A571D1313217BD39BDD03CFCCDF9355D2996BC019E5121A44857C1750D06F361
-            B8F7E2DAC4BF8BFB257C4DBFFB3DE73C5BCB3598F15FF8FBA373575753A90175
-            651D649A12CC6C80C2D0C0B88096D6B0924C9FEDBC1CBFACDF19304972C57E27
-            14E23A84A9C3FA1E1674BA0B21D415803128853E10D9C0D5340ADD0FC0060401
-            10991A88AB1082A06407C80190EF3B9D6185A7C0DC01C4664C8C5F9840ECAE09
-            B8FCC8E6AE22E74E20C764952F209ED928F0F8BCA1C9BFA6F0ED17BF6ADD5D23
-            BD17C7A79BBEEE1AEDEDE91AD726AF4EC3E5716F07F28C14017612D92681E66A
-            BF33313BCF2EFC1CFFF266CA38FDDBBCB690BB7963CF248D8FE571BFB3B72618
-            692AF73A21B43502411001EA8DD352A710D91D74BD56170800704829EAC46750
-            AF9F90EACCDF56C72B35C5C137EB4A5CEBD10FB11EED405F4B19FE0365D3BD53
-            AA437B1A0000000049454E44AE426082}
-          ParentShowHint = False
-          ShowHint = True
-          SpeedButtonOptions.GroupIndex = 1
-          SpeedButtonOptions.CanBeFocused = False
-          SpeedButtonOptions.AllowAllUp = True
-          TabOrder = 0
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-        end
-        object btnFilterOperarios: TcxButton
-          Left = 401
-          Top = 21
-          Width = 21
-          Height = 19
-          Hint = 'Filtrar operarios'
-          Colors.PressedText = 7136979
-          Enabled = False
-          LookAndFeel.Kind = lfUltraFlat
-          LookAndFeel.NativeStyle = False
-          LookAndFeel.SkinName = 'Sharp'
-          OptionsImage.Glyph.SourceDPI = 96
-          OptionsImage.Glyph.SourceHeight = 14
-          OptionsImage.Glyph.SourceWidth = 14
-          OptionsImage.Glyph.Data = {
-            3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
-            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
-            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
-            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
-            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
-            22307078222076696577426F783D2230203020333220333222207374796C653D
-            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
-            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
-            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
-            63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
-            3B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646
-            423131353B7D262331333B262331303B2623393B2E426C61636B7B66696C6C3A
-            233732373237323B7D262331333B262331303B2623393B2E477265656E7B6669
-            6C6C3A233033394332333B7D262331333B262331303B2623393B2E5265647B66
-            696C6C3A234431314331433B7D262331333B262331303B2623393B2E7374307B
-            6F7061636974793A302E37353B7D262331333B262331303B2623393B2E737431
-            7B6F7061636974793A302E353B7D3C2F7374796C653E0D0A3C672069643D2246
-            696C746572223E0D0A09093C706F6C79676F6E20636C6173733D2259656C6C6F
-            772220706F696E74733D22362C342032362C342032362C382031382C31362031
-            382C32342031342C32382031342C313620362C38202623393B222F3E0D0A093C
-            2F673E0D0A3C2F7376673E0D0A}
-          ParentShowHint = False
-          ShowHint = True
-          SpeedButtonOptions.GroupIndex = 1
-          SpeedButtonOptions.CanBeFocused = False
-          SpeedButtonOptions.AllowAllUp = True
-          TabOrder = 1
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-        end
-        object FcxFilterOperarios: TcxCheckComboBox
-          Left = 24
-          Top = 20
-          ParentFont = False
-          Properties.DropDownRows = 30
-          Properties.Items = <>
-          Properties.OnChange = cbDepartamentosPropertiesChange
-          Style.BorderColor = 3553567
-          Style.BorderStyle = ebsSingle
-          Style.Color = 8220514
-          Style.Font.Charset = DEFAULT_CHARSET
-          Style.Font.Color = clWindowText
-          Style.Font.Height = -11
-          Style.Font.Name = 'Segoe UI'
-          Style.Font.Style = []
-          Style.LookAndFeel.NativeStyle = False
-          Style.TextColor = clWhite
-          Style.ButtonStyle = btsSimple
-          Style.ButtonTransparency = ebtAlways
-          Style.IsFontAssigned = True
-          StyleDisabled.LookAndFeel.NativeStyle = False
-          StyleFocused.LookAndFeel.NativeStyle = False
-          StyleHot.LookAndFeel.NativeStyle = False
-          StyleReadOnly.LookAndFeel.NativeStyle = False
-          TabOrder = 2
-          Width = 160
-        end
-        object cbDepartamentos: TcxCheckComboBox
-          Left = 191
-          Top = 20
-          ParentFont = False
-          Properties.DropDownRows = 30
-          Properties.Items = <>
-          Properties.OnChange = cbDepartamentosPropertiesChange
-          Style.BorderColor = 3553567
-          Style.BorderStyle = ebsSingle
-          Style.Color = 8220514
-          Style.Font.Charset = DEFAULT_CHARSET
-          Style.Font.Color = clWindowText
-          Style.Font.Height = -11
-          Style.Font.Name = 'Segoe UI'
-          Style.Font.Style = []
-          Style.LookAndFeel.NativeStyle = False
-          Style.TextColor = clWhite
-          Style.ButtonStyle = btsSimple
-          Style.ButtonTransparency = ebtAlways
-          Style.IsFontAssigned = True
-          StyleDisabled.LookAndFeel.NativeStyle = False
-          StyleFocused.LookAndFeel.NativeStyle = False
-          StyleHot.LookAndFeel.NativeStyle = False
-          StyleReadOnly.LookAndFeel.NativeStyle = False
-          TabOrder = 3
-          Width = 160
-        end
-        object btnClearOperarios: TcxButton
-          Left = 357
-          Top = 21
-          Width = 21
-          Height = 19
-          Caption = 'X'
-          Colors.PressedText = 7136979
-          LookAndFeel.Kind = lfUltraFlat
-          LookAndFeel.NativeStyle = False
-          LookAndFeel.SkinName = 'Sharp'
-          OptionsImage.Glyph.SourceHeight = 12
-          OptionsImage.Glyph.SourceWidth = 12
-          SpeedButtonOptions.GroupIndex = 1
-          SpeedButtonOptions.CanBeFocused = False
-          SpeedButtonOptions.AllowAllUp = True
-          SpeedButtonOptions.Down = True
-          TabOrder = 4
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          OnClick = btnClearOperariosClick
-        end
-        object btnAutoPlanSel: TcxButton
-          Left = 433
-          Top = 21
-          Width = 21
-          Height = 19
-          Hint = 'Auto asignar selecci'#243'n'
-          Colors.PressedText = 7136979
-          LookAndFeel.Kind = lfUltraFlat
-          LookAndFeel.NativeStyle = False
-          LookAndFeel.SkinName = 'Sharp'
-          OptionsImage.Glyph.SourceDPI = 96
-          OptionsImage.Glyph.SourceHeight = 14
-          OptionsImage.Glyph.SourceWidth = 14
-          OptionsImage.Glyph.Data = {
-            3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
-            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
-            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
-            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
-            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
-            22307078222076696577426F783D2230203020333220333222207374796C653D
-            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
-            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
-            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
-            63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
-            3B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646
-            423131353B7D262331333B262331303B2623393B2E5265647B66696C6C3A2344
-            31314331433B7D262331333B262331303B2623393B2E477265656E7B66696C6C
-            3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
-            696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
-            657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
-            74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
-            74317B6F7061636974793A302E37353B7D262331333B262331303B2623393B2E
-            7374327B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B
-            2E7374337B646973706C61793A696E6C696E653B66696C6C3A23464642313135
-            3B7D262331333B262331303B2623393B2E7374347B646973706C61793A696E6C
-            696E653B7D262331333B262331303B2623393B2E7374357B646973706C61793A
-            696E6C696E653B6F7061636974793A302E37353B7D262331333B262331303B26
-            23393B2E7374367B646973706C61793A696E6C696E653B6F7061636974793A30
-            2E353B7D262331333B262331303B2623393B2E7374377B646973706C61793A69
-            6E6C696E653B66696C6C3A233033394332333B7D262331333B262331303B2623
-            393B2E7374387B646973706C61793A696E6C696E653B66696C6C3A2344313143
-            31433B7D262331333B262331303B2623393B2E7374397B646973706C61793A69
-            6E6C696E653B66696C6C3A233131373744373B7D262331333B262331303B2623
-            393B2E737431307B646973706C61793A696E6C696E653B66696C6C3A23464646
-            4646463B7D3C2F7374796C653E0D0A3C672069643D22506572736F6E223E0D0A
-            09093C7061746820636C6173733D22477265656E2220643D224D31302C392E39
-            632D302E312C302E352C302E322C302E392C302E342C312E34732D302E312C31
-            2E372C302E392C312E3663302C302C302C302E312C302C302E3263302E362C32
-            2E332C322C342E392C342E372C342E3973342E322D322E362C342E372D342E39
-            20202623393B2623393B56313363312C302E312C302E362D312E312C302E392D
-            312E3663302E322D302E352C302E342D302E392C302E332D312E34632D302E31
-            2D302E342D302E342D302E342D302E352D302E334332332E322C342E382C3230
-            2E332C352C32302E332C355332302C322C31342E382C3220202623393B262339
-            3B4331302C322C392E342C362C31302E352C392E364331302E342C392E362C31
-            302E312C392E372C31302C392E397A204D32302C3138632D302E382C312E352D
-            322E312C342D342C34732D332E322D322E352D342D34632D322E332C332E352D
-            382C312D382C382E35563330683234762D332E3520202623393B2623393B4332
-            382C31392E312C32322E332C32312E342C32302C31387A222F3E0D0A093C2F67
-            3E0D0A3C2F7376673E0D0A}
-          ParentShowHint = False
-          ShowHint = True
-          SpeedButtonOptions.CanBeFocused = False
-          SpeedButtonOptions.AllowAllUp = True
-          TabOrder = 5
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          OnClick = btnAutoPlanSelClick
-        end
-        object btnDesasignarSel: TcxButton
-          Left = 455
-          Top = 21
-          Width = 21
-          Height = 19
-          Hint = 'Desasignar selecci'#243'n'
-          Colors.PressedText = 7136979
-          LookAndFeel.Kind = lfUltraFlat
-          LookAndFeel.NativeStyle = False
-          LookAndFeel.SkinName = 'Sharp'
-          OptionsImage.Glyph.SourceDPI = 96
-          OptionsImage.Glyph.SourceHeight = 14
-          OptionsImage.Glyph.SourceWidth = 14
-          OptionsImage.Glyph.Data = {
-            3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
-            462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
-            617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
-            2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
-            77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
-            22307078222076696577426F783D2230203020333220333222207374796C653D
-            22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
-            3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
-            303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
-            63653D227072657365727665223E2E426C61636B7B66696C6C3A233732373237
-            323B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A2346
-            46423131353B7D262331333B262331303B2623393B2E426C75657B66696C6C3A
-            233131373744373B7D262331333B262331303B2623393B2E5265647B66696C6C
-            3A234431314331433B7D262331333B262331303B2623393B2E57686974657B66
-            696C6C3A234646464646463B7D262331333B262331303B2623393B2E47726565
-            6E7B66696C6C3A233033394332333B7D262331333B262331303B2623393B2E73
-            74307B66696C6C3A233732373237323B7D262331333B262331303B2623393B2E
-            7374317B6F7061636974793A302E353B7D262331333B262331303B2623393B2E
-            7374327B6F7061636974793A302E37353B7D3C2F7374796C653E0D0A3C672069
-            643D225061796D656E74556E70616964223E0D0A09093C7061746820636C6173
-            733D225265642220643D224D31362C3243382E322C322C322C382E322C322C31
-            3673362E322C31342C31342C31347331342D362E322C31342D31345332332E38
-            2C322C31362C327A204D31362C3663322C302C342C302E362C352E362C312E36
-            4C372E382C32312E3420202623393B2623393B43362E362C32302C362C31382C
-            362C313643362C31302E342C31302E342C362C31362C367A204D31362C323663
-            2D322C302D342D302E362D352E362D312E366C31332E382D31332E384332352E
-            342C31322C32362C31342C32362C31364332362C32312E362C32312E362C3236
-            2C31362C32367A222F3E0D0A093C2F673E0D0A3C2F7376673E0D0A}
-          ParentShowHint = False
-          ShowHint = True
-          SpeedButtonOptions.CanBeFocused = False
-          SpeedButtonOptions.AllowAllUp = True
-          TabOrder = 6
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -9
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          OnClick = btnDesasignarSelClick
-        end
-      end
       object cxButton1: TcxButton
         Left = 490
         Top = 23
@@ -2707,7 +2302,7 @@ object frmVistaGantt: TfrmVistaGantt
         LookAndFeel.NativeStyle = False
         LookAndFeel.SkinName = 'Sharp'
         SpeedButtonOptions.CanBeFocused = False
-        TabOrder = 11
+        TabOrder = 10
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -9
@@ -2729,7 +2324,7 @@ object frmVistaGantt: TfrmVistaGantt
         SpeedButtonOptions.GroupIndex = 1
         SpeedButtonOptions.CanBeFocused = False
         SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 12
+        TabOrder = 11
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -9
@@ -2751,7 +2346,7 @@ object frmVistaGantt: TfrmVistaGantt
         SpeedButtonOptions.GroupIndex = 2
         SpeedButtonOptions.CanBeFocused = False
         SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 13
+        TabOrder = 12
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -9
@@ -2773,7 +2368,7 @@ object frmVistaGantt: TfrmVistaGantt
         SpeedButtonOptions.GroupIndex = 66
         SpeedButtonOptions.CanBeFocused = False
         SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 14
+        TabOrder = 13
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -9
@@ -2796,7 +2391,7 @@ object frmVistaGantt: TfrmVistaGantt
         SpeedButtonOptions.GroupIndex = 66
         SpeedButtonOptions.CanBeFocused = False
         SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 15
+        TabOrder = 14
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -9
@@ -2804,6 +2399,414 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = [fsBold]
         ParentFont = False
         OnClick = btnResaltarOFClick
+      end
+      object btnAtajos: TcxButton
+        Left = 1017
+        Top = 23
+        Width = 24
+        Height = 19
+        Hint = 'Atajos y gestos (May'#250's+F1)'
+        Anchors = [akTop, akRight]
+        Caption = '?'
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.CanBeFocused = False
+        TabOrder = 15
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnAtajosClick
+      end
+      object cxButton2: TcxButton
+        Left = 1047
+        Top = 23
+        Width = 76
+        Height = 19
+        Hint = 'Opciones del Gantt'
+        Anchors = [akTop, akRight]
+        Caption = 'Opciones'
+        DropDownMenu = PopOpciones
+        Kind = cxbkOfficeDropDown
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.CanBeFocused = False
+        TabOrder = 16
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnAtajosClick
+      end
+    end
+    object pnlOperarios: TPanel
+      Left = 0
+      Top = 118
+      Width = 1130
+      Height = 48
+      Align = alTop
+      BevelOuter = bvNone
+      Color = 9404016
+      ParentBackground = False
+      TabOrder = 4
+      object Label23: TLabel
+        Left = 24
+        Top = 6
+        Width = 39
+        Height = 12
+        Caption = 'Operarios'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 4800824
+        Font.Height = -9
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = []
+        ParentFont = False
+      end
+      object Shape3: TShape
+        Left = 0
+        Top = 0
+        Width = 1130
+        Height = 1
+        Align = alTop
+        Brush.Color = 6313290
+        Pen.Color = 6313290
+        ExplicitWidth = 49
+      end
+      object Label19: TLabel
+        Left = 191
+        Top = 6
+        Width = 62
+        Height = 12
+        Caption = 'Departamentos'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 4800824
+        Font.Height = -9
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = []
+        ParentFont = False
+      end
+      object btnHighlightOperarios: TcxButton
+        Left = 379
+        Top = 21
+        Width = 21
+        Height = 19
+        Hint = 'Resaltar operarios'
+        Colors.PressedText = 7136979
+        Enabled = False
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        OptionsImage.Glyph.SourceDPI = 96
+        OptionsImage.Glyph.SourceHeight = 14
+        OptionsImage.Glyph.SourceWidth = 14
+        OptionsImage.Glyph.Data = {
+          89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+          610000003F744558745469746C6500436F6E646974696F6E616C466F726D6174
+          74696E7349636F6E5365745374617273333B436F6E646974696F6E616C466F72
+          6D617474696E673BBD1216EC0000032C49444154785E45926D485B571CC69F73
+          131793D4248B26EB5A496A8BA26E6E3ACA46192BD889C3B1C98476AC30F61206
+          5DCBFAA576C240987BB5DD8B1F4A999B038BF8C142EBC656B73A669DB8B56C85
+          958C2AAD7496D48A1A6B6362D47B73EF3DE7BF136F322F3C3CFC9F737FCFE1DE
+          73D8A5F6DD2002400C04211DB999D078F21A1B7EF709CA06042BA3FFD7AD9951
+          6606F9C74AD986334758193A56DBF94257F43DCAC4C42605E477196A6B817D33
+          DC5C60853BD8E0D1C75EF604C36DE70E9B51E6D87196D45B395AE41082E0801D
+          C437E19C1F7DB6D4E9F5074E3EF97A2BFEE8FEE044E4E9FB3F9230D798458248
+          582E28574016CC5C150C8072EED0A36F57EC6B09398C1B28AF7F29D4383F7F48
+          71579D02C0A520D251923404B73845CADEDA18F2F447AAF70DBCF548EBD8A7CD
+          29BEF0039993ED64CE7D47A31FBD98EA7FA3F278CFC1F286C89EAD3E00055236
+          29C6060FD77C52E42F39E82BDD59E67D3804EFF630BC8107615BFD1330328062
+          87B9E529A41613589E8D2139378344EC762CB9B434F06AFF54BB32757BF94CE2
+          5EDA5D59DF805DB5611417DD83B27C05B49E86D033202D2DE7DF651EC7AEC7B7
+          A1AA7E2F12F7D3EE7FA697FBACC307948E866D7555655B479E3F72C057A0CF02
+          DCB07E14114848877428306C0FE1A79EA164F456FCB9CFAF2CFEFD55532957CC
+          A571D1313217BD39BDD03CFCCDF9355D2996BC019E5121A44857C1750D06F361
+          B8F7E2DAC4BF8BFB257C4DBFFB3DE73C5BCB3598F15FF8FBA373575753A90175
+          651D649A12CC6C80C2D0C0B88096D6B0924C9FEDBC1CBFACDF19304972C57E27
+          14E23A84A9C3FA1E1674BA0B21D415803128853E10D9C0D5340ADD0FC0060401
+          10991A88AB1082A06407C80190EF3B9D6185A7C0DC01C4664C8C5F9840ECAE09
+          B8FCC8E6AE22E74E20C764952F209ED928F0F8BCA1C9BFA6F0ED17BF6ADD5D23
+          BD17C7A79BBEEE1AEDEDE91AD726AF4EC3E5716F07F28C14017612D92681E66A
+          BF33313BCF2EFC1CFFF266CA38FDDBBCB690BB7963CF248D8FE571BFB3B72618
+          692AF73A21B43502411001EA8DD352A710D91D74BD56170800704829EAC46750
+          AF9F90EACCDF56C72B35C5C137EB4A5CEBD10FB11EED405F4B19FE0365D3BD53
+          AA437B1A0000000049454E44AE426082}
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.GroupIndex = 1
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 0
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object btnFilterOperarios: TcxButton
+        Left = 401
+        Top = 21
+        Width = 21
+        Height = 19
+        Hint = 'Filtrar operarios'
+        Colors.PressedText = 7136979
+        Enabled = False
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        OptionsImage.Glyph.SourceDPI = 96
+        OptionsImage.Glyph.SourceHeight = 14
+        OptionsImage.Glyph.SourceWidth = 14
+        OptionsImage.Glyph.Data = {
+          3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+          462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+          617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+          2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+          77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+          22307078222076696577426F783D2230203020333220333222207374796C653D
+          22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+          3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+          303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+          63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
+          3B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646
+          423131353B7D262331333B262331303B2623393B2E426C61636B7B66696C6C3A
+          233732373237323B7D262331333B262331303B2623393B2E477265656E7B6669
+          6C6C3A233033394332333B7D262331333B262331303B2623393B2E5265647B66
+          696C6C3A234431314331433B7D262331333B262331303B2623393B2E7374307B
+          6F7061636974793A302E37353B7D262331333B262331303B2623393B2E737431
+          7B6F7061636974793A302E353B7D3C2F7374796C653E0D0A3C672069643D2246
+          696C746572223E0D0A09093C706F6C79676F6E20636C6173733D2259656C6C6F
+          772220706F696E74733D22362C342032362C342032362C382031382C31362031
+          382C32342031342C32382031342C313620362C38202623393B222F3E0D0A093C
+          2F673E0D0A3C2F7376673E0D0A}
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.GroupIndex = 1
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 1
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object FcxFilterOperarios: TcxCheckComboBox
+        Left = 24
+        Top = 20
+        ParentFont = False
+        Properties.DropDownRows = 30
+        Properties.Items = <>
+        Properties.OnChange = cbDepartamentosPropertiesChange
+        Style.BorderColor = 3553567
+        Style.BorderStyle = ebsSingle
+        Style.Color = 8220514
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = []
+        Style.LookAndFeel.NativeStyle = False
+        Style.TextColor = clWhite
+        Style.ButtonStyle = btsSimple
+        Style.ButtonTransparency = ebtAlways
+        Style.IsFontAssigned = True
+        StyleDisabled.LookAndFeel.NativeStyle = False
+        StyleFocused.LookAndFeel.NativeStyle = False
+        StyleHot.LookAndFeel.NativeStyle = False
+        StyleReadOnly.LookAndFeel.NativeStyle = False
+        TabOrder = 2
+        Width = 160
+      end
+      object cbDepartamentos: TcxCheckComboBox
+        Left = 191
+        Top = 20
+        ParentFont = False
+        Properties.DropDownRows = 30
+        Properties.Items = <>
+        Properties.OnChange = cbDepartamentosPropertiesChange
+        Style.BorderColor = 3553567
+        Style.BorderStyle = ebsSingle
+        Style.Color = 8220514
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = []
+        Style.LookAndFeel.NativeStyle = False
+        Style.TextColor = clWhite
+        Style.ButtonStyle = btsSimple
+        Style.ButtonTransparency = ebtAlways
+        Style.IsFontAssigned = True
+        StyleDisabled.LookAndFeel.NativeStyle = False
+        StyleFocused.LookAndFeel.NativeStyle = False
+        StyleHot.LookAndFeel.NativeStyle = False
+        StyleReadOnly.LookAndFeel.NativeStyle = False
+        TabOrder = 3
+        Width = 160
+      end
+      object btnClearOperarios: TcxButton
+        Left = 357
+        Top = 21
+        Width = 21
+        Height = 19
+        Caption = 'X'
+        Colors.PressedText = 7136979
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        OptionsImage.Glyph.SourceHeight = 12
+        OptionsImage.Glyph.SourceWidth = 12
+        SpeedButtonOptions.GroupIndex = 1
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        SpeedButtonOptions.Down = True
+        TabOrder = 4
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnClearOperariosClick
+      end
+      object btnAutoPlanSel: TcxButton
+        Left = 433
+        Top = 21
+        Width = 21
+        Height = 19
+        Hint = 'Auto asignar selecci'#243'n'
+        Colors.PressedText = 7136979
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        OptionsImage.Glyph.SourceDPI = 96
+        OptionsImage.Glyph.SourceHeight = 14
+        OptionsImage.Glyph.SourceWidth = 14
+        OptionsImage.Glyph.Data = {
+          3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+          462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+          617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+          2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+          77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+          22307078222076696577426F783D2230203020333220333222207374796C653D
+          22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+          3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+          303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+          63653D227072657365727665223E2E426C75657B66696C6C3A23313137374437
+          3B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A234646
+          423131353B7D262331333B262331303B2623393B2E5265647B66696C6C3A2344
+          31314331433B7D262331333B262331303B2623393B2E477265656E7B66696C6C
+          3A233033394332333B7D262331333B262331303B2623393B2E426C61636B7B66
+          696C6C3A233732373237323B7D262331333B262331303B2623393B2E57686974
+          657B66696C6C3A234646464646463B7D262331333B262331303B2623393B2E73
+          74307B6F7061636974793A302E353B7D262331333B262331303B2623393B2E73
+          74317B6F7061636974793A302E37353B7D262331333B262331303B2623393B2E
+          7374327B646973706C61793A6E6F6E653B7D262331333B262331303B2623393B
+          2E7374337B646973706C61793A696E6C696E653B66696C6C3A23464642313135
+          3B7D262331333B262331303B2623393B2E7374347B646973706C61793A696E6C
+          696E653B7D262331333B262331303B2623393B2E7374357B646973706C61793A
+          696E6C696E653B6F7061636974793A302E37353B7D262331333B262331303B26
+          23393B2E7374367B646973706C61793A696E6C696E653B6F7061636974793A30
+          2E353B7D262331333B262331303B2623393B2E7374377B646973706C61793A69
+          6E6C696E653B66696C6C3A233033394332333B7D262331333B262331303B2623
+          393B2E7374387B646973706C61793A696E6C696E653B66696C6C3A2344313143
+          31433B7D262331333B262331303B2623393B2E7374397B646973706C61793A69
+          6E6C696E653B66696C6C3A233131373744373B7D262331333B262331303B2623
+          393B2E737431307B646973706C61793A696E6C696E653B66696C6C3A23464646
+          4646463B7D3C2F7374796C653E0D0A3C672069643D22506572736F6E223E0D0A
+          09093C7061746820636C6173733D22477265656E2220643D224D31302C392E39
+          632D302E312C302E352C302E322C302E392C302E342C312E34732D302E312C31
+          2E372C302E392C312E3663302C302C302C302E312C302C302E3263302E362C32
+          2E332C322C342E392C342E372C342E3973342E322D322E362C342E372D342E39
+          20202623393B2623393B56313363312C302E312C302E362D312E312C302E392D
+          312E3663302E322D302E352C302E342D302E392C302E332D312E34632D302E31
+          2D302E342D302E342D302E342D302E352D302E334332332E322C342E382C3230
+          2E332C352C32302E332C355332302C322C31342E382C3220202623393B262339
+          3B4331302C322C392E342C362C31302E352C392E364331302E342C392E362C31
+          302E312C392E372C31302C392E397A204D32302C3138632D302E382C312E352D
+          322E312C342D342C34732D332E322D322E352D342D34632D322E332C332E352D
+          382C312D382C382E35563330683234762D332E3520202623393B2623393B4332
+          382C31392E312C32322E332C32312E342C32302C31387A222F3E0D0A093C2F67
+          3E0D0A3C2F7376673E0D0A}
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 5
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnAutoPlanSelClick
+      end
+      object btnDesasignarSel: TcxButton
+        Left = 455
+        Top = 21
+        Width = 21
+        Height = 19
+        Hint = 'Desasignar selecci'#243'n'
+        Colors.PressedText = 7136979
+        LookAndFeel.Kind = lfUltraFlat
+        LookAndFeel.NativeStyle = False
+        LookAndFeel.SkinName = 'Sharp'
+        OptionsImage.Glyph.SourceDPI = 96
+        OptionsImage.Glyph.SourceHeight = 14
+        OptionsImage.Glyph.SourceWidth = 14
+        OptionsImage.Glyph.Data = {
+          3C3F786D6C2076657273696F6E3D22312E302220656E636F64696E673D225554
+          462D38223F3E0D0A3C7376672076657273696F6E3D22312E31222069643D224C
+          617965725F312220786D6C6E733D22687474703A2F2F7777772E77332E6F7267
+          2F323030302F7376672220786D6C6E733A786C696E6B3D22687474703A2F2F77
+          77772E77332E6F72672F313939392F786C696E6B2220783D223070782220793D
+          22307078222076696577426F783D2230203020333220333222207374796C653D
+          22656E61626C652D6261636B67726F756E643A6E657720302030203332203332
+          3B2220786D6C3A73706163653D227072657365727665223E262331333B262331
+          303B3C7374796C6520747970653D22746578742F6373732220786D6C3A737061
+          63653D227072657365727665223E2E426C61636B7B66696C6C3A233732373237
+          323B7D262331333B262331303B2623393B2E59656C6C6F777B66696C6C3A2346
+          46423131353B7D262331333B262331303B2623393B2E426C75657B66696C6C3A
+          233131373744373B7D262331333B262331303B2623393B2E5265647B66696C6C
+          3A234431314331433B7D262331333B262331303B2623393B2E57686974657B66
+          696C6C3A234646464646463B7D262331333B262331303B2623393B2E47726565
+          6E7B66696C6C3A233033394332333B7D262331333B262331303B2623393B2E73
+          74307B66696C6C3A233732373237323B7D262331333B262331303B2623393B2E
+          7374317B6F7061636974793A302E353B7D262331333B262331303B2623393B2E
+          7374327B6F7061636974793A302E37353B7D3C2F7374796C653E0D0A3C672069
+          643D225061796D656E74556E70616964223E0D0A09093C7061746820636C6173
+          733D225265642220643D224D31362C3243382E322C322C322C382E322C322C31
+          3673362E322C31342C31342C31347331342D362E322C31342D31345332332E38
+          2C322C31362C327A204D31362C3663322C302C342C302E362C352E362C312E36
+          4C372E382C32312E3420202623393B2623393B43362E362C32302C362C31382C
+          362C313643362C31302E342C31302E342C362C31362C367A204D31362C323663
+          2D322C302D342D302E362D352E362D312E366C31332E382D31332E384332352E
+          342C31322C32362C31342C32362C31364332362C32312E362C32312E362C3236
+          2C31362C32367A222F3E0D0A093C2F673E0D0A3C2F7376673E0D0A}
+        ParentShowHint = False
+        ShowHint = True
+        SpeedButtonOptions.CanBeFocused = False
+        SpeedButtonOptions.AllowAllUp = True
+        TabOrder = 6
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        OnClick = btnDesasignarSelClick
       end
     end
   end
@@ -4566,6 +4569,11 @@ object frmVistaGantt: TfrmVistaGantt
       Caption = 'Ver sumario'
       Checked = True
       OnClick = Versumario1Click
+    end
+    object miVerOperarios: TMenuItem
+      AutoCheck = True
+      Caption = 'Ver panel Operarios'
+      OnClick = miVerOperariosClick
     end
   end
 end

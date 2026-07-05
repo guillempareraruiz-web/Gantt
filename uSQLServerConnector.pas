@@ -1453,6 +1453,7 @@ var
   N: TNode;
   D: TNodeData;
   DataMap: TDictionary<Integer, Integer>;
+  CentreSQL: string;
 begin
   // Construir mapa DataId -> índice en ANodeData
   DataMap := TDictionary<Integer, Integer>.Create;
@@ -1475,13 +1476,21 @@ begin
       if N.Source = '' then
         N.Source := 'ERP';
 
+      // CenterId: <= 0 significa "Sin Centro" (en memoria se carga como -1 desde
+      // NULL, ver LoadNodes). Debe persistirse como NULL, no como -1/0, o viola
+      // la FK FK_FS_PL_Node_Center (no existe centro con ese Id).
+      if N.CentreId <= 0 then
+        CentreSQL := 'NULL'
+      else
+        CentreSQL := IntToStr(N.CentreId);
+
       // MERGE Node (clave (CodigoEmpresa, NodeId))
       ExecSQL(
         'IF EXISTS (SELECT 1 FROM FS_PL_Node WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
         '  AND NodeId = ' + IntToStr(N.Id) + ') ' +
         'UPDATE FS_PL_Node SET ' +
           'ProjectId = ' + IntToStr(AProjectId) + ', ' +
-          'CenterId = ' + IntToStr(N.CentreId) + ', ' +
+          'CenterId = ' + CentreSQL + ', ' +
           'FechaInicio = ' + DateTimeToSQL(N.StartTime) + ', ' +
           'FechaFin = ' + DateTimeToSQL(N.EndTime) + ', ' +
           'DuracionMin = ' + FloatToSQL(N.DurationMin) + ', ' +
@@ -1505,7 +1514,7 @@ begin
           IntToStr(FCodigoEmpresa) + ', ' +
           IntToStr(N.Id) + ', ' +
           IntToStr(AProjectId) + ', ' +
-          IntToStr(N.CentreId) + ', ' +
+          CentreSQL + ', ' +
           DateTimeToSQL(N.StartTime) + ', ' +
           DateTimeToSQL(N.EndTime) + ', ' +
           FloatToSQL(N.DurationMin) + ', ' +

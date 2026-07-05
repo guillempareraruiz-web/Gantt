@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
+  System.Generics.Collections,
   Data.DB, Data.Win.ADODB,
   uDataConnector, uSQLServerConnector, uDBMigrations, uUserPreferencesRepo,
   uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo, uAlertRulesRepo,
@@ -59,6 +60,8 @@ type
     FCurrentProjectTieneBloqueo: Boolean;
     FCurrentProjectRowMode: string;
     FCurrentProjectNivelAgrupacion: Integer;
+    FEnModoDemo: Boolean;
+    FProjectIdAntesDemo: Integer;   // proyecto real al que volver al salir de demo
     FCodigoEmpresa: SmallInt;
     FCurrentEmpresaNombre: string;
     FPlanificaOperarios: Boolean;
@@ -90,6 +93,31 @@ type
     procedure LoadMasterProject;
     procedure LoadUserActiveProject(AUserId: Integer);
     procedure SetCurrentProject(AProjectId: Integer);
+
+    // --- Modo demo del Gantt (V070) ----------------------------------------
+    // Los nodos demo viven en un PROYECTO propio marcado con EsDemo=1, aislado
+    // de los datos reales. Como todo filtra por ProjectId, entrar en modo demo
+    // es solo cambiar el proyecto activo a ese proyecto (y volver al real al
+    // salir). Nada de los datos reales se toca ni se mezcla.
+
+    // Devuelve el ProjectId del proyecto demo de la empresa, creandolo si aun no
+    // existe. 0 si no hay conexion.
+    function GetOrCreateDemoProjectId: Integer;
+    // Cambia el proyecto activo al proyecto demo, recordando el real para poder
+    // volver. Idempotente. Devuelve el ProjectId demo (0 si fallo).
+    function EntrarModoDemo: Integer;
+    // Vuelve al proyecto real que estaba activo antes de entrar en modo demo.
+    procedure SalirModoDemo;
+    // Cuenta cuantos nodos tiene un proyecto (para saber si el demo esta vacio).
+    function ContarNodosProyecto(AProjectId: Integer): Integer;
+    // Genera ACantidad nodos ficticios repartidos por los centros REALES en el
+    // proyecto AProjectId (normalmente el demo). Borra antes los nodos previos
+    // de ese proyecto (regenera). Reparte fechas en el horizonte hoy..hoy+45,
+    // crea NodeData completo (prioridad, entregas, articulo, cliente...) y
+    // algunas dependencias en cadena. Todo en una transaccion. No toca otros
+    // proyectos. Devuelve el numero de nodos creados.
+    function GenerarNodosDemoEnProyecto(AProjectId, ACantidad: Integer): Integer;
+
     procedure LoadEmpresaInfo;
     procedure LoadCalendars;
     procedure LoadCentres;
@@ -147,6 +175,7 @@ type
     property Connector: IGanttDataConnector read FConnector;
     property CurrentProjectId: Integer read FCurrentProjectId write FCurrentProjectId;
     property CurrentProjectName: string read FCurrentProjectName;
+    property EnModoDemo: Boolean read FEnModoDemo;
     property CurrentProjectIsMaster: Boolean read FCurrentProjectIsMaster;
     property CurrentProjectFechaBloqueo: TDateTime read FCurrentProjectFechaBloqueo;
     property CurrentProjectTieneBloqueo: Boolean read FCurrentProjectTieneBloqueo;
@@ -182,7 +211,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uLogin, uAppConfig;
+  uLogin, uAppConfig, uCentreCalendar, uPlanLog, System.Diagnostics;
 
 procedure TDMPlanner.InstallTvfPendingErp;
 var
@@ -238,6 +267,8 @@ procedure TDMPlanner.AfterConstruction;
 begin
   inherited;
   FCurrentProjectId := -1;
+  FEnModoDemo := False;
+  FProjectIdAntesDemo := 0;
   FCodigoEmpresa := 9999;
   FUseWindowsAuth := True;
   FCalendarsRepo := TCalendarsRepo.Create(ADOConnection);
@@ -1187,6 +1218,537 @@ begin
   finally
     Q.Free;
   end;
+end;
+
+{ --- Modo demo del Gantt (V070) ------------------------------------------- }
+
+function TDMPlanner.GetOrCreateDemoProjectId: Integer;
+var
+  Q: TADOQuery;
+  Cmd: TADOCommand;
+  CE: string;
+begin
+  Result := 0;
+  if not IsConnected then Exit;
+  CE := IntToStr(FCodigoEmpresa);
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    // 1. Ya existe el proyecto demo de esta empresa.
+    Q.SQL.Text :=
+      'SELECT TOP 1 ProjectId FROM FS_PL_Project ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND ISNULL(EsDemo, 0) = 1 ' +
+      'ORDER BY ProjectId';
+    Q.Open;
+    if not Q.Eof then
+    begin
+      Result := Q.FieldByName('ProjectId').AsInteger;
+      Exit;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // 2. No existe: crearlo. Codigo unico por empresa (UQ_FS_PL_Project_Codigo).
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := ADOConnection;
+    Cmd.CommandText :=
+      'INSERT INTO FS_PL_Project ' +
+      '  (CodigoEmpresa, Codigo, Nombre, Descripcion, EsMaster, EsDemo, Activo) ' +
+      'VALUES (' + CE + ', ' + QuotedStr('DEMO') + ', ' +
+      QuotedStr(#9733' DEMOSTRACI'#211'N') + ', ' +
+      QuotedStr('Proyecto de demostraci'#243'n (datos ficticios, aislados del plan real)') +
+      ', 0, 1, 1)';
+    Cmd.Execute;
+  finally
+    Cmd.Free;
+  end;
+
+  // 3. Releer el ProjectId recien creado.
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text :=
+      'SELECT TOP 1 ProjectId FROM FS_PL_Project ' +
+      'WHERE CodigoEmpresa = ' + CE + ' AND ISNULL(EsDemo, 0) = 1 ' +
+      'ORDER BY ProjectId DESC';
+    Q.Open;
+    if not Q.Eof then
+      Result := Q.FieldByName('ProjectId').AsInteger;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TDMPlanner.EntrarModoDemo: Integer;
+var
+  DemoId: Integer;
+begin
+  Result := 0;
+  DemoId := GetOrCreateDemoProjectId;
+  if DemoId <= 0 then Exit;
+
+  if not FEnModoDemo then
+    FProjectIdAntesDemo := FCurrentProjectId;   // recordar el real solo una vez
+  FEnModoDemo := True;
+  SetCurrentProject(DemoId);
+  Result := DemoId;
+end;
+
+procedure TDMPlanner.SalirModoDemo;
+begin
+  if not FEnModoDemo then Exit;
+  FEnModoDemo := False;
+  if FProjectIdAntesDemo > 0 then
+    SetCurrentProject(FProjectIdAntesDemo);
+  FProjectIdAntesDemo := 0;
+end;
+
+function TDMPlanner.ContarNodosProyecto(AProjectId: Integer): Integer;
+var
+  Q: TADOQuery;
+begin
+  Result := 0;
+  if (not IsConnected) or (AProjectId <= 0) then Exit;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text :=
+      'SELECT COUNT(*) AS N FROM FS_PL_Node ' +
+      'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+      ' AND ProjectId = ' + IntToStr(AProjectId);
+    Q.Open;
+    Result := Q.FieldByName('N').AsInteger;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TDMPlanner.GenerarNodosDemoEnProyecto(AProjectId, ACantidad: Integer): Integer;
+const
+  OPS: array[0..9] of string = (
+    'CORTAR', 'MECANIZAR', 'FRESAR', 'TORNEAR', 'SOLDAR',
+    'PULIR', 'PINTAR', 'MONTAR', 'REVISAR', 'EMBALAR');
+  ARTS: array[0..7] of string = (
+    'ART-1001', 'ART-1002', 'ART-2050', 'ART-2051',
+    'ART-3100', 'ART-3101', 'ART-4200', 'ART-4201');
+  DESCS: array[0..7] of string = (
+    'Pieza A grande', 'Pieza A peque'#241'a', 'Pieza B chasis', 'Pieza B soporte',
+    'Caja electr'#243'nica', 'Caja sensores', 'Conjunto C ensamblado', 'Conjunto C revisi'#243'n');
+  CLIS: array[0..4] of string = ('CLI-001', 'CLI-002', 'CLI-003', 'CLI-004', 'CLI-005');
+const
+  FILAS_POR_INSERT = 900;   // SQL Server admite hasta 1000 filas por INSERT VALUES
+var
+  Cmd: TADOCommand;
+  Q: TADOQuery;
+  CE, PID: string;
+  Centros, Operarios: TArray<Integer>;
+  I, K, NumOF, ArtIdx, CliIdx, Prio, CenterId, DurInt: Integer;
+  NumOpsNec, UnidTotal, UnidHechas, NumOpsAsig, NumAsig: Integer;
+  BaseId, NodeId, PrevNodeId: Integer;
+  Inicio, Fin, FEnt, FNec, Horizonte: TDateTime;
+  DurMin, DurOrig, HorasOp: Double;
+  Op: string;
+  Inv: TFormatSettings;
+  Cursor: TDictionary<Integer, TDateTime>;   // CenterId -> proximo hueco libre
+  CalCache: TDictionary<Integer, TCentreCalendar>;
+  Cal: TCentreCalendar;
+  // Acumuladores de filas (VALUES) para INSERT multifila por tabla.
+  SbNode, SbData, SbAsig, SbDep: TStringBuilder;
+  NNode, NData, NAsig, NDep: Integer;
+  // --- Instrumentacion de tiempos ---
+  SW, SW2: TStopwatch;
+  MsInserts: Int64;
+
+  function DT(const V: TDateTime): string;
+  begin
+    Result := QuotedStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', V));
+  end;
+
+  // Ejecuta un INSERT multifila (INSERT ... VALUES (f1),(f2),...) y limpia el
+  // acumulador. APrefix es "INSERT INTO tabla (cols) VALUES ". El acumulador
+  // contiene las filas ya con coma inicial: ",(...)". El primer caracter (la
+  // coma) se salta.
+  procedure EjecutarMultifila(const APrefix: string; ASb: TStringBuilder;
+    AWrapIdentity: Boolean);
+  var
+    Sql: string;
+    T: TStopwatch;
+  begin
+    if ASb.Length = 0 then Exit;
+    Sql := APrefix + ASb.ToString.Substring(1);   // quitar la coma inicial
+    if AWrapIdentity then
+      Sql := 'SET IDENTITY_INSERT FS_PL_Node ON; ' + Sql +
+             '; SET IDENTITY_INSERT FS_PL_Node OFF;';
+    T := TStopwatch.StartNew;
+    Cmd.CommandText := Sql;
+    Cmd.Execute;
+    MsInserts := MsInserts + T.ElapsedMilliseconds;
+    ASb.Clear;
+  end;
+
+  // Descarga TODO lo pendiente. ORDEN OBLIGATORIO por las FK: Node primero (las
+  // demas tablas referencian NodeId), luego NodeData/Asignacion/Dependencia.
+  procedure FlushTodo;
+  begin
+    EjecutarMultifila('INSERT INTO FS_PL_Node (CodigoEmpresa, NodeId, ProjectId, ' +
+      'CenterId, FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ' +
+      'ColorBorde, Source) VALUES ', SbNode, True);
+    NNode := 0;
+    EjecutarMultifila('INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
+      'NumeroOF, DuracionMin, DuracionMinOriginal, UnidadesAFabricar, ' +
+      'UnidadesFabricadas, OperariosNecesarios, OperariosAsignados, ColorFondoOp, ' +
+      'ColorBordeOp, Prioridad, FechaEntrega, FechaNecesaria, CodigoArticulo, ' +
+      'DescripcionArticulo, CodigoCliente) VALUES ', SbData, False);
+    NData := 0;
+    EjecutarMultifila('INSERT INTO FS_PL_OperatorAssignment (CodigoEmpresa, ' +
+      'OperatorId, NodeId, Horas) VALUES ', SbAsig, False);
+    NAsig := 0;
+    EjecutarMultifila('INSERT INTO FS_PL_Dependency (CodigoEmpresa, ProjectId, ' +
+      'FromNodeId, ToNodeId, TipoLink, PorcentajeDependencia) VALUES ', SbDep, False);
+    NDep := 0;
+  end;
+
+  // Calendario del centro (cacheado). nil = sin calendario -> tiempo natural.
+  function CalendarioDe(ACenter: Integer): TCentreCalendar;
+  begin
+    if ACenter <= 0 then Exit(nil);
+    if not CalCache.TryGetValue(ACenter, Result) then
+    begin
+      Result := nil;
+      if FCentresRepo <> nil then
+        Result := FCentresRepo.GetCalendarFor(ACenter);
+      CalCache.AddOrSetValue(ACenter, Result);
+    end;
+  end;
+
+begin
+  Result := 0;
+  if (not IsConnected) or (AProjectId <= 0) or (ACantidad <= 0) then Exit;
+  Randomize;
+  Inv := TFormatSettings.Invariant;
+  CE := IntToStr(FCodigoEmpresa);
+  PID := IntToStr(AProjectId);
+
+  // Instrumentacion de tiempos.
+  NumAsig := 0; MsInserts := 0;
+  SW := TStopwatch.StartNew;
+  PlanLog.Inicio(Format('GenerarNodosDemo: %d nodos, proyecto %d', [ACantidad, AProjectId]));
+
+  // Centros reales visibles/habilitados: los nodos demo se reparten entre ellos.
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text := 'SELECT CenterId FROM FS_PL_Center WHERE CodigoEmpresa = ' + CE +
+      ' AND ISNULL(Visible,1) = 1 AND ISNULL(Habilitado,1) = 1 ORDER BY CenterId';
+    Q.Open;
+    SetLength(Centros, 0);
+    while not Q.Eof do
+    begin
+      SetLength(Centros, Length(Centros) + 1);
+      Centros[High(Centros)] := Q.FieldByName('CenterId').AsInteger;
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  PlanLog.Linea('t+%d ms: leidos %d centros', [SW.ElapsedMilliseconds, Length(Centros)]);
+  if Length(Centros) = 0 then Exit;   // sin centros no hay donde colocar nodos
+
+  // Operarios activos: para asignar algunos nodos (realismo). Tolerante a que
+  // la tabla no exista (instalacion sin V019).
+  SetLength(Operarios, 0);
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    Q.SQL.Text := 'SELECT OperatorId FROM FS_PL_Operator WHERE CodigoEmpresa = ' + CE +
+      ' AND ISNULL(Activo,1) = 1 ORDER BY OperatorId';
+    try
+      Q.Open;
+      while not Q.Eof do
+      begin
+        SetLength(Operarios, Length(Operarios) + 1);
+        Operarios[High(Operarios)] := Q.FieldByName('OperatorId').AsInteger;
+        Q.Next;
+      end;
+    except
+      on E: Exception do
+        PlanLog.Linea('  AVISO: fallo al leer operarios: %s', [E.Message]);
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // Si la empresa no tiene operarios, crear unos cuantos demo para que el Gantt
+  // demo pueda mostrar asignaciones. Se insertan como operarios normales de la
+  // empresa (no molestan: son datos de la empresa, no del proyecto).
+  if Length(Operarios) = 0 then
+  begin
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := ADOConnection;
+      for I := 0 to 7 do
+        try
+          Cmd.CommandText :=
+            'IF NOT EXISTS (SELECT 1 FROM FS_PL_Operator WHERE CodigoEmpresa = ' + CE +
+            ' AND Nombre = ' + QuotedStr('Operario Demo ' + IntToStr(I + 1)) + ') ' +
+            'INSERT INTO FS_PL_Operator (CodigoEmpresa, Nombre, Activo) VALUES (' +
+            CE + ', ' + QuotedStr('Operario Demo ' + IntToStr(I + 1)) + ', 1)';
+          Cmd.Execute;
+        except
+          // Si FS_PL_Operator no existe, no se pueden crear: seguimos sin ellos.
+          Break;
+        end;
+    finally
+      Cmd.Free;
+    end;
+    // Releer los ids recien creados.
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := ADOConnection;
+      Q.SQL.Text := 'SELECT OperatorId FROM FS_PL_Operator WHERE CodigoEmpresa = ' + CE +
+        ' AND ISNULL(Activo,1) = 1 ORDER BY OperatorId';
+      try
+        Q.Open;
+        while not Q.Eof do
+        begin
+          SetLength(Operarios, Length(Operarios) + 1);
+          Operarios[High(Operarios)] := Q.FieldByName('OperatorId').AsInteger;
+          Q.Next;
+        end;
+      except
+      end;
+    finally
+      Q.Free;
+    end;
+  end;
+
+  PlanLog.Linea('t+%d ms: preparados %d operarios', [SW.ElapsedMilliseconds, Length(Operarios)]);
+
+  Cursor := TDictionary<Integer, TDateTime>.Create;
+  CalCache := TDictionary<Integer, TCentreCalendar>.Create;
+  SbNode := TStringBuilder.Create;
+  SbData := TStringBuilder.Create;
+  SbAsig := TStringBuilder.Create;
+  SbDep := TStringBuilder.Create;
+  NNode := 0; NData := 0; NAsig := 0; NDep := 0;
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := ADOConnection;
+    ADOConnection.BeginTrans;
+    try
+      // 1. Regenerar: limpiar los nodos previos de ESTE proyecto (solo demo).
+      Cmd.CommandText := 'DELETE FROM FS_PL_OperatorAssignment WHERE CodigoEmpresa = ' + CE +
+        ' AND NodeId IN (SELECT NodeId FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE +
+        ' AND ProjectId = ' + PID + ')';
+      Cmd.Execute;
+      Cmd.CommandText := 'DELETE FROM FS_PL_Dependency WHERE CodigoEmpresa = ' + CE +
+        ' AND ProjectId = ' + PID;
+      Cmd.Execute;
+      Cmd.CommandText := 'DELETE FROM FS_PL_NodeData WHERE CodigoEmpresa = ' + CE +
+        ' AND NodeId IN (SELECT NodeId FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE +
+        ' AND ProjectId = ' + PID + ')';
+      Cmd.Execute;
+      Cmd.CommandText := 'DELETE FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE +
+        ' AND ProjectId = ' + PID;
+      Cmd.Execute;
+
+      // Reservar el rango de NodeIds: como los asignamos NOSOTROS (IDENTITY_INSERT),
+      // podemos usar INSERT multifila masivo sin necesitar SCOPE_IDENTITY por nodo.
+      Q := TADOQuery.Create(nil);
+      try
+        Q.Connection := ADOConnection;
+        Q.SQL.Text := 'SELECT ISNULL(MAX(NodeId), 0) AS M FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE;
+        Q.Open;
+        BaseId := Q.FieldByName('M').AsInteger + 1;
+      finally
+        Q.Free;
+      end;
+      PlanLog.Linea('t+%d ms: DELETE previo hecho, BaseId=%d (empieza generacion)',
+        [SW.ElapsedMilliseconds, BaseId]);
+
+      // 2. Generar ACantidad nodos. Cada ~4 nodos forman una "OF" encadenada
+      //    (dependencias FS entre operaciones consecutivas de la misma OF).
+      //    Cada nodo se coloca EN HORARIO LABORABLE de su centro (calendario) y
+      //    SIN SOLAPARSE: por centro se lleva un "cursor" que avanza tras cada
+      //    nodo, de modo que el siguiente empieza donde acabo el anterior.
+      //    Los NodeId se asignan explicitos (BaseId + I) y las filas se acumulan
+      //    en 4 INSERT multifila (Node/NodeData/Asignacion/Dependencia).
+      Horizonte := Trunc(Date) + 45;
+      NumOF := 1000;
+      PrevNodeId := 0;
+      for I := 0 to ACantidad - 1 do
+      begin
+        NodeId := BaseId + I;
+
+        // Nueva OF cada 4 operaciones: rompe la cadena de dependencias.
+        if (I mod 4) = 0 then
+        begin
+          Inc(NumOF);
+          PrevNodeId := 0;
+        end;
+
+        // Centro real (round-robin para repartir de forma pareja).
+        CenterId := Centros[I mod Length(Centros)];
+
+        // Duracion teorica (original) y duracion real segun estado de
+        // optimizacion (3.4). Se calcula ANTES de las fechas para que la barra
+        // del Gantt (FechaFin-FechaInicio) refleje la duracion REAL.
+        //   - OPTIMIZADO   (~35%): real < original (ahorro 10-30%).
+        //   - SIN OPTIMIZAR(~35%): real = original.
+        //   - NO OPTIMIZADO(~30%): real > original (sobrecoste 15-40%).
+        DurOrig := 30 + Random(271);         // 30..300 min teoricos
+        K := Random(100);
+        if K < 35 then
+          DurMin := DurOrig * (0.70 + Random(21) / 100.0)
+        else if K < 70 then
+          DurMin := DurOrig
+        else
+          DurMin := DurOrig * (1.15 + Random(26) / 100.0);
+        DurInt := Round(DurMin);
+
+        Cal := CalendarioDe(CenterId);
+
+        // Punto de partida = cursor del centro (o inicio del horizonte).
+        if not Cursor.TryGetValue(CenterId, Inicio) then
+          Inicio := Trunc(Date) + 6 / 24;    // arranque nominal 06:00 del dia 1
+
+        if Cal <> nil then
+        begin
+          // Saltar a horario laborable y calcular fin respetando el calendario
+          // (los huecos no laborables no cuentan como duracion).
+          Inicio := Cal.NextWorkingTime(Inicio);
+          Fin := Cal.AddWorkingMinutes(Inicio, DurInt);
+        end
+        else
+        begin
+          // Sin calendario: tiempo natural, saltando noches (jornada 06-22).
+          if Frac(Inicio) > 22 / 24 then Inicio := Trunc(Inicio) + 1 + 6 / 24;
+          if Frac(Inicio) < 6 / 24 then Inicio := Trunc(Inicio) + 6 / 24;
+          Fin := Inicio + DurMin / (24 * 60);
+        end;
+
+        // Avanzar el cursor del centro (mas un pequeno respiro entre nodos).
+        Cursor.AddOrSetValue(CenterId, Fin + 5 / (24 * 60));
+
+        // Si nos salimos del horizonte, reciclar al principio (para no estirar
+        // indefinidamente cuando se piden muchos nodos con pocos centros).
+        if Inicio > Horizonte then
+        begin
+          Inicio := Trunc(Date) + 6 / 24;
+          if Cal <> nil then Inicio := Cal.NextWorkingTime(Inicio);
+          if Cal <> nil then Fin := Cal.AddWorkingMinutes(Inicio, DurInt)
+          else Fin := Inicio + DurMin / (24 * 60);
+          Cursor.AddOrSetValue(CenterId, Fin + 5 / (24 * 60));
+        end;
+
+        Op := OPS[I mod Length(OPS)];
+        ArtIdx := Random(Length(ARTS));
+        CliIdx := Random(Length(CLIS));
+        Prio := 1 + Random(5);
+
+        // 3.2 Fecha de entrega repartida en 3 grupos para ver los 3 estados:
+        //   ~25% VENCIDA (antes de hoy), ~25% A PUNTO (hoy..hoy+3), ~50% FUTURA.
+        K := Random(4);
+        if K = 0 then
+          FEnt := Trunc(Date) - (1 + Random(8))       // vencida: 1..8 dias atras
+        else if K = 1 then
+          FEnt := Trunc(Date) + Random(4)             // a punto: hoy..hoy+3
+        else
+          FEnt := Trunc(Fin) + 3 + Random(20);        // futura: unos dias tras el fin
+        FNec := FEnt - 2 - Random(5);
+
+        // 3.3 Avance: unidades a fabricar y ya fabricadas (0%, parcial, 100%).
+        UnidTotal := 100 + Random(900);
+        K := Random(10);
+        if K < 4 then      UnidHechas := 0                              // 40% sin empezar
+        else if K < 9 then UnidHechas := Random(UnidTotal)             // 50% parcial
+        else               UnidHechas := UnidTotal;                     // 10% completo
+        NumOpsNec := 1 + Random(3);
+
+        // --- Acumular las filas (VALUES) de este nodo en cada acumulador ---
+        // Node (NodeId explicito).
+        SbNode.Append(',(' + CE + ', ' + IntToStr(NodeId) + ', ' + PID + ', ' +
+          IntToStr(CenterId) + ', ' + DT(Inicio) + ', ' + DT(Fin) + ', ' +
+          FloatToStr(DurMin, Inv) + ', ' + QuotedStr(Op) + ', 15251072, 11166760, ' +
+          QuotedStr('ERP') + ')');
+        Inc(NNode);
+
+        // 3.1 Decidir CUANTOS operarios se asignan a este nodo ANTES del NodeData,
+        //   para poder rellenar OperariosAsignados (la vista gvmOperarios pinta
+        //   verde/amarillo/rojo comparando Asignados vs Necesarios). ~70% de los
+        //   nodos reciben 1-2 operarios; ~30% ninguno.
+        NumOpsAsig := 0;
+        if (Length(Operarios) > 0) and (Random(10) < 7) then
+        begin
+          NumOpsAsig := 1;
+          if (Length(Operarios) > 1) and (Random(2) = 0) then NumOpsAsig := 2;
+        end;
+
+        SbData.Append(',(' + CE + ', ' + IntToStr(NodeId) + ', ' + QuotedStr(Op) + ', ' +
+          IntToStr(NumOF) + ', ' + FloatToStr(DurMin, Inv) + ', ' + FloatToStr(DurOrig, Inv) +
+          ', ' + IntToStr(UnidTotal) + ', ' + IntToStr(UnidHechas) + ', ' +
+          IntToStr(NumOpsNec) + ', ' + IntToStr(NumOpsAsig) + ', 15251072, 11166760, ' +
+          IntToStr(Prio) + ', ' + DT(FEnt) + ', ' + DT(FNec) + ', ' + QuotedStr(ARTS[ArtIdx]) +
+          ', ' + QuotedStr(DESCS[ArtIdx]) + ', ' + QuotedStr(CLIS[CliIdx]) + ')');
+        Inc(NData);
+
+        // Insertar las asignaciones reales en FS_PL_OperatorAssignment.
+        if NumOpsAsig > 0 then
+        begin
+          HorasOp := (DurMin / 60.0) / NumOpsAsig;
+          for K := 0 to NumOpsAsig - 1 do
+          begin
+            SbAsig.Append(',(' + CE + ', ' +
+              IntToStr(Operarios[(I + K) mod Length(Operarios)]) + ', ' +
+              IntToStr(NodeId) + ', ' + FloatToStr(HorasOp, Inv) + ')');
+            Inc(NAsig); Inc(NumAsig);
+          end;
+        end;
+
+        // Dependencia FS con la operacion anterior de la misma OF.
+        if PrevNodeId > 0 then
+        begin
+          SbDep.Append(',(' + CE + ', ' + PID + ', ' + IntToStr(PrevNodeId) + ', ' +
+            IntToStr(NodeId) + ', 0, 100)');
+          Inc(NDep);
+        end;
+        PrevNodeId := NodeId;
+
+        // Descargar los 4 acumuladores (en orden FK) cuando cualquiera se acerca
+        // al limite de 900 filas/INSERT. NAsig es el que mas crece (hasta 2/nodo).
+        if (NNode >= FILAS_POR_INSERT) or (NAsig >= FILAS_POR_INSERT) then
+          FlushTodo;
+        Inc(Result);
+      end;
+      FlushTodo;   // volcar todo lo pendiente
+      PlanLog.Linea('t+%d ms: generados %d nodos (suma INSERTs %d ms). ' +
+        'Asignaciones de operario: %d',
+        [SW.ElapsedMilliseconds, Result, MsInserts, NumAsig]);
+
+      SW2 := TStopwatch.StartNew;
+      ADOConnection.CommitTrans;
+      PlanLog.Linea('t+%d ms: COMMIT hecho en %d ms',
+        [SW.ElapsedMilliseconds, SW2.ElapsedMilliseconds]);
+    except
+      ADOConnection.RollbackTrans;
+      Result := 0;
+      raise;
+    end;
+  finally
+    Cmd.Free;
+    Cursor.Free;
+    SbNode.Free; SbData.Free; SbAsig.Free; SbDep.Free;
+    // OJO: los TCentreCalendar del cache son propiedad de CentresRepo
+    // (GetCalendarFor devuelve referencias compartidas). Solo liberar el
+    // diccionario, NUNCA los calendarios.
+    CalCache.Free;
+  end;
+  PlanLog.Linea('TOTAL: %d ms para %d nodos', [SW.ElapsedMilliseconds, Result]);
+  PlanLog.Fin;
 end;
 
 end.

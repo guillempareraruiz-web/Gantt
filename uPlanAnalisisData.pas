@@ -98,6 +98,52 @@ type
     HorasSetup: Double;
   end;
 
+  // --- Estructuras para los graficos PRO ---
+
+  // Barra Gantt-resumen de un proyecto (ventana inicio->fin en el horizonte).
+  TGanttResumen = record
+    Nombre: string;
+    Inicio: TDateTime;
+    Fin: TDateTime;
+  end;
+
+  // Una cadena de dependencias (camino) con su duracion total y nº de eslabones.
+  TCadenaDep = record
+    Etiqueta: string;      // "OF 2501 -> ... (N ops)"
+    HorasTotal: Double;    // suma de duraciones de la cadena
+    NumOps: Integer;       // nº de operaciones encadenadas
+  end;
+
+  // Holgura de una OF: dias entre su fin planificado y su fecha de entrega.
+  //   Margen > 0 = termina antes (colchon); < 0 = termina despues (retraso).
+  TMargenOF = record
+    Etiqueta: string;
+    MargenDias: Double;
+  end;
+
+  // Punto (prioridad, retraso) para el scatter de urgencias.
+  TPrioridadRetraso = record
+    Etiqueta: string;
+    Prioridad: Integer;
+    RetrasoDias: Double;
+  end;
+
+  // Avance global del plan por unidades y por estado de las operaciones.
+  TProgresoPlan = record
+    UnidadesFabricadas: Double;
+    UnidadesAFabricar: Double;
+    // Reparto de nodos por Estado (0..N). Usamos los 4 primeros como
+    // Pendiente / En curso / Hecho / Otro para el embudo WIP.
+    NodosPorEstado: array[0..4] of Integer;
+  end;
+
+  // Cobertura de personal por centro: operarios necesarios vs asignados.
+  TCoberturaCentro = record
+    Nombre: string;
+    Necesarios: Integer;
+    Asignados: Integer;
+  end;
+
   // Resultado completo del analisis.
   TPlanAnalisis = record
     Periodos: TArray<TPeriodoPlan>;
@@ -115,6 +161,16 @@ type
     Duraciones: array[0..7] of Integer;  // TIEMPOS: histograma duracion op (min)
     ProductivoSetup: TArray<TProductivoSetup>; // EFICIENCIA: productivo vs setup
     UtilMediaGlobal: Double;             // EFICIENCIA: utilizacion media global %
+    // --- PRO ---
+    GanttResumen: TArray<TGanttResumen>;      // VISION: mini-Gantt por proyecto
+    Cadenas: TArray<TCadenaDep>;              // DEPENDENCIAS: cadenas mas largas
+    MargenEntrega: TArray<TMargenOF>;         // ENTREGAS: holgura hasta entrega
+    PrioridadRetraso: TArray<TPrioridadRetraso>; // ENTREGAS: prioridad vs retraso
+    CargaAcumulada: TArray<Double>;           // CAPACIDAD: carga acumulada (CRP)
+    CapacidadAcumulada: TArray<Double>;       // CAPACIDAD: capacidad acumulada (CRP)
+    Progreso: TProgresoPlan;                  // AVANCE: unidades y estados
+    PorCliente: TArray<TItemHoras>;           // MIX: carga por cliente
+    Cobertura: TArray<TCoberturaCentro>;      // RECURSOS: personal nec. vs asig.
   end;
 
 // Construye los periodos del horizonte.
@@ -129,7 +185,7 @@ implementation
 uses
   System.Math, System.Generics.Defaults,
   Data.Win.ADODB,
-  uDMPlanner, uCentreCalendar;
+  uDMPlanner, uCentreCalendar, uDemoMode;
 
 { TCargaCentro }
 
@@ -857,12 +913,718 @@ begin
   end;
 end;
 
+{ PRO: Gantt-resumen por proyecto (ventana inicio->fin) }
+
+procedure CalcularGanttResumen(out AGantt: TArray<TGanttResumen>);
+var
+  Q: TADOQuery;
+  PID: Integer;
+  Map: TDictionary<string, TGanttResumen>;
+  Nom: string;
+  Ini, Fin: TDateTime;
+  GR, GR2: TGanttResumen;
+  L: TList<TGanttResumen>;
+begin
+  SetLength(AGantt, 0);
+  PID := DMPlanner.CurrentProjectId;
+  if PID <= 0 then Exit;
+
+  Map := TDictionary<string, TGanttResumen>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT p.Nombre, n.FechaInicio, n.FechaFin ' +
+      'FROM FS_PL_Node n ' +
+      'LEFT JOIN FS_PL_Project p ON p.ProjectId = n.ProjectId ' +
+      'WHERE n.CodigoEmpresa = :CE AND n.ProjectId = :PID ' +
+      '  AND n.FechaInicio IS NOT NULL AND n.FechaFin IS NOT NULL';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := PID;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Nom := Trim(Q.FieldByName('Nombre').AsString);
+      if Nom = '' then Nom := 'Proyecto actual';
+      Ini := Q.FieldByName('FechaInicio').AsDateTime;
+      Fin := Q.FieldByName('FechaFin').AsDateTime;
+      if not Map.TryGetValue(Nom, GR) then
+      begin
+        GR := Default(TGanttResumen); GR.Nombre := Nom;
+        GR.Inicio := Ini; GR.Fin := Fin;
+      end;
+      if Ini < GR.Inicio then GR.Inicio := Ini;
+      if Fin > GR.Fin then GR.Fin := Fin;
+      Map.AddOrSetValue(Nom, GR);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  L := TList<TGanttResumen>.Create;
+  try
+    for GR in Map.Values do begin GR2 := GR; L.Add(GR2); end;
+    // Ordenar por inicio (arriba los que empiezan antes).
+    L.Sort(TComparer<TGanttResumen>.Construct(
+      function(const A, B: TGanttResumen): Integer
+      begin Result := CompareDateTime(A.Inicio, B.Inicio); end));
+    AGantt := L.ToArray;
+  finally
+    L.Free;
+    Map.Free;
+  end;
+end;
+
+{ PRO: cadenas de dependencias mas largas (aproximacion al camino critico).
+  Recorre FS_PL_Dependency como un grafo y, desde cada nodo raiz (sin
+  predecesores), calcula la cadena de mayor duracion acumulada. Devuelve las
+  top-N cadenas por horas. }
+
+procedure CalcularCadenas(out ACadenas: TArray<TCadenaDep>);
+var
+  Q: TADOQuery;
+  PID: Integer;
+  Dur: TDictionary<Integer, Double>;        // NodeId -> DuracionMin
+  Etq: TDictionary<Integer, string>;        // NodeId -> etiqueta corta
+  Succ: TDictionary<Integer, TList<Integer>>; // NodeId -> sucesores
+  TienePred: TDictionary<Integer, Boolean>;
+  L: TList<TCadenaDep>;
+  Nid, F, T: Integer;
+  Lista: TList<Integer>;
+
+  // DFS memoizado: mejor cadena (horas, nº ops, etiqueta ultimo) desde Nid.
+  function Mejor(Nid: Integer; out ANum: Integer; out AFin: string): Double;
+  var
+    S, Num2: Integer;
+    Fin2, EtqNid: string;
+    H, Best, DurNid: Double;
+    Sucesores: TList<Integer>;
+  begin
+    DurNid := 0; Dur.TryGetValue(Nid, DurNid);
+    EtqNid := ''; Etq.TryGetValue(Nid, EtqNid);
+    Best := 0; ANum := 0; AFin := EtqNid;
+    if Succ.TryGetValue(Nid, Sucesores) then
+      for S in Sucesores do
+      begin
+        H := Mejor(S, Num2, Fin2);
+        if H > Best then begin Best := H; ANum := Num2; AFin := Fin2; end;
+      end;
+    Inc(ANum);
+    Result := DurNid / 60.0 + Best;
+  end;
+
+var
+  C: TCadenaDep;
+  Num: Integer;
+  FinEtq, IniEtq: string;
+  Horas: Double;
+begin
+  SetLength(ACadenas, 0);
+  PID := DMPlanner.CurrentProjectId;
+  if PID <= 0 then Exit;
+
+  Dur := TDictionary<Integer, Double>.Create;
+  Etq := TDictionary<Integer, string>.Create;
+  Succ := TDictionary<Integer, TList<Integer>>.Create;
+  TienePred := TDictionary<Integer, Boolean>.Create;
+  L := TList<TCadenaDep>.Create;
+  try
+    // 1. Duraciones + etiqueta de cada nodo del plan.
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT n.NodeId, n.DuracionMin, nd.Operacion, nd.NumeroOF ' +
+        'FROM FS_PL_Node n ' +
+        'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
+        '  AND nd.NodeId = n.NodeId ' +
+        'WHERE n.CodigoEmpresa = :CE AND n.ProjectId = :PID';
+      Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+      Q.Parameters.ParamByName('PID').Value := PID;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Nid := Q.FieldByName('NodeId').AsInteger;
+        Dur.AddOrSetValue(Nid, Q.FieldByName('DuracionMin').AsFloat);
+        IniEtq := Trim(Q.FieldByName('Operacion').AsString);
+        if IniEtq = '' then IniEtq := 'Op';
+        if not Q.FieldByName('NumeroOF').IsNull then
+          IniEtq := 'OF' + IntToStr(Q.FieldByName('NumeroOF').AsInteger) + ' ' + IniEtq;
+        Etq.AddOrSetValue(Nid, IniEtq);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+    if Dur.Count = 0 then Exit;
+
+    // 2. Aristas de dependencia (From -> To).
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT FromNodeId, ToNodeId FROM FS_PL_Dependency ' +
+        'WHERE CodigoEmpresa = :CE AND ProjectId = :PID';
+      Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+      Q.Parameters.ParamByName('PID').Value := PID;
+      try
+        Q.Open;
+        while not Q.Eof do
+        begin
+          F := Q.FieldByName('FromNodeId').AsInteger;
+          T := Q.FieldByName('ToNodeId').AsInteger;
+          if not Succ.TryGetValue(F, Lista) then
+          begin Lista := TList<Integer>.Create; Succ.Add(F, Lista); end;
+          Lista.Add(T);
+          TienePred.AddOrSetValue(T, True);
+          Q.Next;
+        end;
+      except
+        // Sin dependencias (tabla vacia o inexistente): no hay cadenas.
+      end;
+    finally
+      Q.Free;
+    end;
+
+    // 3. Desde cada raiz (sin predecesor), la mejor cadena.
+    for Nid in Dur.Keys do
+      if not TienePred.ContainsKey(Nid) then
+      begin
+        Horas := Mejor(Nid, Num, FinEtq);
+        if (Num >= 2) and (Horas > 0) then  // solo cadenas reales (>=2 ops)
+        begin
+          C := Default(TCadenaDep);
+          IniEtq := ''; Etq.TryGetValue(Nid, IniEtq);
+          C.Etiqueta := IniEtq + ' -> ' + FinEtq;
+          C.HorasTotal := Horas;
+          C.NumOps := Num;
+          L.Add(C);
+        end;
+      end;
+
+    L.Sort(TComparer<TCadenaDep>.Construct(
+      function(const A, B: TCadenaDep): Integer
+      begin Result := CompareValue(B.HorasTotal, A.HorasTotal); end));
+    while L.Count > 12 do L.Delete(L.Count - 1);
+    ACadenas := L.ToArray;
+  finally
+    Dur.Free; Etq.Free; TienePred.Free; L.Free;
+    for Lista in Succ.Values do Lista.Free;
+    Succ.Free;
+  end;
+end;
+
+{ PRO: margen (holgura) hasta la fecha de entrega, y prioridad vs retraso }
+
+procedure CalcularMargenYPrioridad(out AMargen: TArray<TMargenOF>;
+  out APrioRet: TArray<TPrioridadRetraso>);
+var
+  Q: TADOQuery;
+  PID: Integer;
+  LM: TList<TMargenOF>;
+  LP: TList<TPrioridadRetraso>;
+  M: TMargenOF;
+  P: TPrioridadRetraso;
+  FFin, FEnt: TDateTime;
+  Etq: string;
+begin
+  SetLength(AMargen, 0); SetLength(APrioRet, 0);
+  PID := DMPlanner.CurrentProjectId;
+  if PID <= 0 then Exit;
+
+  LM := TList<TMargenOF>.Create;
+  LP := TList<TPrioridadRetraso>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT n.FechaFin, nd.FechaEntrega, nd.NumeroOF, nd.SerieOF, ' +
+      '       nd.CodigoArticulo, ISNULL(nd.Prioridad, 0) AS Prioridad ' +
+      'FROM FS_PL_Node n ' +
+      'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
+      '  AND nd.NodeId = n.NodeId ' +
+      'WHERE n.CodigoEmpresa = :CE AND n.ProjectId = :PID ' +
+      '  AND n.FechaFin IS NOT NULL AND nd.FechaEntrega IS NOT NULL';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := PID;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FFin := Q.FieldByName('FechaFin').AsDateTime;
+      FEnt := Q.FieldByName('FechaEntrega').AsDateTime;
+      Etq := Trim(Q.FieldByName('SerieOF').AsString) + ' ' +
+        IntToStr(Q.FieldByName('NumeroOF').AsInteger);
+      if Trim(Etq) = '' then Etq := Trim(Q.FieldByName('CodigoArticulo').AsString);
+
+      M := Default(TMargenOF);
+      M.Etiqueta := Etq;
+      M.MargenDias := FEnt - FFin;   // >0 = colchon; <0 = retraso
+      LM.Add(M);
+
+      P := Default(TPrioridadRetraso);
+      P.Etiqueta := Etq;
+      P.Prioridad := Q.FieldByName('Prioridad').AsInteger;
+      P.RetrasoDias := FFin - FEnt;  // >0 = tarde
+      LP.Add(P);
+
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  // Margen: ordenar de menor (mas critico) a mayor, y quedarnos con los 15
+  // mas ajustados (los que menos colchon tienen o mas retraso).
+  LM.Sort(TComparer<TMargenOF>.Construct(
+    function(const A, B: TMargenOF): Integer
+    begin Result := CompareValue(A.MargenDias, B.MargenDias); end));
+  while LM.Count > 15 do LM.Delete(LM.Count - 1);
+  AMargen := LM.ToArray;
+  LM.Free;
+
+  APrioRet := LP.ToArray;
+  LP.Free;
+end;
+
+{ PRO: avance del plan (unidades + estados) }
+
+procedure CalcularProgreso(out AProg: TProgresoPlan);
+var
+  Q: TADOQuery;
+  PID, Est: Integer;
+begin
+  AProg := Default(TProgresoPlan);
+  PID := DMPlanner.CurrentProjectId;
+  if PID <= 0 then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT ISNULL(nd.UnidadesFabricadas, 0) AS UF, ' +
+      '       ISNULL(nd.UnidadesAFabricar, 0) AS UA, ' +
+      '       ISNULL(nd.Estado, 0) AS Estado ' +
+      'FROM FS_PL_Node n ' +
+      'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
+      '  AND nd.NodeId = n.NodeId ' +
+      'WHERE n.CodigoEmpresa = :CE AND n.ProjectId = :PID';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := PID;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      AProg.UnidadesFabricadas := AProg.UnidadesFabricadas + Q.FieldByName('UF').AsFloat;
+      AProg.UnidadesAFabricar := AProg.UnidadesAFabricar + Q.FieldByName('UA').AsFloat;
+      Est := Q.FieldByName('Estado').AsInteger;
+      if (Est < 0) or (Est > 4) then Est := 4;
+      Inc(AProg.NodosPorEstado[Est]);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+{ PRO: mix por cliente + cobertura de personal por centro }
+
+procedure CalcularClienteYCobertura(out APorCliente: TArray<TItemHoras>;
+  out ACobertura: TArray<TCoberturaCentro>; const ACentros: TArray<TCargaCentro>);
+var
+  Q: TADOQuery;
+  PID, CId, I: Integer;
+  MapCli: TDictionary<string, TItemHoras>;
+  MapCob: TDictionary<Integer, TCoberturaCentro>;
+  IdToNombre: TDictionary<Integer, string>;
+  Cli, Nombre: string;
+  Horas: Double;
+  X: TItemHoras;
+  Cob: TCoberturaCentro;
+  L: TList<TItemHoras>;
+  LC: TList<TCoberturaCentro>;
+begin
+  SetLength(APorCliente, 0); SetLength(ACobertura, 0);
+  PID := DMPlanner.CurrentProjectId;
+  if PID <= 0 then Exit;
+
+  IdToNombre := TDictionary<Integer, string>.Create;
+  for I := 0 to High(ACentros) do
+    IdToNombre.AddOrSetValue(ACentros[I].CenterId, ACentros[I].Nombre);
+
+  MapCli := TDictionary<string, TItemHoras>.Create;
+  MapCob := TDictionary<Integer, TCoberturaCentro>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT n.CenterId, nd.CodigoCliente, nd.DuracionMin, ' +
+      '       ISNULL(nd.OperariosNecesarios, 0) AS Nec, ' +
+      '       ISNULL(nd.OperariosAsignados, 0) AS Asig ' +
+      'FROM FS_PL_Node n ' +
+      'LEFT JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa ' +
+      '  AND nd.NodeId = n.NodeId ' +
+      'WHERE n.CodigoEmpresa = :CE AND n.ProjectId = :PID';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := PID;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Horas := Q.FieldByName('DuracionMin').AsFloat / 60.0;
+      Cli := Trim(Q.FieldByName('CodigoCliente').AsString);
+      if Cli = '' then Cli := '(sin cliente)';
+      if not MapCli.TryGetValue(Cli, X) then
+      begin X := Default(TItemHoras); X.Clave := Cli; end;
+      X.Horas := X.Horas + Horas; Inc(X.Conteo);
+      MapCli.AddOrSetValue(Cli, X);
+
+      CId := Q.FieldByName('CenterId').AsInteger;
+      if not MapCob.TryGetValue(CId, Cob) then
+      begin
+        Cob := Default(TCoberturaCentro);
+        if IdToNombre.TryGetValue(CId, Nombre) then Cob.Nombre := Nombre
+        else Cob.Nombre := '(centro ' + IntToStr(CId) + ')';
+      end;
+      Cob.Necesarios := Cob.Necesarios + Q.FieldByName('Nec').AsInteger;
+      Cob.Asignados := Cob.Asignados + Q.FieldByName('Asig').AsInteger;
+      MapCob.AddOrSetValue(CId, Cob);
+
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  L := TList<TItemHoras>.Create;
+  try
+    for X in MapCli.Values do L.Add(X);
+    L.Sort(TComparer<TItemHoras>.Construct(
+      function(const A, B: TItemHoras): Integer
+      begin Result := CompareValue(B.Horas, A.Horas); end));
+    while L.Count > 15 do L.Delete(L.Count - 1);
+    APorCliente := L.ToArray;
+  finally
+    L.Free;
+  end;
+
+  LC := TList<TCoberturaCentro>.Create;
+  try
+    for Cob in MapCob.Values do
+      if Cob.Necesarios + Cob.Asignados > 0 then LC.Add(Cob);
+    ACobertura := LC.ToArray;
+  finally
+    LC.Free;
+  end;
+
+  MapCli.Free; MapCob.Free; IdToNombre.Free;
+end;
+
+{ ---------------------------------------------------------------------------
+  MODO DEMO: genera un TPlanAnalisis ficticio, creible y DETERMINISTA (sin
+  Random, para no parpadear entre refrescos) que rellena TODAS las estructuras
+  que consumen los 20 pintores. No toca la base de datos; se activa cuando
+  DemoMode.Active. Al desactivar el modo, todo vuelve a los datos reales.
+  --------------------------------------------------------------------------- }
+
+function CalcularPlanAnalisisDemo(const APeriodos: TArray<TPeriodoPlan>): TPlanAnalisis;
+const
+  CENTROS: array[0..9] of string = (
+    'Torno CNC 1', 'Torno CNC 2', 'Fresadora 2', 'Centro Mecanizado',
+    'Rectificadora', 'Soldadura', 'Corte L'#225'ser', 'Plegadora',
+    'Pintura', 'Montaje');
+  OPERARIOS: array[0..7] of string = (
+    'Juan P'#233'rez', 'Marta Ruiz', 'Luis G'#243'mez', 'Ana Torres',
+    'Pedro Sanz', 'Elena Vidal', 'Carlos Mora', 'Rosa Gil');
+  ARTICULOS: array[0..11] of string = (
+    'ART-1001 Eje motor', 'ART-1002 Brida', 'ART-1003 Tapa', 'ART-1004 Soporte',
+    'ART-1005 Carcasa', 'ART-1006 Pi'#241#243'n', 'ART-1007 Biela', 'ART-1008 Rodillo',
+    'ART-1009 Casquillo', 'ART-1010 Placa', 'ART-1011 Anillo', 'ART-1012 Buje');
+  OPERACIONES: array[0..7] of string = (
+    'Torneado', 'Fresado', 'Rectificado', 'Soldadura',
+    'Corte', 'Plegado', 'Pintura', 'Montaje');
+  PROYECTOS: array[0..4] of string = (
+    'Serie A-100', 'Pedido Cliente Norte', 'Recambios Q3', 'Prototipo X', 'Mantenimiento');
+var
+  NP, I, J, Seed: Integer;
+  Objetivo, CapBase: Double;
+  SerieArr: TArray<Double>;
+  L: TList<TItemHoras>;
+  It: TItemHoras;
+  R: TOfRetraso;
+  MS: TMakespanProyecto;
+  PS: TProductivoSetup;
+  SumaOcup: Double;
+  NConCap: Integer;
+begin
+  Result := Default(TPlanAnalisis);
+  Result.Periodos := APeriodos;
+  NP := Length(APeriodos);
+  if NP = 0 then Exit;
+
+  // --- Centros: carga/capacidad por periodo ---
+  SetLength(Result.Centros, Length(CENTROS));
+  for I := 0 to High(CENTROS) do
+  begin
+    Result.Centros[I].CenterId := 9000 + I;
+    Result.Centros[I].Nombre := CENTROS[I];
+    SetLength(Result.Centros[I].HorasCarga, NP);
+    SetLength(Result.Centros[I].HorasCapacidad, NP);
+    // Capacidad base por periodo (horas): ~40h/semana escaladas por granularidad.
+    CapBase := 8 + (I mod 3) * 2;           // 8..12 h/periodo base
+    Seed := 9000 + I;
+    // Objetivo de ocupacion por centro: 55..119% (algunos en sobrecarga).
+    Objetivo := 55 + ((Seed * 37) mod 65);
+    SerieArr := DemoSerieHaciaValor(Objetivo, NP, 0.30, Seed);
+    for J := 0 to NP - 1 do
+    begin
+      Result.Centros[I].HorasCapacidad[J] := CapBase;
+      Result.Centros[I].HorasCarga[J] := CapBase * SerieArr[J] / 100.0;
+    end;
+  end;
+
+  // --- Operarios: carga/capacidad por periodo ---
+  SetLength(Result.Operarios, Length(OPERARIOS));
+  for I := 0 to High(OPERARIOS) do
+  begin
+    Result.Operarios[I].OperatorId := 8000 + I;
+    Result.Operarios[I].Nombre := OPERARIOS[I];
+    SetLength(Result.Operarios[I].HorasCarga, NP);
+    SetLength(Result.Operarios[I].HorasCapacidad, NP);
+    CapBase := 7 + (I mod 2) * 1;           // 7..8 h/periodo base
+    Seed := 8000 + I * 13;
+    Objetivo := 60 + ((Seed * 29) mod 55);  // 60..114%
+    SerieArr := DemoSerieHaciaValor(Objetivo, NP, 0.28, Seed);
+    for J := 0 to NP - 1 do
+    begin
+      Result.Operarios[I].HorasCapacidad[J] := CapBase;
+      Result.Operarios[I].HorasCarga[J] := CapBase * SerieArr[J] / 100.0;
+    end;
+  end;
+
+  // --- Totales por periodo (curva temporal) ---
+  SetLength(Result.CargaTotalPorPeriodo, NP);
+  SetLength(Result.CapacidadTotalPorPeriodo, NP);
+  for J := 0 to NP - 1 do
+    for I := 0 to High(Result.Centros) do
+    begin
+      Result.CargaTotalPorPeriodo[J] := Result.CargaTotalPorPeriodo[J] +
+        Result.Centros[I].HorasCarga[J];
+      Result.CapacidadTotalPorPeriodo[J] := Result.CapacidadTotalPorPeriodo[J] +
+        Result.Centros[I].HorasCapacidad[J];
+    end;
+
+  // --- OTD: cumplimiento de entregas ---
+  Result.Otd.Total := 120;
+  Result.Otd.ATiempo := 78;
+  Result.Otd.EnRiesgo := 14;
+  Result.Otd.Retrasadas := 19;
+  Result.Otd.SinCompromiso := 9;
+  Result.Otd.RetrasoMedioDias := 2.3;
+  Result.Otd.RetrasoMaxDias := 8;
+  // Histograma desviacion: [<=-3 -2 -1 0 +1 +2 >=+3]
+  Result.Otd.Buckets[0] := 22; Result.Otd.Buckets[1] := 18; Result.Otd.Buckets[2] := 26;
+  Result.Otd.Buckets[3] := 12; Result.Otd.Buckets[4] := 9;  Result.Otd.Buckets[5] := 6;
+  Result.Otd.Buckets[6] := 4;
+
+  // --- MIX: carga por articulo ---
+  L := TList<TItemHoras>.Create;
+  try
+    for I := 0 to High(ARTICULOS) do
+    begin
+      It := Default(TItemHoras);
+      It.Clave := ARTICULOS[I];
+      Seed := 1000 + I * 7;
+      It.Horas := 12 + ((Seed * 31) mod 90);     // 12..101 h
+      It.Conteo := 2 + (I mod 6);
+      L.Add(It);
+    end;
+    L.Sort(TComparer<TItemHoras>.Construct(
+      function(const A, B: TItemHoras): Integer
+      begin Result := CompareValue(B.Horas, A.Horas); end));
+    Result.PorArticulo := L.ToArray;
+  finally
+    L.Free;
+  end;
+
+  // --- MIX: carga por tipo de operacion ---
+  L := TList<TItemHoras>.Create;
+  try
+    for I := 0 to High(OPERACIONES) do
+    begin
+      It := Default(TItemHoras);
+      It.Clave := OPERACIONES[I];
+      Seed := 2000 + I * 11;
+      It.Horas := 20 + ((Seed * 23) mod 120);    // 20..139 h
+      It.Conteo := 3 + (I mod 8);
+      L.Add(It);
+    end;
+    L.Sort(TComparer<TItemHoras>.Construct(
+      function(const A, B: TItemHoras): Integer
+      begin Result := CompareValue(B.Horas, A.Horas); end));
+    Result.PorOperacion := L.ToArray;
+  finally
+    L.Free;
+  end;
+
+  // --- MIX: nº operaciones por centro ---
+  L := TList<TItemHoras>.Create;
+  try
+    for I := 0 to High(CENTROS) do
+    begin
+      It := Default(TItemHoras);
+      It.Clave := CENTROS[I];
+      It.Conteo := 8 + ((9000 + I) * 17) mod 40;  // 8..47 ops
+      It.Horas := It.Conteo * 1.5;
+      L.Add(It);
+    end;
+    L.Sort(TComparer<TItemHoras>.Construct(
+      function(const A, B: TItemHoras): Integer
+      begin Result := CompareValue(B.Conteo, A.Conteo); end));
+    Result.OpsPorCentro := L.ToArray;
+  finally
+    L.Free;
+  end;
+
+  // --- ENTREGAS: top OF mas retrasadas ---
+  SetLength(Result.TopRetrasos, 10);
+  for I := 0 to 9 do
+  begin
+    R := Default(TOfRetraso);
+    R.Etiqueta := 'OF ' + Format('%.4d', [2500 + I * 7]);
+    R.RetrasoDias := 8.5 - I * 0.7;     // 8.5 -> 2.2 dias, descendente
+    Result.TopRetrasos[I] := R;
+  end;
+
+  // --- TIEMPOS: makespan por proyecto ---
+  SetLength(Result.Makespans, Length(PROYECTOS));
+  for I := 0 to High(PROYECTOS) do
+  begin
+    MS := Default(TMakespanProyecto);
+    MS.Nombre := PROYECTOS[I];
+    Seed := 3000 + I * 19;
+    MS.HorasSpan := 40 + ((Seed * 13) mod 200);   // 40..239 h
+    Result.Makespans[I] := MS;
+  end;
+
+  // --- TIEMPOS: histograma de duraciones (8 buckets) ---
+  Result.Duraciones[0] := 14; Result.Duraciones[1] := 28; Result.Duraciones[2] := 41;
+  Result.Duraciones[3] := 37; Result.Duraciones[4] := 25; Result.Duraciones[5] := 16;
+  Result.Duraciones[6] := 8;  Result.Duraciones[7] := 3;
+
+  // --- EFICIENCIA: productivo vs setup por centro ---
+  SetLength(Result.ProductivoSetup, Length(CENTROS));
+  for I := 0 to High(CENTROS) do
+  begin
+    PS := Default(TProductivoSetup);
+    PS.Nombre := CENTROS[I];
+    Seed := 4000 + I * 5;
+    PS.HorasProductivo := 30 + ((Seed * 17) mod 70);  // 30..99 h
+    PS.HorasSetup := 4 + ((Seed * 7) mod 18);         // 4..21 h
+    Result.ProductivoSetup[I] := PS;
+  end;
+
+  // --- EFICIENCIA: utilizacion media global (media de ocupacion de centros) ---
+  SumaOcup := 0; NConCap := 0;
+  for I := 0 to High(Result.Centros) do
+    if Result.Centros[I].TotalCapacidad > 0 then
+    begin
+      SumaOcup := SumaOcup + Result.Centros[I].OcupacionPct;
+      Inc(NConCap);
+    end;
+  if NConCap > 0 then Result.UtilMediaGlobal := SumaOcup / NConCap;
+
+  // --- PRO: Gantt-resumen por proyecto ---
+  SetLength(Result.GanttResumen, Length(PROYECTOS));
+  for I := 0 to High(PROYECTOS) do
+  begin
+    Result.GanttResumen[I].Nombre := PROYECTOS[I];
+    Result.GanttResumen[I].Inicio := APeriodos[0].Inicio + I * 2;
+    Result.GanttResumen[I].Fin := APeriodos[0].Inicio + I * 2 +
+      (5 + ((3000 + I * 19) * 13) mod 20);   // 5..24 dias de span
+  end;
+
+  // --- PRO: cadenas de dependencias ---
+  SetLength(Result.Cadenas, 8);
+  for I := 0 to 7 do
+  begin
+    Result.Cadenas[I].Etiqueta :=
+      'OF' + IntToStr(2500 + I * 7) + ' Torneado -> Montaje';
+    Seed := 5000 + I * 23;
+    Result.Cadenas[I].HorasTotal := 60 - I * 5 + (Seed mod 12);  // desc
+    Result.Cadenas[I].NumOps := 6 - (I mod 4);                   // 3..6
+  end;
+
+  // --- PRO: margen hasta entrega (los 15 mas ajustados) ---
+  SetLength(Result.MargenEntrega, 15);
+  for I := 0 to 14 do
+  begin
+    Result.MargenEntrega[I].Etiqueta := 'OF ' + Format('%.4d', [2600 + I * 5]);
+    Result.MargenEntrega[I].MargenDias := -6.0 + I * 1.1;  // -6 .. +9.4 dias
+  end;
+
+  // --- PRO: prioridad vs retraso ---
+  SetLength(Result.PrioridadRetraso, 30);
+  for I := 0 to 29 do
+  begin
+    Result.PrioridadRetraso[I].Etiqueta := 'OF ' + IntToStr(2700 + I);
+    Seed := 6000 + I * 17;
+    Result.PrioridadRetraso[I].Prioridad := 1 + (Seed mod 5);        // 1..5
+    Result.PrioridadRetraso[I].RetrasoDias := -3.0 + (Seed mod 90) / 9.0; // -3..+7
+  end;
+
+  // --- PRO: CRP acumulada ---
+  SetLength(Result.CargaAcumulada, NP);
+  SetLength(Result.CapacidadAcumulada, NP);
+  for J := 0 to NP - 1 do
+  begin
+    Result.CargaAcumulada[J] := Result.CargaTotalPorPeriodo[J];
+    Result.CapacidadAcumulada[J] := Result.CapacidadTotalPorPeriodo[J];
+    if J > 0 then
+    begin
+      Result.CargaAcumulada[J] := Result.CargaAcumulada[J] + Result.CargaAcumulada[J - 1];
+      Result.CapacidadAcumulada[J] := Result.CapacidadAcumulada[J] + Result.CapacidadAcumulada[J - 1];
+    end;
+  end;
+
+  // --- PRO: avance del plan (unidades + estados) ---
+  Result.Progreso.UnidadesFabricadas := 640;
+  Result.Progreso.UnidadesAFabricar := 1000;
+  Result.Progreso.NodosPorEstado[0] := 34;   // Pendiente
+  Result.Progreso.NodosPorEstado[1] := 21;   // En curso
+  Result.Progreso.NodosPorEstado[2] := 58;   // Hecho
+  Result.Progreso.NodosPorEstado[3] := 5;    // Otro
+  Result.Progreso.NodosPorEstado[4] := 2;
+
+  // --- PRO: mix por cliente ---
+  SetLength(Result.PorCliente, 6);
+  for I := 0 to 5 do
+  begin
+    Result.PorCliente[I].Clave := 'Cliente ' + Chr(Ord('A') + I);
+    Seed := 7000 + I * 29;
+    Result.PorCliente[I].Horas := 40 + ((Seed * 19) mod 160);   // 40..199
+    Result.PorCliente[I].Conteo := 3 + (I mod 7);
+  end;
+
+  // --- PRO: cobertura de personal por centro ---
+  SetLength(Result.Cobertura, Length(CENTROS));
+  for I := 0 to High(CENTROS) do
+  begin
+    Result.Cobertura[I].Nombre := CENTROS[I];
+    Seed := 4500 + I * 11;
+    Result.Cobertura[I].Necesarios := 2 + (Seed mod 5);   // 2..6
+    Result.Cobertura[I].Asignados := 1 + ((Seed div 3) mod 6); // 1..6 (a veces falta)
+  end;
+end;
+
 { Orquestacion }
 
 function CalcularPlanAnalisis(const APeriodos: TArray<TPeriodoPlan>): TPlanAnalisis;
 var
   I, J: Integer;
 begin
+  // Modo demo: datos ficticios generados al vuelo, sin tocar la BD.
+  if DemoMode.Active then
+    Exit(CalcularPlanAnalisisDemo(APeriodos));
+
   Result := Default(TPlanAnalisis);
   Result.Periodos := APeriodos;
   CalcularCarga(APeriodos, Result.Centros);
@@ -903,6 +1665,27 @@ begin
       Inc(J);
     end;
   if J > 0 then Result.UtilMediaGlobal := Result.UtilMediaGlobal / J;
+
+  // --- Graficos PRO ---
+  CalcularGanttResumen(Result.GanttResumen);
+  CalcularCadenas(Result.Cadenas);
+  CalcularMargenYPrioridad(Result.MargenEntrega, Result.PrioridadRetraso);
+  CalcularProgreso(Result.Progreso);
+  CalcularClienteYCobertura(Result.PorCliente, Result.Cobertura, Result.Centros);
+
+  // CRP: carga y capacidad acumuladas periodo a periodo.
+  SetLength(Result.CargaAcumulada, Length(APeriodos));
+  SetLength(Result.CapacidadAcumulada, Length(APeriodos));
+  for J := 0 to High(APeriodos) do
+  begin
+    Result.CargaAcumulada[J] := Result.CargaTotalPorPeriodo[J];
+    Result.CapacidadAcumulada[J] := Result.CapacidadTotalPorPeriodo[J];
+    if J > 0 then
+    begin
+      Result.CargaAcumulada[J] := Result.CargaAcumulada[J] + Result.CargaAcumulada[J - 1];
+      Result.CapacidadAcumulada[J] := Result.CapacidadAcumulada[J] + Result.CapacidadAcumulada[J - 1];
+    end;
+  end;
 end;
 
 end.

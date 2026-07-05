@@ -13,6 +13,7 @@ object frmPlanAnalisis: TfrmPlanAnalisis
   Position = poScreenCenter
   WindowState = wsMaximized
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   TextHeight = 15
   object pnlTop: TPanel
     Left = 0
@@ -79,6 +80,32 @@ object frmPlanAnalisis: TfrmPlanAnalisis
       TabOrder = 3
       OnClick = btnActualizarClick
     end
+    object btnObs: TButton
+      Left = 912
+      Top = 11
+      Width = 136
+      Height = 26
+      Anchors = [akTop, akRight]
+      Caption = 'Observaciones'
+      TabOrder = 5
+      OnClick = btnObsClick
+    end
+    object btnAyuda: TButton
+      Left = 1056
+      Top = 11
+      Width = 28
+      Height = 26
+      Anchors = [akTop, akRight]
+      Caption = '?'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -15
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      TabOrder = 4
+      OnClick = btnAyudaClick
+    end
   end
   object pnlLeft: TPanel
     Left = 0
@@ -98,11 +125,11 @@ object frmPlanAnalisis: TfrmPlanAnalisis
       Color = 16448250
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
-      Font.Height = -13
+      Font.Height = -11
       Font.Name = 'Segoe UI'
       Font.Style = []
       HideSelection = False
-      Indent = 19
+      Indent = 15
       ParentFont = False
       ReadOnly = True
       RowSelect = True

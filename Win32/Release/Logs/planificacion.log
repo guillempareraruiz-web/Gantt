@@ -155,3 +155,57 @@
 2026-06-29 18:58:09.559  BUILD_FROM_ROW: Tipo=[OF ] Nivel=3 | Row.NumeroOF=1 Row.SerieOF=3072 Row.NumeroDoc=0 Row.CodigoOT=1206 Row.CodigoProyecto= | Row.FCompromiso=24/01/2024 Row.FNecesaria=30/12/1899 -> NumOF=1 SerieOF=3072 NumTrab=1206 FEntrega=24/01/2024 FNecesaria=30/12/1899
 2026-06-29 18:58:09.560  --- INPUTS recogidos: 1 operaciones (OP) ---
 2026-06-29 18:58:09.562    [0] Tipo=OF  ClaveERP=OP|2024|1206|5 | NumeroOF=1 SerieOF=3072 NumTrabajo=1206 | FCompromiso=24/01/2024 FEntrega=24/01/2024 FNecesaria=30/12/1899 | Centro=FAB AUT 5 Doc=-0/5 MONTAJE
+2026-07-05 20:42:05.306  
+2026-07-05 20:42:05.306  ========================================================
+2026-07-05 20:42:05.306  === GenerarNodosDemo: 1000 nodos, proyecto 5
+2026-07-05 20:42:05.306  ========================================================
+2026-07-05 20:42:05.306  t+7 ms: leidos 31 centros
+2026-07-05 20:42:05.306  t+12 ms: preparados 94 operarios
+2026-07-05 20:42:05.489  t+184 ms: DELETE previo hecho (empieza generacion)
+2026-07-05 20:42:05.807    flush #1: 307 ms (48 nodos, 50453 chars SQL)
+2026-07-05 20:42:06.119    flush #2: 313 ms (48 nodos, 51297 chars SQL)
+2026-07-05 20:42:06.412    flush #3: 294 ms (48 nodos, 50087 chars SQL)
+2026-07-05 20:42:06.763    flush #4: 340 ms (48 nodos, 51962 chars SQL)
+2026-07-05 20:42:07.062    flush #5: 295 ms (48 nodos, 50658 chars SQL)
+2026-07-05 20:42:07.349    flush #6: 293 ms (48 nodos, 49958 chars SQL)
+2026-07-05 20:42:07.651    flush #7: 297 ms (48 nodos, 50668 chars SQL)
+2026-07-05 20:42:07.953    flush #8: 295 ms (48 nodos, 50377 chars SQL)
+2026-07-05 20:42:08.255    flush #9: 300 ms (48 nodos, 51250 chars SQL)
+2026-07-05 20:42:08.557    flush #10: 299 ms (48 nodos, 50293 chars SQL)
+2026-07-05 20:42:08.860    flush #11: 305 ms (48 nodos, 51085 chars SQL)
+2026-07-05 20:42:09.173    flush #12: 311 ms (48 nodos, 51100 chars SQL)
+2026-07-05 20:42:09.494    flush #13: 314 ms (48 nodos, 51092 chars SQL)
+2026-07-05 20:42:09.787    flush #14: 295 ms (48 nodos, 50223 chars SQL)
+2026-07-05 20:42:10.085    flush #15: 298 ms (48 nodos, 50707 chars SQL)
+2026-07-05 20:42:10.405    flush #16: 324 ms (48 nodos, 51905 chars SQL)
+2026-07-05 20:42:10.723    flush #17: 309 ms (48 nodos, 50875 chars SQL)
+2026-07-05 20:42:11.037    flush #18: 303 ms (48 nodos, 50691 chars SQL)
+2026-07-05 20:42:11.357    flush #19: 319 ms (48 nodos, 50033 chars SQL)
+2026-07-05 20:42:11.682    flush #20: 323 ms (48 nodos, 51558 chars SQL)
+2026-07-05 20:42:11.933    flush #21: 256 ms (40 nodos, 42120 chars SQL)
+2026-07-05 20:42:11.933  t+6636 ms: generados 1000 nodos en 21 flushes (suma flush 6390 ms, flush max 340 ms). Asignaciones de operario generadas: 1016
+2026-07-05 20:42:11.947  t+6644 ms: COMMIT hecho en 7 ms
+2026-07-05 20:42:11.947  TOTAL: 6644 ms para 1000 nodos
+2026-07-05 20:42:11.947  === FIN ===============================================
+2026-07-05 20:51:35.772  
+2026-07-05 20:51:35.772  ========================================================
+2026-07-05 20:51:35.772  === GenerarNodosDemo: 1000 nodos, proyecto 5
+2026-07-05 20:51:35.772  ========================================================
+2026-07-05 20:51:35.772  t+5 ms: leidos 31 centros
+2026-07-05 20:51:35.772  t+9 ms: preparados 94 operarios
+2026-07-05 20:51:35.964  t+193 ms: DELETE previo hecho, BaseId=900000519 (empieza generacion)
+2026-07-05 20:51:37.699  t+1932 ms: generados 1000 nodos (suma INSERTs 1684 ms). Asignaciones de operario: 1055
+2026-07-05 20:51:37.699  t+1939 ms: COMMIT hecho en 6 ms
+2026-07-05 20:51:37.699  TOTAL: 1939 ms para 1000 nodos
+2026-07-05 20:51:37.714  === FIN ===============================================
+2026-07-05 20:59:41.661  
+2026-07-05 20:59:41.661  ========================================================
+2026-07-05 20:59:41.661  === GenerarNodosDemo: 1000 nodos, proyecto 5
+2026-07-05 20:59:41.661  ========================================================
+2026-07-05 20:59:41.661  t+6 ms: leidos 31 centros
+2026-07-05 20:59:41.672  t+10 ms: preparados 94 operarios
+2026-07-05 20:59:41.862  t+199 ms: DELETE previo hecho, BaseId=900000519 (empieza generacion)
+2026-07-05 20:59:43.689  t+2033 ms: generados 1000 nodos (suma INSERTs 1783 ms). Asignaciones de operario: 1064
+2026-07-05 20:59:43.703  t+2039 ms: COMMIT hecho en 5 ms
+2026-07-05 20:59:43.703  TOTAL: 2039 ms para 1000 nodos
+2026-07-05 20:59:43.703  === FIN ===============================================

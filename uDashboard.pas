@@ -90,6 +90,8 @@ type
     lblValOTsPendientes: TLabel;
     imgSection: TcxImage;
     btnConfig: TcxButton;
+    Panel1: TPanel;
+    Image1: TImage;
     procedure lblPendingSyncClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);

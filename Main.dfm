@@ -27,43 +27,6 @@ object Form1: TForm1
     Color = 14869218
     ParentBackground = False
     TabOrder = 0
-    DesignSize = (
-      1092
-      33)
-    object Label28: TLabel
-      Left = 714
-      Top = 3
-      Width = 240
-      Height = 19
-      Alignment = taRightJustify
-      Anchors = [akTop, akRight]
-      AutoSize = False
-      Caption = 'PROJECT NAME'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = 6313290
-      Font.Height = -12
-      Font.Name = 'Segoe UI'
-      Font.Style = [fsBold]
-      ParentFont = False
-      Layout = tlCenter
-    end
-    object Label29: TLabel
-      Left = 858
-      Top = 13
-      Width = 96
-      Height = 19
-      Alignment = taRightJustify
-      Anchors = [akTop, akRight]
-      AutoSize = False
-      Caption = 'MASTER'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = 12037284
-      Font.Height = -11
-      Font.Name = 'Segoe UI'
-      Font.Style = [fsBold]
-      ParentFont = False
-      Layout = tlCenter
-    end
     object btnTB_Dashboard: TcxButton
       AlignWithMargins = True
       Left = 6
@@ -89,7 +52,7 @@ object Form1: TForm1
       AlignWithMargins = True
       Left = 87
       Top = 5
-      Width = 75
+      Width = 60
       Height = 23
       Margins.Top = 5
       Margins.Bottom = 5
@@ -106,7 +69,7 @@ object Form1: TForm1
     end
     object btnTB_PlaniCentros: TcxButton
       AlignWithMargins = True
-      Left = 249
+      Left = 219
       Top = 5
       Width = 75
       Height = 23
@@ -122,10 +85,11 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 2
       OnClick = FiniteCapacity1Click
+      ExplicitLeft = 249
     end
     object cxButton1: TcxButton
       AlignWithMargins = True
-      Left = 631
+      Left = 586
       Top = 5
       Width = 75
       Height = 23
@@ -141,10 +105,11 @@ object Form1: TForm1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
       TabOrder = 3
+      ExplicitLeft = 631
     end
     object btnTB_PlaniOperarios: TcxButton
       AlignWithMargins = True
-      Left = 330
+      Left = 300
       Top = 5
       Width = 75
       Height = 23
@@ -160,12 +125,13 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 4
       OnClick = FiniteCapacityOperaris1Click
+      ExplicitLeft = 330
     end
     object btnTB_PlaniGantt: TcxButton
       AlignWithMargins = True
-      Left = 411
+      Left = 381
       Top = 5
-      Width = 75
+      Width = 60
       Height = 23
       Margins.Top = 5
       Margins.Bottom = 5
@@ -197,9 +163,6 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 6
       OnClick = btnTB_HelpClick
-      ExplicitLeft = 950
-      ExplicitTop = 5
-      ExplicitHeight = 23
     end
     object btnLinkERP: TcxButton
       AlignWithMargins = True
@@ -253,9 +216,9 @@ object Form1: TForm1
     end
     object cxButton2: TcxButton
       AlignWithMargins = True
-      Left = 168
+      Left = 153
       Top = 5
-      Width = 75
+      Width = 60
       Height = 23
       Margins.Top = 5
       Margins.Bottom = 5
@@ -272,7 +235,7 @@ object Form1: TForm1
     end
     object btnTB_PlaniAlertas: TcxButton
       AlignWithMargins = True
-      Left = 492
+      Left = 447
       Top = 5
       Width = 133
       Height = 23
@@ -290,6 +253,7 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 9
       OnClick = btnTB_PlaniAlertasClick
+      ExplicitLeft = 492
     end
   end
   object tmr1Sec: TTimer
@@ -471,6 +435,10 @@ object Form1: TForm1
         Caption = 'Generar nodos demo...'
         OnClick = GenerarNodosDemo1Click
       end
+      object RegenerarGanttDemo1: TMenuItem
+        Caption = 'Regenerar Gantt demo (modo demostraci'#243'n)...'
+        OnClick = RegenerarGanttDemo1Click
+      end
       object GenerarBacklogDemo1: TMenuItem
         Caption = 'Generar Backlog demo...'
         OnClick = GenerarBacklogDemo1Click
@@ -549,13 +517,16 @@ object Form1: TForm1
         Caption = 'An'#225'lisis del plan'
         OnClick = AnalisisPlan1Click
       end
-      object AlertasPlanificacion1: TMenuItem
-        Caption = 'Alertas de planificaci'#243'n...'
-        OnClick = AlertasPlanificacion1Click
-      end
       object CuadroPlanificacionDia1: TMenuItem
         Caption = 'Cuadro Planificaci'#243'n del D'#237'a'
         OnClick = CuadroPlanificacionDia1Click
+      end
+      object N7: TMenuItem
+        Caption = '-'
+      end
+      object AlertasPlanificacion1: TMenuItem
+        Caption = 'Alertas de planificaci'#243'n...'
+        OnClick = AlertasPlanificacion1Click
       end
       object Indicadoresdecentros1: TMenuItem
         Caption = 'Indicadores de centros'
