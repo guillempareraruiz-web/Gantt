@@ -21,8 +21,17 @@ type
   TMarkerMovedEvent = procedure(Sender: TObject; const MarkerId: Integer; const NewDateTime: TDateTime) of object;
 
   TGanttStatsChanged = procedure(Sender: TObject) of object;
+
+  // Tipo de cambio notificado por OnPlanModified. Distingue mover/redimensionar
+  // (solo cambian FechaInicio/Fin/CenterId -> persistencia ligera de posiciones)
+  // de editar la ficha del nodo (NodeData/operarios/centros -> persistencia
+  // completa). Un cambio de posicion que reencadena 100-500 nodos NO debe
+  // reescribir NodeData/CentresPermesos/CustomFields de cada uno (era el patron
+  // lento: 334 nodos = 2.1s). pmkFull es el default seguro (comportamiento previo).
+  TPlanModKind = (pmkPosition, pmkFull);
+
   TGanttPlanModifiedEvent = procedure(Sender: TObject;
-    const ADataIds: TArray<Integer>) of object;
+    const ADataIds: TArray<Integer>; AKind: TPlanModKind) of object;
 
   TGanttRenderMode = (grmNormalVCL, grmAdvancedD2D);
 
@@ -72,6 +81,10 @@ type
     FUndoBatchBefore: TArray<TNodePlanSnapshot>;
     FUndoBatchCaption: string;
     FUndoBatchAction: TGanttHistoryActionType;
+    // Durante un batch, en vez de disparar OnPlanModified por cada nodo (que en
+    // Main copia TODO el array de nodos + sync -> O(n^2) en drag multiple), se
+    // acumulan aqui los DataIds afectados y se notifica UNA sola vez en EndUndoBatch.
+    FBatchAffectedIds: TDictionary<Integer, Boolean>;
 
     FScrollX, FScrollY: Single;
     FPxPerMinute: Single;
@@ -341,6 +354,9 @@ type
     procedure ScrollByPixels(const dx, dy: Integer; const ScrollRect: TRect);
 
     procedure BuildCentreNodeIndex;
+    // True si FCentreNodeIdx no refleja bien el centro actual del nodo (p.ej.
+    // acaba de cambiar de centro y el cache aun lo tiene en el viejo).
+    function CentreNodeIndexNecesitaRebuild(const ANodeIdx: Integer): Boolean;
     function GetNodeIndexesForCentre(const ACentreId: Integer): TArray<Integer>;
     function TryGetRowByCentreId(const ACentreId: Integer; out Row: TRowLayout): Boolean;
     function CalcLaneTop(const Row: TRowLayout; const Centre: TCentreTreball;
@@ -986,7 +1002,8 @@ const
 
 implementation
 
-uses uGanttHelpers, uErpSampleBuilder, uGanttTimeline, Main, System.Diagnostics;
+uses uGanttHelpers, uErpSampleBuilder, uGanttTimeline, Main, System.Diagnostics,
+  uPlanLog;
 
 // ===== LOG DEBUG LOTE (permanente, util para futuras depuraciones) =====
 // Escribe en C:\lote_debug.log. Es a prueba de fallos (no rompe nada si no
@@ -1984,6 +2001,7 @@ begin
 
   FHistory := TGanttHistoryManager.Create(200);
   FUndoBatchActive := False;
+  FBatchAffectedIds := TDictionary<Integer, Boolean>.Create;
 end;
 
 destructor TGanttControl.Destroy;
@@ -2003,6 +2021,7 @@ begin
   HideNodeHint;
 
   FHistory.Free;
+  FBatchAffectedIds.Free;
 
   // Alliberar índexos de graf
   FNodeIdToIndex.Free;
@@ -2103,8 +2122,9 @@ begin
   Invalidate;
 
   // Marcar dirty para persistencia (igual que CommitNodeMoveOrResize paso 7).
+  // Resize: solo cambia posicion/duracion -> persistencia ligera.
   if Assigned(FOnPlanModified) and (FNodes[NodeIndex].DataId > 0) then
-    FOnPlanModified(Self, [FNodes[NodeIndex].DataId]);
+    FOnPlanModified(Self, [FNodes[NodeIndex].DataId], pmkPosition);
 end;
 
 procedure TGanttControl.SetTimeRange(const AStart, AEnd: TDateTime);
@@ -2438,7 +2458,13 @@ begin
   RebuildLayout;          // recrea FRows + FNodeLayouts
   RebuildNodeLayoutIndex; // OBLIGATORI sempre
   if RebuildNodeIndexMap then
+  begin
     RebuildOpIdIndex;     // només si has canviat l’ordre de FNodes o has afegit/treu nodes
+    // Si el mapa de nodos cambio (p.ej. un nodo cambio de centro), reconstruir
+    // tambien el cache centre->nodos para que render y proximas resoluciones de
+    // colisiones lo vean coherente. Barato (O(n) una vez por operacion).
+    BuildCentreNodeIndex;
+  end;
 end;
 
 procedure TGanttControl.ResetNodeDuration(const ANodeIndex: Integer);
@@ -2698,6 +2724,22 @@ begin
 
     FCentreNodeIdx.AddOrSetValue(centreId, arr);
   end;
+end;
+
+function TGanttControl.CentreNodeIndexNecesitaRebuild(const ANodeIdx: Integer): Boolean;
+var
+  arr: TArray<Integer>;
+  j: Integer;
+begin
+  // El cache esta al dia para este nodo si su indice aparece en la lista del
+  // centro que el nodo dice tener ahora. Si no aparece (cambio de centro sin
+  // rebuild), hay que reconstruir. Coste O(nodos del centro), no O(todos).
+  if (ANodeIdx < 0) or (ANodeIdx > High(FNodes)) then Exit(False);
+  if not FCentreNodeIdx.TryGetValue(FNodes[ANodeIdx].CentreId, arr) then
+    Exit(True);   // el centro destino ni siquiera esta en el cache
+  for j := 0 to High(arr) do
+    if arr[j] = ANodeIdx then Exit(False);
+  Result := True;
 end;
 
 
@@ -5315,9 +5357,28 @@ var
   AfterSnaps: TArray<TNodePlanSnapshot>;
   Changes: TArray<TNodeHistoryChange>;
   Entry: TGanttHistoryEntry;
+  AllIds: TArray<Integer>;
+  Id, K: Integer;
 begin
   if not FUndoBatchActive then Exit;
   FUndoBatchActive := False;
+
+  // Notificacion GLOBAL acumulada durante el batch: UNA sola llamada a
+  // OnPlanModified con todos los DataIds afectados (en vez de una por nodo).
+  // Se hace ANTES de cualquier Exit para que no se pierda aunque el historico
+  // no registre cambios. Vaciar siempre el acumulador.
+  if FBatchAffectedIds.Count > 0 then
+  begin
+    SetLength(AllIds, FBatchAffectedIds.Count);
+    K := 0;
+    for Id in FBatchAffectedIds.Keys do
+    begin
+      AllIds[K] := Id; Inc(K);
+    end;
+    FBatchAffectedIds.Clear;
+    if Assigned(FOnPlanModified) then
+      FOnPlanModified(Self, AllIds, pmkPosition);
+  end;
 
   AfterSnaps := CaptureAllNodesSnapshot;
   Changes := BuildNodeHistoryChanges(FUndoBatchBefore, AfterSnaps);
@@ -6373,11 +6434,14 @@ begin
   end;
 
   // Notificar al exterior (Main -> sync NodesRepo desde GetNodes + AutoSaver).
+  // pmkFull: PersistNodeChange se usa para cambios de nodo generales (p.ej.
+  // bloqueo/Enabled) que la persistencia ligera de posiciones no cubre. Es 1
+  // nodo puntual, no el caso lento -> el coste completo es irrelevante aqui.
   if Assigned(FOnPlanModified) then
   begin
     SetLength(DataIds, 1);
     DataIds[0] := FNodes[NodeIndex].DataId;
-    FOnPlanModified(Self, DataIds);
+    FOnPlanModified(Self, DataIds, pmkFull);
   end;
 end;
 
@@ -10919,8 +10983,9 @@ begin
         FNodeRepo.AddOrUpdate(D);
       end;
     end;
+    // Mover lotes solo reposiciona sus miembros -> persistencia ligera.
     if (Ids.Count > 0) and Assigned(FOnPlanModified) then
-      FOnPlanModified(Self, Ids.ToArray);
+      FOnPlanModified(Self, Ids.ToArray, pmkPosition);
   finally
     Ids.Free;
   end;
@@ -10950,6 +11015,16 @@ begin
     BeforeSnaps := CaptureSnapshotsFromNodePropagation(NodeIdx);
   // IMPORTANT: si l'has mogut cap a l'esquerra, el corregeix segons predecessors
   ClampNodeToPredecessors(NodeIdx);
+
+  // Reconstruir el cache centre->nodos SOLO si el nodo ha cambiado de centro y
+  // el cache aun no lo refleja. Si el nodo acaba de cambiar de centro (drag entre
+  // rows), FCentreNodeIdx todavia lo tiene en el centro VIEJO; sin este rebuild,
+  // Resolve(Non)SequentialCollisionsFromNode consulta el centro destino con datos
+  // obsoletos (no ve el nodo movido ni la ocupacion real) -> el nodo se superpone
+  // a los del centro destino sin empujar. Condicional para no pagar O(n) en cada
+  // commit del drag multiple (solo se reconstruye cuando de verdad hace falta).
+  if CentreNodeIndexNecesitaRebuild(NodeIdx) then
+    BuildCentreNodeIndex;
 
   ResolveAllConstraintsFromNode(NodeIdx, 0);
 
@@ -11018,9 +11093,18 @@ begin
     IdSet.Free;
   end;
 
-  // 8) Notificar al exterior (Main -> AutoSaver + sync NodesRepo)
-  if (Length(AffectedDataIds) > 0) and Assigned(FOnPlanModified) then
-    FOnPlanModified(Self, AffectedDataIds);
+  // 8) Notificar al exterior (Main -> AutoSaver + sync NodesRepo).
+  // Mover/redimensionar + cascada de reencadenado: solo cambian posiciones.
+  // Si hay un BATCH abierto (drag multiple), NO notificamos por nodo: cada
+  // OnPlanModified copia TODO el array de nodos + sync en Main -> O(n^2). En su
+  // lugar acumulamos los DataIds y EndUndoBatch dispara UNA notificacion global.
+  if FUndoBatchActive then
+  begin
+    for I := 0 to High(AffectedDataIds) do
+      FBatchAffectedIds.AddOrSetValue(AffectedDataIds[I], True);
+  end
+  else if (Length(AffectedDataIds) > 0) and Assigned(FOnPlanModified) then
+    FOnPlanModified(Self, AffectedDataIds, pmkPosition);
 end;
 
 
@@ -11506,7 +11590,13 @@ var
   K, OIdx: Integer;
   BeforeSnaps: TArray<TNodePlanSnapshot>;
   OtherBefore: TArray<TNodePlanSnapshot>;
+  SWTot, SWMul, SWReb: TStopwatch;   // instrumentacion drag multiple
+  NMovidos: Integer;
 begin
+  SWTot := TStopwatch.StartNew;
+  SWMul := TStopwatch.Create;   // por si no hay drag multiple
+  SWReb := TStopwatch.Create;
+  NMovidos := 0;
   idx := FMoveNodeIndex;
   if (idx < 0) or (idx > High(FNodes)) then Exit;
 
@@ -11599,15 +11689,21 @@ begin
             FNodes[K].DurationMin := FNodes[idx].DurationMin;
           end;
 
+      // Si es drag MULTIPLE, abrir un batch: agrupa historico Y notificacion.
+      // Sin esto, cada CommitNodeMoveOrResize dispara OnPlanModified -> Main copia
+      // todo el array de nodos + sync por cada nodo -> O(n^2) (195 nodos = 1.6s).
+      // Con el batch, se acumulan los DataIds y EndUndoBatch notifica UNA vez.
+      var bMultiDrag: Boolean :=
+        (FSelectedNodeIndexes <> nil) and (FSelectedNodeIndexes.Count > 1)
+        and (DeltaDays <> 0) and FSelectedNodeIndexes.ContainsKey(idx);
+      if bMultiDrag then
+        BeginUndoBatch('Mover ' + IntToStr(FSelectedNodeIndexes.Count) + ' nodos', hatMove);
+
       CommitNodeMoveOrResize( idx, BeforeSnaps, 'Mover nodo', hatMove );
 
-      // Drag multiple: si el nodo arrastrado forma parte de una seleccion de
-      // varios, mover todos el mismo delta de tiempo (cada uno en su centro),
-      // respetando las reglas. Si el nodo arrastrado NO esta seleccionado, solo
-      // se mueve el (comportamiento intuitivo).
-      if (FSelectedNodeIndexes <> nil) and (FSelectedNodeIndexes.Count > 1)
-         and (DeltaDays <> 0)
-         and FSelectedNodeIndexes.ContainsKey(idx) then
+      // Drag multiple: mover todos el mismo delta de tiempo (cada uno en su
+      // centro), respetando las reglas.
+      if bMultiDrag then
       begin
         // Copiamos los indices a un array porque ResolveAllConstraints puede
         // disparar rebuilds; el set de seleccion no debe iterarse en vivo.
@@ -11618,6 +11714,7 @@ begin
           OtherIdxs[K] := OIdx;
           Inc(K);
         end;
+        SWMul := TStopwatch.StartNew;
         for K := 0 to High(OtherIdxs) do
         begin
           OIdx := OtherIdxs[K];
@@ -11627,7 +11724,9 @@ begin
           OtherBefore := CaptureSnapshotsFromNodePropagation(OIdx);
           if MoveNodeKeepingDuration(OIdx, FNodes[OIdx].StartTime + DeltaDays) then
             CommitNodeMoveOrResize(OIdx, OtherBefore, 'Mover nodo', hatMove);
+          Inc(NMovidos);
         end;
+        SWMul.Stop;
       end;
 
       // Si se ha movido un lote, persistir todos sus miembros (se desplazaron
@@ -11635,17 +11734,31 @@ begin
       if FNodes[idx].LoteId > 0 then
         PersistLotesModificados;
 
+      // Cerrar el batch: dispara UNA notificacion global con todos los DataIds
+      // acumulados (en vez de una por nodo).
+      if bMultiDrag then
+        EndUndoBatch;
+
       FMoving := False;
       FDragMode := dmNone;
       FMoveNodeIndex := -1;
       MouseCapture := False;
 
+      SWReb := TStopwatch.StartNew;
       RebuildAfterModelChange(bRebuildMap);
+      SWReb.Stop;
 
   finally
       Invalidate;
       Screen.cursor := crDefault;
   end;
+
+  SWTot.Stop;
+  // Alarma solo si un drag se vuelve anormalmente lento (>800ms): sirve de aviso
+  // si algun cambio futuro degrada el rendimiento del movimiento multiple.
+  if SWTot.ElapsedMilliseconds > 800 then
+    PlanLog.Linea('COMMIT_MOVE LENTO: %d ms (multi=%d nodos, rebuild=%d ms)',
+      [SWTot.ElapsedMilliseconds, NMovidos, SWReb.ElapsedMilliseconds]);
 end;
 
 

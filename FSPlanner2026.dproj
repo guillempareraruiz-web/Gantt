@@ -454,6 +454,7 @@
         <DCCReference Include="uGenerarNodosDemo.pas">
             <Form>frmGenerarNodosDemo</Form>
         </DCCReference>
+        <DCCReference Include="uDemoPlanEngine.pas"/>
         <DCCReference Include="uCentresKPI.pas">
             <Form>frmCentresKPI</Form>
             <FormType>dfm</FormType>

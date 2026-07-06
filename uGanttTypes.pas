@@ -151,6 +151,12 @@ type
 
     Selected: Boolean;
     Modified: Boolean;
+    // FullDirty: quan Modified=True, indica si el canvi afecta la FITXA sencera
+    // (NodeData/operaris/centres -> desat complet) o NOMÉS la posició
+    // (FechaInicio/Fin/CenterId -> desat lleuger). Un canvi de fitxa "puja"
+    // FullDirty=True i ja no baixa fins que es persisteix. Mover/reencadenar
+    // deixa FullDirty=False (desat de posicions, molt més ràpid).
+    FullDirty: Boolean;
     LibreMoviment: Boolean;  // True = es pot moure a qualsevol centre; False = només CentresPermesos
 
     // Link al modelo unificado Raw_Item (V016+). Poblado via FS_PL_vw_NodeGroupParent.

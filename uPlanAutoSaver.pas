@@ -30,6 +30,10 @@ type
 
   TPlanSaveProc = reference to procedure(AProjectId: Integer;
     const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>);
+  // Persistencia ligera: SOLO posiciones (FechaInicio/Fin/CenterId) de FS_PL_Node.
+  // Sin NodeData/CentresPermesos/CustomFields. Para mover/reencadenar.
+  TPlanSavePosProc = reference to procedure(AProjectId: Integer;
+    const ANodes: TArray<TNode>);
   TPlanGetProjectIdFunc = reference to function: Integer;
   TPlanModifiedProc = reference to procedure(const ADataIds: TArray<Integer>);
 
@@ -45,6 +49,7 @@ type
     FNodesRepo: TNodesRepo;
     FGetProjectId: TPlanGetProjectIdFunc;
     FSaveProc: TPlanSaveProc;
+    FSavePosProc: TPlanSavePosProc;   // persistencia ligera de posiciones (opcional)
 
     FDebounceMs: Integer;
     FTimer: TTimer;
@@ -69,8 +74,11 @@ type
       ASaveProc: TPlanSaveProc);
     destructor Destroy; override;
 
-    procedure MarkDirty(const ADataId: Integer); overload;
-    procedure MarkDirty(const ADataIds: TArray<Integer>); overload;
+    // AFull=True (edicion de ficha) -> persistencia completa; AFull=False
+    // (mover/redimensionar) -> persistencia ligera de posiciones. Default True
+    // (seguro: comportamiento previo) para los callers que no lo especifican.
+    procedure MarkDirty(const ADataId: Integer; AFull: Boolean = True); overload;
+    procedure MarkDirty(const ADataIds: TArray<Integer>; AFull: Boolean = True); overload;
 
     // Flush(True) bloquea hasta acabar el save. Llamar al cerrar / cambiar plan.
     procedure Flush(ASync: Boolean);
@@ -79,6 +87,10 @@ type
 
     property Status: TAutoSaveStatus read FStatus;
     property DebounceMs: Integer read FDebounceMs write FDebounceMs;
+    // Persistencia ligera de posiciones (opcional). Si se asigna, los cambios
+    // marcados como solo-posicion (mover/reencadenar) se guardan por aqui (rapido);
+    // si es nil, TODO va por el save completo (comportamiento previo).
+    property SavePosProc: TPlanSavePosProc read FSavePosProc write FSavePosProc;
 
     property OnSaveStarted: TAutoSaveStartedEvent
       read FOnSaveStarted write FOnSaveStarted;
@@ -132,21 +144,22 @@ begin
     FOnStatusChange(Self, FStatus);
 end;
 
-procedure TPlanAutoSaver.MarkDirty(const ADataId: Integer);
+procedure TPlanAutoSaver.MarkDirty(const ADataId: Integer; AFull: Boolean);
 begin
-  if FNodeDataRepo = nil then Exit;
-  // El flag Modified ya lo pone el caller via FNodeRepo.AddOrUpdate(D);
-  // aqu'i s'olo reiniciamos el timer.
+  MarkDirty(TArray<Integer>.Create(ADataId), AFull);
+end;
+
+procedure TPlanAutoSaver.MarkDirty(const ADataIds: TArray<Integer>; AFull: Boolean);
+begin
+  if (FNodeDataRepo = nil) or (Length(ADataIds) = 0) then Exit;
+  // Marcar el tipo de cambio (posicion vs ficha) en el repo. El flag Modified
+  // basico ya lo pueden haber puesto los callers; MarkDirtyKind ademas fija
+  // FullDirty segun AFull.
+  FNodeDataRepo.MarkDirtyKind(ADataIds, AFull);
   SetStatus(assDirty);
   FTimer.Enabled := False;
   FTimer.Interval := FDebounceMs;
   FTimer.Enabled := True;
-end;
-
-procedure TPlanAutoSaver.MarkDirty(const ADataIds: TArray<Integer>);
-begin
-  if Length(ADataIds) = 0 then Exit;
-  MarkDirty(ADataIds[0]);
 end;
 
 procedure TPlanAutoSaver.Cancel;
@@ -162,10 +175,11 @@ end;
 
 procedure TPlanAutoSaver.DoSaveAsync;
 var
-  Dirty: TArray<TNodeData>;
-  ProjectId, I: Integer;
+  DirtyPos, DirtyFull: TArray<TNodeData>;
+  ProjectId, I, Total: Integer;
   DataIds: TArray<Integer>;
-  Nodes: TArray<TNode>;
+  IdsPos, IdsFull: TArray<Integer>;
+  NodesPos, NodesFull: TArray<TNode>;
 begin
   FLock.Enter;
   try
@@ -181,26 +195,40 @@ begin
     ProjectId := FGetProjectId();
     if ProjectId <= 0 then Exit;
 
-    Dirty := FNodeDataRepo.GetDirtyData;
-    if Length(Dirty) = 0 then
+    // Separar dirty en solo-posicion (persistencia ligera) y ficha-completa.
+    FNodeDataRepo.GetDirtySplit(DirtyPos, DirtyFull);
+    Total := Length(DirtyPos) + Length(DirtyFull);
+    if Total = 0 then
     begin
       SetStatus(assIdle);
       Exit;
     end;
 
-    // Snapshot de DataIds y limpieza inmediata de flags.
-    // Si el usuario reedita uno durante el save, se vuelve a marcar Modified=True
-    // y el siguiente ciclo lo recoger'a.
-    SetLength(DataIds, Length(Dirty));
-    for I := 0 to High(Dirty) do
-      DataIds[I] := Dirty[I].DataId;
+    // Si no hay proc ligero asignado, TODO va por el save completo (seguro).
+    if not Assigned(FSavePosProc) and (Length(DirtyPos) > 0) then
+    begin
+      DirtyFull := DirtyFull + DirtyPos;
+      SetLength(DirtyPos, 0);
+    end;
+
+    // DataIds de cada grupo + snapshot combinado para limpiar/restaurar flags.
+    SetLength(IdsPos, Length(DirtyPos));
+    for I := 0 to High(DirtyPos) do IdsPos[I] := DirtyPos[I].DataId;
+    SetLength(IdsFull, Length(DirtyFull));
+    for I := 0 to High(DirtyFull) do IdsFull[I] := DirtyFull[I].DataId;
+    DataIds := IdsPos + IdsFull;
     FNodeDataRepo.ClearModifiedFlags(DataIds);
 
-    // Recoger los TNode correspondientes
+    // Recoger los TNode de cada grupo (posiciones actualizadas).
     if FNodesRepo <> nil then
-      Nodes := FNodesRepo.GetByDataIds(DataIds)
+    begin
+      NodesPos := FNodesRepo.GetByDataIds(IdsPos);
+      NodesFull := FNodesRepo.GetByDataIds(IdsFull);
+    end
     else
-      SetLength(Nodes, 0);
+    begin
+      SetLength(NodesPos, 0); SetLength(NodesFull, 0);
+    end;
 
     FSavingDataIds := DataIds;
     FSaving := True;
@@ -210,19 +238,22 @@ begin
   end;
 
   if Assigned(FOnSaveStarted) then
-    FOnSaveStarted(Self, Length(Dirty));
+    FOnSaveStarted(Self, Total);
 
   // Lanzar save en thread secundario
   TThread.CreateAnonymousThread(
     procedure
     var
       ErrMsg: string;
-      OkCount: Integer;
     begin
       ErrMsg := '';
-      OkCount := Length(Dirty);
       try
-        FSaveProc(ProjectId, Nodes, Dirty);
+        // 1) Posiciones (ligero) para los solo-movidos/reencadenados.
+        if Assigned(FSavePosProc) and (Length(NodesPos) > 0) then
+          FSavePosProc(ProjectId, NodesPos);
+        // 2) Ficha completa para los editados.
+        if Length(DirtyFull) > 0 then
+          FSaveProc(ProjectId, NodesFull, DirtyFull);
       except
         on E: Exception do ErrMsg := E.Message;
       end;
@@ -264,7 +295,7 @@ begin
           end
           else
           begin
-            if Assigned(FOnSaveCompleted) then FOnSaveCompleted(Self, OkCount);
+            if Assigned(FOnSaveCompleted) then FOnSaveCompleted(Self, Total);
           end;
         end);
     end).Start;
@@ -272,38 +303,57 @@ end;
 
 procedure TPlanAutoSaver.DoSaveSync;
 var
-  Dirty: TArray<TNodeData>;
-  ProjectId, I: Integer;
-  DataIds: TArray<Integer>;
-  Nodes: TArray<TNode>;
+  DirtyPos, DirtyFull: TArray<TNodeData>;
+  ProjectId, I, Total: Integer;
+  DataIds, IdsPos, IdsFull: TArray<Integer>;
+  NodesPos, NodesFull: TArray<TNode>;
   ErrMsg: string;
 begin
   if (FNodeDataRepo = nil) or not Assigned(FGetProjectId) then Exit;
   ProjectId := FGetProjectId();
   if ProjectId <= 0 then Exit;
 
-  Dirty := FNodeDataRepo.GetDirtyData;
-  if Length(Dirty) = 0 then
+  FNodeDataRepo.GetDirtySplit(DirtyPos, DirtyFull);
+  Total := Length(DirtyPos) + Length(DirtyFull);
+  if Total = 0 then
   begin
     SetStatus(assIdle);
     Exit;
   end;
 
-  SetLength(DataIds, Length(Dirty));
-  for I := 0 to High(Dirty) do DataIds[I] := Dirty[I].DataId;
+  // Sin proc ligero: todo por el completo.
+  if not Assigned(FSavePosProc) and (Length(DirtyPos) > 0) then
+  begin
+    DirtyFull := DirtyFull + DirtyPos;
+    SetLength(DirtyPos, 0);
+  end;
+
+  SetLength(IdsPos, Length(DirtyPos));
+  for I := 0 to High(DirtyPos) do IdsPos[I] := DirtyPos[I].DataId;
+  SetLength(IdsFull, Length(DirtyFull));
+  for I := 0 to High(DirtyFull) do IdsFull[I] := DirtyFull[I].DataId;
+  DataIds := IdsPos + IdsFull;
   FNodeDataRepo.ClearModifiedFlags(DataIds);
 
   if FNodesRepo <> nil then
-    Nodes := FNodesRepo.GetByDataIds(DataIds)
+  begin
+    NodesPos := FNodesRepo.GetByDataIds(IdsPos);
+    NodesFull := FNodesRepo.GetByDataIds(IdsFull);
+  end
   else
-    SetLength(Nodes, 0);
+  begin
+    SetLength(NodesPos, 0); SetLength(NodesFull, 0);
+  end;
 
   SetStatus(assSaving);
-  if Assigned(FOnSaveStarted) then FOnSaveStarted(Self, Length(Dirty));
+  if Assigned(FOnSaveStarted) then FOnSaveStarted(Self, Total);
 
   ErrMsg := '';
   try
-    FSaveProc(ProjectId, Nodes, Dirty);
+    if Assigned(FSavePosProc) and (Length(NodesPos) > 0) then
+      FSavePosProc(ProjectId, NodesPos);
+    if Length(DirtyFull) > 0 then
+      FSaveProc(ProjectId, NodesFull, DirtyFull);
   except
     on E: Exception do ErrMsg := E.Message;
   end;
@@ -317,7 +367,7 @@ begin
   else
   begin
     SetStatus(assIdle);
-    if Assigned(FOnSaveCompleted) then FOnSaveCompleted(Self, Length(Dirty));
+    if Assigned(FOnSaveCompleted) then FOnSaveCompleted(Self, Total);
   end;
 end;
 

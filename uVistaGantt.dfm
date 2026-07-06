@@ -4544,6 +4544,7 @@ object frmVistaGantt: TfrmVistaGantt
         Caption = 'Solo ver del nodo seleccionado'
         Checked = True
         GroupIndex = 1
+        RadioItem = True
         OnClick = aaa1Click
       end
       object ssss1: TMenuItem
@@ -4551,6 +4552,7 @@ object frmVistaGantt: TfrmVistaGantt
         AutoCheck = True
         Caption = 'Ver todas'
         GroupIndex = 1
+        RadioItem = True
         OnClick = aaa1Click
       end
       object Noverninguna1: TMenuItem
@@ -4558,6 +4560,7 @@ object frmVistaGantt: TfrmVistaGantt
         AutoCheck = True
         Caption = 'No ver ninguna'
         GroupIndex = 1
+        RadioItem = True
         OnClick = aaa1Click
       end
     end

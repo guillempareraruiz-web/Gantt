@@ -75,6 +75,10 @@ type
     // --- Guardado incremental (solo lo modificado) ---
     function SaveNodes(AProjectId: Integer; const ANodes: TArray<TNode>;
       const ANodeData: TArray<TNodeData>): TConnectorResult;
+    // Guardado LIGERO: solo posiciones (FechaInicio/Fin/CenterId) de FS_PL_Node.
+    // Para mover/reencadenar muchos nodos sin reescribir NodeData/centros/custom.
+    function SaveNodePositions(AProjectId: Integer;
+      const ANodes: TArray<TNode>): TConnectorResult;
     function SaveCentres(const ACentres: TArray<TCentreTreball>): TConnectorResult;
     function SaveLinks(AProjectId: Integer; const ALinks: TArray<TErpLink>): TConnectorResult;
     function SaveMarkers(AProjectId: Integer; const AMarkers: TArray<TGanttMarker>): TConnectorResult;

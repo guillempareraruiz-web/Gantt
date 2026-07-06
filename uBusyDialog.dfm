@@ -14,6 +14,7 @@ object frmBusyDialog: TfrmBusyDialog
   Font.Style = []
   FormStyle = fsStayOnTop
   Position = poOwnerFormCenter
+  PixelsPerInch = 96
   TextHeight = 17
   object pnlBorder: TPanel
     AlignWithMargins = True
@@ -38,25 +39,24 @@ object frmBusyDialog: TfrmBusyDialog
       OnPaint = pbSpinnerPaint
     end
     object lblMessage: TLabel
-      Left = 16
+      Left = 9
       Top = 88
-      Width = 288
-      Height = 24
+      Width = 295
+      Height = 49
       Alignment = taCenter
       AutoSize = False
       Caption = 'Cargando datos...'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 3553567
-      Font.Height = -16
+      Font.Height = -15
       Font.Name = 'Segoe UI Semibold'
       Font.Style = []
-      Layout = tlCenter
       ParentFont = False
     end
     object lblSub: TLabel
-      Left = 16
-      Top = 114
-      Width = 288
+      Left = 9
+      Top = 136
+      Width = 295
       Height = 18
       Alignment = taCenter
       AutoSize = False
@@ -66,8 +66,8 @@ object frmBusyDialog: TfrmBusyDialog
       Font.Height = -11
       Font.Name = 'Segoe UI'
       Font.Style = []
-      Layout = tlCenter
       ParentFont = False
+      Layout = tlCenter
     end
   end
 end

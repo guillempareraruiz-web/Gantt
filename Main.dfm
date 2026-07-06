@@ -431,10 +431,6 @@ object Form1: TForm1
         Caption = 'Asistente de instalaci'#243'n...'
         OnClick = AsistenteInstalacion1Click
       end
-      object GenerarNodosDemo1: TMenuItem
-        Caption = 'Generar nodos demo...'
-        OnClick = GenerarNodosDemo1Click
-      end
       object RegenerarGanttDemo1: TMenuItem
         Caption = 'Regenerar Gantt demo (modo demostraci'#243'n)...'
         OnClick = RegenerarGanttDemo1Click

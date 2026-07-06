@@ -59,6 +59,16 @@ type
     procedure SetModifiedFlags(const DataIds: TArray<Integer>);
     function HasDirty: Boolean;
 
+    // Marca los DataIds como dirty. AFull=True (edicion de ficha) fuerza
+    // FullDirty=True (persistencia completa); AFull=False (mover/reencadenar)
+    // deja FullDirty como estaba (no lo baja: un cambio de ficha previo sin
+    // guardar debe seguir siendo completo). Persistir limpia ambos flags.
+    procedure MarkDirtyKind(const DataIds: TArray<Integer>; AFull: Boolean);
+    // Dirty separados en dos grupos para el auto-save selectivo:
+    //   APosOnly = solo posicion (FullDirty=False) -> UPDATE ligero de FS_PL_Node.
+    //   AFull    = ficha completa (FullDirty=True)  -> SaveNodes completo.
+    procedure GetDirtySplit(out APosOnly, AFull: TArray<TNodeData>);
+
   end;
 
 implementation
@@ -386,7 +396,10 @@ begin
       IdSet.AddOrSetValue(DataIds[J], True);
     for I := 0 to High(FData) do
       if IdSet.ContainsKey(FData[I].DataId) then
+      begin
         FData[I].Modified := False;
+        FData[I].FullDirty := False;   // persistido: baja tambien el flag de ficha
+      end;
   finally
     IdSet.Free;
   end;
@@ -417,6 +430,53 @@ begin
   for I := 0 to High(FData) do
     if FData[I].Modified then Exit(True);
   Result := False;
+end;
+
+procedure TNodeDataRepo.MarkDirtyKind(const DataIds: TArray<Integer>; AFull: Boolean);
+var
+  I, J: Integer;
+  IdSet: TDictionary<Integer, Boolean>;
+begin
+  if Length(DataIds) = 0 then Exit;
+  IdSet := TDictionary<Integer, Boolean>.Create;
+  try
+    for J := 0 to High(DataIds) do
+      IdSet.AddOrSetValue(DataIds[J], True);
+    for I := 0 to High(FData) do
+      if IdSet.ContainsKey(FData[I].DataId) then
+      begin
+        FData[I].Modified := True;
+        // AFull sube FullDirty; AFalse NO lo baja (un cambio de ficha pendiente
+        // debe seguir siendo completo aunque despues se mueva el nodo).
+        if AFull then
+          FData[I].FullDirty := True;
+      end;
+  finally
+    IdSet.Free;
+  end;
+end;
+
+procedure TNodeDataRepo.GetDirtySplit(out APosOnly, AFull: TArray<TNodeData>);
+var
+  I, KP, KF: Integer;
+begin
+  SetLength(APosOnly, Length(FData));
+  SetLength(AFull, Length(FData));
+  KP := 0; KF := 0;
+  for I := 0 to High(FData) do
+    if FData[I].Modified then
+    begin
+      if FData[I].FullDirty then
+      begin
+        AFull[KF] := FData[I]; Inc(KF);
+      end
+      else
+      begin
+        APosOnly[KP] := FData[I]; Inc(KP);
+      end;
+    end;
+  SetLength(APosOnly, KP);
+  SetLength(AFull, KF);
 end;
 
 end.

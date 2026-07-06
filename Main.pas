@@ -57,7 +57,6 @@ type
     SelectorErp1: TMenuItem;
     SincronizarERP1: TMenuItem;
     AsistenteInstalacion1: TMenuItem;
-    GenerarNodosDemo1: TMenuItem;
     RegenerarGanttDemo1: TMenuItem;
     Salir1: TMenuItem;
     N3: TMenuItem;
@@ -146,7 +145,6 @@ type
     procedure ArticleDetail1Click(Sender: TObject);
     procedure DashboardOperativo1Click(Sender: TObject);
     procedure AsistenteInstalacion1Click(Sender: TObject);
-    procedure GenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarGanttDemo1Click(Sender: TObject);
     procedure Dashboard1Click(Sender: TObject);
     procedure Areas1Click(Sender: TObject);
@@ -179,7 +177,8 @@ type
     // Auto-save
     procedure InitAutoSaver;
     procedure DestroyAutoSaver;
-    procedure GanttPlanModified(Sender: TObject; const ADataIds: TArray<Integer>);
+    procedure GanttPlanModified(Sender: TObject; const ADataIds: TArray<Integer>;
+      AKind: TPlanModKind);
     procedure GanttLinksModified(Sender: TObject);
     procedure SaveNodesViaConnector(AProjectId: Integer;
       const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>);
@@ -262,7 +261,9 @@ type
       AAction: TProc);
 
     // Llamar despues de cada operaci'on que modifica nodos (Kanban, Inspector, Gantt).
-    procedure NotifyPlanModified(const ADataIds: TArray<Integer>);
+    // AKind: pmkPosition (mover) usa persistencia ligera; pmkFull (default) completa.
+    procedure NotifyPlanModified(const ADataIds: TArray<Integer>;
+      AKind: TPlanModKind = pmkFull);
 
     // Acceso a repos globales (para forms hijos)
     function GetHabilidadRepo: THabilidadRepo;
@@ -747,8 +748,7 @@ end;
 
 procedure TForm1.AplicarModoDemoGantt;
 var
-  DemoId, NumNodos, Generados: Integer;
-  S: string;
+  DemoId, Generados: Integer;
 begin
   // El modo demo del GANTT vive en un proyecto propio (EsDemo=1), aislado de
   // los datos reales. Entrar = cambiar el proyecto activo al demo; salir =
@@ -763,26 +763,22 @@ begin
       ShowMessage('No se ha podido preparar el proyecto de demostraci'#243'n.');
       Exit;
     end;
-    // Si el proyecto demo esta vacio, preguntar cuantos nodos generar.
+    // Si el proyecto demo esta vacio, generar automaticamente con valores por
+    // defecto (sin dialogo): el motor real coloca los nodos (colisiones/lanes/
+    // calendario) y reencadena dependencias. Para personalizar, usar
+    // "Regenerar Gantt Demo".
     if DMPlanner.ContarNodosProyecto(DemoId) = 0 then
     begin
-      S := '200';
-      if InputQuery('Gantt en modo demostraci'#243'n',
-           'El Gantt de demostraci'#243'n est'#225' vac'#237'o.'#13#10 +
-           #191'Cu'#225'ntos nodos ficticios quieres generar? (10-2000)', S) then
-      begin
-        NumNodos := StrToIntDef(Trim(S), 0);
-        if NumNodos < 10 then NumNodos := 10;
-        if NumNodos > 2000 then NumNodos := 2000;
-        Generados := 0;
-        ShowBusy(Self, 'Generando ' + IntToStr(NumNodos) + ' nodos de demostraci'#243'n...',
-          procedure
-          begin
-            Generados := DMPlanner.GenerarNodosDemoEnProyecto(DemoId, NumNodos);
-          end);
-        if Generados <= 0 then
-          ShowMessage('No se han podido generar los nodos de demostraci'#243'n.');
-      end;
+      Generados := 0;
+      ShowBusy(Self, 'Generando y planificando el Gantt de demostraci'#243'n...',
+        procedure
+        begin
+          // 12 OFs x 3 OTs x 3 OPs ~= 108 operaciones planificadas por el motor.
+          Generados := TfrmGenerarNodosDemo.ExecuteSilent(DemoId, 12, 3);
+        end);
+      if Generados <= 0 then
+        ShowMessage('No se han podido generar los nodos de demostraci'#243'n. '
+          + #191'Hay centros de trabajo activos?');
     end;
   end
   else
@@ -1822,6 +1818,21 @@ begin
         SaveNodesViaConnector(AProjectId, ANodes, ANodeData);
       end);
 
+    // Persistencia ligera de posiciones (mover/reencadenar): solo actualiza
+    // FechaInicio/Fin/CenterId en FS_PL_Node, sin reescribir NodeData/centros/
+    // custom fields de cada nodo -> muchisimo mas rapido con 100-500 nodos.
+    FAutoSaver.SavePosProc :=
+      procedure(AProjectId: Integer; const ANodes: TArray<TNode>)
+      var
+        Res: TConnectorResult;
+      begin
+        if not Assigned(DMPlanner) or not Assigned(DMPlanner.Connector) then
+          raise Exception.Create('No hay conexi'#243'n a BD');
+        Res := DMPlanner.Connector.SaveNodePositions(AProjectId, ANodes);
+        if not Res.Success then
+          raise Exception.Create(Res.ErrorMessage);
+      end;
+
     FAutoSaver.OnStatusChange := AutoSaverStatusChange;
     FAutoSaver.OnSaveStarted := AutoSaverSaveStarted;
     FAutoSaver.OnSaveCompleted := AutoSaverSaveCompleted;
@@ -1934,7 +1945,8 @@ begin
   FAutoSaveLabel.Caption := S;
 end;
 
-procedure TForm1.NotifyPlanModified(const ADataIds: TArray<Integer>);
+procedure TForm1.NotifyPlanModified(const ADataIds: TArray<Integer>;
+  AKind: TPlanModKind);
 begin
   // Punto de restauracion AUTO del dia: ANTES de marcar el cambio, si hoy aun no
   // hay snapshot AUTO de este proyecto, capturamos el estado ACTUAL (el "antes"
@@ -1949,11 +1961,11 @@ begin
     end;
 
   if Assigned(FAutoSaver) then
-    FAutoSaver.MarkDirty(ADataIds);
+    FAutoSaver.MarkDirty(ADataIds, AKind = pmkFull);
 end;
 
 procedure TForm1.GanttPlanModified(Sender: TObject;
-  const ADataIds: TArray<Integer>);
+  const ADataIds: TArray<Integer>; AKind: TPlanModKind);
 var
   I, J: Integer;
   AllNodes: TArray<TNode>;
@@ -1992,8 +2004,10 @@ begin
     end;
   end;
 
-  // 2) Disparar el debounce del AutoSaver
-  NotifyPlanModified(ADataIds);
+  // 2) Disparar el debounce del AutoSaver. Propagamos el tipo: pmkPosition
+  //    (mover/redimensionar/cascada) -> persistencia ligera de posiciones;
+  //    pmkFull (ficha) -> persistencia completa.
+  NotifyPlanModified(ADataIds, AKind);
 end;
 
 procedure TForm1.GanttLinksModified(Sender: TObject);
@@ -2132,25 +2146,9 @@ begin
   TfrmInstallWizard.Execute;
 end;
 
-procedure TForm1.GenerarNodosDemo1Click(Sender: TObject);
-begin
-  if not IsAdmin then
-  begin
-    ShowMessage('Solo el administrador puede generar nodos demo.');
-    Exit;
-  end;
-  if DMPlanner.CurrentProjectId <= 0 then
-  begin
-    ShowMessage('Primero active un proyecto.');
-    Exit;
-  end;
-  TfrmGenerarNodosDemo.Execute;
-end;
-
 procedure TForm1.RegenerarGanttDemo1Click(Sender: TObject);
 var
-  DemoId, Actual, NumNodos, Generados: Integer;
-  S: string;
+  DemoId: Integer;
 begin
   if not DMPlanner.IsConnected then
   begin
@@ -2165,42 +2163,18 @@ begin
     Exit;
   end;
 
-  Actual := DMPlanner.ContarNodosProyecto(DemoId);
-  if Actual > 0 then
-    S := IntToStr(Actual)
-  else
-    S := '200';
-
-  if not InputQuery('Regenerar Gantt de demostraci'#243'n',
-       'Esto BORRA los nodos actuales del Gantt demo y crea otros nuevos.'#13#10 +
-       'Solo afecta al proyecto de demostraci'#243'n, nunca a tus datos reales.'#13#10 +
-       #191'Cu'#225'ntos nodos ficticios quieres generar? (10-2000)', S) then
+  // Abrir el generador rico (OF/OTs/OPs + dependencias + operarios/moldes),
+  // apuntando al proyecto DEMO. Al generar, pasa los nodos por el motor real
+  // (colisiones/lanes/calendario) y reencadena dependencias antes de escribir.
+  // PlanificarConMotor fija temporalmente el proyecto demo como activo, asi que
+  // no hace falta estar en modo demo para regenerar.
+  if not TfrmGenerarNodosDemo.Execute(DemoId) then
     Exit;
-
-  NumNodos := StrToIntDef(Trim(S), 0);
-  if NumNodos < 10 then NumNodos := 10;
-  if NumNodos > 2000 then NumNodos := 2000;
-
-  Generados := 0;
-  ShowBusy(Self, 'Generando ' + IntToStr(NumNodos) + ' nodos de demostraci'#243'n...',
-    procedure
-    begin
-      Generados := DMPlanner.GenerarNodosDemoEnProyecto(DemoId, NumNodos);
-    end);
-
-  if Generados <= 0 then
-  begin
-    ShowMessage('No se han podido generar los nodos de demostraci'#243'n. '
-      + #191'Hay centros de trabajo activos?');
-    Exit;
-  end;
 
   // Si estamos en modo demo, recargar el plan (LoadActivePlan recarga tambien
   // las asignaciones de operarios; FVistaGantt.Inicializar solo no basta).
   if uDemoMode.DemoMode.Active then
     LoadActivePlan;
-
-  ShowMessage(Format('Gantt de demostraci'#243'n regenerado: %d nodos.', [Generados]));
 end;
 
 procedure TForm1.Dashboard1Click(Sender: TObject);

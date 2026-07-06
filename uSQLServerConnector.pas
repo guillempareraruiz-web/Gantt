@@ -1,4 +1,4 @@
-unit uSQLServerConnector;
+﻿unit uSQLServerConnector;
 
 interface
 
@@ -102,6 +102,8 @@ type
 
     function SaveNodes(AProjectId: Integer; const ANodes: TArray<TNode>;
       const ANodeData: TArray<TNodeData>): TConnectorResult;
+    function SaveNodePositions(AProjectId: Integer;
+      const ANodes: TArray<TNode>): TConnectorResult;
     function SaveCentres(const ACentres: TArray<TCentreTreball>): TConnectorResult;
     function SaveLinks(AProjectId: Integer; const ALinks: TArray<TErpLink>): TConnectorResult;
     function SaveMarkers(AProjectId: Integer; const AMarkers: TArray<TGanttMarker>): TConnectorResult;
@@ -135,7 +137,7 @@ type
 implementation
 
 uses
-  System.JSON;
+  System.JSON, uPlanLog;
 
 { TSQLServerConnectorConfig }
 
@@ -1232,7 +1234,14 @@ end;
 
 function TSQLServerConnector.SaveNodes(AProjectId: Integer;
   const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>): TConnectorResult;
+var
+  T0: TDateTime;
 begin
+  // Instrumentacion: medir cuantos nodos y cuanto tarda cada SaveNodes. El
+  // auto-save de edicion normal manda pocos nodos (rapido); pero mover un nodo
+  // que reencadena dependencias puede mandar 100-500 -> aqui veremos si eso
+  // dispara el patron lento (round-trip por nodo) y justifica una ruta bulk.
+  T0 := Now;
   try
     FConnection.BeginTrans;
     try
@@ -1243,9 +1252,83 @@ begin
       FConnection.RollbackTrans;
       raise;
     end;
+    // Solo se registra un save COMPLETO lento (>500ms): sirve de aviso si algun
+    // dia vuelve a llegar un lote grande de ficha por un camino inesperado. Los
+    // saves normales (pocos nodos, o movimientos via SaveNodePositions) no ensucian el log.
+    if MilliSecondsBetween(Now, T0) > 500 then
+      PlanLog.Linea('SAVE_NODES LENTO: %d nodos en %d ms (proyecto %d) - revisar si deberia ser posiciones',
+        [Length(ANodes), MilliSecondsBetween(Now, T0), AProjectId]);
   except
     on E: Exception do
       Result := TConnectorResult.Fail(E.Message);
+  end;
+end;
+
+function TSQLServerConnector.SaveNodePositions(AProjectId: Integer;
+  const ANodes: TArray<TNode>): TConnectorResult;
+var
+  T0: TDateTime;
+  Sb: TStringBuilder;
+  I, EnLote: Integer;
+  N: TNode;
+  CentreSQL: string;
+
+  procedure Flush;
+  begin
+    if Sb.Length = 0 then Exit;
+    ExecSQL(Sb.ToString);
+    Sb.Clear;
+    EnLote := 0;
+  end;
+
+begin
+  // Guardado LIGERO: solo FechaInicio/Fin/CenterId de FS_PL_Node. NO toca
+  // NodeData/CentresPermesos/CustomFields. Para mover/reencadenar muchos nodos.
+  // Los UPDATE se concatenan en lotes (1 ExecSQL cada ~200) para NO pagar un
+  // round-trip por nodo (era el patron lento: 334 nodos = 2.1s).
+  T0 := Now;
+  Sb := TStringBuilder.Create;
+  try
+    try
+      FConnection.BeginTrans;
+      try
+        EnLote := 0;
+        for I := 0 to High(ANodes) do
+        begin
+          N := ANodes[I];
+          if N.Id <= 0 then Continue;
+          if N.CentreId <= 0 then CentreSQL := 'NULL'
+          else CentreSQL := IntToStr(N.CentreId);
+
+          Sb.Append(
+            'UPDATE FS_PL_Node SET ' +
+            'FechaInicio = ' + DateTimeToSQL(N.StartTime) + ', ' +
+            'FechaFin = ' + DateTimeToSQL(N.EndTime) + ', ' +
+            'CenterId = ' + CentreSQL + ', ' +
+            'DuracionMin = ' + FloatToSQL(N.DurationMin) +
+            ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+            '   AND NodeId = ' + IntToStr(N.Id) + ';');
+          Inc(EnLote);
+          if EnLote >= 200 then Flush;
+        end;
+        Flush;   // resto
+        FConnection.CommitTrans;
+        Result := TConnectorResult.OK(Length(ANodes));
+      except
+        FConnection.RollbackTrans;
+        raise;
+      end;
+      // Solo se registra si es anormalmente lento (>500ms): el caso normal
+      // (mover/reencadenar cientos de nodos) va en decenas de ms y no ensucia el log.
+      if MilliSecondsBetween(Now, T0) > 500 then
+        PlanLog.Linea('SAVE_POSITIONS LENTO: %d nodos en %d ms (proyecto %d)',
+          [Length(ANodes), MilliSecondsBetween(Now, T0), AProjectId]);
+    except
+      on E: Exception do
+        Result := TConnectorResult.Fail(E.Message);
+    end;
+  finally
+    Sb.Free;
   end;
 end;
 
