@@ -26,7 +26,8 @@ type
     hatChangeCentre,     // mover nodo a otro centro
     hatCreateLote,       // agrupar nodos en lote
     hatBreakLote,        // deshacer/romper lote
-    hatEditNode          // editar propiedades de nodo (NodeInspector)
+    hatEditNode,         // editar propiedades de nodo (NodeInspector)
+    hatCompactSel        // compactar (left-shift) los nodos seleccionados
   );
 
   TNodePlanSnapshot = record

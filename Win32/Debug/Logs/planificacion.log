@@ -1,0 +1,6 @@
+2026-07-07 23:20:01.734  LOADDATA query (tab=0 nivel=1): 467 ms [BD]
+2026-07-07 23:20:01.810  LOADDATA volcado 312 filas: 75 ms
+2026-07-07 23:20:01.942  LOADDATA pintado+KPIs: 127 ms
+2026-07-07 23:23:00.132  LOADDATA query (tab=0 nivel=1): 472 ms [BD]
+2026-07-07 23:23:00.178  LOADDATA volcado 312 filas: 46 ms
+2026-07-07 23:23:00.260  LOADDATA pintado+KPIs: 82 ms

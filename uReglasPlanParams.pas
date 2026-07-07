@@ -199,7 +199,7 @@ begin
   cmbTipo.Items.BeginUpdate;
   try
     cmbTipo.Items.Clear;
-    cmbTipo.Items.Add('Reglas can'#243'nicas');           // TIPO_CANONICA
+    cmbTipo.Items.Add('Reglas industriales');           // TIPO_CANONICA
     cmbTipo.Items.Add('Reglas personalizadas');         // TIPO_PERSONALIZADA
   finally
     cmbTipo.Items.EndUpdate;

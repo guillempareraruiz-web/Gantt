@@ -171,6 +171,9 @@ type
     odalaOTconprioridad1: TMenuItem;
     ApartirdelNodo1: TMenuItem;
     ApartirdelNodoconprioridad2: TMenuItem;
+    SepCompactSel1: TMenuItem;
+    miCompactarSeleccion: TMenuItem;
+    miMoverTodoDesde: TMenuItem;
     ShiftRow2: TMenuItem;
     N1: TMenuItem;
     Color1: TMenuItem;
@@ -317,6 +320,8 @@ type
       const NewDateTime: TDateTime);
     procedure PersistMarcadores;
     procedure miAsignarOperariosClick(Sender: TObject);
+    procedure miCompactarSeleccionClick(Sender: TObject);
+    procedure miMoverTodoDesdeClick(Sender: TObject);
     procedure miGestionOperariosClick(Sender: TObject);
     procedure miEditarLinksClick(Sender: TObject);
     procedure miDesplanificarClick(Sender: TObject);
@@ -4749,6 +4754,86 @@ begin
     FGanttControl.EndUndoBatch;
   end;
   UpdateHistoryButtons;
+end;
+
+// Compacta (left-shift) los nodos seleccionados dejando fijos los demas: cada
+// seleccionado se acerca a la izquierda hasta topar con un nodo NO seleccionado,
+// un predecesor logico, el calendario o el bloqueo. Nunca solapa; si un nodo no
+// cabe mas a la izquierda, se queda donde estaba. Mismo patron que asignar
+// operarios: actua sobre GetSelectedNodeIndexes. Un solo Undo.
+procedure TfrmVistaGantt.miCompactarSeleccionClick(Sender: TObject);
+var
+  SelIndexes: TArray<Integer>;
+  Movidos: Integer;
+begin
+  if FGanttControl = nil then Exit;
+  SelIndexes := FGanttControl.GetSelectedNodeIndexes;
+  if Length(SelIndexes) = 0 then
+  begin
+    ShowMessage('Selecciona al menos un nodo en el Gantt para compactar.');
+    Exit;
+  end;
+
+  FGanttControl.BeginUndoBatch('Compactar seleccion', hatCompactSel);
+  try
+    Movidos := FGanttControl.CompactSelection(SelIndexes, 0);
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
+
+  if Movidos = 0 then
+    ShowMessage('Los nodos seleccionados ya estan compactados: ninguno se ha ' +
+      'podido acercar mas a la izquierda sin solapar.')
+  else
+    ShowMessage(Format('%d nodo(s) compactados.', [Movidos]));
+end;
+
+// "Mover todo a partir de este punto hasta [fecha]": replanifica en bloque todos
+// los nodos que empiezan a partir del punto clicado (FClickDatetime), arrancando en
+// la fecha destino que anota el usuario. Los nodos anteriores al punto quedan fijos.
+// No preserva las distancias: recalcula cada nodo con el calendario vigente en las
+// nuevas fechas (puede haber calendarios distintos ahi), dependencias y colisiones.
+procedure TfrmVistaGantt.miMoverTodoDesdeClick(Sender: TObject);
+var
+  Cutoff, Destino: TDateTime;
+  Movidos: Integer;
+  ok: Boolean;
+begin
+  if FGanttControl = nil then Exit;
+
+  // Punto de corte = instante bajo el clic derecho (lo fija el MouseDown del control).
+  Cutoff := FGanttControl.FClickDatetime;
+  if Cutoff <= 1 then
+  begin
+    ShowMessage('Haz clic derecho sobre un punto del cronograma para indicar ' +
+      'desde donde mover.');
+    Exit;
+  end;
+
+  // Selector de fecha destino (por defecto, el propio punto de corte).
+  if not TfrmMoverFecha.Execute(
+       'Mover todo a partir de este punto',
+       'Todo lo que empieza a partir de aqu'#237' se replanificar'#225' arrancando en ' +
+       'la fecha indicada (recalculando calendarios y dependencias).',
+       0, Cutoff, Destino) then
+    Exit;
+
+  ok := False;
+  FGanttControl.BeginUndoBatch('Mover todo a partir de fecha', hatReplanAll);
+  try
+    ok := FGanttControl.MoverTodoDesde(Cutoff, Destino, 0, Movidos);
+  finally
+    FGanttControl.EndUndoBatch;
+  end;
+  UpdateHistoryButtons;
+
+  if not ok or (Movidos = 0) then
+    ShowMessage('No se ha movido ning'#250'n nodo (no hay nodos a partir de ese ' +
+      'punto, o las restricciones de calendario/dependencias/bloqueo lo impiden).')
+  else
+    ShowMessage(Format('%d nodo(s) replanificados desde %s.',
+      [Movidos, FormatDateTime('dd/mm/yyyy hh:nn', Destino)]));
 end;
 
 procedure TfrmVistaGantt.miAsignarOperariosClick(Sender: TObject);

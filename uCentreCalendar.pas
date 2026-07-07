@@ -3,6 +3,7 @@ unit uCentreCalendar;
 interface
 
 uses
+  Winapi.Windows,
   System.SysUtils, System.DateUtils, System.Generics.Collections,
   System.Generics.Defaults, System.Math;
 
@@ -70,6 +71,13 @@ type
     function NextWorkingTime(const T: TDateTime): TDateTime;
     function PrevWorkingTime(const T: TDateTime): TDateTime;
 
+    // Pre-puebla las caches internas (FMergedAroundCache) para todo el rango
+    // [ADesde..AHasta] EN EL HILO PRINCIPAL. Tras esto, NextWorkingTime /
+    // AddWorkingMinutes solo LEEN las caches para ese rango -> multiples hilos
+    // pueden usar el mismo calendario sin escribir (thread-safe de lectura).
+    // Imprescindible antes de usar el calendario en TTask/threads.
+    procedure WarmupCache(const ADesde, AHasta: TDateTime);
+
     function WorkingMinutesBetween(const AStart, AEnd: TDateTime): Integer;
     function AddWorkingMinutes(const Start: TDateTime; Minutes: Integer): TDateTime;
     function SubtractWorkingMinutes(const FromEnd: TDateTime; Minutes: Integer): TDateTime;
@@ -110,21 +118,36 @@ const
   COneMs     = 1 / MSecsPerDay;
 
 // Log de depuracion del calendario, al mismo fichero que LogLote (C:\lote_debug.log).
+// DESACTIVADO por defecto (GCalLogEnabled=False): es debug puro y, sobre todo, NO
+// es thread-safe (AssignFile/Append/Writeln globales sobre un fichero compartido).
+// Con varios hilos usando el calendario (optimizador SA), 8 hilos escribiendo aqui
+// corrompian el estado de I/O y mataban los TTask en silencio -> era EL bug de las
+// cadenas con iter=0. El lock lo protege por si se reactiva para depurar.
+var
+  GCalLogEnabled: Boolean = False;
+  GCalLogLock: TRTLCriticalSection;
+
 procedure LogCal(const AMsg: string);
 var
   F: TextFile;
   Path: string;
 begin
+  if not GCalLogEnabled then Exit;   // no-op en produccion / en hilos
   Path := 'C:\lote_debug.log';
+  EnterCriticalSection(GCalLogLock);
   try
-    AssignFile(F, Path);
-    if FileExists(Path) then Append(F) else Rewrite(F);
     try
-      Writeln(F, FormatDateTime('hh:nn:ss.zzz', Now) + '  ' + AMsg);
-    finally
-      CloseFile(F);
+      AssignFile(F, Path);
+      if FileExists(Path) then Append(F) else Rewrite(F);
+      try
+        Writeln(F, FormatDateTime('hh:nn:ss.zzz', Now) + '  ' + AMsg);
+      finally
+        CloseFile(F);
+      end;
+    except
     end;
-  except
+  finally
+    LeaveCriticalSection(GCalLogLock);
   end;
 end;
 
@@ -624,6 +647,25 @@ begin
   Result := Cur;
 end;
 
+// Pre-puebla FMergedAroundCache dia a dia en [ADesde..AHasta]. Como
+// GetMergedIntervalsAround usa una ventana [D-2..D+2], recorrer cada dia deja la
+// cache lista para todo el rango. Tras esto, las rutas calientes (NextWorkingTime,
+// AddWorkingMinutes) solo LEEN -> seguras desde varios hilos.
+procedure TCentreCalendar.WarmupCache(const ADesde, AHasta: TDateTime);
+var
+  D: TDateTime;
+begin
+  if AHasta < ADesde then Exit;
+  D := DateOf(ADesde);
+  // Margen extra (+/-3 dias) por la ventana de la cache.
+  D := IncDay(D, -3);
+  while D <= IncDay(DateOf(AHasta), 3) do
+  begin
+    GetMergedIntervalsAround(D);   // fuerza el llenado del dia (si falta)
+    D := IncDay(D, 1);
+  end;
+end;
+
 function TCentreCalendar.PrevWorkingTime(const T: TDateTime): TDateTime;
 var
   Cur: TDateTime;
@@ -885,5 +927,11 @@ begin
     AEnd := FloorToMinute(Cal.AddWorkingMinutes(AStart, MinMinutes));
 end;
 
+
+initialization
+  InitializeCriticalSection(GCalLogLock);
+
+finalization
+  DeleteCriticalSection(GCalLogLock);
 
 end.

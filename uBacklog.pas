@@ -49,7 +49,7 @@ uses
   dxSkinVisualStudio2013Blue, dxSkinVisualStudio2013Dark,
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
   dxSkinXmas2008Blue, Vcl.Menus, cxButtons, dxGDIPlusClasses, cxImage,
-  Vcl.WinXCtrls;
+  Vcl.WinXCtrls, uBulkNodePersist;
 
 const
   BACKLOG_GRID_ID = 'BACKLOG';
@@ -148,6 +148,7 @@ type
     cmbOrigen: TComboBox;
     lblNivelVista: TLabel;
     cmbNivelVista: TComboBox;
+    cmbPersistMethod: TComboBox;
     edtCliente: TEdit;
     edtProyecto: TEdit;
     edtCentro: TEdit;
@@ -187,7 +188,6 @@ type
     btnPlanificar: TButton;
     btnPlanificarExpress: TButton;
     btnSyncErp: TcxButton;
-    btnDesplanificarTodo: TButton;
     PopupMenu2: TPopupMenu;
     Columnas1: TMenuItem;
     Configurar1: TMenuItem;
@@ -222,13 +222,9 @@ type
     cxButton9: TcxButton;
     chkVerImpacto: TcxCheckBox;
     chkVerFiltros: TcxCheckBox;
-    btnSelectAll: TButton;
-    btnDeselectAll: TButton;
     procedure btnSyncErpClick(Sender: TObject);
     procedure RegenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarBacklogDemo1Click(Sender: TObject);
-    procedure btnSelectAllClick(Sender: TObject);
-    procedure btnDeselectAllClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -248,7 +244,6 @@ type
     procedure tabModeChange(Sender: TObject);
     procedure cmbNivelVistaChange(Sender: TObject);
     procedure btnDesplanificarSelClick(Sender: TObject);
-    procedure btnDesplanificarTodoClick(Sender: TObject);
     procedure btnRecargarClick(Sender: TObject);
     procedure Configurar1Click(Sender: TObject);
     procedure Restablecer1Click(Sender: TObject);
@@ -260,6 +255,18 @@ type
   private
     FRows: TList<TBacklogRow>;
     FFilteredIndices: TArray<Integer>;   // FRows index per cada fila del grid
+    FStylePlanificado: TcxStyle;         // verde claro: fila planificada con holgura
+    FStyleTarde: TcxStyle;               // rojo: NodeFin > FechaEntrega (llega tarde)
+    FStyleRiesgo: TcxStyle;              // naranja: planificada pero ajustada al plazo
+    FDiasVencimiento: Integer;           // umbral naranja (dias de margen); pref usuario
+    // Cache del recordset (desconectado) por clave (tab,nivel): el toggle
+    // Pendientes/Planificados y el cambio de nivel son acciones muy comunes y la
+    // query es el 89% del tiempo (~1s). Con cache, el toggle solo revuelca+pinta
+    // desde memoria (~100ms). Se invalida al planificar/desplanificar/filtrar/
+    // refrescar. Clave = 'tab|nivel' (p.ej. '1|3').
+    FRecordsetCache: TObjectDictionary<string, TCustomADODataSet>;
+
+
     FCustomCols: TArray<TCustomColumnDef>;
     FBaseColumns: TArray<TcxGridColumn>;
     FCustomColumns: TArray<TcxGridColumn>;
@@ -267,6 +274,17 @@ type
     FLoading: Boolean;
     FFirstShow: Boolean;
     FNivelVista: Integer;   // 1=OF/PED/PRJ, 2=OT/LINEA/TAREA, 3=OP. Tab Pendientes.
+
+    function CacheKey: string;
+    function TryLoadFromCache(out ADataSet: TCustomADODataSet): Boolean;
+    procedure StoreInCache(ADataSet: TCustomADODataSet);
+    procedure InvalidateDataCache;
+
+    // Colorea de verde claro las filas ya planificadas (NodeId>0). La seleccion
+    // amarilla se configura via tvBacklog.Styles.Selection (no por fila).
+    procedure tvBacklogGetContentStyle(Sender: TcxCustomGridTableView;
+      ARecord: TcxCustomGridRecord; AItem: TcxCustomGridTableItem;
+      var AStyle: TcxStyle);
 
     procedure VerOFActual(ARecordIndex: Integer = -1);
     procedure VerNodeManual(ANodeId: Integer);
@@ -301,6 +319,10 @@ type
     function CollectSelectedInputs: TArray<TSchedInput>;
     function BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
     function ExplodeToOpInputs(ARawId: Int64; ANivel: Integer): TArray<TSchedInput>;
+    // Explosion en LOTE: todas las OP descendientes de un conjunto de ancestros
+    // del mismo nivel, en UNA sola consulta (IN). Evita N round-trips.
+    function ExplodeManyToOpInputs(const ARawIds: TArray<Int64>;
+      ANivel: Integer): TArray<TSchedInput>;
     procedure CommitScheduling(const AResult: TSchedResult;
       out ACreados: TArray<TPair<Integer, Integer>>);
     // Aplica la agrupacion elegida en el wizard sobre los nodos recien creados,
@@ -442,6 +464,7 @@ begin
     Cmd.Free;
   end;
 
+  InvalidateDataCache;   // se vacio el plan: datos de ambos tabs cambian
   LoadData;
   ShowMessage('Plan vaciado correctamente.');
 
@@ -452,10 +475,91 @@ begin
   Result := DMPlanner.CodigoEmpresa;
 end;
 
+procedure TfrmBacklog.tvBacklogGetContentStyle(Sender: TcxCustomGridTableView;
+  ARecord: TcxCustomGridRecord; AItem: TcxCustomGridTableItem;
+  var AStyle: TcxStyle);
+var
+  RecIdx, RowIdx: Integer;
+  Row: TBacklogRow;
+  FEntrega, FRef: TDateTime;
+  Planificada: Boolean;
+begin
+  if ARecord = nil then Exit;
+  RecIdx := ARecord.RecordIndex;
+  if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Exit;
+  RowIdx := FFilteredIndices[RecIdx];
+  if (RowIdx < 0) or (RowIdx >= FRows.Count) then Exit;
+  Row := FRows[RowIdx];
+
+  // Semaforo de cumplimiento (rojo > naranja > verde). La fecha objetivo es
+  // FechaEntrega (cae a FechaCompromiso en el volcado si no habia entrega).
+  //  - Planificados: se compara con NodeFin (fin de la planificacion).
+  //  - Pendientes:   se compara con HOY (aun no hay fin planificado).
+  FEntrega := Row.FechaEntrega;
+  if FEntrega <= 0 then Exit;   // sin fecha objetivo no hay semaforo
+
+  if IsPlanningTab then
+    FRef := Row.NodeFin           // fin planificado (0 si aun no hay, p.ej. Nivel 1/2 sin rango)
+  else
+    FRef := Date;                 // pendiente: referencia = hoy
+
+  if FRef > 0 then
+  begin
+    if FRef > FEntrega then
+    begin
+      AStyle := FStyleTarde;      // ROJO: se termina/vence despues del plazo
+      Exit;
+    end
+    else if FEntrega - FRef <= FDiasVencimiento then
+    begin
+      AStyle := FStyleRiesgo;     // NARANJA: dentro del margen de riesgo
+      Exit;
+    end;
+  end;
+
+  // Sin retraso ni riesgo: en Planificados, verde si la fila esta planificada.
+  Planificada := (Row.NodeId > 0) or (Row.NumOpsPlan > 0);
+  if IsPlanningTab and Planificada then
+    AStyle := FStylePlanificado;  // VERDE: planificada con holgura
+end;
+
 procedure TfrmBacklog.FormCreate(Sender: TObject);
 begin
   FRows := TList<TBacklogRow>.Create;
   FColKeyByTag := TDictionary<Integer, string>.Create;
+  // Cache de recordsets por (tab,nivel). doOwnsValues: libera cada TADODataSet al
+  // reemplazar/vaciar/destruir. Ver LoadData/InvalidateDataCache.
+  FRecordsetCache := TObjectDictionary<string, TCustomADODataSet>.Create([doOwnsValues]);
+
+  // Colores de fila personalizados. IMPRESCINDIBLE NativeStyle=False: con el skin
+  // nativo activo, DevExpress ignora el Color de los estilos y las filas salen
+  // blancas (mismo patron que el grid de uSincronizarERP, que si funciona).
+  tvBacklog.LookAndFeel.NativeStyle := False;
+  // Semaforo de cumplimiento por fila (tab Planificados), aplicado via
+  // OnGetContentStyle. Prioridad: rojo (tarde) > naranja (ajustado) > verde
+  // (holgura). Colores BGR.
+  FStylePlanificado := TcxStyle.Create(Self);
+  FStylePlanificado.Color := $00D8F5D8;      // verde claro = planificada con holgura
+  FStylePlanificado.TextColor := clWindowText;
+  FStyleTarde := TcxStyle.Create(Self);
+  FStyleTarde.Color := $00CACAFF;            // rojo claro = NodeFin > FechaEntrega
+  FStyleTarde.TextColor := clWindowText;
+  FStyleRiesgo := TcxStyle.Create(Self);
+  FStyleRiesgo.Color := $0080D0FF;           // naranja = ajustada al plazo (riesgo)
+  FStyleRiesgo.TextColor := clWindowText;
+  FDiasVencimiento := 7;                      // se refresca en cada LoadData
+  tvBacklog.Styles.OnGetContentStyle := tvBacklogGetContentStyle;
+  // Filas seleccionadas en amarillo (una sola vez; sirve para ambos tabs).
+  if tvBacklog.Styles.Selection = nil then
+    tvBacklog.Styles.Selection := TcxStyle.Create(Self);
+  tvBacklog.Styles.Selection.Color := $0000F5FF;   // amarillo (BGR)
+  tvBacklog.Styles.Selection.TextColor := clBlack;
+  // Seleccion multi-fila via checkboxes: uno por fila + uno en la cabecera que
+  // marca/desmarca TODO (persistente). Sustituye los botones Seleccionar/
+  // Deseleccionar todo. El resto del codigo usa Controller.SelectedRows, que
+  // funciona igual con seleccion por checkbox.
+  tvBacklog.OptionsSelection.MultiSelect := True;
+  tvBacklog.OptionsSelection.CheckBoxVisibility := [cbvDataRow, cbvColumnHeader];
   FLoading := True;
   try
     dtFechaDesde.Date := Date;
@@ -465,7 +569,6 @@ begin
     tabMode.TabIndex := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'TabIndex', 0);
     btnPlanificar.Visible := not IsPlanningTab;
     btnDesplanificarSel.Visible := IsPlanningTab;
-    btnDesplanificarTodo.Visible := IsPlanningTab;
 
     // Nivel de vista (1/2/3). Por defecto 3 (OP), comportamiento previo.
     FNivelVista := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'NivelVista', 3);
@@ -510,6 +613,7 @@ begin
   ClearRows;
   FRows.Free;
   FColKeyByTag.Free;
+  FRecordsetCache.Free;   // doOwnsValues libera los recordsets cacheados
 end;
 
 procedure TfrmBacklog.ClearRows;
@@ -621,31 +725,52 @@ end;
 // expone leafs sin node y propaga los campos heredados del padre/abuelo).
 function TfrmBacklog.ExplodeToOpInputs(ARawId: Int64;
   ANivel: Integer): TArray<TSchedInput>;
+begin
+  // Compatibilidad: explosion de un unico ancestro. Delega en la version en
+  // lote para no duplicar la logica de mapeo.
+  Result := ExplodeManyToOpInputs([ARawId], ANivel);
+end;
+
+function TfrmBacklog.ExplodeManyToOpInputs(const ARawIds: TArray<Int64>;
+  ANivel: Integer): TArray<TSchedInput>;
 var
   Q: TADOQuery;
   L: TList<TSchedInput>;
   Inp: TSchedInput;
-  AncestorJoin: string;
+  AncestorJoin, IdList: string;
+  K: Integer;
 begin
   L := TList<TSchedInput>.Create;
   Q := TADOQuery.Create(nil);
   try
+    if Length(ARawIds) = 0 then Exit(nil);
+
+    // Lista de ancestros para IN(...). UNA sola consulta para TODOS los
+    // seleccionados del mismo nivel (antes: 1 consulta por OF -> N round-trips,
+    // que congelaba la UI antes de abrir el wizard con selecciones grandes).
+    IdList := '';
+    for K := 0 to High(ARawIds) do
+    begin
+      if IdList <> '' then IdList := IdList + ',';
+      IdList := IdList + IntToStr(ARawIds[K]);
+    end;
+
     // Filtro de ancestro segun el nivel del nodo seleccionado:
-    //   Nivel 1 -> la OP cuelga de una OT cuyo padre es ARawId (abuelo).
-    //   Nivel 2 -> la OP cuelga directamente de ARawId (padre).
+    //   Nivel 1 -> la OP cuelga de una OT cuyo padre esta en la lista (abuelo).
+    //   Nivel 2 -> la OP cuelga directamente de un ancestro de la lista (padre).
     if ANivel <= 1 then
       AncestorJoin :=
         ' JOIN FS_PL_Raw_Item op ON op.RawItemId = b.RawId' +
         '   AND op.CodigoEmpresa = b.CodigoEmpresa' +
         ' JOIN FS_PL_Raw_Item ot ON ot.RawItemId = op.ParentRawItemId' +
         ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
-        '   AND b.Nivel = 3 AND ot.ParentRawItemId = ' + IntToStr(ARawId)
+        '   AND b.Nivel = 3 AND ot.ParentRawItemId IN (' + IdList + ')'
     else
       AncestorJoin :=
         ' JOIN FS_PL_Raw_Item op ON op.RawItemId = b.RawId' +
         '   AND op.CodigoEmpresa = b.CodigoEmpresa' +
         ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
-        '   AND b.Nivel = 3 AND op.ParentRawItemId = ' + IntToStr(ARawId);
+        '   AND b.Nivel = 3 AND op.ParentRawItemId IN (' + IdList + ')';
 
     Q.Connection := DMPlanner.ADOConnection;
     Q.SQL.Text :=
@@ -702,22 +827,6 @@ begin
       Inp.RawItemClaveERP := Q.FieldByName('ClaveERP').AsString;
       Inp.RawItemTipoOrigen := Q.FieldByName('TipoOrigen').AsString;
 
-      // Diagnostico: que trae la vista (crudo) vs que asignamos al input.
-      PlanLog.Linea('EXPLODE leido de vista: TipoOrigen=[%s] Nivel=%s ' +
-        'NumeroOF(crudo)=[%s] SerieOF(crudo)=[%s] NumeroDoc=[%s] CodigoOT=[%s] ' +
-        'CodigoProyecto=[%s] FCompromiso=[%s] FNecesaria=[%s] -> asignado: ' +
-        'NumOF=%d SerieOF=%s NumTrab=%s',
-        [Q.FieldByName('TipoOrigen').AsString,
-         Q.FieldByName('Nivel').AsString,
-         Q.FieldByName('NumeroOF').AsString,
-         Q.FieldByName('SerieOF').AsString,
-         Q.FieldByName('NumeroDoc').AsString,
-         Q.FieldByName('CodigoOT').AsString,
-         Q.FieldByName('CodigoProyecto').AsString,
-         Q.FieldByName('FechaCompromiso').AsString,
-         Q.FieldByName('FechaNecesaria').AsString,
-         Inp.NumeroOF, Inp.SerieOF, Inp.NumeroTrabajo]);
-
       L.Add(Inp);
       Q.Next;
     end;
@@ -735,9 +844,16 @@ var
   L: TList<TSchedInput>;
   Exploded: TArray<TSchedInput>;
   J: Integer;
+  AncN1, AncN2: TList<Int64>;   // ancestros a explosionar, agrupados por nivel
 begin
   L := TList<TSchedInput>.Create;
+  AncN1 := TList<Int64>.Create;
+  AncN2 := TList<Int64>.Create;
   try
+    // 1er barrido: separar OP directas (Nivel 3) de los ancestros a explosionar
+    // (Nivel 1/2). Los ancestros se acumulan para explosionarlos en UNA consulta
+    // por nivel (antes: 1 consulta por fila -> N round-trips = pantalla congelada
+    // con selecciones grandes, p.ej. 312 OF).
     for I := 0 to tvBacklog.Controller.SelectedRowCount - 1 do
     begin
       RecIdx := tvBacklog.Controller.SelectedRows[I].RecordIndex;
@@ -747,20 +863,33 @@ begin
 
       Row := FRows[RowIdx];
 
-      // Nivel 1/2 (OF / OT): explosionar a las OP descendientes pendientes.
-      // Cada OP se planifica como un nodo; el motor no cambia.
-      if Row.Nivel < 3 then
-      begin
-        Exploded := ExplodeToOpInputs(Row.RawId, Row.Nivel);
-        for J := 0 to High(Exploded) do
-          L.Add(Exploded[J]);
-      end
+      if Row.Nivel <= 1 then
+        AncN1.Add(Row.RawId)          // Nivel 1 (OF / Pedido / Proyecto)
+      else if Row.Nivel = 2 then
+        AncN2.Add(Row.RawId)          // Nivel 2 (OT / Linea / Tarea)
       else
-        // Nivel 3 (OP): planificable directamente.
+        // Nivel 3 (OP): planificable directamente, sin consulta.
         L.Add(BuildInputFromRow(Row));
     end;
+
+    // 2o: explosion en LOTE (1 consulta por nivel con los ancestros via IN).
+    if AncN1.Count > 0 then
+    begin
+      Exploded := ExplodeManyToOpInputs(AncN1.ToArray, 1);
+      for J := 0 to High(Exploded) do
+        L.Add(Exploded[J]);
+    end;
+    if AncN2.Count > 0 then
+    begin
+      Exploded := ExplodeManyToOpInputs(AncN2.ToArray, 2);
+      for J := 0 to High(Exploded) do
+        L.Add(Exploded[J]);
+    end;
+
     Result := L.ToArray;
   finally
+    AncN1.Free;
+    AncN2.Free;
     L.Free;
   end;
 end;
@@ -768,144 +897,96 @@ end;
 procedure TfrmBacklog.CommitScheduling(const AResult: TSchedResult;
   out ACreados: TArray<TPair<Integer, Integer>>);
 var
-  Cmd: TADOCommand;
-  Q: TADOQuery;
   I: Integer;
   Item: TSchedOutput;
-  CE, PID: string;
-  NodeId: Integer;
-  DurStr, FIniStr, FFinStr, CenterStr: string;
-  UdsStr, FNecStr, FEntStr, TufStr: string;
   NumCreats: Integer;
   Creados: TList<TPair<Integer, Integer>>;
-
-  function QS(const S: string): string;
-  begin
-    Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
-  end;
-
-  function FmtDT(const T: TDateTime): string;
-  begin
-    Result := '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', T) + '''';
-  end;
-
-  function QSOrNull(const S: string): string;
-  begin
-    if S = '' then Result := 'NULL' else Result := QS(S);
-  end;
-
+  Rows: TArray<TBulkNodeRow>;
+  Row: TBulkNodeRow;
+  MetodoPref, MetodoUsado: TBulkNodeMethod;
+  FechaObjetivo: TFunc<TSchedInput, TDateTime>;
 begin
-  CE := IntToStr(DMPlanner.CodigoEmpresa);
-  PID := IntToStr(DMPlanner.CurrentProjectId);
   NumCreats := 0;
   Creados := TList<TPair<Integer, Integer>>.Create;
   try
 
+  // Fecha objetivo del nodo (entrega/necesaria) = FechaCompromiso del backlog
+  // (la fecha objetivo de la OF). Si no hay compromiso, caemos a los campos
+  // especificos del input como respaldo. Devuelve 0 si no hay ninguna (=> NULL).
+  FechaObjetivo :=
+    function(AInput: TSchedInput): TDateTime
+    begin
+      if AInput.FechaCompromiso > 0 then Result := AInput.FechaCompromiso
+      else if AInput.FechaEntrega > 0 then Result := AInput.FechaEntrega
+      else Result := 0;
+    end;
+
+  // 1) Mapear los items PLANIFICABLES a filas de persistencia masiva. El motor
+  //    BulkInsertNodes asigna los NodeId y crea Node + NodeData en lote.
+  SetLength(Rows, 0);
+  for I := 0 to High(AResult.Items) do
+  begin
+    Item := AResult.Items[I];
+    // Solo planificamos los que tienen fechas y centro valido
+    if (Item.Status = ssSinCentro) or (Item.Status = ssSinCalendario) then
+      Continue;
+    if (Item.FechaInicio = 0) or (Item.FechaFin = 0) then Continue;
+    if Item.CenterId <= 0 then Continue;
+
+    SetLength(Rows, Length(Rows) + 1);
+    Row := Default(TBulkNodeRow);
+    Row.CenterId := Item.CenterId;
+    Row.FechaInicio := Item.FechaInicio;
+    Row.FechaFin := Item.FechaFin;
+    Row.DuracionMin := Item.DuracionMin;
+    Row.Caption := Item.Input.CodigoDocumento;
+    Row.Operacion := Item.Input.CodigoDocumento;
+    Row.NumeroOF := Item.Input.NumeroOF;
+    Row.SerieOF := Item.Input.SerieOF;
+    Row.NumeroPedido := Item.Input.NumeroPedido;
+    Row.SeriePedido := Item.Input.SeriePedido;
+    Row.NumeroTrabajo := Item.Input.NumeroTrabajo;
+    Row.FechaEntrega := FechaObjetivo(Item.Input);
+    Row.FechaNecesaria := FechaObjetivo(Item.Input);
+    Row.CodigoCliente := Item.Input.CodigoCliente;
+    Row.CodigoArticulo := Item.Input.CodigoArticulo;
+    Row.DescripcionArticulo := Item.Input.DescripcionArticulo;
+    Row.UnidadesAFabricar := Item.Input.UnidadesAFabricar;
+    Row.TiempoUnidadFabSecs := Item.Input.TiempoUnidadFabSecs;
+    Row.Prioridad := Item.Input.Prioridad;
+    Row.RawItemClaveERP := Item.Input.RawItemClaveERP;
+    Row.RawItemTipoOrigen := Item.Input.RawItemTipoOrigen;
+    Rows[High(Rows)] := Row;
+  end;
+
+  // Metodo de persistencia. El combo cmbPersistMethod esta OCULTO (Visible=False):
+  // sirvio para la comparativa M1/M4/M5 (M5 ~3x sobre M4, validado). En produccion
+  // va siempre por M5 (ItemIndex=0), con fallback automatico M5->M4->M1 dentro de
+  // BulkInsertNodes. Para volver a diagnosticar, poner el combo Visible=True.
+  case cmbPersistMethod.ItemIndex of
+    1: MetodoPref := bmBulkADO;
+    2: MetodoPref := bmPerRow;
+  else MetodoPref := bmBulkFile;
+  end;
+
   DMPlanner.ADOConnection.BeginTrans;
   try
-    for I := 0 to High(AResult.Items) do
+    if Length(Rows) > 0 then
     begin
-      Item := AResult.Items[I];
-      // Solo planificamos los que tienen fechas y centro valido
-      if (Item.Status = ssSinCentro) or (Item.Status = ssSinCalendario) then
-        Continue;
-      if (Item.FechaInicio = 0) or (Item.FechaFin = 0) then Continue;
-      if Item.CenterId <= 0 then Continue;
+      // Persistencia masiva (Node + NodeData). Asigna Rows[i].NodeId.
+      MetodoUsado := BulkInsertNodes(DMPlanner.ADOConnection,
+        DMPlanner.CodigoEmpresa, DMPlanner.CurrentProjectId, Rows, MetodoPref);
 
-      DurStr := FloatToStr(Item.DuracionMin, TFormatSettings.Invariant);
-      FIniStr := FmtDT(Item.FechaInicio);
-      FFinStr := FmtDT(Item.FechaFin);
-      CenterStr := IntToStr(Item.CenterId);
-
-      // Insert FS_PL_Node
-      Cmd := TADOCommand.Create(nil);
-      try
-        Cmd.Connection := DMPlanner.ADOConnection;
-        Cmd.CommandText :=
-          'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, ' +
-          '  FechaInicio, FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde) VALUES (' +
-          CE + ', ' + PID + ', ' + CenterStr + ', ' +
-          FIniStr + ', ' + FFinStr + ', ' + DurStr + ', ' +
-          QS(Item.Input.CodigoDocumento) + ', 15251072, 11166760)';
-        Cmd.Execute;
-      finally
-        Cmd.Free;
+      // Resumen (sin log por-fila: 1194 lineas de I/O son ruido y lentitud).
+      for I := 0 to High(Rows) do
+      begin
+        Creados.Add(TPair<Integer, Integer>.Create(Rows[I].NodeId, Rows[I].CenterId));
+        Inc(NumCreats);
       end;
-
-      // Recuperar NodeId creado
-      Q := TADOQuery.Create(nil);
-      try
-        Q.Connection := DMPlanner.ADOConnection;
-        Q.SQL.Text :=
-          'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
-          'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
-        Q.Open;
-        NodeId := Q.FieldByName('NewId').AsInteger;
-      finally
-        Q.Free;
-      end;
-
-      // Insert FS_PL_NodeData con NumeroOF / NumeroPedido para ligar al staging
-      if Item.Input.UnidadesAFabricar > 0 then
-        UdsStr := FloatToStr(Item.Input.UnidadesAFabricar, TFormatSettings.Invariant)
-      else
-        UdsStr := '1';
-      // FechaEntrega y FechaNecesaria del nodo = FechaCompromiso del backlog
-      // (la fecha objetivo de la OF). Si no hay compromiso, caemos a los campos
-      // especificos del input como respaldo.
-      if Item.Input.FechaCompromiso > 0 then
-        FEntStr := FmtDT(Item.Input.FechaCompromiso)
-      else if Item.Input.FechaEntrega > 0 then
-        FEntStr := FmtDT(Item.Input.FechaEntrega)
-      else
-        FEntStr := 'NULL';
-
-      if Item.Input.FechaCompromiso > 0 then
-        FNecStr := FmtDT(Item.Input.FechaCompromiso)
-      else if Item.Input.FechaNecesaria > 0 then
-        FNecStr := FmtDT(Item.Input.FechaNecesaria)
-      else
-        FNecStr := 'NULL';
-      if Item.Input.TiempoUnidadFabSecs > 0 then
-        TufStr := FloatToStr(Item.Input.TiempoUnidadFabSecs, TFormatSettings.Invariant)
-      else
-        TufStr := '0';
-      Cmd := TADOCommand.Create(nil);
-      try
-        Cmd.Connection := DMPlanner.ADOConnection;
-        Cmd.CommandText :=
-          'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
-          '  NumeroOF, SerieOF, NumeroPedido, SeriePedido, NumeroTrabajo, ' +
-          '  FechaEntrega, FechaNecesaria, CodigoCliente, ' +
-          '  CodigoArticulo, DescripcionArticulo, ' +
-          '  DuracionMin, DuracionMinOriginal, ' +
-          '  UnidadesAFabricar, TiempoUnidadFabSecs, ' +
-          '  OperariosNecesarios, Prioridad, ' +
-          '  RawItemClaveERP, RawItemTipoOrigen, ' +
-          '  ColorFondoOp, ColorBordeOp) VALUES (' +
-          CE + ', ' + IntToStr(NodeId) + ', ' + QS(Item.Input.CodigoDocumento) + ', ' +
-          IntToStr(Item.Input.NumeroOF) + ', ' + QS(Item.Input.SerieOF) + ', ' +
-          IntToStr(Item.Input.NumeroPedido) + ', ' + QS(Item.Input.SeriePedido) + ', ' +
-          QS(Item.Input.NumeroTrabajo) + ', ' +
-          FEntStr + ', ' + FNecStr + ', ' + QS(Item.Input.CodigoCliente) + ', ' +
-          QS(Item.Input.CodigoArticulo) + ', ' + QS(Item.Input.DescripcionArticulo) + ', ' +
-          DurStr + ', ' + DurStr + ', ' +
-          UdsStr + ', ' + TufStr + ', 1, ' + IntToStr(Item.Input.Prioridad) + ', ' +
-          QSOrNull(Item.Input.RawItemClaveERP) + ', ' +
-          QSOrNull(Item.Input.RawItemTipoOrigen) + ', ' +
-          '15251072, 11166760)';
-        Cmd.Execute;
-      finally
-        Cmd.Free;
-      end;
-
-      PlanLog.Linea('COMMIT NodeData NodeId=%d: NumeroOF=%d SerieOF=%s ' +
-        'NumTrabajo=%s FechaEntrega=%s FechaNecesaria=%s | Centro=%d ClaveERP=%s',
-        [NodeId, Item.Input.NumeroOF, Item.Input.SerieOF, Item.Input.NumeroTrabajo,
-         FEntStr, FNecStr, Item.CenterId, Item.Input.RawItemClaveERP]);
-
-      Creados.Add(TPair<Integer, Integer>.Create(NodeId, Item.CenterId));
-      Inc(NumCreats);
+      PlanLog.Linea('=== PERSISTENCIA: %d nodos, metodo pedido=%s, usado=%s ' +
+        '(NodeId %d..%d) ===',
+        [NumCreats, BulkNodeMethodName(MetodoPref), BulkNodeMethodName(MetodoUsado),
+         Rows[0].NodeId, Rows[High(Rows)].NodeId]);
     end;
 
     DMPlanner.ADOConnection.CommitTrans;
@@ -1020,6 +1101,9 @@ begin
   if uBacklogCustomCols.TfrmBacklogCustomCols.Execute then
   begin
     // Si ha habido altas/bajas/ediciones, recargar definiciones, columnas y datos.
+    // Cambian las columnas custom -> cambia BuildSQL -> el recordset cacheado ya
+    // no sirve (le faltarian columnas): invalidar.
+    InvalidateDataCache;
     LoadCustomColumnDefs;
     BuildCustomColumns;
     LoadData;
@@ -1052,7 +1136,7 @@ var
   SR: TSchedResult;
   MR: TModalResult;
   Creados: TArray<TPair<Integer, Integer>>;
-  LogI: Integer;
+  TCol: TDateTime;
   RuleSet, EddRuleSet: TPriorityRuleSet;
   PerfilesCustom, CentrosPlan: TArray<string>;
   PerfilSel, PCI: Integer;
@@ -1073,18 +1157,14 @@ begin
   PlanLog.Inicio(Format('PLANIFICAR  -  %d filas seleccionadas, ProjectId=%d',
     [tvBacklog.Controller.SelectedRowCount, DMPlanner.CurrentProjectId]));
 
+  // Recogida + explosion a OP. Instrumentado: con selecciones grandes (Nivel 1)
+  // esta fase era el cuello de botella (1 consulta por OF). Ahora es 1 consulta
+  // por nivel. El detalle por-fila se elimino (I/O de log O(n) congelaba la UI).
+  TCol := Now;
   Inputs := CollectSelectedInputs;
+  PlanLog.Linea('--- INPUTS recogidos: %d operaciones (OP) en %d ms ---',
+    [Length(Inputs), MilliSecondsBetween(Now, TCol)]);
 
-  // Volcado de lo que se ha recogido de la seleccion (post explosion a OP).
-  PlanLog.Linea('--- INPUTS recogidos: %d operaciones (OP) ---', [Length(Inputs)]);
-  for LogI := 0 to High(Inputs) do
-    PlanLog.Linea('  [%d] Tipo=%s ClaveERP=%s | NumeroOF=%d SerieOF=%s ' +
-      'NumTrabajo=%s | FCompromiso=%s FEntrega=%s FNecesaria=%s | Centro=%s Doc=%s',
-      [LogI, Inputs[LogI].RawItemTipoOrigen, Inputs[LogI].RawItemClaveERP,
-       Inputs[LogI].NumeroOF, Inputs[LogI].SerieOF, Inputs[LogI].NumeroTrabajo,
-       DateToStr(Inputs[LogI].FechaCompromiso), DateToStr(Inputs[LogI].FechaEntrega),
-       DateToStr(Inputs[LogI].FechaNecesaria),
-       Inputs[LogI].CentroPreferente, Inputs[LogI].CodigoDocumento]);
   if Length(Inputs) = 0 then
   begin
     // A Nivel 1/2 puede pasar que la seleccion no tenga OP pendientes (todas ya
@@ -1174,17 +1254,10 @@ begin
     PlanLog.Linea('--- SCHEDULING: Mode=%d Order=%d FechaBase=%s Agrupacion=%d ---',
       [Ord(Params.Mode), Ord(Params.Order), DateToStr(Params.FechaBase),
        Ord(Params.Agrupacion)]);
+    TCol := Now;
     SR := RunAutoScheduling(Inputs, Params);
-    PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados ---',
-      [Length(SR.Items), SR.TotalPlanificados]);
-    for LogI := 0 to High(SR.Items) do
-      PlanLog.Linea('  out[%d] Status=%d Centro=%d Ini=%s Fin=%s | Input.NumeroOF=%d ' +
-        'Input.SerieOF=%s Input.FCompromiso=%s Input.FEntrega=%s',
-        [LogI, Ord(SR.Items[LogI].Status), SR.Items[LogI].CenterId,
-         DateToStr(SR.Items[LogI].FechaInicio), DateToStr(SR.Items[LogI].FechaFin),
-         SR.Items[LogI].Input.NumeroOF, SR.Items[LogI].Input.SerieOF,
-         DateToStr(SR.Items[LogI].Input.FechaCompromiso),
-         DateToStr(SR.Items[LogI].Input.FechaEntrega)]);
+    PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados en %d ms ---',
+      [Length(SR.Items), SR.TotalPlanificados, MilliSecondsBetween(Now, TCol)]);
 
     MR := TfrmBacklogSchedPreview.Execute(SR);
 
@@ -1202,6 +1275,7 @@ begin
               Exit;
             end;
           end;
+          InvalidateDataCache;  // se crearon nodos: datos de ambos tabs cambian
           LoadData;  // recarga -> los planificados desaparecen del backlog
           Exit;
         end;
@@ -1215,6 +1289,7 @@ end;
 
 procedure TfrmBacklog.btnRecargarClick(Sender: TObject);
 begin
+  InvalidateDataCache;   // "Refrescar" = el usuario quiere datos frescos de BD
   LoadData;
 end;
 
@@ -1253,13 +1328,19 @@ begin
   if TfrmSyncBacklogPreview.Execute(
        Self, DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa,
        Reader.GetSistemaNombre, Reader, Ejercicio) then
+  begin
+    InvalidateDataCache;   // sync ERP cambio el staging
     LoadData;
+  end;
 end;
 
 procedure TfrmBacklog.RegenerarNodosDemo1Click(Sender: TObject);
 begin
   if TfrmGenerarNodosDemo.Execute then
+  begin
+    InvalidateDataCache;   // se regeneraron datos
     LoadData;
+  end;
 end;
 
 procedure TfrmBacklog.RegenerarBacklogDemo1Click(Sender: TObject);
@@ -1291,6 +1372,7 @@ begin
 
   uDemoBacklog.GenerarBacklogDemo(NumOFs, NumCom, NumPrj, False);
 
+  InvalidateDataCache;   // se regenero el backlog (y quiza se vacio el plan)
   LoadData;
 end;
 
@@ -1342,7 +1424,6 @@ begin
   // Visibilidad de botones segun tab
   btnPlanificar.Visible := not IsPlanningTab;
   btnDesplanificarSel.Visible := IsPlanningTab;
-  btnDesplanificarTodo.Visible := IsPlanningTab;
 
   // El nivel de vista aplica a ambos tabs (Pendientes y Planificados).
   cmbNivelVista.Visible := True;
@@ -1358,10 +1439,16 @@ begin
 end;
 
 procedure TfrmBacklog.tabModeChange(Sender: TObject);
+var
+  T: TDateTime;
 begin
   if FLoading then Exit;
   uUserPrefs.SetPrefInt(BACKLOG_MOD, 'TabIndex', tabMode.TabIndex);
+  PlanLog.Inicio(Format('TOGGLE TAB -> %d (0=Pend,1=Planif)', [tabMode.TabIndex]));
+  T := Now;
   ApplyTabMode;
+  PlanLog.Linea('=== TOGGLE total: %d ms ===', [MilliSecondsBetween(Now, T)]);
+  PlanLog.Fin;
 end;
 
 procedure TfrmBacklog.cmbNivelVistaChange(Sender: TObject);
@@ -1481,80 +1568,11 @@ begin
       Exit;
     end;
   end;
+  InvalidateDataCache;   // se borraron nodos: datos de ambos tabs cambian
   LoadData;
   ShowMessage(Format('%d elementos desplanificados.', [Length(Ids)]));
 end;
 
-procedure TfrmBacklog.btnDesplanificarTodoClick(Sender: TObject);
-var
-  Q: TADOQuery;
-  Ids: TList<Integer>;
-  IdArr: TArray<Integer>;
-  CE, PID: string;
-begin
-  CE := IntToStr(EmpresaCode);
-  PID := IntToStr(DMPlanner.CurrentProjectId);
-
-  // Recoger TODOS los NodeIds del plan actual que provengan del staging
-  // (tengan NumeroOF o NumeroPedido que matchee una fila de Raw_OF / Raw_Comanda)
-  Ids := TList<Integer>.Create;
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text :=
-      'SELECT DISTINCT n.NodeId ' +
-      'FROM FS_PL_Node n ' +
-      'INNER JOIN FS_PL_NodeData nd ' +
-      '  ON nd.CodigoEmpresa = n.CodigoEmpresa AND nd.NodeId = n.NodeId ' +
-      'WHERE n.CodigoEmpresa = ' + CE +
-      '  AND n.ProjectId = ' + PID +
-      '  AND ( ' +
-      '    EXISTS (SELECT 1 FROM FS_PL_Raw_OF r ' +
-      '            WHERE r.CodigoEmpresa = n.CodigoEmpresa ' +
-      '              AND r.NumeroOF = nd.NumeroOF ' +
-      '              AND ISNULL(r.SerieOF,'''') = ISNULL(nd.SerieOF,'''')) ' +
-      '    OR ' +
-      '    EXISTS (SELECT 1 FROM FS_PL_Raw_Comanda rc ' +
-      '            WHERE rc.CodigoEmpresa = n.CodigoEmpresa ' +
-      '              AND rc.NumeroPedido = nd.NumeroPedido ' +
-      '              AND ISNULL(rc.SeriePedido,'''') = ISNULL(nd.SeriePedido,'''')) ' +
-      '  )';
-    Q.Open;
-    while not Q.Eof do
-    begin
-      Ids.Add(Q.FieldByName('NodeId').AsInteger);
-      Q.Next;
-    end;
-    IdArr := Ids.ToArray;
-  finally
-    Q.Free;
-    Ids.Free;
-  end;
-
-  if Length(IdArr) = 0 then
-  begin
-    ShowMessage('No hay nodos provenientes del Backlog en el plan actual.');
-    Exit;
-  end;
-
-  if MessageDlg(
-      Format('Se desplanificaran %d nodos del plan actual que provienen del Backlog.' +
-        sLineBreak + 'Los nodos manuales o de otras fuentes no se tocan.' +
-        sLineBreak + sLineBreak + 'Continuar?', [Length(IdArr)]),
-      mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-
-  try
-    DoDesplanificar(IdArr);
-  except
-    on E: Exception do
-    begin
-      ShowMessage('Error al desplanificar: ' + E.Message);
-      Exit;
-    end;
-  end;
-  LoadData;
-  ShowMessage(Format('%d nodos desplanificados.', [Length(IdArr)]));
-end;
 
 // ---------------------------------------------------------------------------
 // Construccion de columnas base (vista FS_PL_vw_Backlog)
@@ -1917,29 +1935,80 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
+// Cache del recordset por (tab, nivel). El toggle Pendientes/Planificados y el
+// cambio de nivel son muy comunes y la query es ~89% del tiempo (~1s). La cache
+// guarda SOLO datos (recordset desconectado); el layout de columnas (orden,
+// anchos, ocultas) es independiente (lo gestiona DevExpress + FS_PL_Cfg_UserGridLayout)
+// y NO se ve afectado: al hacer toggle las columnas se reconstruyen igual.
+// ---------------------------------------------------------------------------
+function TfrmBacklog.CacheKey: string;
+begin
+  Result := IntToStr(tabMode.TabIndex) + '|' + IntToStr(FNivelVista);
+end;
+
+function TfrmBacklog.TryLoadFromCache(out ADataSet: TCustomADODataSet): Boolean;
+begin
+  ADataSet := nil;
+  Result := (FRecordsetCache <> nil) and
+            FRecordsetCache.TryGetValue(CacheKey, ADataSet) and
+            (ADataSet <> nil) and ADataSet.Active;
+end;
+
+// Adopta el recordset (ya desconectado) en la cache bajo la clave actual. La
+// cache es TObjectDictionary con doOwnsValues: al reemplazar o vaciar, libera el
+// anterior automaticamente. El recordset es client-side/desconectado, asi que se
+// puede rebobinar (First) y releer en cada toggle sin volver a BD.
+procedure TfrmBacklog.StoreInCache(ADataSet: TCustomADODataSet);
+begin
+  if (FRecordsetCache = nil) or (ADataSet = nil) then Exit;
+  FRecordsetCache.AddOrSetValue(CacheKey, ADataSet);  // libera el previo si habia
+end;
+
+// Vacia toda la cache: fuerza que el proximo LoadData vaya a BD. Se llama cuando
+// los DATOS cambian (planificar, desplanificar, cambiar filtros, refrescar).
+// El layout de columnas NO pasa por aqui (es independiente).
+procedure TfrmBacklog.InvalidateDataCache;
+begin
+  if FRecordsetCache <> nil then
+    FRecordsetCache.Clear;   // doOwnsValues libera cada recordset
+end;
+
+// ---------------------------------------------------------------------------
 // Carga datos a la estructura interna y luego los vuelca al grid
 // ---------------------------------------------------------------------------
 procedure TfrmBacklog.LoadData;
 var
-  Q: TADOQuery;
+  Q: TADOQuery;          // creado solo si vamos a BD; su propiedad pasa a la cache
+  DS: TCustomADODataSet; // fuente a volcar: Q nuevo o el recordset cacheado
+  Cached: TCustomADODataSet;
   Row: TBacklogRow;
   I: Integer;
   FldName: string;
   V: Variant;
   SQLText, ConnStr: string;
+  TQuery, TVolcado, TPintado: TDateTime;
 begin
   ClearRows;
+  Q := nil;
   SQLText := BuildSQL;
-  // Reconstruir la cadena desde la configuracion (incluye el password en auth
-  // SQL). NO clonar ADOConnection.ConnectionString: OLE DB la devuelve sin el
-  // password una vez conectado, y el ThConn.Open del hilo fallaria con auth SQL.
   ConnStr := DMPlanner.ConnectionStringForThreads;
 
-  // La query (parte lenta) se ejecuta en un thread con conexion ADO propia y
-  // cursor client-side: asi se desconecta y se puede leer desde el hilo
-  // principal, que mientras tanto anima el spinner del dialogo de carga.
-  Q := TADOQuery.Create(nil);
-  try
+  TQuery := Now;
+  if TryLoadFromCache(Cached) then
+  begin
+    // Servido desde memoria: nada de thread ni BD. Rebobinar el recordset
+    // (desconectado -> se puede releer). La propiedad sigue en la cache.
+    DS := Cached;
+    DS.First;
+    PlanLog.Linea('LOADDATA query (tab=%d nivel=%d): %d ms [CACHE]',
+      [tabMode.TabIndex, FNivelVista, MilliSecondsBetween(Now, TQuery)]);
+  end
+  else
+  begin
+    // La query (parte lenta) se ejecuta en un thread con conexion ADO propia y
+    // cursor client-side: asi se desconecta y se puede leer desde el hilo
+    // principal, que mientras tanto anima el spinner del dialogo de carga.
+    Q := TADOQuery.Create(nil);
     uBusyDialog.RunBusy(Self, 'Cargando backlog...',
       procedure
       var
@@ -1961,116 +2030,124 @@ begin
           ThConn.Free;
         end;
       end);
+    DS := Q;
+    // La cache ADOPTA Q (TObjectDictionary doOwnsValues lo liberara). Por eso
+    // NO se libera aqui: sobrevive para el proximo toggle desde memoria.
+    StoreInCache(Q);
+    PlanLog.Linea('LOADDATA query (tab=%d nivel=%d): %d ms [BD]',
+      [tabMode.TabIndex, FNivelVista, MilliSecondsBetween(Now, TQuery)]);
+  end;
+  TVolcado := Now;
 
     // A partir de aqui, ya en el hilo principal, volcamos el recordset
     // (desconectado) a las filas y al grid.
-    while not Q.Eof do
+    while not DS.Eof do
     begin
-      Row.Origen              := Q.FieldByName('Origen').AsString;
-      if Q.FindField('TipoOrigen') <> nil then
-        Row.TipoOrigen := Q.FieldByName('TipoOrigen').AsString
+      Row.Origen              := DS.FieldByName('Origen').AsString;
+      if DS.FindField('TipoOrigen') <> nil then
+        Row.TipoOrigen := DS.FieldByName('TipoOrigen').AsString
       else
         Row.TipoOrigen := '';
-      if Q.FindField('Nivel') <> nil then
-        Row.Nivel := Q.FieldByName('Nivel').AsInteger
+      if DS.FindField('Nivel') <> nil then
+        Row.Nivel := DS.FieldByName('Nivel').AsInteger
       else
         Row.Nivel := 0;
-      Row.RawId               := Q.FieldByName('RawId').AsLargeInt;
-      if (Q.FindField('ParentRawItemId') <> nil) and
-         not Q.FieldByName('ParentRawItemId').IsNull then
-        Row.ParentRawItemId := Q.FieldByName('ParentRawItemId').AsLargeInt
+      Row.RawId               := DS.FieldByName('RawId').AsLargeInt;
+      if (DS.FindField('ParentRawItemId') <> nil) and
+         not DS.FieldByName('ParentRawItemId').IsNull then
+        Row.ParentRawItemId := DS.FieldByName('ParentRawItemId').AsLargeInt
       else
         Row.ParentRawItemId := 0;
-      if (Q.FindField('GrandRawItemId') <> nil) and
-         not Q.FieldByName('GrandRawItemId').IsNull then
-        Row.GrandRawItemId := Q.FieldByName('GrandRawItemId').AsLargeInt
+      if (DS.FindField('GrandRawItemId') <> nil) and
+         not DS.FieldByName('GrandRawItemId').IsNull then
+        Row.GrandRawItemId := DS.FieldByName('GrandRawItemId').AsLargeInt
       else
         Row.GrandRawItemId := 0;
-      Row.OrigenERP           := Q.FieldByName('OrigenERP').AsString;
-      Row.ClaveERP            := Q.FieldByName('ClaveERP').AsString;
-      Row.CodigoDocumento     := Q.FieldByName('CodigoDocumento').AsString;
-      if Q.FindField('NumeroDoc') <> nil then
-        Row.NumeroDoc := Q.FieldByName('NumeroDoc').AsInteger
+      Row.OrigenERP           := DS.FieldByName('OrigenERP').AsString;
+      Row.ClaveERP            := DS.FieldByName('ClaveERP').AsString;
+      Row.CodigoDocumento     := DS.FieldByName('CodigoDocumento').AsString;
+      if DS.FindField('NumeroDoc') <> nil then
+        Row.NumeroDoc := DS.FieldByName('NumeroDoc').AsInteger
       else
         Row.NumeroDoc := 0;
-      if Q.FindField('SerieDoc') <> nil then
-        Row.SerieDoc := Q.FieldByName('SerieDoc').AsString
+      if DS.FindField('SerieDoc') <> nil then
+        Row.SerieDoc := DS.FieldByName('SerieDoc').AsString
       else
         Row.SerieDoc := '';
-      Row.CodigoArticulo      := Q.FieldByName('CodigoArticulo').AsString;
-      Row.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
-      Row.Cantidad            := Q.FieldByName('Cantidad').AsFloat;
-      Row.UnidadMedida        := Q.FieldByName('UnidadMedida').AsString;
-      Row.CodigoCliente       := Q.FieldByName('CodigoCliente').AsString;
-      Row.NombreCliente       := Q.FieldByName('NombreCliente').AsString;
-      Row.CodigoProyecto      := Q.FieldByName('CodigoProyecto').AsString;
-      if (Q.FindField('NumeroOF') <> nil) and not Q.FieldByName('NumeroOF').IsNull then
-        Row.NumeroOF := Q.FieldByName('NumeroOF').AsInteger
+      Row.CodigoArticulo      := DS.FieldByName('CodigoArticulo').AsString;
+      Row.DescripcionArticulo := DS.FieldByName('DescripcionArticulo').AsString;
+      Row.Cantidad            := DS.FieldByName('Cantidad').AsFloat;
+      Row.UnidadMedida        := DS.FieldByName('UnidadMedida').AsString;
+      Row.CodigoCliente       := DS.FieldByName('CodigoCliente').AsString;
+      Row.NombreCliente       := DS.FieldByName('NombreCliente').AsString;
+      Row.CodigoProyecto      := DS.FieldByName('CodigoProyecto').AsString;
+      if (DS.FindField('NumeroOF') <> nil) and not DS.FieldByName('NumeroOF').IsNull then
+        Row.NumeroOF := DS.FieldByName('NumeroOF').AsInteger
       else
         Row.NumeroOF := 0;
-      if Q.FindField('SerieOF') <> nil then
-        Row.SerieOF := Q.FieldByName('SerieOF').AsString
+      if DS.FindField('SerieOF') <> nil then
+        Row.SerieOF := DS.FieldByName('SerieOF').AsString
       else
         Row.SerieOF := '';
-      if Q.FindField('CodigoOT') <> nil then
-        Row.CodigoOT := Q.FieldByName('CodigoOT').AsString
+      if DS.FindField('CodigoOT') <> nil then
+        Row.CodigoOT := DS.FieldByName('CodigoOT').AsString
       else
         Row.CodigoOT := '';
-      if Q.FindField('CodigoOP') <> nil then
-        Row.CodigoOP := Q.FieldByName('CodigoOP').AsString
+      if DS.FindField('CodigoOP') <> nil then
+        Row.CodigoOP := DS.FieldByName('CodigoOP').AsString
       else
         Row.CodigoOP := '';
-      if Q.FieldByName('FechaCompromiso').IsNull then Row.FechaCompromiso := 0
-        else Row.FechaCompromiso := Q.FieldByName('FechaCompromiso').AsDateTime;
-      if Q.FieldByName('FechaNecesaria').IsNull then Row.FechaNecesaria := 0
-        else Row.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
-      if (Q.FindField('FechaEntrega') <> nil) and not Q.FieldByName('FechaEntrega').IsNull then
-        Row.FechaEntrega := Q.FieldByName('FechaEntrega').AsDateTime
+      if DS.FieldByName('FechaCompromiso').IsNull then Row.FechaCompromiso := 0
+        else Row.FechaCompromiso := DS.FieldByName('FechaCompromiso').AsDateTime;
+      if DS.FieldByName('FechaNecesaria').IsNull then Row.FechaNecesaria := 0
+        else Row.FechaNecesaria := DS.FieldByName('FechaNecesaria').AsDateTime;
+      if (DS.FindField('FechaEntrega') <> nil) and not DS.FieldByName('FechaEntrega').IsNull then
+        Row.FechaEntrega := DS.FieldByName('FechaEntrega').AsDateTime
       else
         Row.FechaEntrega := Row.FechaCompromiso;
-      Row.Prioridad           := Q.FieldByName('Prioridad').AsInteger;
-      Row.CentroPreferente    := Q.FieldByName('CentroPreferente').AsString;
-      Row.HorasEstimadas      := Q.FieldByName('HorasEstimadas').AsFloat;
-      if (Q.FindField('TiempoUnidadFabSecs') <> nil)
-         and not Q.FieldByName('TiempoUnidadFabSecs').IsNull then
-        Row.TiempoUnidadFabSecs := Q.FieldByName('TiempoUnidadFabSecs').AsFloat
+      Row.Prioridad           := DS.FieldByName('Prioridad').AsInteger;
+      Row.CentroPreferente    := DS.FieldByName('CentroPreferente').AsString;
+      Row.HorasEstimadas      := DS.FieldByName('HorasEstimadas').AsFloat;
+      if (DS.FindField('TiempoUnidadFabSecs') <> nil)
+         and not DS.FieldByName('TiempoUnidadFabSecs').IsNull then
+        Row.TiempoUnidadFabSecs := DS.FieldByName('TiempoUnidadFabSecs').AsFloat
       else
         Row.TiempoUnidadFabSecs := 0;
-      Row.EstadoERP           := Q.FieldByName('EstadoERP').AsString;
+      Row.EstadoERP           := DS.FieldByName('EstadoERP').AsString;
 
       // Bloque OP (Nivel 3). FindField por robustez ante vistas pre-V053.
-      if Q.FindField('Orden') <> nil then
-        Row.Orden := Q.FieldByName('Orden').AsInteger
+      if DS.FindField('Orden') <> nil then
+        Row.Orden := DS.FieldByName('Orden').AsInteger
       else
         Row.Orden := 0;
-      Row.OpTiempoPreparacion  := FieldFloat(Q, 'OpTiempoPreparacion');
-      Row.OpTiempoFabricacion  := FieldFloat(Q, 'OpTiempoFabricacion');
-      Row.OpUnidadesHora       := FieldFloat(Q, 'OpUnidadesHora');
-      Row.OpCosteHoraMaquina   := FieldFloat(Q, 'OpCosteHoraMaquina');
-      Row.OpCosteHoraManoObra  := FieldFloat(Q, 'OpCosteHoraManoObra');
-      Row.OpUnidadesFabricadas := FieldFloat(Q, 'OpUnidadesFabricadas');
-      Row.OpFechaInicioReal    := FieldDate(Q, 'OpFechaInicioReal');
-      Row.OpFechaFinalReal     := FieldDate(Q, 'OpFechaFinalReal');
-      Row.OpOperacionExterna   := FieldBoolVar(Q, 'OpOperacionExterna');
-      Row.OpCodigoProveedor    := FieldStr(Q, 'OpCodigoProveedor');
-      Row.OpSeccionFabrica     := FieldStr(Q, 'OpSeccionFabrica');
-      Row.OpStatusPlanificado  := FieldBoolVar(Q, 'OpStatusPlanificado');
-      Row.OpObservaciones      := FieldStr(Q, 'OpObservaciones');
-      Row.OpPctParaSigOperacion   := FieldFloat(Q, 'OpPctParaSigOperacion');
-      Row.OpPctDedicacionOperario := FieldFloat(Q, 'OpPctDedicacionOperario');
+      Row.OpTiempoPreparacion  := FieldFloat(DS, 'OpTiempoPreparacion');
+      Row.OpTiempoFabricacion  := FieldFloat(DS, 'OpTiempoFabricacion');
+      Row.OpUnidadesHora       := FieldFloat(DS, 'OpUnidadesHora');
+      Row.OpCosteHoraMaquina   := FieldFloat(DS, 'OpCosteHoraMaquina');
+      Row.OpCosteHoraManoObra  := FieldFloat(DS, 'OpCosteHoraManoObra');
+      Row.OpUnidadesFabricadas := FieldFloat(DS, 'OpUnidadesFabricadas');
+      Row.OpFechaInicioReal    := FieldDate(DS, 'OpFechaInicioReal');
+      Row.OpFechaFinalReal     := FieldDate(DS, 'OpFechaFinalReal');
+      Row.OpOperacionExterna   := FieldBoolVar(DS, 'OpOperacionExterna');
+      Row.OpCodigoProveedor    := FieldStr(DS, 'OpCodigoProveedor');
+      Row.OpSeccionFabrica     := FieldStr(DS, 'OpSeccionFabrica');
+      Row.OpStatusPlanificado  := FieldBoolVar(DS, 'OpStatusPlanificado');
+      Row.OpObservaciones      := FieldStr(DS, 'OpObservaciones');
+      Row.OpPctParaSigOperacion   := FieldFloat(DS, 'OpPctParaSigOperacion');
+      Row.OpPctDedicacionOperario := FieldFloat(DS, 'OpPctDedicacionOperario');
 
       // Agregados de prevision (V055, solo vw_BacklogTree). FindField por
       // robustez: vw_BacklogPlanned no los trae.
-      Row.DuracionPrevistaMin := FieldFloat(Q, 'DuracionPrevistaMin');
-      if Q.FindField('NumOpsTotal') <> nil then
-        Row.NumOpsTotal := Q.FieldByName('NumOpsTotal').AsInteger
+      Row.DuracionPrevistaMin := FieldFloat(DS, 'DuracionPrevistaMin');
+      if DS.FindField('NumOpsTotal') <> nil then
+        Row.NumOpsTotal := DS.FieldByName('NumOpsTotal').AsInteger
       else
         Row.NumOpsTotal := 0;
-      if Q.FindField('NumOpsPendientes') <> nil then
-        Row.NumOpsPendientes := Q.FieldByName('NumOpsPendientes').AsInteger
+      if DS.FindField('NumOpsPendientes') <> nil then
+        Row.NumOpsPendientes := DS.FieldByName('NumOpsPendientes').AsInteger
       else
         Row.NumOpsPendientes := 0;
-      Row.FechaCompromisoMin := FieldDate(Q, 'FechaCompromisoMin');
+      Row.FechaCompromisoMin := FieldDate(DS, 'FechaCompromisoMin');
 
       // Campos del nodo (solo vw_BacklogPlanned / vw_BacklogPlannedTree)
       Row.NodeId := 0;
@@ -2082,49 +2159,56 @@ begin
       Row.NumCentros := 0;
       if IsPlanningTab then
       begin
-        if Q.FindField('NodeId') <> nil then
-          Row.NodeId := Q.FieldByName('NodeId').AsInteger;
-        if (Q.FindField('NodeInicio') <> nil) and not Q.FieldByName('NodeInicio').IsNull then
-          Row.NodeInicio := Q.FieldByName('NodeInicio').AsDateTime;
-        if (Q.FindField('NodeFin') <> nil) and not Q.FieldByName('NodeFin').IsNull then
-          Row.NodeFin := Q.FieldByName('NodeFin').AsDateTime;
-        if Q.FindField('NodeCodigoCentro') <> nil then
-          Row.NodeCodigoCentro := Q.FieldByName('NodeCodigoCentro').AsString;
-        if Q.FindField('NodeCentroNombre') <> nil then
-          Row.NodeCentroNombre := Q.FieldByName('NodeCentroNombre').AsString;
+        if DS.FindField('NodeId') <> nil then
+          Row.NodeId := DS.FieldByName('NodeId').AsInteger;
+        if (DS.FindField('NodeInicio') <> nil) and not DS.FieldByName('NodeInicio').IsNull then
+          Row.NodeInicio := DS.FieldByName('NodeInicio').AsDateTime;
+        if (DS.FindField('NodeFin') <> nil) and not DS.FieldByName('NodeFin').IsNull then
+          Row.NodeFin := DS.FieldByName('NodeFin').AsDateTime;
+        if DS.FindField('NodeCodigoCentro') <> nil then
+          Row.NodeCodigoCentro := DS.FieldByName('NodeCodigoCentro').AsString;
+        if DS.FindField('NodeCentroNombre') <> nil then
+          Row.NodeCentroNombre := DS.FieldByName('NodeCentroNombre').AsString;
         // Agregados de progreso (V056, solo a Nivel 1/2 via vw_BacklogPlannedTree).
-        if Q.FindField('NumOpsPlan') <> nil then
-          Row.NumOpsPlan := Q.FieldByName('NumOpsPlan').AsInteger;
-        if Q.FindField('NumCentros') <> nil then
-          Row.NumCentros := Q.FieldByName('NumCentros').AsInteger;
+        if DS.FindField('NumOpsPlan') <> nil then
+          Row.NumOpsPlan := DS.FieldByName('NumOpsPlan').AsInteger;
+        if DS.FindField('NumCentros') <> nil then
+          Row.NumCentros := DS.FieldByName('NumCentros').AsInteger;
       end;
 
       Row.Extras := TDictionary<string, Variant>.Create;
       for I := 0 to High(FCustomCols) do
       begin
         FldName := 'X_' + FCustomCols[I].ColumnKey;
-        if Q.FindField(FldName) <> nil then
+        if DS.FindField(FldName) <> nil then
         begin
-          if Q.FieldByName(FldName).IsNull then
+          if DS.FieldByName(FldName).IsNull then
             V := Null
           else
             // FieldValue siempre vive en BD como string en formato invariant.
             // Lo decodificamos al tipo nativo (Double/TDateTime/Boolean/string)
             // para que el editor de la celda acepte el valor sin conversion.
             V := DecodeFieldValue(FCustomCols[I].DataType,
-                                  Q.FieldByName(FldName).AsString);
+                                  DS.FieldByName(FldName).AsString);
           Row.Extras.AddOrSetValue(FCustomCols[I].ColumnKey, V);
         end;
       end;
 
       FRows.Add(Row);
-      Q.Next;
+      DS.Next;
     end;
-  finally
-    Q.Free;
-  end;
+  // No se libera DS: su propiedad esta en FRecordsetCache (viene de cache o Q
+  // recien adoptado). Se liberara al invalidar la cache o al destruir el form.
+  PlanLog.Linea('LOADDATA volcado %d filas: %d ms',
+    [FRows.Count, MilliSecondsBetween(Now, TVolcado)]);
+  // Umbral naranja del semaforo de fila (mismo que el KPI 'Vencen Nd'). Se lee
+  // aqui para que OnGetContentStyle no toque las prefs en cada celda.
+  FDiasVencimiento := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'DiasVencimiento', 7);
+  if FDiasVencimiento <= 0 then FDiasVencimiento := 7;
+  TPintado := Now;
   ApplyRowsToGrid;
   LoadKpis;
+  PlanLog.Linea('LOADDATA pintado+KPIs: %d ms', [MilliSecondsBetween(Now, TPintado)]);
   // UpdateCountLabel (dins ApplyRowsToGrid) ya ha puesto el conteo real.
 end;
 
@@ -2156,7 +2240,9 @@ begin
   end;
 
   uUserPrefs.SetPrefInt(BACKLOG_MOD, 'DiasVencimiento', Dias);
-  LoadKpis;   // recalcula el semaforo con el nuevo umbral
+  FDiasVencimiento := Dias;
+  LoadKpis;                    // recalcula el semaforo KPI de cabecera
+  tvBacklog.Site.Invalidate;   // repinta el grid con el nuevo umbral (sin recargar)
 end;
 
 procedure TfrmBacklog.LoadKpis;
@@ -2802,20 +2888,13 @@ begin
     else
       Row.Extras.AddOrSetValue(ColumnKey, NewVal);
     FRows[RowIdx] := Row;
+    // El recordset cacheado de este (tab,nivel) queda desactualizado respecto al
+    // valor recien editado: invalidar para que el proximo toggle relea de BD.
+    InvalidateDataCache;
   except
     on E: Exception do
       ShowMessage('No se pudo guardar el valor: ' + E.Message);
   end;
-end;
-
-procedure TfrmBacklog.btnSelectAllClick(Sender: TObject);
-begin
-  tvBacklog.Controller.SelectAll;
-end;
-
-procedure TfrmBacklog.btnDeselectAllClick(Sender: TObject);
-begin
-  tvBacklog.Controller.ClearSelection;
 end;
 
 procedure TfrmBacklog.UpdateImpacto;

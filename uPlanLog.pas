@@ -22,7 +22,10 @@ type
   private
     FLock: TCriticalSection;
     FPath: string;
+    FBuffer: TStringBuilder;   // acumula lineas; flush explicito o en Fin.
+    FBufferLevel: Integer;     // >0 => Linea acumula en memoria (anidable).
     function AsegurarRuta: string;
+    procedure EscribirDisco(const ATexto: string);
   public
     constructor Create;
     destructor Destroy; override;
@@ -32,6 +35,13 @@ type
     // Escribe una linea con timestamp. Acepta formato estilo Format().
     procedure Linea(const AMsg: string); overload;
     procedure Linea(const AFmt: string; const AArgs: array of const); overload;
+    // Modo buffer: mientras esta activo, las lineas se acumulan en memoria y
+    // NO se abre/cierra el fichero por cada una (evita I/O O(n) al loguear
+    // muchas filas). BeginBuffer/EndBuffer se pueden anidar; EndBuffer hace
+    // flush cuando se cierra el ultimo nivel. Fin tambien hace flush.
+    procedure BeginBuffer;
+    procedure EndBuffer;
+    procedure Flush;
     // Ruta del fichero de log activo (para mostrarla al usuario).
     function RutaLog: string;
   end;
@@ -55,11 +65,15 @@ constructor TPlanLog.Create;
 begin
   inherited Create;
   FLock := TCriticalSection.Create;
+  FBuffer := TStringBuilder.Create;
+  FBufferLevel := 0;
   FPath := AsegurarRuta;
 end;
 
 destructor TPlanLog.Destroy;
 begin
+  Flush;
+  FBuffer.Free;
   FLock.Free;
   inherited;
 end;
@@ -85,18 +99,63 @@ begin
   Result := FPath;
 end;
 
+procedure TPlanLog.EscribirDisco(const ATexto: string);
+begin
+  if ATexto = '' then Exit;
+  try
+    TFile.AppendAllText(FPath, ATexto, TEncoding.UTF8);
+  except
+    // Nunca interrumpir la planificacion por un fallo de log.
+  end;
+end;
+
 procedure TPlanLog.Linea(const AMsg: string);
 var
-  Linea: string;
+  L: string;
 begin
   FLock.Enter;
   try
-    Linea := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + '  ' + AMsg;
-    try
-      TFile.AppendAllText(FPath, Linea + sLineBreak, TEncoding.UTF8);
-    except
-      // Nunca interrumpir la planificacion por un fallo de log.
+    L := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + '  ' + AMsg + sLineBreak;
+    if FBufferLevel > 0 then
+      FBuffer.Append(L)          // acumula en memoria (sin tocar disco)
+    else
+      EscribirDisco(L);          // modo directo (compatibilidad)
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TPlanLog.BeginBuffer;
+begin
+  FLock.Enter;
+  try
+    Inc(FBufferLevel);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TPlanLog.EndBuffer;
+begin
+  FLock.Enter;
+  try
+    if FBufferLevel > 0 then Dec(FBufferLevel);
+    if FBufferLevel = 0 then
+    begin
+      EscribirDisco(FBuffer.ToString);
+      FBuffer.Clear;
     end;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TPlanLog.Flush;
+begin
+  FLock.Enter;
+  try
+    EscribirDisco(FBuffer.ToString);
+    FBuffer.Clear;
   finally
     FLock.Leave;
   end;
@@ -113,7 +172,20 @@ end;
 
 procedure TPlanLog.Inicio(const ATitulo: string);
 begin
-  Linea('');
+  // Cada sesion de planificacion arranca con el log LIMPIO (vacia el fichero y
+  // cualquier buffer pendiente), asi cada ejecucion deja datos aislados.
+  FLock.Enter;
+  try
+    FBuffer.Clear;
+    try
+      TFile.WriteAllText(FPath, '', TEncoding.UTF8);   // trunca el contenido
+    except
+      // Si no se puede truncar, seguimos: el log se acumulara, no es critico.
+    end;
+  finally
+    FLock.Leave;
+  end;
+
   Linea('========================================================');
   Linea('=== ' + ATitulo);
   Linea('========================================================');

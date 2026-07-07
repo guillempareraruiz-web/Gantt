@@ -39,9 +39,9 @@ object frmBusyDialog: TfrmBusyDialog
       OnPaint = pbSpinnerPaint
     end
     object lblMessage: TLabel
-      Left = 9
+      Left = 16
       Top = 88
-      Width = 295
+      Width = 281
       Height = 49
       Alignment = taCenter
       AutoSize = False
@@ -52,6 +52,7 @@ object frmBusyDialog: TfrmBusyDialog
       Font.Name = 'Segoe UI Semibold'
       Font.Style = []
       ParentFont = False
+      WordWrap = True
     end
     object lblSub: TLabel
       Left = 9

@@ -185,6 +185,20 @@ type
     Desempate2: TPriorityRule;
   end;
 
+  // Intervalo ocupado en un lane (existente o planificado). Publico para poder
+  // CACHEAR la ocupacion existente y reutilizarla sin tocar BD (ver TOccupancyCache).
+  TLaneSlotPub = record
+    StartDT: TDateTime;
+    EndDT: TDateTime;
+    Bloqueado: Boolean;
+  end;
+
+  // Ocupacion existente por CenterId, precargada UNA vez desde BD. Permite:
+  //   1) evitar N queries repetidas en optimizacion (cada evaluacion la reusa),
+  //   2) ejecutar RunAutoScheduling en THREADS (sin tocar la conexion ADO, que
+  //      no es thread-safe) -> multi-start SA paralelo.
+  TOccupancyCache = TDictionary<Integer, TArray<TLaneSlotPub>>;
+
 function PriorityRuleToStr(R: TPriorityRule): string;
 function DefaultRuleSet: TPriorityRuleSet;
 function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
@@ -193,8 +207,14 @@ function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
 // unica fuente de verdad para "cuanto dura una operacion" antes de planificar.
 function CalcDuracionOpMin(const AInput: TSchedInput): Double;
 
+// Construye la cache de ocupacion existente leyendo BD UNA vez (llamar en el hilo
+// principal). El llamante es dueno del diccionario y debe liberarlo.
+function BuildOccupancyCache(const AFechaBloqueo: TDateTime): TOccupancyCache;
+
+// AOccCache opcional: si <> nil, la ocupacion existente se toma de la cache (sin
+// BD, thread-safe). Si nil, comportamiento clasico (lee BD via LoadExistingOccupancy).
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
-  const AParams: TSchedParams): TSchedResult;
+  const AParams: TSchedParams; AOccCache: TOccupancyCache = nil): TSchedResult;
 
 function StatusToStr(AStatus: TSchedStatus): string;
 function PlacementToStr(P: TPlacementPolicy): string;
@@ -716,13 +736,47 @@ end;
 // Carga los nodos existentes del centro (FS_PL_Node del proyecto activo) como
 // ocupacion en los lanes. Reparte por lanes con first-fit para no superponer.
 // Marca como Bloqueado los que terminan antes de AFechaBloqueo.
+// Coloca un slot ocupado en el cursor por first-fit (primer lane sin colision).
+procedure PlaceExistingSlot(var ACursor: TCenterCursor; const ASlot: TLaneSlot);
+var
+  L, Placed: Integer;
+begin
+  Placed := -1;
+  for L := 0 to High(ACursor.LaneOcc) do
+    if not LaneCollides(ACursor.LaneOcc[L], ASlot.StartDT, ASlot.EndDT) then
+    begin
+      Placed := L;
+      Break;
+    end;
+  if Placed < 0 then Placed := 0;  // todos chocan: apilar en lane 0
+  InsertSlotOrdered(ACursor.LaneOcc[Placed], ASlot);
+end;
+
+// Carga la ocupacion existente de un centro en el cursor. Si AOccCache <> nil,
+// la toma de la CACHE (sin BD, thread-safe). Si nil, lee BD.
 procedure LoadExistingOccupancy(ACenterId: Integer; const AFechaBloqueo: TDateTime;
-  var ACursor: TCenterCursor);
+  var ACursor: TCenterCursor; AOccCache: TOccupancyCache = nil);
 var
   Q: TADOQuery;
   Slot: TLaneSlot;
-  L, Placed: Integer;
+  Slots: TArray<TLaneSlotPub>;
+  K: Integer;
 begin
+  // --- Camino CACHE: sin tocar BD ---
+  if AOccCache <> nil then
+  begin
+    if AOccCache.TryGetValue(ACenterId, Slots) then
+      for K := 0 to High(Slots) do
+      begin
+        Slot.StartDT := Slots[K].StartDT;
+        Slot.EndDT := Slots[K].EndDT;
+        Slot.Bloqueado := Slots[K].Bloqueado;
+        PlaceExistingSlot(ACursor, Slot);
+      end;
+    Exit;
+  end;
+
+  // --- Camino BD (clasico) ---
   if DMPlanner.ADOConnection = nil then Exit;
   Q := TADOQuery.Create(nil);
   try
@@ -741,16 +795,47 @@ begin
       Slot.StartDT := Q.FieldByName('FechaInicio').AsDateTime;
       Slot.EndDT := Q.FieldByName('FechaFin').AsDateTime;
       Slot.Bloqueado := (AFechaBloqueo > 0) and (Slot.EndDT <= AFechaBloqueo);
-      // first-fit: primer lane donde no choque
-      Placed := -1;
-      for L := 0 to High(ACursor.LaneOcc) do
-        if not LaneCollides(ACursor.LaneOcc[L], Slot.StartDT, Slot.EndDT) then
-        begin
-          Placed := L;
-          Break;
-        end;
-      if Placed < 0 then Placed := 0;  // todos chocan: apilar en lane 0
-      InsertSlotOrdered(ACursor.LaneOcc[Placed], Slot);
+      PlaceExistingSlot(ACursor, Slot);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+// Lee TODA la ocupacion existente del proyecto (una query) y la agrupa por
+// CenterId. El llamante es dueno del diccionario resultante.
+function BuildOccupancyCache(const AFechaBloqueo: TDateTime): TOccupancyCache;
+var
+  Q: TADOQuery;
+  CenterId, N: Integer;
+  Slot: TLaneSlotPub;
+  Arr: TArray<TLaneSlotPub>;
+begin
+  Result := TOccupancyCache.Create;
+  if DMPlanner.ADOConnection = nil then Exit;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    Q.SQL.Text :=
+      'SELECT CenterId, FechaInicio, FechaFin FROM FS_PL_Node ' +
+      'WHERE CodigoEmpresa = :CE AND ProjectId = :PID ' +
+      '  AND ISNULL(Visible,1) = 1 AND CenterId IS NOT NULL ' +
+      'ORDER BY CenterId, FechaInicio';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      CenterId := Q.FieldByName('CenterId').AsInteger;
+      Slot.StartDT := Q.FieldByName('FechaInicio').AsDateTime;
+      Slot.EndDT := Q.FieldByName('FechaFin').AsDateTime;
+      Slot.Bloqueado := (AFechaBloqueo > 0) and (Slot.EndDT <= AFechaBloqueo);
+      if not Result.TryGetValue(CenterId, Arr) then Arr := nil;
+      N := Length(Arr);
+      SetLength(Arr, N + 1);
+      Arr[N] := Slot;
+      Result.AddOrSetValue(CenterId, Arr);
       Q.Next;
     end;
   finally
@@ -759,7 +844,7 @@ begin
 end;
 
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
-  const AParams: TSchedParams): TSchedResult;
+  const AParams: TSchedParams; AOccCache: TOccupancyCache = nil): TSchedResult;
 var
   Inputs: TArray<TSchedInput>;
   Params: TSchedParams;
@@ -868,7 +953,8 @@ begin
         // Registrar ANTES de cargar (las listas son por referencia): asi, si
         // LoadExistingOccupancy lanza, el finally igualmente liberara las listas.
         Cursors.Add(C.Id, Cursor);
-        LoadExistingOccupancy(C.Id, FechaBloqueo, Cursor);
+        // Con AOccCache <> nil lee de cache (sin BD, thread-safe).
+        LoadExistingOccupancy(C.Id, FechaBloqueo, Cursor, AOccCache);
       end;
 
       Output.CenterId := C.Id;

@@ -4,7 +4,7 @@
         <ProjectVersion>19.3</ProjectVersion>
         <FrameworkType>VCL</FrameworkType>
         <Base>True</Base>
-        <Config Condition="'$(Config)'==''">Release</Config>
+        <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
         <TargetedPlatforms>1</TargetedPlatforms>
         <AppType>Application</AppType>
@@ -247,15 +247,6 @@
             <Form>frmBacklogSchedParams</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="uBacklogSchedWizard.pas">
-            <Form>frmBacklogSchedWizard</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uPlanAnalisisData.pas"/>
-        <DCCReference Include="uPlanAnalisis.pas">
-            <Form>frmPlanAnalisis</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
         <DCCReference Include="uBacklogSchedPreview.pas">
             <Form>frmBacklogSchedPreview</Form>
             <FormType>dfm</FormType>
@@ -454,7 +445,6 @@
         <DCCReference Include="uGenerarNodosDemo.pas">
             <Form>frmGenerarNodosDemo</Form>
         </DCCReference>
-        <DCCReference Include="uDemoPlanEngine.pas"/>
         <DCCReference Include="uCentresKPI.pas">
             <Form>frmCentresKPI</Form>
             <FormType>dfm</FormType>
@@ -462,13 +452,6 @@
         <DCCReference Include="uGanttDatesDialog.pas">
             <Form>frmGanttDatesDialog</Form>
         </DCCReference>
-        <DCCReference Include="uMoverFecha.pas">
-            <Form>frmMoverFecha</Form>
-        </DCCReference>
-        <DCCReference Include="uCrearNodoManual.pas">
-            <Form>frmCrearNodoManual</Form>
-        </DCCReference>
-        <DCCReference Include="uPlanLog.pas"/>
         <DCCReference Include="uAppConfig.pas"/>
         <DCCReference Include="uDBConfig.pas">
             <Form>frmDBConfig</Form>
@@ -485,16 +468,6 @@
         <DCCReference Include="uModalOverlayAuto.pas"/>
         <DCCReference Include="uHelpAutoInstall.pas"/>
         <DCCReference Include="uKPICard.pas"/>
-        <DCCReference Include="uDemoMode.pas"/>
-        <DCCReference Include="uDashWidgets.pas"/>
-        <DCCReference Include="uDashboardConfig.pas">
-            <Form>frmDashboardConfig</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uKPIDetail.pas">
-            <Form>frmKPIDetail</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
         <DCCReference Include="uNodeLayoutEditor.pas">
             <Form>frmNodeLayoutEditor</Form>
             <FormType>dfm</FormType>
@@ -510,10 +483,6 @@
         </DCCReference>
         <DCCReference Include="uAlertasViewer.pas">
             <Form>frmAlertasViewer</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="uGanttShortcuts.pas">
-            <Form>frmGanttShortcuts</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="uAlertConfig.pas">
@@ -542,13 +511,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

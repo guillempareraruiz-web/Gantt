@@ -1347,8 +1347,10 @@ begin
     SortInputsByRuleSet(Copia, RS, dtFechaBase.Date);
 
     Y := 66;
-    GpPanel(G, 12, Y, W, 220, CLR_PANEL, CLR_PANEL_BD);
     NShow := Min(7, Length(Copia));
+    // Panel alto suficiente para los NShow nodos + la linea "... y N mas":
+    // 12 (margen sup) + NShow*28 (nodos) + 26 (linea resumen + margen inf).
+    GpPanel(G, 12, Y, W, 12 + NShow * 28 + 26, CLR_PANEL, CLR_PANEL_BD);
     for I := 0 to NShow - 1 do
     begin
       GpNodo(G, 28, Y + 12 + I * 28, 40, 22,
@@ -1366,12 +1368,13 @@ begin
     end;
     if Length(Copia) > NShow then
       GpText(G, Format('... y %d operaciones m'#225's', [Length(Copia) - NShow]),
-        80, Y + 16 + NShow * 28, CLR_TXT_SOFT, 9);
+        80, Y + 14 + NShow * 28, CLR_TXT_SOFT, 9);
 
+    // Texto de ayuda por DEBAJO del panel (panel alto = 12+NShow*28+26).
     GpText(G,
       'Usa "Configurar desempates..." para afinar c'#243'mo se rompen los empates '+
       'y los overrides por centro.',
-      12, Y + 232, CLR_TXT_SOFT, 9);
+      12, Y + (12 + NShow * 28 + 26) + 10, CLR_TXT_SOFT, 9);
   finally
     G.Free;
   end;

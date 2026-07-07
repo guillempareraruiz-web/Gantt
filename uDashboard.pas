@@ -2627,20 +2627,24 @@ end;
 function TfrmDashboard.SerieKPI(const AColumn: string;
   const AValorActual: Double): TArray<Double>;
 var
-  Seed, I: Integer;
+  Seed: Cardinal;
+  I: Integer;
 begin
   if DemoMode.Active then
   begin
     // Seed determinista por nombre de columna: cada KPI tiene una forma de
     // sparkline distinta (no todas iguales), pero estable entre refrescos.
+    // El acumulador es Cardinal (sin signo): "Seed * 31" puede rebasar 2^31 y
+    // con {$Q+} (Debug) eso lanzaba EIntOverflow ("Integer overflow"); en
+    // Cardinal el wrap-around es valido y el hash sigue siendo determinista.
     Seed := 0;
     for I := 1 to Length(AColumn) do
-      Seed := (Seed * 31 + Ord(AColumn[I])) and $7FFFFFFF;
+      Seed := (Seed * 31 + Cardinal(Ord(AColumn[I]))) and $7FFFFFFF;
     // Nº de puntos demo segun el periodo (acotado para no saturar la sparkline).
     var Pts: Integer := RangoDiasEfectivo;
     if Pts < 7 then Pts := 7;
     if Pts > 30 then Pts := 30;
-    Result := DemoSerieHaciaValor(AValorActual, Pts, 0.22, Seed);
+    Result := DemoSerieHaciaValor(AValorActual, Pts, 0.22, Integer(Seed));
   end
   else
     Result := LoadMetricSerie(AColumn);
@@ -2889,13 +2893,13 @@ begin
       function(ADias: Integer): TKPIRangoData
       var
         DiasEf, K, I: Integer;
-        Seed: Integer;
+        Seed: Cardinal;   // sin signo: "Seed * 31" puede rebasar 2^31 (evita EIntOverflow con {$Q+})
       begin
         if ADias = RANGO_SEMANA then DiasEf := DayOfTheWeek(Date) else DiasEf := ADias;
         if DiasEf < 2 then DiasEf := 7;
         Seed := 0;
-        for K := 1 to Length(KeyD) do Seed := (Seed * 31 + Ord(KeyD[K])) and $7FFFFFFF;
-        Result.Series := DemoSerieHaciaValor(ValD, DiasEf, 0.22, Seed);
+        for K := 1 to Length(KeyD) do Seed := (Seed * 31 + Cardinal(Ord(KeyD[K]))) and $7FFFFFFF;
+        Result.Series := DemoSerieHaciaValor(ValD, DiasEf, 0.22, Integer(Seed));
         // Fechas ficticias: los ultimos DiasEf dias hasta hoy.
         SetLength(Result.Fechas, Length(Result.Series));
         for I := 0 to High(Result.Series) do

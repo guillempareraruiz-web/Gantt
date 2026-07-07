@@ -702,6 +702,10 @@ var
   CircleText: string;
   TextCircleBrush: ID2D1SolidColorBrush;
 begin
+  // Guarda de seguridad: fila fuera de rango -> no pintar (evita GPF cuando, en
+  // modo compactar + panning, la lista de filas queda vacia o desincronizada).
+  if (RowIndex < 0) or (RowIndex > High(FRows)) then Exit;
+
   iCentreId := Row.CentreId;
   iCentreIdx := FindCentreIndexById(iCentreId);
 

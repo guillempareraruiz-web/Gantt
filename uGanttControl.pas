@@ -749,6 +749,13 @@ type
     function ShiftLeftAllImpactedSequentialFromDate( const AFromTime: TDateTime; const MinGapMin: Integer): Boolean;
     function ShiftLeftAllImpactedSequentialFromNode( const ANodeIdx: Integer;  const MinGapMin: Integer): Boolean;
     function CompactOFFromNode(const ANodeIdx: Integer; const MinGapMin: Integer; const AllOF: Boolean = False; const bForce: Boolean = False): Boolean;
+    // Compacta (left-shift) SOLO los nodos cuyos indices se pasan en ASelIdx,
+    // dejando FIJOS todos los demas (modo "ventana"): cada seleccionado se
+    // acerca a la izquierda hasta topar con un nodo NO seleccionado, con un
+    // predecessor logico, con el calendario o con la fecha de bloqueo. Nunca
+    // crea solapamientos: si un nodo no cabe sin solapar, se queda donde estaba
+    // (modo conservador). Todo en memoria (sin BD). Devuelve nº de nodos movidos.
+    function CompactSelection(const ASelIdx: TArray<Integer>; const MinGapMin: Integer): Integer;
     function BackwardScheduleOF(const ANodeIdx: Integer; const AEndDate: TDateTime; const MinGapMin: Integer; const bForce: Boolean = False): Boolean;
 
     function CompactOTFromNode(const ANodeIdx: Integer; const MinGapMin: Integer; const AllOT: Boolean = False; const bForce: Boolean = False): Boolean;
@@ -768,7 +775,15 @@ type
     function ReplanAllFromDate(const AFromDate: TDateTime; const MinGapMin: Integer;
       out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
     function ReplanAllFromDateV2(const AFromDate: TDateTime; const MinGapMin: Integer;
-      out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
+      out ElapsedMs: Int64; out MovedCount: Integer;
+      const ACutoff: TDateTime = 0): Boolean;
+    // "Mover todo a partir de este punto hasta una fecha": replanifica los nodos
+    // que EMPIEZAN a partir de ACutoff (los anteriores quedan fijos), haciendo que
+    // el bloque arranque en ADestino y recalculando cada nodo con el calendario
+    // vigente en las nuevas fechas (dependencias + colisiones + bloqueo). Devuelve
+    // nº de nodos movidos.
+    function MoverTodoDesde(const ACutoff, ADestino: TDateTime;
+      const MinGapMin: Integer; out MovedCount: Integer): Boolean;
 
     procedure SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean = True);
     procedure ScrollNodeIntoView(const NodeIndex: Integer; const Center: Boolean = True);
@@ -5718,9 +5733,19 @@ begin
 end;
 
 function TGanttControl.ReplanAllFromDateV2(const AFromDate: TDateTime;
-  const MinGapMin: Integer; out ElapsedMs: Int64; out MovedCount: Integer): Boolean;
+  const MinGapMin: Integer; out ElapsedMs: Int64; out MovedCount: Integer;
+  const ACutoff: TDateTime = 0): Boolean;
 {  Versió optimitzada: elimina cerques lineals repetides usant diccionaris
-   pre-construïts i substitueix Queue.Insert per un heap binari. }
+   pre-construïts i substitueix Queue.Insert per un heap binari.
+
+   ACutoff (opcional): si > 0, NOMÉS es replanifiquen els nodes que comencen a
+   partir d'aquesta data (StartTime >= ACutoff). Els anteriors queden FIXOS i:
+     - la seva ocupació se sembra a CentreLast / CentreLaneOcc perquè el bloc
+       replanificat no els trepitgi;
+     - si un node fix és predecessor d'un node replanificat, la seva restricció
+       de data (DepMinStart) s'aplica com a data mínima, però NO com a aresta del
+       graf (no afecta InDegree) -> el node replanificat no queda bloquejat.
+   Amb ACutoff = 0 el comportament és l'original (replanifica tot). }
 type
   TReplanRec = record
     NodeIdx: Integer;
@@ -5729,6 +5754,7 @@ type
     InDegree: Integer;
     CentreId: Integer;
     DurationMin: Double;
+    FixedPredMinStart: TDateTime; // restriccio de predecessors FIXOS (fora del cutoff)
   end;
   TCentreInfo = record
     IsSeq: Boolean;
@@ -5836,9 +5862,14 @@ begin
       end;
 
       // ─── 2) Construir Recs ───
+      //   Amb ACutoff > 0: els nodes que comencen ABANS del tall NO es replanifiquen
+      //   (queden fixos). No entren a Recs, pero sembren l'ocupacio del seu centre
+      //   perque el bloc replanificat no els trepitgi.
       N := 0;
       SetLength(Recs, Length(FNodes));
       NodeIdToRecIdx := TDictionary<Integer, Integer>.Create(Length(FNodes));
+      CentreLast := TDictionary<Integer, TDateTime>.Create;
+      CentreLaneOcc := TDictionary<Integer, TLaneOccupancy>.Create;
       try
         for I := 0 to High(FNodes) do
         begin
@@ -5846,12 +5877,43 @@ begin
           if FNodes[I].DataId = 0 then Continue;
           if not FNodeRepo.TryGetById(FNodes[I].DataId, D) then Continue;
 
+          // Node FIX (anterior al tall): sembra ocupacio i no entra al graf.
+          if (ACutoff > 0) and (FNodes[I].StartTime < ACutoff) then
+          begin
+            CentreId := FNodes[I].CentreId;
+            if CentreInfoMap.TryGetValue(CentreId, CI) then
+            begin
+              if CI.IsSeq then
+              begin
+                if (not CentreLast.TryGetValue(CentreId, PrevEnd)) or
+                   (FNodes[I].EndTime > PrevEnd) then
+                  CentreLast.AddOrSetValue(CentreId, FNodes[I].EndTime);
+              end
+              else
+              begin
+                if not CentreLaneOcc.TryGetValue(CentreId, Occ) then
+                begin
+                  Occ := TLaneOccupancy.Create(CI.MaxLanes);
+                  CentreLaneOcc.Add(CentreId, Occ);
+                end;
+                // Col·locar el fix a la primera lane lliure (replica el repartiment).
+                var seedLane: Integer := 0;
+                while ((CI.MaxLanes = 0) or (seedLane < CI.MaxLanes - 1)) and
+                      Occ.Collides(seedLane, FNodes[I].StartTime, FNodes[I].EndTime) do
+                  Inc(seedLane);
+                Occ.Add(seedLane, FNodes[I].StartTime, FNodes[I].EndTime);
+              end;
+            end;
+            Continue;
+          end;
+
           Recs[N].NodeIdx := I;
           Recs[N].FechaEntrega := D.FechaEntrega;
           Recs[N].Prioridad := D.Prioridad;
           Recs[N].InDegree := 0;
           Recs[N].CentreId := FNodes[I].CentreId;
           Recs[N].DurationMin := FNodes[I].DurationMin;
+          Recs[N].FixedPredMinStart := 0;
           NodeIdToRecIdx.AddOrSetValue(FNodes[I].Id, N);
           Inc(N);
         end;
@@ -5864,8 +5926,26 @@ begin
         for I := 0 to High(FLinks) do
         begin
           var FromRec, ToRec: Integer;
-          if not NodeIdToRecIdx.TryGetValue(FLinks[I].FromNodeId, FromRec) then Continue;
           if not NodeIdToRecIdx.TryGetValue(FLinks[I].ToNodeId, ToRec) then Continue;
+
+          // Predecessor FIX (fora del cutoff): no és aresta del graf (no compta
+          // InDegree, si no el successor quedaria bloquejat al heap), pero SÍ imposa
+          // data mínima. Acumulem la seva restricció a FixedPredMinStart.
+          if not NodeIdToRecIdx.TryGetValue(FLinks[I].FromNodeId, FromRec) then
+          begin
+            var PredIdx := FindNodeIndexById(FLinks[I].FromNodeId);
+            if PredIdx >= 0 then
+            begin
+              var Pct2: Double := FLinks[I].PorcentajeDependencia;
+              if Pct2 < 0 then Pct2 := 0;
+              if Pct2 > 100 then Pct2 := 100;
+              var FixMin: TDateTime := FNodes[PredIdx].StartTime +
+                (FNodes[PredIdx].EndTime - FNodes[PredIdx].StartTime) * (Pct2 / 100.0);
+              if FixMin > Recs[ToRec].FixedPredMinStart then
+                Recs[ToRec].FixedPredMinStart := FixMin;
+            end;
+            Continue;
+          end;
 
           // Afegir successor
           var SLen := Length(Succs[FromRec]);
@@ -5882,9 +5962,9 @@ begin
         end;
 
         // ─── 4) Kahn amb min-heap ───
+        //   CentreLast / CentreLaneOcc ja s'han creat i sembrat amb els nodes fixos
+        //   (si ACutoff > 0) a la secció 2.
         Heap := TList<Integer>.Create(N);
-        CentreLast := TDictionary<Integer, TDateTime>.Create;
-        CentreLaneOcc := TDictionary<Integer, TLaneOccupancy>.Create;
         try
           HeapSize := 0;
           for I := 0 to N - 1 do
@@ -5896,8 +5976,10 @@ begin
             RecIdx := HeapPop;
             CentreId := Recs[RecIdx].CentreId;
 
-            // a) Data mínima
+            // a) Data mínima: destí, o restricció de predecessors FIXOS si és més tard.
             NewStart := AFromDate;
+            if Recs[RecIdx].FixedPredMinStart > NewStart then
+              NewStart := Recs[RecIdx].FixedPredMinStart;
 
             // b) Dependències (usant Preds[] pre-construït)
             for I := 0 to High(Preds[RecIdx]) do
@@ -5987,15 +6069,15 @@ begin
           end;
 
         finally
-          CentreLast.Free;
-          for Occ in CentreLaneOcc.Values do
-            Occ.Free;
-          CentreLaneOcc.Free;
           Heap.Free;
         end;
 
       finally
         NodeIdToRecIdx.Free;
+        CentreLast.Free;
+        for Occ in CentreLaneOcc.Values do
+          Occ.Free;
+        CentreLaneOcc.Free;
       end;
 
     finally
@@ -6014,6 +6096,15 @@ begin
     SW.Stop;
     ElapsedMs := SW.ElapsedMilliseconds;
   end;
+end;
+
+function TGanttControl.MoverTodoDesde(const ACutoff, ADestino: TDateTime;
+  const MinGapMin: Integer; out MovedCount: Integer): Boolean;
+var
+  Elapsed: Int64;
+begin
+  MovedCount := 0;
+  Result := ReplanAllFromDateV2(ADestino, MinGapMin, Elapsed, MovedCount, ACutoff);
 end;
 
 procedure TGanttControl.SelectNodeByIndex(const NodeIndex: Integer; const EnsureVisible: Boolean);
@@ -12570,6 +12661,175 @@ begin
   end;
 
   if Result then
+  begin
+    RebuildAfterModelChange(False);
+    Invalidate;
+  end;
+end;
+
+
+function TGanttControl.CompactSelection(
+  const ASelIdx: TArray<Integer>;
+  const MinGapMin: Integer): Integer;
+{
+  Compacta (left-shift) SOLO los nodos seleccionados, dejando fijos los demas.
+
+  Estrategia "PRO", todo en memoria (sin BD, una sola pasada):
+
+  1) Marcamos que nodos estan seleccionados (SelMark) para distinguir movibles de
+     anclas fijas. Los NO seleccionados son ocupacion DURA que no se toca.
+
+  2) Por cada centro implicado creamos UN TLaneOccupancy (el mismo motor de
+     colisiones que usa el layout): un centro secuencial es simplemente MaxLanes=1,
+     uno con solapamiento es MaxLanes=MaxLaneCount. Lo SEMBRAMOS con la ocupacion
+     de TODOS los nodos NO seleccionados de ese centro -> son la "ventana" fija.
+
+  3) Procesamos los seleccionados de IZQUIERDA a DERECHA (por StartTime). Para cada
+     uno calculamos desiredStart = max(predecesores logicos, calendario, bloqueo) y
+     pedimos a la ocupacion el primer hueco libre a la derecha de desiredStart donde
+     quepa entero. Como conservador (nunca a la derecha, nunca solapando): solo lo
+     movemos si el hueco encontrado es ANTERIOR a su StartTime actual; si no cabe
+     mas a la izquierda, se queda donde estaba y su posicion actual pasa a ser
+     ocupacion para los siguientes.
+
+  Devuelve el numero de nodos efectivamente movidos.
+
+  MinGapMin: reservado para separacion minima entre operaciones (aun no aplicado;
+  las llamadas actuales pasan 0, igual que CompactOF/OT). Se mantiene en la firma
+  por coherencia con la familia Compact*.
+}
+var
+  SelMark: array of Boolean;
+  Occ: TDictionary<Integer, TLaneOccupancy>;
+  Order: TArray<Integer>;
+  i, idx, centreId, moved: Integer;
+  O: TLaneOccupancy;
+  predMin, desiredStart, placedStart: TDateTime;
+  hasPred: Boolean;
+  cal: TCentreCalendar;
+
+  // Ocupacion (o la crea) para un centro, sembrada con sus nodos NO seleccionados.
+  function GetOcc(const ACentreId: Integer): TLaneOccupancy;
+  var
+    k, cIdx, maxL: Integer;
+  begin
+    if Occ.TryGetValue(ACentreId, Result) then Exit;
+
+    if IsCentreSequecial(ACentreId) then
+      maxL := 1
+    else
+    begin
+      maxL := 0;
+      if FCentreIdToIdx.TryGetValue(ACentreId, cIdx) then
+        maxL := FCentres[cIdx].MaxLaneCount;
+    end;
+    Result := TLaneOccupancy.Create(maxL);
+    Occ.Add(ACentreId, Result);
+
+    // Sembrar con la ocupacion FIJA (nodos no seleccionados del centro).
+    for k := 0 to High(FNodes) do
+    begin
+      if SelMark[k] then Continue;
+      if FNodes[k].CentreId <> ACentreId then Continue;
+      // Lane concreta no importa para el sembrado secuencial (MaxLanes=1);
+      // para no-secuencial repartimos por lane 0..MaxLanes-1 buscando hueco.
+      if maxL = 1 then
+        Result.Add(0, FNodes[k].StartTime, FNodes[k].EndTime)
+      else
+      begin
+        // Colocar el fijo en la primera lane donde no colisione (respeta el
+        // reparto real que hace el layout sin necesidad de recalcularlo).
+        var lane := 0;
+        while (lane < maxL) and
+              Result.Collides(lane, FNodes[k].StartTime, FNodes[k].EndTime) do
+          Inc(lane);
+        if lane >= maxL then lane := maxL - 1;  // saturado: apilar en la ultima
+        Result.Add(lane, FNodes[k].StartTime, FNodes[k].EndTime);
+      end;
+    end;
+  end;
+
+begin
+  Result := 0;
+  moved := 0;
+  if Length(ASelIdx) = 0 then Exit;
+
+  SetLength(SelMark, Length(FNodes));
+  for i := 0 to High(SelMark) do SelMark[i] := False;
+
+  // Marcar seleccion valida y movible; construir la lista a procesar.
+  SetLength(Order, 0);
+  for i := 0 to High(ASelIdx) do
+  begin
+    idx := ASelIdx[i];
+    if (idx < 0) or (idx > High(FNodes)) then Continue;
+    if SelMark[idx] then Continue;          // duplicado
+    SelMark[idx] := True;
+    if not IsNodeMovable(idx) then Continue; // disabled / consolidado -> queda fijo
+    SetLength(Order, Length(Order) + 1);
+    Order[High(Order)] := idx;
+  end;
+  if Length(Order) = 0 then Exit;
+
+  // Ordenar por StartTime ascendente: compactar es procesar de izquierda a derecha.
+  TArray.Sort<Integer>(Order,
+    TComparer<Integer>.Construct(
+      function(const L, R: Integer): Integer
+      begin
+        Result := CompareDateTime(FNodes[L].StartTime, FNodes[R].StartTime);
+        if Result = 0 then
+          Result := CompareValue(L, R);  // estable
+      end));
+
+  Occ := TDictionary<Integer, TLaneOccupancy>.Create;
+  try
+    for i := 0 to High(Order) do
+    begin
+      idx := Order[i];
+      centreId := FNodes[idx].CentreId;
+      O := GetOcc(centreId);
+
+      // 1) desiredStart minimo por predecesores logicos.
+      desiredStart := 0;
+      predMin := GetMinStartAllowedByPredecessors(idx, hasPred);
+      if hasPred then
+        desiredStart := predMin;
+
+      // 2) Aplicar bloqueo + calendario al minimo deseado.
+      if (FFechaBloqueo <> 0) and (desiredStart < FFechaBloqueo) then
+        desiredStart := FFechaBloqueo;
+      cal := GetCalendar(centreId);
+      if cal <> nil then
+        desiredStart := cal.NextWorkingTime(desiredStart);
+
+      // 3) Primer hueco libre a la derecha de desiredStart donde quepa entero.
+      //    FindFreeLaneOrShift avanza placedStart hasta el primer hueco valido.
+      placedStart := desiredStart;
+      O.FindFreeLaneOrShift(placedStart, FNodes[idx].DurationMin, centreId, Self);
+
+      // 4) Conservador: solo mover si acercamos (placedStart < actual). Si no
+      //    cabe mas a la izquierda, el nodo se queda donde esta.
+      if placedStart < FNodes[idx].StartTime - OneSecond then
+      begin
+        if MoveNodeKeepingDuration(idx, placedStart) then
+          Inc(moved);
+      end;
+
+      // 5) Registrar la ocupacion en la posicion REAL donde queda el nodo (movido
+      //    o no), en una lane que no colisione, para los siguientes del centro.
+      var lane := 0;
+      while (lane < O.MaxLanes - 1) and
+            O.Collides(lane, FNodes[idx].StartTime, FNodes[idx].EndTime) do
+        Inc(lane);
+      O.Add(lane, FNodes[idx].StartTime, FNodes[idx].EndTime);
+    end;
+  finally
+    for O in Occ.Values do O.Free;
+    Occ.Free;
+  end;
+
+  Result := moved;
+  if moved > 0 then
   begin
     RebuildAfterModelChange(False);
     Invalidate;

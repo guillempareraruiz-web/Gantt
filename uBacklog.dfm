@@ -16,9 +16,6 @@ object frmBacklog: TfrmBacklog
   OnDestroy = FormDestroy
   OnShow = FormShow
   PixelsPerInch = 96
-  DesignSize = (
-    1296
-    719)
   TextHeight = 15
   object pnlHeader: TPanel
     Left = 0
@@ -714,6 +711,7 @@ object frmBacklog: TfrmBacklog
       OptionsData.Inserting = False
       OptionsSelection.CellSelect = False
       OptionsSelection.MultiSelect = True
+      OptionsSelection.MultiSelectMode = msmPersistent
       OptionsView.Indicator = True
     end
     object lvBacklog: TcxGridLevel
@@ -760,10 +758,10 @@ object frmBacklog: TfrmBacklog
     object btnDesplanificarSel: TButton
       Left = 702
       Top = 6
-      Width = 148
+      Width = 93
       Height = 28
       Anchors = [akTop, akRight]
-      Caption = 'Desplanificar selecci'#243'n'
+      Caption = 'Desplanificar sel'
       TabOrder = 0
       Visible = False
       OnClick = btnDesplanificarSelClick
@@ -782,17 +780,17 @@ object frmBacklog: TfrmBacklog
         'Nivel 3 (OP)')
     end
     object btnPlanificar: TButton
-      Left = 107
+      Left = 85
       Top = 6
-      Width = 133
+      Width = 92
       Height = 28
-      Caption = 'Planificar selecci'#243'n...'
+      Caption = 'Planificar sel...'
       Default = True
       TabOrder = 1
       OnClick = btnPlanificarClick
     end
     object btnPlanificarExpress: TButton
-      Left = 244
+      Left = 176
       Top = 6
       Width = 130
       Height = 28
@@ -801,24 +799,29 @@ object frmBacklog: TfrmBacklog
       OnClick = btnPlanificarExpressClick
     end
     object btnSyncErp: TcxButton
-      Left = 380
+      Left = 308
       Top = 6
-      Width = 121
+      Width = 101
       Height = 28
       Caption = 'Sincronizar ERP...'
-      TabOrder = 3
+      TabOrder = 9
       OnClick = btnSyncErpClick
     end
-    object btnDesplanificarTodo: TButton
-      Left = 856
-      Top = 6
-      Width = 121
-      Height = 28
+    object cmbPersistMethod: TComboBox
+      Left = 894
+      Top = 7
+      Width = 115
+      Height = 23
+      Style = csDropDownList
       Anchors = [akTop, akRight]
-      Caption = 'Desplanificar TODO'
-      TabOrder = 3
+      ItemIndex = 0
+      TabOrder = 10
+      Text = 'Persist. M5 (bulk)'
       Visible = False
-      OnClick = btnDesplanificarTodoClick
+      Items.Strings = (
+        'Persist. M5 (bulk)'
+        'Persist. M4 (bulk ADO)'
+        'Persist. M1 (clasica)')
     end
     object btnRecargar: TcxButton
       Left = 12
@@ -881,8 +884,8 @@ object frmBacklog: TfrmBacklog
       TabOrder = 6
     end
     object chkVerImpacto: TcxCheckBox
-      Left = 996
-      Top = 12
+      Left = 1036
+      Top = 11
       Anchors = [akTop, akRight]
       Caption = 'Panel impacto'
       Properties.OnChange = chkVerImpactoPropertiesChange
@@ -901,8 +904,8 @@ object frmBacklog: TfrmBacklog
       TabOrder = 7
     end
     object chkVerFiltros: TcxCheckBox
-      Left = 1108
-      Top = 12
+      Left = 1143
+      Top = 11
       Anchors = [akTop, akRight]
       Caption = 'Filtros'
       Properties.OnChange = chkVerFiltrosPropertiesChange
@@ -921,26 +924,6 @@ object frmBacklog: TfrmBacklog
       StyleReadOnly.LookAndFeel.SkinName = 'DevExpressDarkStyle'
       TabOrder = 8
     end
-  end
-  object btnSelectAll: TButton
-    Left = 1065
-    Top = 116
-    Width = 102
-    Height = 26
-    Anchors = [akTop, akRight]
-    Caption = 'Seleccionar todo'
-    TabOrder = 6
-    OnClick = btnSelectAllClick
-  end
-  object btnDeselectAll: TButton
-    Left = 1173
-    Top = 116
-    Width = 114
-    Height = 26
-    Anchors = [akTop, akRight]
-    Caption = 'Deseleccionar todo'
-    TabOrder = 7
-    OnClick = btnDeselectAllClick
   end
   object PopupMenu1: TPopupMenu
     Left = 528

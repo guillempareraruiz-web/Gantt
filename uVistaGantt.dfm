@@ -1575,7 +1575,7 @@ object frmVistaGantt: TfrmVistaGantt
           Caption = '0'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
-          Font.Height = -15
+          Font.Height = -12
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
@@ -1634,7 +1634,7 @@ object frmVistaGantt: TfrmVistaGantt
           Caption = '0'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
-          Font.Height = -15
+          Font.Height = -12
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
@@ -1693,7 +1693,7 @@ object frmVistaGantt: TfrmVistaGantt
           Caption = '0'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
-          Font.Height = -15
+          Font.Height = -12
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
@@ -1770,7 +1770,7 @@ object frmVistaGantt: TfrmVistaGantt
           Caption = '23 / 456'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWhite
-          Font.Height = -15
+          Font.Height = -12
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
@@ -1833,7 +1833,7 @@ object frmVistaGantt: TfrmVistaGantt
           Caption = '13'
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clBlack
-          Font.Height = -15
+          Font.Height = -12
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
@@ -2866,6 +2866,10 @@ object frmVistaGantt: TfrmVistaGantt
       Caption = 'Shift Row all impact'
       OnClick = ShiftRowallimpact1Click
     end
+    object miMoverTodoDesde: TMenuItem
+      Caption = 'Mover todo a partir de este punto...'
+      OnClick = miMoverTodoDesdeClick
+    end
     object N2: TMenuItem
       Caption = '-'
     end
@@ -3041,6 +3045,13 @@ object frmVistaGantt: TfrmVistaGantt
         HelpContext = 1
         OnClick = otalaOT1Click
       end
+    end
+    object SepCompactSel1: TMenuItem
+      Caption = '-'
+    end
+    object miCompactarSeleccion: TMenuItem
+      Caption = 'Compactar seleccion'
+      OnClick = miCompactarSeleccionClick
     end
     object ShiftRow2: TMenuItem
       Caption = 'ShiftRow'
