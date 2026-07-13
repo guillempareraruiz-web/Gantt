@@ -1605,6 +1605,7 @@ var
   Op: TOperario;
   Pair: TPair<Integer, Integer>;
   N, OpId: Integer;
+  D: TNodeData;
 begin
   FOperarioLabelCache.Clear;
   if not Assigned(FOperariosRepo) then Exit;
@@ -1639,6 +1640,19 @@ begin
           FOperarioLabelCache.Add(Pair.Key, IntToStr(OpId));
       end;
     end;
+
+    // Sincronizar OperariosAsignados de cada NodeData con el recuento REAL de
+    // asignaciones. Es la fuente de verdad del color de la vista gvmOperarios
+    // (rojo/amarillo/verde). El campo persistido en FS_PL_NodeData se desincroniza
+    // facilmente (p.ej. planes Demo lo dejan a 0 aunque haya operario asignado),
+    // asi que aqui lo recalculamos en RAM para que color y rotulo sean coherentes.
+    for Pair in CountByNode do
+      if DMPlanner.NodeDataRepo.TryGetById(Pair.Key, D) then
+        if D.OperariosAsignados <> Pair.Value then
+        begin
+          D.OperariosAsignados := Pair.Value;
+          DMPlanner.NodeDataRepo.AddOrUpdate(D);
+        end;
   finally
     CountByNode.Free;
     FirstOpByNode.Free;

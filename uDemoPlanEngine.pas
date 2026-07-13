@@ -127,6 +127,7 @@ type
     FechaEntrega, FechaNecesaria: TDateTime;
     ArtIdx, CliIdx: Integer;
     OperatorId: Integer;        // -1 = sin operario
+    NumOpsAsig: Integer;        // operarios efectivamente asignados (0 o 1 en Demo)
     PredIdx: Integer;           // indice de la OP predecesora en el array (-1 = ninguna)
     // Resultado de la planificacion (en RAM):
     Ini, Fin: TDateTime;
@@ -388,6 +389,14 @@ var
           else
             Ops[Idx].OperatorId := -1;
 
+          // OperariosAsignados: Demo asigna como mucho 1 operario por OP. Este
+          // campo alimenta el color de la vista Operarios (rojo/amarillo/verde);
+          // si no se persiste, todos los nodos saldrian rojos.
+          if Ops[Idx].OperatorId > 0 then
+            Ops[Idx].NumOpsAsig := 1
+          else
+            Ops[Idx].NumOpsAsig := 0;
+
           // Dependencia FS con la OP anterior de la misma OT.
           if AParams.GenerarDependencias and (iOP > 1) then
             Ops[Idx].PredIdx := Idx - 1
@@ -548,6 +557,7 @@ var
       IntToStr(O.NumOF) + ', ' + IntToStr(O.NumPedido) + ', ' + QStr(IntToStr(O.NumTrabajo)) + ', ' +
       FloatToStr(O.DurReal, Inv) + ', ' + FloatToStr(O.DurOriginal, Inv) + ', ' +
       IntToStr(O.UnidTotal) + ', ' + IntToStr(O.UnidHechas) + ', ' + IntToStr(O.NumOpsNec) +
+      ', ' + IntToStr(O.NumOpsAsig) +
       ', 15251072, 11166760, ' + IntToStr(O.Prioridad) + ', ' +
       DT(O.FechaEntrega) + ', ' + DT(O.FechaNecesaria) + ', ' +
       QStr(ARTS[O.ArtIdx]) + ', ' + QStr(DESCS[O.ArtIdx]) + ', ' + QStr(CLIS[O.CliIdx]) + ')');
@@ -582,8 +592,8 @@ var
       NNode := 0;
       EjecutarMultifila('INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, ' +
         'NumeroOF, NumeroPedido, NumeroTrabajo, DuracionMin, DuracionMinOriginal, ' +
-        'UnidadesAFabricar, UnidadesFabricadas, OperariosNecesarios, ColorFondoOp, ' +
-        'ColorBordeOp, Prioridad, FechaEntrega, FechaNecesaria, CodigoArticulo, ' +
+        'UnidadesAFabricar, UnidadesFabricadas, OperariosNecesarios, OperariosAsignados, ' +
+        'ColorFondoOp, ColorBordeOp, Prioridad, FechaEntrega, FechaNecesaria, CodigoArticulo, ' +
         'DescripcionArticulo, CodigoCliente) VALUES ', SbData, False);
       NData := 0;
       EjecutarMultifila('INSERT INTO FS_PL_OperatorAssignment (CodigoEmpresa, ' +
@@ -728,6 +738,7 @@ var
           WData.Write(IntToStr(O.UnidTotal)); WData.Write('|');
           WData.Write(IntToStr(O.UnidHechas)); WData.Write('|');
           WData.Write(IntToStr(O.NumOpsNec)); WData.Write('|');
+          WData.Write(IntToStr(O.NumOpsAsig)); WData.Write('|');
           WData.Write('15251072|11166760|');
           WData.Write(IntToStr(O.Prioridad)); WData.Write('|');
           WData.Write(DTf(O.FechaEntrega)); WData.Write('|');
@@ -859,6 +870,7 @@ var
           RsData.FieldByName('UnidadesAFabricar').AsFloat := O.UnidTotal;
           RsData.FieldByName('UnidadesFabricadas').AsFloat := O.UnidHechas;
           RsData.FieldByName('OperariosNecesarios').AsInteger := O.NumOpsNec;
+          RsData.FieldByName('OperariosAsignados').AsInteger := O.NumOpsAsig;
           RsData.FieldByName('ColorFondoOp').AsInteger := 15251072;
           RsData.FieldByName('ColorBordeOp').AsInteger := 11166760;
           RsData.FieldByName('Prioridad').AsInteger := O.Prioridad;
@@ -915,7 +927,7 @@ var
       'CREATE TABLE #tmpData (CodigoEmpresa INT, NodeId INT, Operacion NVARCHAR(255), ' +
       '  NumeroOF INT, NumeroPedido INT, NumeroTrabajo NVARCHAR(50), DuracionMin DECIMAL(12,2), ' +
       '  DuracionMinOriginal DECIMAL(12,2), UnidadesAFabricar DECIMAL(14,4), ' +
-      '  UnidadesFabricadas DECIMAL(14,4), OperariosNecesarios INT, ColorFondoOp INT, ' +
+      '  UnidadesFabricadas DECIMAL(14,4), OperariosNecesarios INT, OperariosAsignados INT, ColorFondoOp INT, ' +
       '  ColorBordeOp INT, Prioridad INT, FechaEntrega DATETIME, FechaNecesaria DATETIME, ' +
       '  CodigoArticulo NVARCHAR(255), DescripcionArticulo NVARCHAR(255), CodigoCliente NVARCHAR(255)); ' +
       'CREATE TABLE #tmpAsig (CodigoEmpresa INT, OperatorId INT, NodeId INT, Horas DECIMAL(12,4)); ' +
@@ -969,10 +981,10 @@ var
     ExecNoRec(
       'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, NumeroOF, NumeroPedido, ' +
       '  NumeroTrabajo, DuracionMin, DuracionMinOriginal, UnidadesAFabricar, UnidadesFabricadas, ' +
-      '  OperariosNecesarios, ColorFondoOp, ColorBordeOp, Prioridad, FechaEntrega, FechaNecesaria, ' +
+      '  OperariosNecesarios, OperariosAsignados, ColorFondoOp, ColorBordeOp, Prioridad, FechaEntrega, FechaNecesaria, ' +
       '  CodigoArticulo, DescripcionArticulo, CodigoCliente) ' +
       'SELECT CodigoEmpresa, NodeId, Operacion, NumeroOF, NumeroPedido, NumeroTrabajo, DuracionMin, ' +
-      '  DuracionMinOriginal, UnidadesAFabricar, UnidadesFabricadas, OperariosNecesarios, ColorFondoOp, ' +
+      '  DuracionMinOriginal, UnidadesAFabricar, UnidadesFabricadas, OperariosNecesarios, OperariosAsignados, ColorFondoOp, ' +
       '  ColorBordeOp, Prioridad, FechaEntrega, FechaNecesaria, CodigoArticulo, DescripcionArticulo, ' +
       '  CodigoCliente FROM #tmpData;');
 

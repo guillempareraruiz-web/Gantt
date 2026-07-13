@@ -1,8 +1,9 @@
 object frmGestionOperaris: TfrmGestionOperaris
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Gesti'#243'n de Operarios'
-  ClientHeight = 520
+  ClientHeight = 480
   ClientWidth = 980
   Color = clWhite
   Font.Charset = DEFAULT_CHARSET
@@ -51,93 +52,111 @@ object frmGestionOperaris: TfrmGestionOperaris
       ParentFont = False
     end
   end
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 480
-    Width = 980
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    TabOrder = 1
-    object btnClose: TButton
-      Left = 872
-      Top = 6
-      Width = 100
-      Height = 28
-      Cancel = True
-      Caption = 'Cerrar'
-      TabOrder = 0
-      OnClick = btnCloseClick
-    end
-  end
   object pnlToolbar: TPanel
     Left = 0
     Top = 60
     Width = 980
-    Height = 40
+    Height = 33
     Align = alTop
     BevelOuter = bvNone
-    TabOrder = 2
-    object btnAdd: TButton
-      Left = 4
-      Top = 6
+    Color = 14869218
+    ParentBackground = False
+    TabOrder = 1
+    object btnAdd: TcxButton
+      Left = 6
+      Top = 5
       Width = 80
-      Height = 28
+      Height = 23
       Caption = 'Nuevo'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 0
       OnClick = btnAddClick
     end
-    object btnDel: TButton
-      Left = 88
-      Top = 6
+    object btnDel: TcxButton
+      Left = 90
+      Top = 5
       Width = 80
-      Height = 28
+      Height = 23
       Caption = 'Eliminar'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 1
       OnClick = btnDelClick
     end
-    object btnSave: TButton
-      Left = 172
-      Top = 6
+    object btnSave: TcxButton
+      Left = 174
+      Top = 5
       Width = 120
-      Height = 28
+      Height = 23
       Caption = 'Guardar cambios'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 2
       OnClick = btnSaveClick
     end
-    object btnDepartamentos: TButton
-      Left = 296
-      Top = 6
+    object btnDepartamentos: TcxButton
+      Left = 298
+      Top = 5
       Width = 180
-      Height = 28
+      Height = 23
       Caption = 'Asignar Departamentos...'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 3
       OnClick = btnDepartamentosClick
     end
-    object btnPolivalencia: TButton
-      Left = 480
-      Top = 6
+    object btnPolivalencia: TcxButton
+      Left = 482
+      Top = 5
       Width = 180
-      Height = 28
+      Height = 23
       Caption = 'Polivalencia y coste...'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 4
       OnClick = btnPolivalenciaClick
     end
-    object btnMatriz: TButton
-      Left = 664
-      Top = 6
+    object btnMatriz: TcxButton
+      Left = 666
+      Top = 5
       Width = 160
-      Height = 28
+      Height = 23
       Caption = 'Matriz polivalencia'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 5
       OnClick = btnMatrizClick
     end
-    object btnConfigurarColumnas: TButton
-      Left = 828
-      Top = 6
-      Width = 180
-      Height = 28
+    object btnConfigurarColumnas: TcxButton
+      Left = 830
+      Top = 5
+      Width = 144
+      Height = 23
       Caption = 'Configurar columnas...'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
       TabOrder = 6
       Visible = False
       OnClick = btnConfigurarColumnasClick
@@ -145,11 +164,11 @@ object frmGestionOperaris: TfrmGestionOperaris
   end
   object gridOperaris: TcxGrid
     Left = 0
-    Top = 100
+    Top = 93
     Width = 980
-    Height = 380
+    Height = 387
     Align = alClient
-    TabOrder = 3
+    TabOrder = 2
     object tvOperaris: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
       ScrollbarAnnotations.CustomAnnotations = <>

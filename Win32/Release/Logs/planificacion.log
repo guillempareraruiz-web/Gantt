@@ -1,18 +1,14 @@
-﻿2026-07-07 21:42:17.778  ========================================================
-2026-07-07 21:42:17.778  === PLANIFICAR  -  312 filas seleccionadas, ProjectId=3
-2026-07-07 21:42:17.779  ========================================================
-2026-07-07 21:42:18.096  --- INPUTS recogidos: 1194 operaciones (OP) en 317 ms ---
-2026-07-07 21:42:30.190  
-2026-07-07 21:42:30.191  === COMPARATIVA REGLAS - Compactar=False (Placement=Añadir al final de la cola, HuecoMin=30 min, PctMinNodo=50) ===
-2026-07-07 21:42:30.267    EDD (vencimiento mas proximo) makespan=2079,4 h  ini=07/07 21:42  fin=02/10 13:05  planif=40  retrasos=1154  saturados=0
-2026-07-07 21:42:30.328    SPT (tarea mas corta)        makespan=2079,5 h  ini=07/07 21:42  fin=02/10 13:13  planif=47  retrasos=1147  saturados=0
-2026-07-07 21:42:30.409    LPT (tarea mas larga)        makespan=2079,3 h  ini=07/07 21:42  fin=02/10 13:02  planif=41  retrasos=1153  saturados=0
-2026-07-07 21:42:30.473    FIFO (orden de llegada)      makespan=2079,4 h  ini=07/07 21:42  fin=02/10 13:05  planif=42  retrasos=1152  saturados=0
-2026-07-07 21:42:30.532    Critical Ratio (menos margen relativo) makespan=2079,4 h  ini=07/07 21:42  fin=02/10 13:05  planif=41  retrasos=1153  saturados=0
-2026-07-07 21:42:30.596    Slack (menos holgura)        makespan=2079,4 h  ini=07/07 21:42  fin=02/10 13:05  planif=38  retrasos=1156  saturados=0
-2026-07-07 21:42:30.668    Prioridad ERP                makespan=2079,5 h  ini=07/07 21:42  fin=02/10 13:11  planif=42  retrasos=1152  saturados=0
-2026-07-07 21:42:32.590  OPTIM: warmup de 6 calendarios para [07/07/2026 .. 02/10/2026]
-2026-07-07 21:42:52.717  === OPTIMIZAR SA: 8 hilos, 2431 iter total, 3 mejoras, obj 1,0000 -> 1,0000, 20098 ms | makespan=2079,5 h retrasos=1149 ===
-2026-07-07 22:49:46.937  LOADDATA query (tab=0 nivel=1): 505 ms [BD]
-2026-07-07 22:49:46.979  LOADDATA volcado 312 filas: 42 ms
-2026-07-07 22:49:47.084  LOADDATA pintado+KPIs: 103 ms
+﻿2026-07-13 16:26:08.323  ========================================================
+2026-07-13 16:26:08.325  === TOGGLE TAB -> 0 (0=Pend,1=Planif)
+2026-07-13 16:26:08.326  ========================================================
+2026-07-13 16:26:08.373  LOADDATA query (tab=0 nivel=1): 0 ms [CACHE]
+2026-07-13 16:26:08.423  LOADDATA volcado 312 filas: 49 ms
+2026-07-13 16:26:08.502  LOADDATA pintado+KPIs: 77 ms
+2026-07-13 16:26:08.502  === TOGGLE total: 175 ms ===
+2026-07-13 16:26:08.503  === FIN ===============================================
+2026-07-13 16:41:12.333  LOADDATA query (tab=0 nivel=3): 104 ms [BD]
+2026-07-13 16:41:12.333  LOADDATA volcado 0 filas: 0 ms
+2026-07-13 16:41:12.368  LOADDATA pintado+KPIs: 33 ms
+2026-07-13 18:02:02.696  LOADDATA query (tab=0 nivel=1): 511 ms [BD]
+2026-07-13 18:02:02.737  LOADDATA volcado 312 filas: 40 ms
+2026-07-13 18:02:02.833  LOADDATA pintado+KPIs: 93 ms

@@ -2397,7 +2397,12 @@ begin
   if (CentrosUsados > 0) and not VarIsNull(FInicio) and not VarIsNull(FFin) then
   begin
     var DiasPlan: Integer := Max(1, Trunc(VarToDateTime(FFin) - VarToDateTime(FInicio)) + 1);
-    var MinutosDisponibles: Double := CentrosUsados * DiasPlan * 8 * 60;
+    // OJO: forzar Double desde el primer factor. Si se dejan los 4 operandos como
+    // Integer, Delphi calcula el producto en aritmetica de 32 bits y solo al final
+    // promociona a Double; con {$Q+} (Debug) un DiasPlan grande (fechas de nodo
+    // disparatadas) hace que CentrosUsados*DiasPlan*8*60 rebase 2^31 -> EIntOverflow
+    // ("Integer overflow"). En Release el wrap-around es silencioso pero da mal.
+    var MinutosDisponibles: Double := CentrosUsados * DiasPlan * 8.0 * 60.0;
     if MinutosDisponibles > 0 then
       Satur := Min(100, DuracionTotal / MinutosDisponibles * 100);
   end;
@@ -2417,6 +2422,8 @@ begin
     OFsTotal := 24;    OFsPlan := 21;
     PedidosTotal := 17; PedidosPlan := 15;
     Satur := 82;
+    OpAsig := 14;                             // operarios asignados (demo)
+    CargaH := 304;                            // carga planificada (h) (demo)
     DemoCentros := DemoGanttCentros;         // helper local
     SetLength(DemoSatur, 12);
     for var K := 0 to 11 do
@@ -2456,22 +2463,27 @@ begin
 
   // ---- KPI 7: OFs en riesgo (entrega <= hoy+7 y no finalizadas) ----
   var OFsRiesgo: Integer := 0;
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text :=
-      'SELECT COUNT(DISTINCT nd.NumeroOF) AS NumOFs ' +
-      'FROM FS_PL_Node n ' +
-      'INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa AND nd.NodeId = n.NodeId ' +
-      'WHERE n.CodigoEmpresa = ' + CE + ' AND n.ProjectId = ' + PID +
-      '  AND nd.NumeroOF IS NOT NULL ' +
-      '  AND nd.FechaEntrega IS NOT NULL ' +
-      '  AND nd.FechaEntrega <= DATEADD(day, 7, CAST(GETDATE() AS DATE)) ' +
-      '  AND ISNULL(nd.Estado, 0) <> 2';   // 2 = neFinalizado
-    Q.Open;
-    OFsRiesgo := Q.FieldByName('NumOFs').AsInteger;
-  finally
-    Q.Free;
+  if DemoMode.Active then
+    OFsRiesgo := 3                            // OFs en riesgo (demo)
+  else
+  begin
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT COUNT(DISTINCT nd.NumeroOF) AS NumOFs ' +
+        'FROM FS_PL_Node n ' +
+        'INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa AND nd.NodeId = n.NodeId ' +
+        'WHERE n.CodigoEmpresa = ' + CE + ' AND n.ProjectId = ' + PID +
+        '  AND nd.NumeroOF IS NOT NULL ' +
+        '  AND nd.FechaEntrega IS NOT NULL ' +
+        '  AND nd.FechaEntrega <= DATEADD(day, 7, CAST(GETDATE() AS DATE)) ' +
+        '  AND ISNULL(nd.Estado, 0) <> 2';   // 2 = neFinalizado
+      Q.Open;
+      OFsRiesgo := Q.FieldByName('NumOFs').AsInteger;
+    finally
+      Q.Free;
+    end;
   end;
 
   // 1) Registrar el valor REAL de hoy (upsert). OFsPendientes se guarda aparte
@@ -2627,19 +2639,20 @@ end;
 function TfrmDashboard.SerieKPI(const AColumn: string;
   const AValorActual: Double): TArray<Double>;
 var
-  Seed: Cardinal;
+  Seed: UInt64;
   I: Integer;
 begin
   if DemoMode.Active then
   begin
     // Seed determinista por nombre de columna: cada KPI tiene una forma de
     // sparkline distinta (no todas iguales), pero estable entre refrescos.
-    // El acumulador es Cardinal (sin signo): "Seed * 31" puede rebasar 2^31 y
-    // con {$Q+} (Debug) eso lanzaba EIntOverflow ("Integer overflow"); en
-    // Cardinal el wrap-around es valido y el hash sigue siendo determinista.
+    // OJO {$Q+} (Debug): con Seed:Cardinal, "Seed * 31" tambien dispara
+    // EIntOverflow cuando el producto rebasa 2^32 -el chequeo de overflow salta
+    // ANTES del "and", que llega tarde-. Acumulamos en UInt64 (32 bits nunca se
+    // desbordan al multiplicar por 31) y enmascaramos a 31 bits en cada paso.
     Seed := 0;
     for I := 1 to Length(AColumn) do
-      Seed := (Seed * 31 + Cardinal(Ord(AColumn[I]))) and $7FFFFFFF;
+      Seed := (Seed * 31 + UInt64(Ord(AColumn[I]))) and $7FFFFFFF;
     // Nº de puntos demo segun el periodo (acotado para no saturar la sparkline).
     var Pts: Integer := RangoDiasEfectivo;
     if Pts < 7 then Pts := 7;
@@ -2663,6 +2676,18 @@ begin
   lblValOFsPendientes.Font.Color := clBlack;
   lblValOTsPendientes.Caption := '--';
   lblValOTsPendientes.Font.Color := clBlack;
+
+  // ---- Modo DEMO: pendientes ficticios (sin tocar BD). ----
+  if DemoMode.Active then
+  begin
+    lblValOFsPendientes.Caption := '4';
+    lblValOFsPendientes.Font.Color := clRed;
+    lblValOTsPendientes.Caption := '9';
+    lblValOTsPendientes.Font.Color := clRed;
+    SetKPI(FKPIOFsPend, 4, SerieKPI('OFsPendientes', 4));
+    Exit;
+  end;
+
   if not DMPlanner.IsConnected then
   begin
     lblPendingSync.Caption := '(sin conexion BD)';
@@ -2966,6 +2991,19 @@ begin
     Exit;
   end;
 
+  // ---- Modo DEMO: valores ficticios creibles (sin tocar BD). ----
+  if DemoMode.Active then
+  begin
+    Otif := 91; SatOp := 78; Cuello := 94; CuelloNombre := 'Soldadura';
+    TKPICard(FKPICuelloBotella).ColorTone := kctRojo;
+    TKPICard(FKPICuelloBotella).Caption := 'Cuello: ' + CuelloNombre;
+    TKPICard(FKPIOtif).ColorTone := kctAmbar;
+    SetKPI(FKPIOtif,          Otif,   SerieKPI('Otif', Otif), '%');
+    SetKPI(FKPICuelloBotella, Cuello, SerieKPI('CuelloBotella', Cuello), '%');
+    SetKPI(FKPISatOperarios,  SatOp,  SerieKPI('SatOperarios', SatOp), '%');
+    Exit;
+  end;
+
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   PID := IntToStr(DMPlanner.CurrentProjectId);
   Otif := 0; SatOp := 0; Cuello := 0; CuelloNombre := '';
@@ -3034,7 +3072,7 @@ begin
     if not Q.Eof then
     begin
       CuelloNombre := Q.FieldByName('Centro').AsString;
-      var MinDisp: Double := DiasPlan * 8 * 60;
+      var MinDisp: Double := DiasPlan * 8.0 * 60.0;
       if MinDisp > 0 then
         Cuello := Min(100, Q.FieldByName('MinCarga').AsFloat / MinDisp * 100);
     end;
@@ -3057,7 +3095,7 @@ begin
     var HorasTot: Double := Q.FieldByName('HorasTot').AsFloat;
     if NumOp > 0 then
     begin
-      var HorasDisp: Double := NumOp * DiasPlan * 8;   // 8h/dia
+      var HorasDisp: Double := NumOp * DiasPlan * 8.0;   // 8h/dia
       if HorasDisp > 0 then
         SatOp := Min(100, HorasTot / HorasDisp * 100);
     end;

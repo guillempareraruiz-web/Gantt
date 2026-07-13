@@ -8,7 +8,7 @@ uses
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters,
   cxStyles, cxEdit, cxGrid, cxGridLevel, cxGridCustomView,
   cxGridCustomTableView, cxGridTableView, cxTextEdit, cxCheckBox,
-  cxCalc, cxCalendar, cxDropDownEdit,
+  cxCalc, cxCalendar, cxDropDownEdit, cxButtons,
   cxContainer, cxClasses, cxFilter,
   dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
@@ -35,16 +35,14 @@ type
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
-    pnlBottom: TPanel;
-    btnClose: TButton;
     pnlToolbar: TPanel;
-    btnAdd: TButton;
-    btnDel: TButton;
-    btnSave: TButton;
-    btnDepartamentos: TButton;
-    btnPolivalencia: TButton;
-    btnMatriz: TButton;
-    btnConfigurarColumnas: TButton;
+    btnAdd: TcxButton;
+    btnDel: TcxButton;
+    btnSave: TcxButton;
+    btnDepartamentos: TcxButton;
+    btnPolivalencia: TcxButton;
+    btnMatriz: TcxButton;
+    btnConfigurarColumnas: TcxButton;
     gridOperaris: TcxGrid;
     tvOperaris: TcxGridTableView;
     colOpId: TcxGridColumn;
@@ -56,7 +54,6 @@ type
     lvOperaris: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
-    procedure btnCloseClick(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnSaveClick(Sender: TObject);
@@ -64,6 +61,9 @@ type
     procedure btnPolivalenciaClick(Sender: TObject);
     procedure btnMatrizClick(Sender: TObject);
     procedure btnConfigurarColumnasClick(Sender: TObject);
+    procedure tvOperarisGetContentStyle(Sender: TcxCustomGridTableView;
+      ARecord: TcxCustomGridRecord; AItem: TcxCustomGridTableItem;
+      var AStyle: TcxStyle);
   private
     type
       TOperarioCustomCol = record
@@ -79,6 +79,7 @@ type
     FCalendarNames: TArray<string>;
     FCustomCols: TArray<TOperarioCustomCol>;
     FCustomColumns: TArray<TcxGridColumn>;
+    FStyleInactivo: TcxStyle;   // fons vermell clar per operaris no actius
     procedure LoadCalendars;
     procedure SetupCombos;
     procedure LoadCustomColumnDefs;
@@ -108,7 +109,8 @@ implementation
 {$R *.dfm}
 uses
   uDMPlanner, uAsignarDepartamentos,
-  uOperarioPolivalencia, uMatrizPolivalencia, uOperariosCustomCols, uLogin, Main;
+  uOperarioPolivalencia, uMatrizPolivalencia, uOperariosCustomCols, uLogin,
+  uHelpViewer, Main;
 
 const
   OPERARIOS_GRID_ID = 'OPERARIOS';
@@ -146,11 +148,36 @@ end;
 procedure TfrmGestionOperaris.FormCreate(Sender: TObject);
 begin
   btnConfigurarColumnas.Visible := uLogin.IsAdmin;
+
+  // Estilo de fila para operarios NO activos: fondo rojo claro (BGR). El resto
+  // queda blanco. IMPRESCINDIBLE NativeStyle=False (el skin nativo ignora Color).
+  tvOperaris.LookAndFeel.NativeStyle := False;
+  FStyleInactivo := TcxStyle.Create(Self);
+  FStyleInactivo.Color := $00CACAFF;          // rojo claro
+  FStyleInactivo.TextColor := clWindowText;
+  tvOperaris.Styles.OnGetContentStyle := tvOperarisGetContentStyle;
+
   LoadCalendars;
   SetupCombos;
   LoadCustomColumnDefs;
   BuildCustomColumns;
   LoadOperarios;
+
+  // Boton '?' en el caption (requiere BorderStyle=bsDialog) + F1 = ayuda.
+  THelpViewer.InstallHelp(Self, 'uGestionOperaris', 'Gesti'#243'n de Operarios');
+end;
+
+procedure TfrmGestionOperaris.tvOperarisGetContentStyle(
+  Sender: TcxCustomGridTableView; ARecord: TcxCustomGridRecord;
+  AItem: TcxCustomGridTableItem; var AStyle: TcxStyle);
+var
+  V: Variant;
+begin
+  if ARecord = nil then Exit;
+  V := ARecord.Values[colOpActivo.Index];
+  // Activo = False (y no nulo) -> fila roja. Cualquier otro caso: blanco.
+  if (not VarIsNull(V)) and (not VarIsEmpty(V)) and (not Boolean(V)) then
+    AStyle := FStyleInactivo;
 end;
 
 function TfrmGestionOperaris.UserLogin: string;
@@ -387,10 +414,6 @@ begin
     BuildCustomColumns;
     LoadOperarios;
   end;
-end;
-procedure TfrmGestionOperaris.btnCloseClick(Sender: TObject);
-begin
-  Close;
 end;
 procedure TfrmGestionOperaris.LoadCalendars;
 var

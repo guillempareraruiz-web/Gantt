@@ -528,6 +528,13 @@ object Form1: TForm1
         Caption = 'Indicadores de centros'
         OnClick = Indicadoresdecentros1Click
       end
+      object N11: TMenuItem
+        Caption = '-'
+      end
+      object Nesting2D1: TMenuItem
+        Caption = 'Optimizaci'#243'n de corte (nesting)...'
+        OnClick = Nesting2D1Click
+      end
     end
     object Ayuda1: TMenuItem
       Caption = 'Ayuda'

@@ -223,6 +223,7 @@ type
     procedure AlertasPlanificacion1Click(Sender: TObject);
     procedure btnTB_PlaniAlertasClick(Sender: TObject);
     procedure HistogramasOperarios1Click(Sender: TObject);
+    procedure Nesting2D1Click(Sender: TObject);
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
     procedure MnGanttClick(Sender: TObject);
@@ -311,7 +312,7 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uBacklogScheduler, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
   uReglasPlanParams, uReglasPlanPreview, uReglasPlanComparativa,
   uGestionOperacionHabilidades, uGestionOperationTypes,
-  uCuadroPlanificacionDelDia, uGestionTurnos,
+  uCuadroPlanificacionDelDia, uGestionTurnos, uOptimizacionHub,
   uDMPlanner, uGestionRoles, uGestionUsuarios, uLogin, uGestionDemos,
   uGestionProyectos, uGestionAreas, uGestionDepartamentos,
   uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uSincronizarERP, uInstallWizard,
@@ -674,6 +675,11 @@ end;
 procedure TForm1.HistogramasOperarios1Click(Sender: TObject);
 begin
   TfrmHistogramasOperarios.Execute;
+end;
+
+procedure TForm1.Nesting2D1Click(Sender: TObject);
+begin
+  ShowOptimizacionHub(Self);
 end;
 
 procedure TForm1.CuadroPlanificacionDia1Click(Sender: TObject);
