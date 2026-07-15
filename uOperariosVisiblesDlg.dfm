@@ -1,6 +1,7 @@
 object frmOperariosVisibles: TfrmOperariosVisibles
   Left = 0
   Top = 0
+  BorderStyle = bsDialog
   Caption = 'Operarios visibles'
   ClientHeight = 540
   ClientWidth = 480
@@ -67,7 +68,7 @@ object frmOperariosVisibles: TfrmOperariosVisibles
       Style = csDropDownList
       TabOrder = 1
     end
-    object btnAplicarCriterios: TButton
+    object btnAplicarCriterios: TcxButton
       Left = 365
       Top = 78
       Width = 100
@@ -89,7 +90,7 @@ object frmOperariosVisibles: TfrmOperariosVisibles
     TabOrder = 1
     object lblOperarios: TLabel
       Left = 16
-      Top = 8
+      Top = 12
       Width = 280
       Height = 17
       Caption = 'Selecci'#243'n manual de operarios visibles:'
@@ -100,11 +101,32 @@ object frmOperariosVisibles: TfrmOperariosVisibles
       Font.Style = [fsBold]
       ParentFont = False
     end
+    object btnTodos: TcxButton
+      Left = 269
+      Top = 6
+      Width = 90
+      Height = 25
+      Anchors = [akTop, akRight]
+      Caption = 'Marcar todos'
+      TabOrder = 1
+      OnClick = btnTodosClick
+    end
+    object btnNinguno: TcxButton
+      Left = 365
+      Top = 6
+      Width = 100
+      Height = 25
+      Anchors = [akTop, akRight]
+      Caption = 'Desmarcar todos'
+      TabOrder = 2
+      OnClick = btnNingunoClick
+    end
     object clOperarios: TCheckListBox
       Left = 16
-      Top = 32
+      Top = 36
       Width = 449
-      Height = 308
+      Height = 304
+      Anchors = [akLeft, akTop, akRight, akBottom]
       ItemHeight = 17
       TabOrder = 0
     end
@@ -119,42 +141,26 @@ object frmOperariosVisibles: TfrmOperariosVisibles
     Color = 15789544
     ParentBackground = False
     TabOrder = 2
-    object btnTodos: TButton
-      Left = 16
-      Top = 12
-      Width = 90
-      Height = 27
-      Caption = 'Marcar todos'
-      TabOrder = 0
-      OnClick = btnTodosClick
-    end
-    object btnNinguno: TButton
-      Left = 112
-      Top = 12
-      Width = 100
-      Height = 27
-      Caption = 'Desmarcar todos'
-      TabOrder = 1
-      OnClick = btnNingunoClick
-    end
-    object btnOK: TButton
+    object btnOK: TcxButton
       Left = 296
       Top = 12
       Width = 80
       Height = 27
+      Anchors = [akTop, akRight]
       Caption = 'Aceptar'
       Default = True
-      TabOrder = 2
+      TabOrder = 0
       OnClick = btnOKClick
     end
-    object btnCancel: TButton
+    object btnCancel: TcxButton
       Left = 384
       Top = 12
       Width = 80
       Height = 27
+      Anchors = [akTop, akRight]
       Cancel = True
       Caption = 'Cancelar'
-      TabOrder = 3
+      TabOrder = 1
       OnClick = btnCancelClick
     end
   end

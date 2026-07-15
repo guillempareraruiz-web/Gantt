@@ -40,7 +40,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.DateUtils,
   System.Generics.Collections,
-  uGanttTypes;
+  uGanttTypes, uSetupRules;
 
 type
   TSchedMode = (smForward, smBackward);
@@ -77,6 +77,10 @@ type
     // Link al modelo unificado FS_PL_Raw_Item (V016)
     RawItemClaveERP: string;     // ClaveERP del item planificado (Nivel 3 en el modelo PRO)
     RawItemTipoOrigen: string;   // 'OF ','PED','PRJ' (char(3) SQL)
+    // Atributos para el tiempo de cambio secuencia-dependiente (uSetupRules).
+    // El caller (p.ej. BuildInputFromRow) los rellena desde builtin+CustomFields
+    // del nodo: Color, Substrato, AnchoBobina, Molde... Vacio = sin setup rules.
+    SetupAttrs: TSetupAttrList;
   end;
 
   TSchedStatus = (ssOK, ssSaturado, ssFueraPlazo, ssSinCentro, ssSinCalendario);
@@ -133,6 +137,12 @@ type
     Agrupacion: TSchedAgrupacion;   // por defecto agNinguna (sin agrupar)
     CentroDestinoAgrupado: string;  // solo para agTodo multi-centro: codigo del
                                     // centro destino elegido por el usuario.
+    // --- Tiempo de cambio secuencia-dependiente (uSetupRules) --------------
+    // Si <> nil, entre dos nodos consecutivos del mismo lane se deja el hueco
+    // real calculado por el motor (segun en que difieran sus SetupAttrs), en
+    // lugar de la DistanciaMinNodos fija. El caller es el propietario del engine
+    // (no lo libera el scheduler). nil = comportamiento clasico.
+    SetupEngine: TSetupRuleEngine;
   end;
 
   TSchedResult = record
@@ -365,6 +375,10 @@ type
     StartDT: TDateTime;
     EndDT: TDateTime;
     Bloqueado: Boolean;
+    // Atributos del nodo colocado, para calcular el setup con el SIGUIENTE nodo
+    // que caiga tras el en este lane (uSetupRules). Vacio en slots ya existentes
+    // (carga consolidada) cuyos atributos no conocemos.
+    SetupAttrs: TSetupAttrList;
   end;
 
   TLaneOcc = TList<TLaneSlot>;  // ordenada por StartDT ascendente
@@ -560,6 +574,37 @@ begin
       if V > Best then begin Best := V; Result := I; end;
     end;
   end;
+end;
+
+// Gap (minutos) que hay que dejar ANTES de colocar el nodo ACurr en este lane:
+// el maximo entre la DistanciaMinNodos fija y el tiempo de cambio secuencia-
+// dependiente respecto al ULTIMO nodo del lane (uSetupRules). Si no hay engine
+// o el lane esta vacio, devuelve la distancia fija (comportamiento clasico).
+//
+// NOTA (fase 1): el setup se calcula contra el ultimo nodo de la cola, que es el
+// caso dominante en Forward (nodos encadenados). La insercion en hueco intermedio
+// usa el setup respecto al ultimo nodo, no respecto al vecino exacto del hueco;
+// afinar eso queda para fase 2 (ver memoria project_gantt_setup_secuencia_dependiente).
+function EffectiveGapMin(AOcc: TLaneOcc; const ACurr: TSchedInput;
+  const ACentreCode: string; ADistFija: Integer;
+  ASetupEngine: TSetupRuleEngine): Integer;
+var
+  PrevAttrs: TSetupAttrList;
+  HasPrev: Boolean;
+  SetupMin: Integer;
+begin
+  Result := ADistFija;
+  if (ASetupEngine = nil) or not ASetupEngine.HasRules then Exit;
+
+  HasPrev := AOcc.Count > 0;
+  if HasPrev then
+    PrevAttrs := AOcc[AOcc.Count - 1].SetupAttrs
+  else
+    SetLength(PrevAttrs, 0);
+
+  SetupMin := ASetupEngine.CalcSetupMin(PrevAttrs, ACurr.SetupAttrs, HasPrev,
+    ACentreCode);
+  if SetupMin > Result then Result := SetupMin;
 end;
 
 procedure SortInputs(var AInputs: TArray<TSchedInput>; AOrder: TSchedOrder);
@@ -867,6 +912,7 @@ var
   FechaBloqueo: TDateTime;
   J, DurSlotMin: Integer;
   ShiftTo: TDateTime;
+  EffDist: Integer;
 
 begin
   Result := Default(TSchedResult);
@@ -978,10 +1024,12 @@ begin
             begin
               // Fallback a Forward desde FechaBase, con la politica elegida.
               Lane := PickLane(Cursor, True);
+              EffDist := EffectiveGapMin(Cursor.LaneOcc[Lane], Input, Cursor.Code,
+                Params.DistanciaMinNodos, Params.SetupEngine);
               StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
                 Params.FechaBase, DurMin, Params.Placement,
                 Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
-                Params.DistanciaMinNodos, NeedsShift);
+                EffDist, NeedsShift);
               EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
               Output.FechaInicio := StartDT;
               Output.FechaFin := EndDT;
@@ -1026,10 +1074,14 @@ begin
         smForward:
           begin
             Lane := PickLane(Cursor, True);
+            // Gap efectivo = max(distancia fija, tiempo de cambio secuencia-
+            // dependiente respecto al ultimo nodo del lane).
+            EffDist := EffectiveGapMin(Cursor.LaneOcc[Lane], Input, Cursor.Code,
+              Params.DistanciaMinNodos, Params.SetupEngine);
             StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
               Params.FechaBase, DurMin, Params.Placement,
               Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
-              Params.DistanciaMinNodos, NeedsShift);
+              EffDist, NeedsShift);
             EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
 
             Output.FechaInicio := StartDT;
@@ -1056,6 +1108,9 @@ begin
         NewSlot.StartDT := StartDT;
         NewSlot.EndDT := EndDT;
         NewSlot.Bloqueado := False;
+        // Arrastrar los atributos del nodo para que el SIGUIENTE que caiga tras
+        // el en este lane pueda calcular su tiempo de cambio (uSetupRules).
+        NewSlot.SetupAttrs := Input.SetupAttrs;
         InsertSlotOrdered(Cursor.LaneOcc[Lane], NewSlot);
 
         // Shift (solo politica ppHuecoShift): tras insertar el nuevo nodo,

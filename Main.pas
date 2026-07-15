@@ -158,6 +158,9 @@ type
     procedure PesosScoring1Click(Sender: TObject);
     procedure MostrarDashboard;
     procedure OcultarDashboard;
+    // Refresco pesado del Dashboard diferido al arranque (via ForceQueue): corre
+    // tras pintar la ventana, con el busy visible, y al final lo cierra.
+    procedure RefrescoArranqueDiferido;
     procedure AplicarModoDemoGantt;   // entra/sale del proyecto demo y recarga
     procedure ActualizarCaption;      // "FSPlanner 2026 - Empresa - Proyecto"
     procedure MostrarBacklog;
@@ -295,6 +298,7 @@ var
   FPesosScoring: TPesosPlanificacion;
   FMoldeRepo: TMoldeRepo;
   FCentresRows: TArray<TCentreTreball>;
+  FArrancando: Boolean;   // durante FormCreate: MostrarDashboard no refresca (diferido)
   FDashboard: TfrmDashboard;
   FVistaGantt: TfrmVistaGantt;
   FFiniteCapacity: TfrmFiniteCapacityPlanner;
@@ -309,7 +313,7 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uDemoBacklog, uDemoMode,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
-  uBacklogScheduler, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
+  uBacklogScheduler, uSetupRules, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
   uReglasPlanParams, uReglasPlanPreview, uReglasPlanComparativa,
   uGestionOperacionHabilidades, uGestionOperationTypes,
   uCuadroPlanificacionDelDia, uGestionTurnos, uOptimizacionHub,
@@ -318,7 +322,7 @@ uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaK
   uConfigEmpresa, uGenerarNodosDemo, uCentresKPI, uErpSelector, uSincronizarERP, uInstallWizard,
   uDataConnector, uUserPrefs,
   uErpReader, uErpReaderFactory, uStockCockpit,
-  uDashboardOperativo, uBusyDialog, uHelpViewer;
+  uDashboardOperativo, uBusyDialog, uHelpViewer, uPlanLog;
 
 {$R *.dfm}
 
@@ -808,6 +812,11 @@ begin
   uDemoMode.DemoMode.Active := btnTB_Demo.Down;
   // Ademas, el GANTT usa un proyecto demo aislado: entrar/salir de el y recargar.
   AplicarModoDemoGantt;
+  // Ahora que TODO esta conmutado (proyecto demo/real cargado), refrescamos el
+  // Dashboard UNA sola vez si esta visible. DemoChanged y LoadActivePlan solo
+  // invalidaron la cache; asi evitamos el doble refresco que se veia en el log.
+  if Assigned(FDashboard) and FDashboard.Visible then
+    FDashboard.Refrescar(True);
 end;
 
 procedure TForm1.btnTB_HelpClick(Sender: TObject);
@@ -903,6 +912,10 @@ procedure TForm1.ReglasPlanificacion1Click(Sender: TObject);
 begin
   if TfrmPlanningRulesEditor.Execute(FPlanningRuleEngine) then
     FPlanningRuleEngine.SaveToFile;
+  // Recargar las reglas de tiempo de cambio (setup) en el Gantt para que la
+  // franja se repinte con las reglas nuevas sin reabrir el plan.
+  if Assigned(FVistaGantt) and Assigned(FVistaGantt.GanttControl) then
+    FVistaGantt.GanttControl.RefreshSetupEngine;
 end;
 
 procedure TForm1.GestionCardLayouts1Click(Sender: TObject);
@@ -1113,7 +1126,20 @@ end;
 
 
 procedure TForm1.FormCreate(Sender: TObject);
+var
+  TArr: TDateTime;
+
+  procedure ArrTic(const AEtapa: string);
+  begin
+    PlanLog.Linea('  ARRANQUE.%s: %d ms', [AEtapa, MilliSecondsBetween(Now, TArr)]);
+    TArr := Now;
+  end;
+
 begin
+  PlanLog.Linea('======== ARRANQUE Main.FormCreate INICIO ========');
+  StartupBusyUpdate('Cargando recursos...');
+  FArrancando := True;   // el refresco del Dashboard se hace diferido, no aqui
+  TArr := Now;
   Randomize;
   Width := 1900;
 
@@ -1122,6 +1148,7 @@ begin
 
   FPlanningRuleEngine := TPlanningRuleEngine.Create(FCustomFieldDefs);
   FPlanningRuleEngine.LoadFromFile(ExtractFilePath(Application.ExeName) + 'planning_rules.json');
+  ArrTic('ConfigJSON');
 
   // Repo de operarios: si BD conectada, carga real desde FS_PL_Operator
   // (basico: id + nombre + calendario). Sin BD usa sample data.
@@ -1228,6 +1255,7 @@ begin
   end
   else
     FOperariosRepo.LoadSampleData;
+  ArrTic('Operarios+Deptos');
   FAbsenciasRepo := TOperatorAbsencesRepo.Create;
   FHabilidadRepo := THabilidadRepo.Create;
   FOperationTypesRepo := TOperationTypesRepo.Create;
@@ -1267,6 +1295,7 @@ begin
     LoadPesosActivo(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa,
       FPesosScoring);
   end;
+  ArrTic('Repos(Habil/OpTypes/Absen/Pesos)');
 
   // Fallback: si no se cargo nada (sin BD o BD vacia), usa sample
   if Length(FHabilidadRepo.GetHabilidades) = 0 then
@@ -1385,10 +1414,34 @@ begin
       QChk.Free;
     end;
   end;
+  ArrTic('MigracionHabilidades');
 
-  MostrarDashboard;
-
+  // Cargar el plan ANTES de mostrar el Dashboard: asi LoadActivePlan (que
+  // invalida la cache del Dashboard) ocurre primero, y MostrarDashboard refresca
+  // UNA sola vez con el plan ya cargado. Al reves, MostrarDashboard refrescaba y
+  // LoadActivePlan invalidaba justo despues -> doble refresco (~8s en real).
+  StartupBusyUpdate('Cargando plan activo...');
   LoadActivePlan;
+  ArrTic('LoadActivePlan');
+
+  // Mostrar el Dashboard SIN refrescar todavia: asi FormCreate retorna al
+  // instante y la ventana principal se pinta ya (~0,3s). El refresco pesado del
+  // Dashboard (~4,5s en BD real: contadores + proyecto + salud + KPIs) se lanza
+  // DIFERIDO, tras arrancar el bucle de mensajes, con el busy visible girando.
+  // Asi la app "arranca" de inmediato en vez de quedarse 4,5s en negro.
+  MostrarDashboard;
+  ArrTic('MostrarDashboard(sin refresco)');
+
+  PlanLog.Linea('======== ARRANQUE Main.FormCreate FIN (refresco diferido) ========');
+
+  // Programar el refresco del Dashboard para justo despues de que el bucle de
+  // mensajes empiece (ventana ya visible). NO cerramos el busy aqui: lo cierra
+  // RefrescoArranqueDiferido al terminar.
+  TThread.ForceQueue(nil,
+    procedure
+    begin
+      RefrescoArranqueDiferido;
+    end);
 
   // Conectar handler de cierre con check de dirty + flush
   Self.OnCloseQuery := FormCloseQuery;
@@ -1412,9 +1465,35 @@ begin
   if Assigned(FVistaGantt) then    FVistaGantt.Visible := False;
   if Assigned(FBacklog) then       FBacklog.Visible := False;
   if Assigned(FFiniteOps) then     FFiniteOps.Visible := False;
-  FDashboard.Refrescar;
   FDashboard.Visible := True;
   FDashboard.BringToFront;
+  // Durante el arranque NO refrescamos aqui: lo hace RefrescoArranqueDiferido
+  // tras pintar la ventana (asi la app abre al instante). En el resto de casos,
+  // UN unico punto de refresco: RefrescarSiHaceFalta refresca solo si la cache
+  // esta invalidada (primera vez, cambio de plan, toggle Demo). En un form
+  // embebido (Parent), OnShow no es fiable, por eso lo llamamos explicito.
+  if not FArrancando then
+    FDashboard.RefrescarSiHaceFalta;
+end;
+
+procedure TForm1.RefrescoArranqueDiferido;
+// Corre via ForceQueue, ya con la ventana pintada y el busy visible. Hace el
+// refresco pesado del Dashboard (el que en BD real tarda ~4,5s) fuera de
+// FormCreate, y al terminar cierra el busy y desactiva el modo arranque.
+var
+  T0: TDateTime;
+begin
+  T0 := Now;
+  try
+    StartupBusyUpdate('Cargando indicadores...');
+    if Assigned(FDashboard) then
+      FDashboard.RefrescarSiHaceFalta;
+    PlanLog.Linea('  ARRANQUE.RefrescoDiferido: %d ms', [MilliSecondsBetween(Now, T0)]);
+  finally
+    FArrancando := False;
+    StartupBusyClose;
+    PlanLog.Linea('======== ARRANQUE refresco diferido COMPLETO ========');
+  end;
 end;
 
 procedure TForm1.OcultarDashboard;
@@ -1428,7 +1507,8 @@ var
   Reader: IErpReader;
 begin
   Reader := GetActiveErpReader;
-  if Reader = nil then
+  // En modo Demo la ficha funciona con datos ficticios aunque no haya ERP.
+  if (Reader = nil) and (not DemoMode.Active) then
   begin
     ShowMessage('No hay ERP configurado. Configura el ERP en el men'#250
       + ' Configuraci'#243'n > Selector de ERP.');
@@ -1458,7 +1538,11 @@ begin
   FArticleDetail.BringToFront;
 
   if Trim(ACodigo) <> '' then
-    FArticleDetail.CargarArticulo(ACodigo);
+    FArticleDetail.CargarArticulo(ACodigo)
+  else if DemoMode.Active then
+    // En Demo sin codigo concreto: cargar un articulo demo para que la ficha
+    // salga llena (ruptura + recomendacion) en vez de vacia.
+    FArticleDetail.CargarArticulo(uDemoMode.DemoArticuloCodigos[0]);
 end;
 
 procedure TForm1.DashboardAbrirGantt(Sender: TObject);
@@ -1622,7 +1706,8 @@ begin
       FOperariosRepo,
       FAbsenciasRepo,
       nil,
-      FCustomFieldDefs);
+      FCustomFieldDefs,
+      DMPlanner.NodesRepo);
   end;
   if Assigned(FDashboard) then      FDashboard.Visible := False;
   if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
@@ -1780,6 +1865,12 @@ begin
   // Si la VistaGantt ya existe, refrescarla con los nuevos datos
   if Assigned(FVistaGantt) and FVistaGantt.Visible then
     FVistaGantt.Inicializar;
+
+  // El plan cambio: SOLO invalidamos la cache del Dashboard. El refresco (una
+  // sola vez, con todo ya conmutado) lo hace quien mostro/conmuto: btnTB_Demo
+  // tras AplicarModoDemoGantt, o MostrarDashboard al abrirlo (EstaCargado=False).
+  if Assigned(FDashboard) then
+    FDashboard.InvalidarCache;
 
   ActualizarCaption;
 end;
@@ -2081,8 +2172,9 @@ begin
     Gc.HideWeekends := Cfg.HideWeekends;
     Gc.LinksVisible := Cfg.LinksVisible;
     Gc.AutoMarkersEnabled := Cfg.AutoMarkers;
-    if Cfg.PxPerMinute > 0 then
-      Gc.PxPerMinute := Cfg.PxPerMinute;
+    Gc.SetupCollisionMode := Cfg.SetupCollisionMode;
+    // NO reaplicar PxPerMinute: el zoom es estado de sesion (rueda + prefs de
+    // viewport). Reasignarlo pisaria el zoom/posicion actual del usuario.
     Gc.Invalidate;
   end;
 end;
@@ -2387,6 +2479,7 @@ var
   I: Integer;
   TituloRegla: string;
   MR: TModalResult;
+  SetupEngine: TSetupRuleEngine;
 
   // Convierte los nodos (en su orden actual) a TSchedInput.
   procedure NodesToInputs(const ANodes: TArray<TNodeData>);
@@ -2442,6 +2535,9 @@ var
         Input.FechaNecesaria := Node.FechaNecesaria;
         Input.RawItemClaveERP := Node.RawItemClaveERP;
         Input.RawItemTipoOrigen := Node.RawItemTipoOrigen;
+        // Atributos para el tiempo de cambio secuencia-dependiente (uSetupRules):
+        // builtin relevantes + campos personalizados del nodo. Ver uBacklog.
+        Input.SetupAttrs := BuildSetupAttrsFromNode(Node);
         LInputs.Add(Input);
       end;
       Inputs := LInputs.ToArray;
@@ -2527,27 +2623,38 @@ begin
     // estan listos y la ventana hara las 7 reglas tras el finally).
     if MR <> mrComparar then
     begin
-      if (PerfilSel >= 0) and Assigned(FPlanningRuleEngine) then
-      begin
-        // Perfil custom: ordenar los NODOS con el motor de Reglas de
-        // Planificacion (multi-campo + campos custom) y reconstruir los inputs
-        // en ESE orden. La cola ya viene ordenada -> apilar sin reordenar.
-        FPlanningRuleEngine.ActiveIndex := PerfilSel;
-        FPlanningRuleEngine.SortNodes(Nodes);
-        NodesToInputs(Nodes);
-        Params.Order := soPreordenado;
-        Res := RunAutoScheduling(Inputs, Params);
-        TituloRegla := FPlanningRuleEngine.GetProfile(PerfilSel).Name + ' (perfil)';
-      end
-      else
-      begin
-        // Regla canonica: via motor de reglas (ordena por centro + desempate).
-        Engine := TPriorityRuleEngine.Create;
-        EngineRef := Engine;  // gestion de vida via interface
-        Engine.Global := Global;
-        Engine.SetOverrides(Overrides);
-        Res := EngineRef.Schedule(Inputs, Params);
-        TituloRegla := PriorityRuleToStr(Global.Principal);
+      // Motor de tiempo de cambio secuencia-dependiente (uSetupRules), local a
+      // esta ejecucion. Sin reglas actua como nil (comportamiento clasico). No
+      // se inyecta en modo comparativa (Params se usa fuera del finally).
+      SetupEngine := TSetupRuleEngine.Create;
+      try
+        SetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
+        Params.SetupEngine := SetupEngine;
+        if (PerfilSel >= 0) and Assigned(FPlanningRuleEngine) then
+        begin
+          // Perfil custom: ordenar los NODOS con el motor de Reglas de
+          // Planificacion (multi-campo + campos custom) y reconstruir los inputs
+          // en ESE orden. La cola ya viene ordenada -> apilar sin reordenar.
+          FPlanningRuleEngine.ActiveIndex := PerfilSel;
+          FPlanningRuleEngine.SortNodes(Nodes);
+          NodesToInputs(Nodes);
+          Params.Order := soPreordenado;
+          Res := RunAutoScheduling(Inputs, Params);
+          TituloRegla := FPlanningRuleEngine.GetProfile(PerfilSel).Name + ' (perfil)';
+        end
+        else
+        begin
+          // Regla canonica: via motor de reglas (ordena por centro + desempate).
+          Engine := TPriorityRuleEngine.Create;
+          EngineRef := Engine;  // gestion de vida via interface
+          Engine.Global := Global;
+          Engine.SetOverrides(Overrides);
+          Res := EngineRef.Schedule(Inputs, Params);
+          TituloRegla := PriorityRuleToStr(Global.Principal);
+        end;
+      finally
+        Params.SetupEngine := nil;
+        SetupEngine.Free;
       end;
     end;
   finally

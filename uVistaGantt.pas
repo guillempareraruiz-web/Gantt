@@ -259,6 +259,8 @@ type
     Dependencias1: TMenuItem;
     Versumario1: TMenuItem;
     miVerOperarios: TMenuItem;
+    N7: TMenuItem;
+    miConfiguracionGantt: TMenuItem;
     aaa1: TMenuItem;
     ssss1: TMenuItem;
     Noverninguna1: TMenuItem;
@@ -279,6 +281,7 @@ type
     procedure btnAtajosClick(Sender: TObject);
     procedure Versumario1Click(Sender: TObject);
     procedure miVerOperariosClick(Sender: TObject);
+    procedure miConfiguracionGanttClick(Sender: TObject);
     procedure btnFocoClick(Sender: TObject);
     procedure btnCompactarClick(Sender: TObject);
     procedure pnlKPIAlertasClick(Sender: TObject);
@@ -611,7 +614,7 @@ uses
   uDMPlanner, Vcl.Dialogs, Data.Win.ADODB, Data.DB, uLoteViewer,
   uGestionMarkers, uCentreInspector, uSampleDataGenerator,
   uCentresKPI, uGestionCentres, uNodeInspector, uMarkerEditor,
-  uGanttDatesDialog, uUserPrefs, System.JSON,
+  uGanttDatesDialog, uUserPrefs, System.JSON, uGanttConfig,
   uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,
   uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts,
@@ -2313,6 +2316,10 @@ begin
     SetLength(Nodes, 0);
 
   FGanttControl.SetData(Centres, Nodes, FTimelineControl.StartTime);
+  // Aplicar la politica de tiempo de cambio (setup) guardada en preferencias al
+  // cargar el plan (si no, el control queda en su default y no respeta el "No
+  // pisar" configurado).
+  FGanttControl.SetupCollisionMode := LoadGanttConfig.SetupCollisionMode;
   FGanttControl.RebuildOpIdIndex;
   FGanttControl.RebuildNodeLayoutIndex;
   // Copiar reglas de cada calendario al calendario interno del Gantt por centro.
@@ -3308,6 +3315,32 @@ begin
   // AutoCheck ya togleo miVerOperarios.Checked antes de este OnClick.
   AplicarPanelOperarios(miVerOperarios.Checked);
   SaveViewportPrefs;   // persistir la eleccion (save-on-change)
+end;
+
+procedure TfrmVistaGantt.miConfiguracionGanttClick(Sender: TObject);
+var
+  Cfg: TGanttConfig;
+begin
+  // Configuracion del Gantt accesible tambien desde aqui (ademas del menu
+  // principal). Misma logica que TForm1.PreferenciasGantt1Click: cargar, editar,
+  // guardar y aplicar en caliente sobre este control.
+  Cfg := LoadGanttConfig;
+  if not TfrmGanttConfig.Execute(Cfg) then Exit;
+  SaveGanttConfig(Cfg);
+
+  if Assigned(FGanttControl) then
+  begin
+    FGanttControl.HideWeekends := Cfg.HideWeekends;
+    FGanttControl.LinksVisible := Cfg.LinksVisible;
+    FGanttControl.AutoMarkersEnabled := Cfg.AutoMarkers;
+    FGanttControl.SetupCollisionMode := Cfg.SetupCollisionMode;
+    // NO reaplicar PxPerMinute aqui: el zoom es estado de sesion (lo controla el
+    // usuario con la rueda y se persiste en las prefs de viewport). Reasignarlo
+    // desde la config pisaria el zoom actual y, via SetPxPerMinute->RebuildLayout,
+    // reseteaba tambien la posicion. El PxPerMinute de la config es solo el zoom
+    // INICIAL al abrir el plan, no un valor a aplicar en caliente.
+    FGanttControl.Invalidate;
+  end;
 end;
 
 procedure TfrmVistaGantt.RebuildSummaryData;

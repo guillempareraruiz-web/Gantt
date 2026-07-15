@@ -56,6 +56,15 @@ type
   TNodoTipo   = (ntOF, ntPedido, ntProyecto, ntOferta);
   TNodoEstado = (nePendiente, neEnCurso, neFinalizado, neBloqueado);
 
+  // Politica al mover un nodo sobre la franja de tiempo de cambio (setup) del
+  // nodo anterior. Vive aqui (tipo de dominio) para que lo compartan el control
+  // del Gantt (uGanttControl) y la config (uGanttConfig) sin dependencia cruzada.
+  //   scmIgnorar  No se tiene en cuenta (la franja es solo informativa).
+  //   scmAvisar   Se permite, pero se marca/avisa como conflicto de preparacion.
+  //   scmBloquear La franja cuenta como ocupado: el nodo se reposiciona detras
+  //               del setup (no la pisa).
+  TSetupCollisionMode = (scmIgnorar, scmAvisar, scmBloquear);
+
   // Modos de Vista del Gantt. Vive aqui (tipo de dominio) para que lo puedan usar
   // unidades de modelo (ej. uNodeCardLayout) sin depender de uGanttControl.
   TGanttViewMode = (

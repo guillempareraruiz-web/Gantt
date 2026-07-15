@@ -20,7 +20,9 @@ uses
   System.Generics.Collections,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls, Vcl.CheckLst,
-  uOperariosTypes, uOperariosRepo;
+  cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters, cxContainer,
+  cxEdit, cxButtons,
+  uOperariosTypes, uOperariosRepo, uHelpViewer;
 
 type
   TfrmOperariosVisibles = class(TForm)
@@ -30,15 +32,15 @@ type
     cbDept: TComboBox;
     lblCap: TLabel;
     cbCap: TComboBox;
-    btnAplicarCriterios: TButton;
+    btnAplicarCriterios: TcxButton;
     pnlList: TPanel;
     lblOperarios: TLabel;
     clOperarios: TCheckListBox;
     pnlBottom: TPanel;
-    btnTodos: TButton;
-    btnNinguno: TButton;
-    btnOK: TButton;
-    btnCancel: TButton;
+    btnTodos: TcxButton;
+    btnNinguno: TcxButton;
+    btnOK: TcxButton;
+    btnCancel: TcxButton;
     procedure FormCreate(Sender: TObject);
     procedure btnAplicarCriteriosClick(Sender: TObject);
     procedure btnTodosClick(Sender: TObject);
@@ -91,6 +93,8 @@ procedure TfrmOperariosVisibles.FormCreate(Sender: TObject);
 begin
   Caption := 'Operarios visibles';
   Position := poScreenCenter;
+  // Ayuda contextual: boton '?' en el caption + F1 (patron MD a disco).
+  THelpViewer.InstallHelp(Self, 'uOperariosVisiblesDlg', 'Operarios visibles');
 end;
 
 procedure TfrmOperariosVisibles.LoadCombos;

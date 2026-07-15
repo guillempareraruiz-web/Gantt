@@ -77,13 +77,25 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
       OnClick = chkSoloCapacitadosClick
     end
     object btnOperariosVisibles: TButton
-      Left = 1080
+      Left = 1158
       Top = 18
       Width = 160
       Height = 25
+      Anchors = [akTop, akRight]
       Caption = 'Operarios visibles...'
       TabOrder = 4
       OnClick = btnOperariosVisiblesClick
+    end
+    object cxBtnOpciones: TcxButton
+      Left = 998
+      Top = 18
+      Width = 152
+      Height = 25
+      Anchors = [akTop, akRight]
+      Caption = 'Asignar: todas'
+      DropDownMenu = pmOpcionesAsig
+      Kind = cxbkOfficeDropDown
+      TabOrder = 5
     end
   end
   object pnlMain: TPanel
@@ -544,6 +556,34 @@ object frmFiniteCapacityOperaris: TfrmFiniteCapacityOperaris
     object miQuitarAusencia: TMenuItem
       Caption = 'Quitar ausencia'
       OnClick = miQuitarAusenciaClick
+    end
+  end
+  object pmOpcionesAsig: TPopupMenu
+    Left = 900
+    Top = 200
+    object miAsigTodas: TMenuItem
+      AutoCheck = True
+      Caption = 'Asignar todo tipo de operaciones'
+      Checked = True
+      GroupIndex = 1
+      RadioItem = True
+      OnClick = miAsigTipoClick
+    end
+    object miAsigPendientes: TMenuItem
+      Tag = 1
+      AutoCheck = True
+      Caption = 'Asignar solo pendientes'
+      GroupIndex = 1
+      RadioItem = True
+      OnClick = miAsigTipoClick
+    end
+    object miAsigPlanificadas: TMenuItem
+      Tag = 2
+      AutoCheck = True
+      Caption = 'Asignar solo planificadas'
+      GroupIndex = 1
+      RadioItem = True
+      OnClick = miAsigTipoClick
     end
   end
 end

@@ -493,6 +493,7 @@
         <DCCReference Include="uAlertRulesRepo.pas"/>
         <DCCReference Include="uPlanSnapshot.pas"/>
         <DCCReference Include="uSnapshotRepo.pas"/>
+        <DCCReference Include="uSetupRules.pas"/>
         <DCCReference Include="uRestorePoints.pas">
             <Form>frmRestorePoints</Form>
             <FormType>dfm</FormType>

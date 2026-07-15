@@ -23,9 +23,12 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Graphics,
   cxVGrid, cxInplaceContainer, cxControls, cxStyles, cxGraphics,
   cxLookAndFeels, cxLookAndFeelPainters, cxEdit,
-  uBacklogScheduler, uGanttControl;
+  uBacklogScheduler, uGanttControl, uGanttTypes;
 
 type
+  // TSetupCollisionMode vive ahora en uGanttTypes (tipo de dominio compartido
+  // por el control y esta config, sin dependencia cruzada).
+
   // Todos los parametros configurables del Gantt (por usuario).
   TGanttConfig = record
     // --- Planificacion ---
@@ -41,6 +44,8 @@ type
     LinksVisible: TLinksVisible;
     AutoMarkers: Boolean;
     PxPerMinute: Double;
+    // --- Tiempo de cambio (setup) ---
+    SetupCollisionMode: TSetupCollisionMode;
   end;
 
 // Valores por defecto razonables (alineados con APS PRO).
@@ -67,11 +72,12 @@ type
   private
     FCfg: TGanttConfig;
     // Categorias
-    FCatPlan, FCatHuecos, FCatVisual: TcxCategoryRow;
+    FCatPlan, FCatHuecos, FCatVisual, FCatSetup: TcxCategoryRow;
     // Filas editor
     FRowMode, FRowOrder, FRowPlacement: TcxEditorRow;
     FRowHuecoMin, FRowPctNodo, FRowDistMin: TcxEditorRow;
     FRowHideWE, FRowLinks, FRowAutoMarkers, FRowPxMin: TcxEditorRow;
+    FRowSetupColl: TcxEditorRow;
     function AddCategory(const ACaption: string): TcxCategoryRow;
     function AddComboRow(AParent: TcxCategoryRow; const ACaption: string;
       const AItems: array of string; AIndex: Integer): TcxEditorRow;
@@ -111,6 +117,7 @@ begin
   Result.LinksVisible := lvSelected;
   Result.AutoMarkers := False;
   Result.PxPerMinute := 0.05;
+  Result.SetupCollisionMode := scmAvisar;   // por defecto: permitir pero avisar
 end;
 
 function ClampOrd(AValue, ALo, AHi, ADef: Integer): Integer;
@@ -150,6 +157,10 @@ begin
       Ord(Low(TLinksVisible)), Ord(High(TLinksVisible)), Ord(Result.LinksVisible)));
     Result.AutoMarkers := Root.GetValue<Boolean>('autoMarkers', Result.AutoMarkers);
     Result.PxPerMinute := Root.GetValue<Double>('pxPerMinute', Result.PxPerMinute);
+    Result.SetupCollisionMode := TSetupCollisionMode(ClampOrd(
+      Root.GetValue<Integer>('setupCollision', Ord(Result.SetupCollisionMode)),
+      Ord(Low(TSetupCollisionMode)), Ord(High(TSetupCollisionMode)),
+      Ord(Result.SetupCollisionMode)));
 
     // Saneo de umbrales.
     if Result.HuecoMinimoMin < 0 then Result.HuecoMinimoMin := 0;
@@ -180,6 +191,7 @@ begin
     Root.AddPair('linksVisible', TJSONNumber.Create(Ord(ACfg.LinksVisible)));
     Root.AddPair('autoMarkers', TJSONBool.Create(ACfg.AutoMarkers));
     Root.AddPair('pxPerMinute', TJSONNumber.Create(ACfg.PxPerMinute));
+    Root.AddPair('setupCollision', TJSONNumber.Create(Ord(ACfg.SetupCollisionMode)));
     DMPlanner.UserPrefs.Save(SCREEN_KEY, Root.ToJSON);
   finally
     Root.Free;
@@ -316,6 +328,12 @@ begin
       ['Nunca', 'Solo seleccionado', 'Siempre'], Ord(FCfg.LinksVisible));
     FRowAutoMarkers := AddBoolRow(FCatVisual, 'Marcadores autom'#225'ticos', FCfg.AutoMarkers);
     FRowPxMin := AddFloatRow(FCatVisual, 'Zoom (px/min)', FCfg.PxPerMinute);
+
+    FCatSetup := AddCategory('Tiempo de cambio (setup)');
+    FRowSetupColl := AddComboRow(FCatSetup,
+      'Al mover un nodo sobre el tiempo de cambio',
+      ['No tenerlo en cuenta', 'Permitir pero avisar', 'Bloquear (no pisar)'],
+      Ord(FCfg.SetupCollisionMode));
   finally
     vg.EndUpdate;
   end;
@@ -349,6 +367,9 @@ begin
   if Idx >= 0 then FCfg.LinksVisible := TLinksVisible(Idx);
   FCfg.AutoMarkers := Boolean(FRowAutoMarkers.Properties.Value);
   FCfg.PxPerMinute := Double(FRowPxMin.Properties.Value);
+
+  Idx := ComboIdx(FRowSetupColl);
+  if Idx >= 0 then FCfg.SetupCollisionMode := TSetupCollisionMode(Idx);
 end;
 
 end.

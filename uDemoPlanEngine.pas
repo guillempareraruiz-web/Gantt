@@ -661,6 +661,11 @@ var
       FlushTmp('#tmpDep',  SbDep,  NDep);
     end;
 
+    // Forward: LlenarBulkFile degrada a M4 (LlenarBulkADO) si el BULK INSERT
+    // falla, pero LlenarBulkADO se declara mas abajo. La forward permite la
+    // llamada anticipada (el cuerpo real esta al final).
+    procedure LlenarBulkADO; forward;
+
     // M5: escribe las filas a ficheros CSV en disco y hace BULK INSERT. SQL
     // Server lee el fichero en streaming (sin overhead por fila) -> la via mas
     // rapida. Campos separados por '|', filas por CRLF, NULLs como campo vacio
@@ -788,12 +793,20 @@ var
         except
           on E: Exception do
           begin
-            PlanLog.Linea('  M5 BULK INSERT fallo: %s', [E.Message]);
-            raise Exception.Create(
-              'BULK INSERT (M5) fallo: ' + E.Message + sLineBreak +
-              'Probablemente la cuenta de servicio de SQL Server no puede leer:' + sLineBreak +
-              Dir + sLineBreak +
-              'Usa el motor "PRO bulk ADO (M4)" en su lugar.');
+            // Tipicamente: la cuenta de servicio de SQL Server no puede leer el
+            // path (TEMP del usuario, o SQL en otro equipo donde ese path ni
+            // existe). En vez de fallar, DEGRADAMOS a M4 (bulk ADO), que llena
+            // las #temp con recordsets binarios via OLE DB y NO toca disco, asi
+            // que no depende de la cuenta de servicio. Seguimos dentro de la
+            // transaccion y antes del volcado, por lo que reintentar el llenado
+            // es seguro; las #temp pueden traer filas a medias del BULK fallido,
+            // asi que las vaciamos antes. Mismo fallback que uBulkNodePersist.
+            PlanLog.Linea('  M5 BULK INSERT fallo (%s) -> degradando a M4 bulk ADO',
+              [E.Message]);
+            ExecNoRec(
+              'DELETE FROM #tmpNode; DELETE FROM #tmpData; ' +
+              'DELETE FROM #tmpAsig; DELETE FROM #tmpDep;');
+            LlenarBulkADO;
           end;
         end;
       finally

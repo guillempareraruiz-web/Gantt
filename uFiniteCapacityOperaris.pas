@@ -25,7 +25,7 @@ uses
   System.DateUtils, System.StrUtils,
   Vcl.Controls, Vcl.Graphics, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
   Vcl.ExtCtrls, Vcl.Menus, Vcl.ComCtrls,
-  uGanttTypes, uNodeDataRepo, uCustomFieldDefs,
+  uGanttTypes, uNodeDataRepo, uNodesRepo, uCustomFieldDefs,
   uOperariosTypes, uOperariosRepo,
   uOperatorAbsencesRepo, uOperationTypesRepo, dxSkinsCore, dxSkinBasic,
   dxSkinBlack, dxSkinBlue, dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee,
@@ -56,6 +56,13 @@ type
   TFCORange = (frHoy, frSemana, fr2Semanas, frMes);
   // Modo de orden de columnas
   TFCOSortMode = (smNombre, smOcupacion, smDepartamento, smNivel);
+  // Que tipo de operaciones se permite asignar a operarios por drag&drop:
+  //  - taTodas: cualquier operacion pendiente (comportamiento por defecto).
+  //  - taSoloPendientes: solo las que AUN NO forman parte del Gantt
+  //    (no tienen nodo planificado con fecha).
+  //  - taSoloPlanificadas: solo las que YA forman parte del Gantt
+  //    (tienen nodo con FechaInicio asignada).
+  TTipoAsignacion = (taTodas, taSoloPendientes, taSoloPlanificadas);
   // Resultado para el caller
   TFCOAssignment = record
     OperarioId: Integer;
@@ -288,6 +295,11 @@ type
     cbFiltroOp: TComboBox;
     chkSoloCapacitados: TCheckBox;
     btnOperariosVisibles: TButton;
+    cxBtnOpciones: TcxButton;
+    pmOpcionesAsig: TPopupMenu;
+    miAsigTodas: TMenuItem;
+    miAsigPendientes: TMenuItem;
+    miAsigPlanificadas: TMenuItem;
     pnlMain: TPanel;
     pnlPendientes: TPanel;
     pnlPendientesHeader: TPanel;
@@ -342,6 +354,7 @@ type
     procedure miGestionAusenciasClick(Sender: TObject);
     procedure miGestionCalendarioClick(Sender: TObject);
     procedure miQuitarAusenciaClick(Sender: TObject);
+    procedure miAsigTipoClick(Sender: TObject);
   private
     FNodeRepo: TNodeDataRepo;
     FOpRepo: TOperariosRepo;
@@ -351,6 +364,9 @@ type
     FOwnsAbsRepo: Boolean;
     FOwnsTypesRepo: Boolean;
     FVisibleOperarioIds: TArray<Integer>;  // si len=0, todos visibles
+    FTipoAsignacion: TTipoAsignacion;      // filtro de que se puede asignar
+    FNodesRepo: TNodesRepo;                // nodos del Gantt (para saber planificados)
+    FPlanificadosSet: TDictionary<Integer, Boolean>;  // DataIds ya en el Gantt (con fecha)
     FPendingList: TPendingOpsListControl;
     FOperariColumns: TOperariColumnsControl;
     procedure OnPendingBeginDrag(Sender: TObject);
@@ -371,6 +387,15 @@ type
     function CollectPendingDataIds: TArray<Integer>;
     procedure DoAssignFromPending(DataId, OpId: Integer);
     procedure DoMoveAssignment(DataId, FromOpId, ToOpId: Integer);
+    // Reconstruye el set de DataIds que ya forman parte del Gantt (nodos con
+    // FechaInicio asignada) a partir de FNodesRepo.
+    procedure RebuildPlanificadosSet;
+    // True si el DataId ya esta planificado (forma parte del Gantt).
+    function IsDataPlanificado(DataId: Integer): Boolean;
+    // True si, segun el filtro FTipoAsignacion actual, este DataId puede
+    // asignarse a un operario. Muestra aviso si se bloquea (con AShowAviso).
+    function PuedeAsignar(DataId: Integer; AShowAviso: Boolean): Boolean;
+    procedure UpdateBtnOpcionesCaption;
   public
     // Inicializa la vista en modo embedded (hermana de Dashboard / Gantt /
     // FCP / Backlog dentro del Form1). No usa ShowModal; los repos los
@@ -380,7 +405,8 @@ type
       AOpRepo: TOperariosRepo;
       AAbsRepo: TOperatorAbsencesRepo = nil;
       ATypesRepo: TOperationTypesRepo = nil;
-      ACustomFieldDefs: TCustomFieldDefs = nil);
+      ACustomFieldDefs: TCustomFieldDefs = nil;
+      ANodesRepo: TNodesRepo = nil);
   end;
 implementation
 uses
@@ -1005,6 +1031,11 @@ begin
   FVisibleIds := Copy(AIds, 0, Length(AIds));
   ApplyVisibleFilter;
   SortOperarios;
+  // Al cambiar los operarios visibles cambia el numero de columnas y por
+  // tanto MaxScrollX. Reseteamos el scroll horizontal a 0 para que las
+  // columnas restantes siempre queden visibles (evita que queden fuera de
+  // pantalla a la izquierda si veniamos con scroll desplazado a la derecha).
+  FScrollX := 0;
   Invalidate;
 end;
 procedure TOperariColumnsControl.ComputeSummary(
@@ -2230,6 +2261,9 @@ begin
   FOperariColumns.OnRightClickAbsence := OnColRightClickAbsence;
   FOperariColumns.OnDblClickCard := OnColDblClick;
   FOperariColumns.OnHeaderOptionsClick := OnHeaderOptionsClick;
+  FTipoAsignacion := taTodas;
+  FPlanificadosSet := TDictionary<Integer, Boolean>.Create;
+  UpdateBtnOpcionesCaption;
   Application.OnIdle := ApplicationOnIdle;
 end;
 procedure TfrmFiniteCapacityOperaris.FormDestroy(Sender: TObject);
@@ -2237,6 +2271,7 @@ begin
   Application.OnIdle := nil;
   if FOwnsAbsRepo and Assigned(FAbsRepo) then FAbsRepo.Free;
   if FOwnsTypesRepo and Assigned(FTypesRepo) then FTypesRepo.Free;
+  FPlanificadosSet.Free;
 end;
 procedure TfrmFiniteCapacityOperaris.FillFiltroOp;
 var
@@ -2287,6 +2322,7 @@ var
   Operarios: TArray<TOperario>;
 begin
   Pending := CollectPendingDataIds;
+  RebuildPlanificadosSet;
   if Assigned(FOpRepo) then
     Operarios := FOpRepo.GetOperarios
   else
@@ -2372,6 +2408,65 @@ begin
   begin
     FVisibleOperarioIds := NewIds;
     RefreshAll;
+  end;
+end;
+
+procedure TfrmFiniteCapacityOperaris.miAsigTipoClick(Sender: TObject);
+begin
+  // Los 3 items comparten GroupIndex/RadioItem: Tag identifica la opcion.
+  if Sender is TMenuItem then
+    FTipoAsignacion := TTipoAsignacion(TMenuItem(Sender).Tag);
+  UpdateBtnOpcionesCaption;
+end;
+
+procedure TfrmFiniteCapacityOperaris.UpdateBtnOpcionesCaption;
+begin
+  case FTipoAsignacion of
+    taSoloPendientes:   cxBtnOpciones.Caption := 'Asignar: pendientes';
+    taSoloPlanificadas: cxBtnOpciones.Caption := 'Asignar: planificadas';
+  else
+    cxBtnOpciones.Caption := 'Asignar: todas';
+  end;
+end;
+
+procedure TfrmFiniteCapacityOperaris.RebuildPlanificadosSet;
+var
+  Nodes: TArray<TNode>;
+  I: Integer;
+begin
+  FPlanificadosSet.Clear;
+  if not Assigned(FNodesRepo) then Exit;
+  Nodes := FNodesRepo.GetAll;
+  for I := 0 to High(Nodes) do
+    // Forma parte del Gantt si tiene fecha de inicio asignada (>0).
+    if Nodes[I].StartTime > 0 then
+      FPlanificadosSet.AddOrSetValue(Nodes[I].DataId, True);
+end;
+
+function TfrmFiniteCapacityOperaris.IsDataPlanificado(DataId: Integer): Boolean;
+begin
+  Result := FPlanificadosSet.ContainsKey(DataId);
+end;
+
+function TfrmFiniteCapacityOperaris.PuedeAsignar(DataId: Integer;
+  AShowAviso: Boolean): Boolean;
+var
+  Plan: Boolean;
+begin
+  if FTipoAsignacion = taTodas then Exit(True);
+  Plan := IsDataPlanificado(DataId);
+  if FTipoAsignacion = taSoloPlanificadas then
+    Result := Plan
+  else // taSoloPendientes
+    Result := not Plan;
+  if (not Result) and AShowAviso then
+  begin
+    if FTipoAsignacion = taSoloPlanificadas then
+      ShowMessage('El modo actual solo permite asignar operaciones '#39'planificadas'#39' '
+        + '(que ya forman parte del Gantt).')
+    else
+      ShowMessage('El modo actual solo permite asignar operaciones '#39'pendientes'#39' '
+        + '(que a'#250'n no forman parte del Gantt).');
   end;
 end;
 procedure TfrmFiniteCapacityOperaris.OnPendingBeginDrag(Sender: TObject);
@@ -2551,10 +2646,29 @@ begin
     if (PendingId > 0) and (DropOp > 0) then
     begin
       var Ids := FPendingList.DragDataIds;
+      var Bloqueadas := 0;
       for var Id in Ids do
+      begin
+        // Filtro por tipo de asignacion (todas / solo pendientes / solo
+        // planificadas). Aviso agregado al final, no card a card.
+        if not PuedeAsignar(Id, False) then
+        begin
+          Inc(Bloqueadas);
+          Continue;
+        end;
         DoAssignFromPending(Id, DropOp);
+      end;
       FPendingList.ClearSelection;
       RefreshAll;
+      if Bloqueadas > 0 then
+      begin
+        if FTipoAsignacion = taSoloPlanificadas then
+          ShowMessage(Format('%d operaci'#243'n(es) no se asignaron: el modo actual '
+            + 'solo permite asignar '#39'planificadas'#39' (ya en el Gantt).', [Bloqueadas]))
+        else
+          ShowMessage(Format('%d operaci'#243'n(es) no se asignaron: el modo actual '
+            + 'solo permite asignar '#39'pendientes'#39' (a'#250'n no en el Gantt).', [Bloqueadas]));
+      end;
     end
     else if (ColId > 0) and DropOnPending and (ColFromOp > 0) then
     begin
@@ -2683,7 +2797,8 @@ procedure TfrmFiniteCapacityOperaris.InicializarEmbedded(
   AOpRepo: TOperariosRepo;
   AAbsRepo: TOperatorAbsencesRepo;
   ATypesRepo: TOperationTypesRepo;
-  ACustomFieldDefs: TCustomFieldDefs);
+  ACustomFieldDefs: TCustomFieldDefs;
+  ANodesRepo: TNodesRepo);
 var
   OperarioIds: TArray<Integer>;
   Ops: TArray<TOperario>;
@@ -2692,6 +2807,7 @@ begin
   FNodeRepo := ANodeRepo;
   FOpRepo := AOpRepo;
   FCustomFieldDefs := ACustomFieldDefs;
+  FNodesRepo := ANodesRepo;
   if Assigned(AAbsRepo) then
   begin
     FAbsRepo := AAbsRepo;

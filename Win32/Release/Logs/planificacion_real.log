@@ -1,0 +1,41 @@
+﻿2026-07-14 19:04:39.076  ========================================================
+2026-07-14 19:04:39.077  === LOGIN btnDevAdmin (arranque)
+2026-07-14 19:04:39.077  ========================================================
+2026-07-14 19:04:39.115    LOGIN.Connect (con migraciones): 0 ms
+2026-07-14 19:04:39.129    LOGIN.ValidateUser: 14 ms
+2026-07-14 19:04:39.133    LOGIN.LoadPermissions: 4 ms
+2026-07-14 19:04:39.241      DM.LoadCalendars: 103 ms
+2026-07-14 19:04:39.250      DM.LoadCentres: 9 ms
+2026-07-14 19:04:39.250    LOGIN.LoadEmpresaInfo (+Calendars+Centres): 117 ms
+2026-07-14 19:04:39.254    LOGIN.LoadMasterProject: 3 ms
+2026-07-14 19:04:39.254  ======== LOGIN btnDevAdmin FIN ========
+2026-07-14 19:04:39.267  ======== ARRANQUE Main.FormCreate INICIO ========
+2026-07-14 19:04:39.270    ARRANQUE.ConfigJSON: 1 ms
+2026-07-14 19:04:39.276    ARRANQUE.Operarios+Deptos: 6 ms
+2026-07-14 19:04:39.286    ARRANQUE.Repos(Habil/OpTypes/Absen/Pesos): 10 ms
+2026-07-14 19:04:39.288    ARRANQUE.MigracionHabilidades: 2 ms
+2026-07-14 19:04:39.338    ARRANQUE.LoadActivePlan: 50 ms
+2026-07-14 19:04:39.391    ARRANQUE.MostrarDashboard(sin refresco): 52 ms
+2026-07-14 19:04:39.392  ======== ARRANQUE Main.FormCreate FIN (refresco diferido) ========
+2026-07-14 19:04:39.458  DASH.FormShow INICIO (EstaCargado=False)
+2026-07-14 19:04:39.458  DASH.Refrescar INICIO (Forzar=False Demo=False)
+2026-07-14 19:04:39.473    DASH.Contadores: 15 ms
+2026-07-14 19:04:40.088    DASH.ProyectoActivo: 615 ms
+2026-07-14 19:04:40.136    DASH.PendingSync: 48 ms
+2026-07-14 19:04:40.620    DASH.Salud: 484 ms
+2026-07-14 19:04:41.359    DASH.KPIsAvanzados: 739 ms
+2026-07-14 19:04:41.359  DASH.Refrescar TOTAL: 1901 ms
+2026-07-14 19:04:41.360    DASH.FormShow.Refrescar: 1902 ms
+2026-07-14 19:04:41.364    DASH.FormShow.RelayoutAll: 4 ms
+2026-07-14 19:04:41.681    ARRANQUE.RefrescoDiferido: 107 ms
+2026-07-14 19:04:41.685  ======== ARRANQUE refresco diferido COMPLETO ========
+2026-07-14 19:04:45.532  DASH.Refrescar INICIO (Forzar=True Demo=True)
+2026-07-14 19:04:45.532    DASH.Contadores: 0 ms
+2026-07-14 19:04:45.539    DASH.ProyectoActivo: 6 ms
+2026-07-14 19:04:45.539    DASH.PendingSync: 0 ms
+2026-07-14 19:04:45.539    DASH.Salud: 0 ms
+2026-07-14 19:04:45.540    DASH.KPIsAvanzados: 0 ms
+2026-07-14 19:04:45.540  DASH.Refrescar TOTAL: 8 ms
+2026-07-14 19:04:51.149  DASH.FormShow INICIO (EstaCargado=True)
+2026-07-14 19:04:51.149    DASH.FormShow.Refrescar: 0 ms
+2026-07-14 19:04:51.150    DASH.FormShow.RelayoutAll: 0 ms

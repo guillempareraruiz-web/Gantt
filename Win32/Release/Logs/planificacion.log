@@ -1,14 +1,32 @@
-﻿2026-07-13 16:26:08.323  ========================================================
-2026-07-13 16:26:08.325  === TOGGLE TAB -> 0 (0=Pend,1=Planif)
-2026-07-13 16:26:08.326  ========================================================
-2026-07-13 16:26:08.373  LOADDATA query (tab=0 nivel=1): 0 ms [CACHE]
-2026-07-13 16:26:08.423  LOADDATA volcado 312 filas: 49 ms
-2026-07-13 16:26:08.502  LOADDATA pintado+KPIs: 77 ms
-2026-07-13 16:26:08.502  === TOGGLE total: 175 ms ===
-2026-07-13 16:26:08.503  === FIN ===============================================
-2026-07-13 16:41:12.333  LOADDATA query (tab=0 nivel=3): 104 ms [BD]
-2026-07-13 16:41:12.333  LOADDATA volcado 0 filas: 0 ms
-2026-07-13 16:41:12.368  LOADDATA pintado+KPIs: 33 ms
-2026-07-13 18:02:02.696  LOADDATA query (tab=0 nivel=1): 511 ms [BD]
-2026-07-13 18:02:02.737  LOADDATA volcado 312 filas: 40 ms
-2026-07-13 18:02:02.833  LOADDATA pintado+KPIs: 93 ms
+﻿2026-07-16 00:22:43.315  ========================================================
+2026-07-16 00:22:43.315  === LOGIN btnDevAdmin (arranque)
+2026-07-16 00:22:43.315  ========================================================
+2026-07-16 00:22:43.361    LOGIN.Connect (con migraciones): 0 ms
+2026-07-16 00:22:43.375    LOGIN.ValidateUser: 14 ms
+2026-07-16 00:22:43.387    LOGIN.LoadPermissions: 12 ms
+2026-07-16 00:22:43.466      DM.LoadCalendars: 72 ms
+2026-07-16 00:22:43.478      DM.LoadCentres: 12 ms
+2026-07-16 00:22:43.478    LOGIN.LoadEmpresaInfo (+Calendars+Centres): 91 ms
+2026-07-16 00:22:43.497    LOGIN.LoadMasterProject: 19 ms
+2026-07-16 00:22:43.497  ======== LOGIN btnDevAdmin FIN ========
+2026-07-16 00:22:43.508  ======== ARRANQUE Main.FormCreate INICIO ========
+2026-07-16 00:22:43.508    ARRANQUE.ConfigJSON: 0 ms
+2026-07-16 00:22:43.532    ARRANQUE.Operarios+Deptos: 24 ms
+2026-07-16 00:22:43.561    ARRANQUE.Repos(Habil/OpTypes/Absen/Pesos): 29 ms
+2026-07-16 00:22:43.569    ARRANQUE.MigracionHabilidades: 8 ms
+2026-07-16 00:22:43.665    ARRANQUE.LoadActivePlan: 96 ms
+2026-07-16 00:22:43.730    ARRANQUE.MostrarDashboard(sin refresco): 65 ms
+2026-07-16 00:22:43.731  ======== ARRANQUE Main.FormCreate FIN (refresco diferido) ========
+2026-07-16 00:22:43.799  DASH.FormShow INICIO (EstaCargado=False)
+2026-07-16 00:22:43.799  DASH.Refrescar INICIO (Forzar=False Demo=False)
+2026-07-16 00:22:43.811    DASH.Contadores: 12 ms
+2026-07-16 00:22:43.920    DASH.ProyectoActivo: 109 ms
+2026-07-16 00:22:43.963    DASH.PendingSync: 37 ms
+2026-07-16 00:22:43.980    DASH.Salud: 17 ms
+2026-07-16 00:22:44.059    DASH.KPIsAvanzados: 79 ms
+2026-07-16 00:22:44.059    DASH.KPIsStock: 0 ms
+2026-07-16 00:22:44.059  DASH.Refrescar TOTAL: 260 ms
+2026-07-16 00:22:44.059    DASH.FormShow.Refrescar: 260 ms
+2026-07-16 00:22:44.063    DASH.FormShow.RelayoutAll: 4 ms
+2026-07-16 00:22:44.386    ARRANQUE.RefrescoDiferido: 90 ms
+2026-07-16 00:22:44.392  ======== ARRANQUE refresco diferido COMPLETO ========

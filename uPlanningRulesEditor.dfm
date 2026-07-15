@@ -1,7 +1,7 @@
 object frmPlanningRulesEditor: TfrmPlanningRulesEditor
   Left = 0
   Top = 0
-  BorderStyle = bsSizeToolWin
+  BorderStyle = bsDialog
   Caption = 'Reglas de Planificaci'#243'n'
   ClientHeight = 680
   ClientWidth = 1280
@@ -13,58 +13,17 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
   Font.Style = []
   KeyPreview = True
   Position = poScreenCenter
+  OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnKeyDown = FormKeyDown
   PixelsPerInch = 96
   TextHeight = 15
-  object pnlBottom: TPanel
-    Left = 0
-    Top = 640
-    Width = 920
-    Height = 40
-    Align = alBottom
-    BevelOuter = bvNone
-    Color = 15395562
-    ParentBackground = False
-    TabOrder = 1
-    DesignSize = (
-      920
-      40)
-    object btnOK: TButton
-      Left = 740
-      Top = 6
-      Width = 80
-      Height = 28
-      Anchors = [akTop, akRight]
-      Caption = 'Aceptar'
-      Default = True
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWhite
-      Font.Height = -12
-      Font.Name = 'Segoe UI Semibold'
-      Font.Style = []
-      ParentFont = False
-      TabOrder = 0
-      OnClick = btnOKClick
-    end
-    object btnCancel: TButton
-      Left = 830
-      Top = 6
-      Width = 80
-      Height = 28
-      Anchors = [akTop, akRight]
-      Cancel = True
-      Caption = 'Cancelar'
-      TabOrder = 1
-      OnClick = btnCancelClick
-    end
-  end
   object pnlMain: TPanel
     Left = 0
     Top = 0
-    Width = 920
-    Height = 640
+    Width = 1280
+    Height = 680
     Align = alClient
     BevelOuter = bvNone
     Color = 15395562
@@ -73,21 +32,24 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
     object pnlProfiles: TPanel
       Left = 0
       Top = 0
-      Width = 920
+      Width = 1280
       Height = 80
       Align = alTop
       BevelOuter = bvNone
-      Color = 15395562
+      Color = 16382457
       ParentBackground = False
       TabOrder = 0
+      DesignSize = (
+        1280
+        80)
       object lblProfile: TLabel
         Left = 16
         Top = 12
-        Width = 33
+        Width = 34
         Height = 15
         Caption = 'Perfil:'
         Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWhite
+        Font.Color = 3750201
         Font.Height = -12
         Font.Name = 'Segoe UI Semibold'
         Font.Style = []
@@ -96,11 +58,11 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
       object lblDescription: TLabel
         Left = 16
         Top = 48
-        Width = 70
+        Width = 68
         Height = 15
         Caption = 'Descripci'#243'n:'
         Font.Charset = DEFAULT_CHARSET
-        Font.Color = 14540253
+        Font.Color = 7107965
         Font.Height = -12
         Font.Name = 'Segoe UI'
         Font.Style = []
@@ -150,17 +112,34 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
         TabOrder = 4
         OnChange = edtDescriptionChange
       end
+      object btnGuardar: TButton
+        Left = 1140
+        Top = 22
+        Width = 124
+        Height = 34
+        Anchors = [akTop, akRight]
+        Caption = 'Guardar reglas'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 3750201
+        Font.Height = -12
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = []
+        ParentFont = False
+        TabOrder = 5
+        OnClick = btnGuardarReglasClick
+      end
     end
     object pnlRules: TPanel
       Left = 0
       Top = 80
       Width = 1280
-      Height = 560
+      Height = 600
       Align = alClient
       BevelOuter = bvNone
       Color = 15395562
       ParentBackground = False
       TabOrder = 1
+      ExplicitHeight = 560
       object pnlSortRules: TPanel
         Left = 0
         Top = 0
@@ -170,7 +149,6 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
         BevelOuter = bvNone
         Color = 15395562
         Padding.Left = 8
-        Padding.Top = 0
         Padding.Right = 4
         Padding.Bottom = 8
         ParentBackground = False
@@ -189,7 +167,7 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             Left = 0
             Top = 0
             Width = 408
-            Height = 44
+            Height = 60
             Align = alTop
             BevelOuter = bvNone
             Color = 15132390
@@ -197,8 +175,8 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             TabOrder = 0
             object lblSortTitle: TLabel
               Left = 14
-              Top = 12
-              Width = 136
+              Top = 10
+              Width = 137
               Height = 17
               Caption = #9650#9660' Criterios de Orden'
               Font.Charset = DEFAULT_CHARSET
@@ -208,14 +186,27 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
               Font.Style = []
               ParentFont = False
             end
+            object lblSortSub: TLabel
+              Left = 14
+              Top = 33
+              Width = 300
+              Height = 14
+              Caption = 'En qu'#233' orden entra la carga al planificar'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = 8947848
+              Font.Height = -11
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
             object lblSortCount: TLabel
-              Left = 310
-              Top = 14
-              Width = 10
+              Left = 306
+              Top = 12
+              Width = 6
               Height = 15
               Caption = '0'
               Font.Charset = DEFAULT_CHARSET
-              Font.Color = 8421504
+              Font.Color = clGray
               Font.Height = -12
               Font.Name = 'Segoe UI'
               Font.Style = []
@@ -239,7 +230,6 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             Align = alClient
             BorderStyle = bsNone
             Color = 15132390
-            ParentBackground = False
             ParentColor = False
             TabOrder = 1
           end
@@ -254,7 +244,6 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
         BevelOuter = bvNone
         Color = 15395562
         Padding.Left = 4
-        Padding.Top = 0
         Padding.Right = 4
         Padding.Bottom = 8
         ParentBackground = False
@@ -273,7 +262,7 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             Left = 0
             Top = 0
             Width = 412
-            Height = 44
+            Height = 60
             Align = alTop
             BevelOuter = bvNone
             Color = 15132390
@@ -281,8 +270,8 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             TabOrder = 0
             object lblFilterTitle: TLabel
               Left = 14
-              Top = 12
-              Width = 125
+              Top = 10
+              Width = 115
               Height = 17
               Caption = #9881' Reglas de Filtro'
               Font.Charset = DEFAULT_CHARSET
@@ -292,14 +281,27 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
               Font.Style = []
               ParentFont = False
             end
+            object lblFilterSub: TLabel
+              Left = 14
+              Top = 33
+              Width = 300
+              Height = 14
+              Caption = 'Qu'#233' trabajos incluir, excluir o forzar a un centro'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = 8947848
+              Font.Height = -11
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
             object lblFilterCount: TLabel
-              Left = 310
-              Top = 14
-              Width = 10
+              Left = 306
+              Top = 12
+              Width = 6
               Height = 15
               Caption = '0'
               Font.Charset = DEFAULT_CHARSET
-              Font.Color = 8421504
+              Font.Color = clGray
               Font.Height = -12
               Font.Name = 'Segoe UI'
               Font.Style = []
@@ -323,7 +325,6 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             Align = alClient
             BorderStyle = bsNone
             Color = 15132390
-            ParentBackground = False
             ParentColor = False
             TabOrder = 1
           end
@@ -338,7 +339,6 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
         BevelOuter = bvNone
         Color = 15395562
         Padding.Left = 4
-        Padding.Top = 0
         Padding.Right = 8
         Padding.Bottom = 8
         ParentBackground = False
@@ -357,7 +357,7 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             Left = 0
             Top = 0
             Width = 428
-            Height = 44
+            Height = 60
             Align = alTop
             BevelOuter = bvNone
             Color = 15132390
@@ -365,8 +365,8 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             TabOrder = 0
             object lblGroupTitle: TLabel
               Left = 14
-              Top = 12
-              Width = 140
+              Top = 10
+              Width = 151
               Height = 17
               Caption = #9776' Agrupaci'#243'n (Batching)'
               Font.Charset = DEFAULT_CHARSET
@@ -376,14 +376,27 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
               Font.Style = []
               ParentFont = False
             end
+            object lblGroupSub: TLabel
+              Left = 14
+              Top = 33
+              Width = 320
+              Height = 14
+              Caption = 'Qu'#233' trabajos juntar (mismo valor) para reducir cambios'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = 8947848
+              Font.Height = -11
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
             object lblGroupCount: TLabel
-              Left = 330
-              Top = 14
-              Width = 10
+              Left = 326
+              Top = 12
+              Width = 6
               Height = 15
               Caption = '0'
               Font.Charset = DEFAULT_CHARSET
-              Font.Color = 8421504
+              Font.Color = clGray
               Font.Height = -12
               Font.Name = 'Segoe UI'
               Font.Style = []
@@ -407,7 +420,6 @@ object frmPlanningRulesEditor: TfrmPlanningRulesEditor
             Align = alClient
             BorderStyle = bsNone
             Color = 15132390
-            ParentBackground = False
             ParentColor = False
             TabOrder = 1
           end

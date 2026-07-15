@@ -4589,5 +4589,12 @@ object frmVistaGantt: TfrmVistaGantt
       Caption = 'Ver panel Operarios'
       OnClick = miVerOperariosClick
     end
+    object N7: TMenuItem
+      Caption = '-'
+    end
+    object miConfiguracionGantt: TMenuItem
+      Caption = 'Configuraci'#243'n del Gantt...'
+      OnClick = miConfiguracionGanttClick
+    end
   end
 end

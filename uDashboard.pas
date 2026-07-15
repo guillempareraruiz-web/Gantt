@@ -107,6 +107,7 @@ type
   private
     FOnAbrirGantt: TNotifyEvent;
     FOnAbrirFiniteCapacity: TNotifyEvent;
+    FCargado: Boolean;   // ya se hizo un Refrescar completo (cache de refresco)
     // KPI cards modernos. Sustituyen visualmente al bloque de contadores
     // planos del pnlMetricas (calendarios/centros/areas/etc.); estos siguen
     // existiendo en el DFM por compatibilidad pero quedan ocultos.
@@ -122,6 +123,8 @@ type
     FKPIOtif: TObject;         // % de OFs entregadas a tiempo (OTIF)
     FKPISatOperarios: TObject; // % saturacion media de operarios
     FKPICuelloBotella: TObject;// saturacion del centro mas cargado
+    FKPIStockOk: TObject;      // % de OFs con material suficiente (cobertura)
+    FKPIRotura: TObject;       // % de OFs con rotura de stock a su fecha
     // Periodo mostrado en las sparklines. Valores especiales: RANGO_SEMANA para
     // "esta semana" (desde el lunes); >0 = numero de dias (7/30/90).
     FRangoDias: Integer;
@@ -244,6 +247,9 @@ type
     procedure RefrescarSalud;
     // KPIs avanzados: OTIF, saturacion operarios, centro cuello de botella.
     procedure RefrescarKPIsAvanzados;
+    // KPIs de cobertura de material: % OFs con stock suficiente / con rotura.
+    // De momento solo con datos DEMO; en real muestra N/D (calculo real PENDIENTE).
+    procedure RefrescarKPIsStock;
     procedure SaludCardClick(Sender: TObject);
     procedure CardDblClick(Sender: TObject);
     // Historico real de KPIs (FS_PL_DashboardMetric, V068).
@@ -266,7 +272,18 @@ type
     function SubtituloRango(ARango: Integer): string;
   public
     destructor Destroy; override;
-    procedure Refrescar;
+    // AForzar=False: si ya se refresco antes, no recalcula (retorno instantaneo
+    // al volver de otra pantalla). AForzar=True: recalcula siempre (cambio de
+    // proyecto, toggle Demo, boton de refresco manual).
+    procedure Refrescar(AForzar: Boolean = False);
+    // Invalida la cache: el proximo Refrescar recalculara aunque no se fuerce.
+    procedure InvalidarCache;
+    // True si ya se hizo un refresco completo (Main lo usa para no repetirlo al
+    // volver de otra pantalla).
+    function EstaCargado: Boolean;
+    // Punto UNICO de entrada desde el Main al mostrar: refresca solo si la cache
+    // esta invalidada. Evita el doble refresco (MostrarDashboard + FormShow).
+    procedure RefrescarSiHaceFalta;
     property OnAbrirGantt: TNotifyEvent read FOnAbrirGantt write FOnAbrirGantt;
     property OnAbrirFiniteCapacity: TNotifyEvent read FOnAbrirFiniteCapacity
       write FOnAbrirFiniteCapacity;
@@ -283,7 +300,7 @@ uses
   uBacklog, uKPICard, uDemoMode, uDashWidgets, uGanttAlertas, uDashboardConfig,
   uKPIDetail,
   uErpReader, uErpReaderFactory, uSyncBacklogPreview, uErpSyncRepo,
-  uErpSyncTypes, uBusyDialog, uSincronizarERP;
+  uErpSyncTypes, uBusyDialog, uSincronizarERP, uPlanLog;
 
 const
   DASHBOARD_PREF_KEY = 'Dashboard';
@@ -595,8 +612,12 @@ end;
 // El modo DEMO ha cambiado: repintar KPIs (usaran serie ficticia o real).
 procedure TfrmDashboard.DemoChanged(Sender: TObject);
 begin
-  if Visible then
-    Refrescar;
+  // El toggle Demo cambia todos los datos: SOLO invalidamos la cache. NO
+  // refrescamos aqui porque este evento se dispara ANTES de que el Main termine
+  // de conmutar el proyecto (EntrarModoDemo/LoadActivePlan): refrescar ahora
+  // pintaria datos a medio conmutar. El refresco unico lo hace el Main
+  // (btnTB_DemoClick) cuando ya esta todo listo, o MostrarDashboard al abrirlo.
+  InvalidarCache;
 end;
 
 // Envuelve todo el contenido de pnlCards en un TcxScrollBox con scroll vertical
@@ -670,13 +691,23 @@ begin
 end;
 
 procedure TfrmDashboard.FormShow(Sender: TObject);
+var
+  T0: TDateTime;
 begin
-  Refrescar;
+  PlanLog.Linea('DASH.FormShow INICIO (EstaCargado=%s)', [BoolToStr(FCargado, True)]);
+  T0 := Now;
+  // Refresco condicionado a la cache (idempotente): si el Main ya llamo a
+  // RefrescarSiHaceFalta no recalcula nada. Cubre el arranque de la app cuando
+  // el Dashboard es lo primero que se muestra.
+  RefrescarSiHaceFalta;
+  PlanLog.Linea('  DASH.FormShow.Refrescar: %d ms', [MilliSecondsBetween(Now, T0)]);
+  T0 := Now;
   ActualizarReloj;
   TimerReloj.Enabled := True;
   // Cuando el form ya tiene sus dimensiones reales, relayout responsive (el
   // OnResize del scrollbox no siempre dispara con el ancho definitivo al abrir).
   RelayoutAll;
+  PlanLog.Linea('  DASH.FormShow.RelayoutAll: %d ms', [MilliSecondsBetween(Now, T0)]);
 
   // "Al arrancar la aplicacion": comprobar una sola vez por sesion.
   if not FStartupDone then
@@ -760,6 +791,14 @@ begin
   FKPISatOperarios := NewCard('SatOperarios', 'Saturaci'#243'n operarios',
     'Ocupaci'#243'n media de los operarios respecto a su jornada.', 'Recursos',
     kctAmbar, '%', '%.0f');
+
+  // -- Materiales (cobertura de stock) --
+  FKPIStockOk    := NewCard('StockOk', 'OFs con stock suficiente',
+    'Porcentaje de OF cuyo material est'#225' disponible para su fecha.', 'Materiales',
+    kctVerde, '%', '%.0f');
+  FKPIRotura     := NewCard('Rotura', 'OFs con rotura de stock',
+    'Porcentaje de OF con alg'#250'n material en rotura a su fecha.', 'Materiales',
+    kctRojo, '%', '%.0f');
 
   // -- ERP --
   FKPIOFsPend    := NewCard('OFsPend', 'OFs pendientes',
@@ -886,6 +925,25 @@ begin
     'frecuencia para que el Gantt refleje siempre la carga real; si este n'#250'mero '+
     'crece, es se'#241'al de que el plan se est'#225' quedando desfasado frente a los '+
     'pedidos que entran.';
+
+  TKPICard(FKPIStockOk).DescAmpliada :=
+    'Porcentaje de '#243'rdenes de fabricaci'#243'n del plan cuyo material necesario '+
+    '(componentes del escandallo) est'#225' DISPONIBLE a la fecha en que la orden '+
+    'debe empezar, seg'#250'n la proyecci'#243'n de stock.'#13#10#13#10+
+    'Es el indicador de aprovisionamiento clave: un valor alto significa que el '+
+    'plan es EJECUTABLE, que no se parar'#225' una l'#237'nea por falta de un ingrediente '+
+    'o un envase. Compras y log'#237'stica lo vigilan junto con "OFs con rotura": si '+
+    'baja, hay material por reponer antes de que la producci'#243'n lo necesite.';
+
+  TKPICard(FKPIRotura).DescAmpliada :=
+    'Porcentaje de '#243'rdenes de fabricaci'#243'n con AL MENOS UN material en rotura '+
+    '(stock proyectado por debajo de lo necesario) en la fecha en que la orden '+
+    'lo consume. Es el complementario de "OFs con stock suficiente".'#13#10#13#10+
+    'Se'#241'ala el riesgo de aprovisionamiento del plan: cada punto son '#243'rdenes '+
+    'que, si no se repone el material a tiempo, se retrasar'#225'n por falta de '+
+    'existencias, no por capacidad. Es la lista de trabajo de compras: prioriza '+
+    'las reposiciones de los materiales que bloquean m'#225's '#243'rdenes y con fecha '+
+    'm'#225's cercana.';
 end;
 
 procedure TfrmDashboard.pnlMetricasResize(Sender: TObject);
@@ -1998,29 +2056,102 @@ procedure TfrmDashboard.ActualizarReloj;
 begin
   lblFechaHora.Caption := FormatDateTime('dddd d" de "mmmm" de "yyyy   hh:nn:ss', Now);
 end;
-procedure TfrmDashboard.Refrescar;
+procedure TfrmDashboard.InvalidarCache;
+begin
+  FCargado := False;
+end;
+
+function TfrmDashboard.EstaCargado: Boolean;
+begin
+  Result := FCargado;
+end;
+
+procedure TfrmDashboard.RefrescarSiHaceFalta;
+begin
+  if not FCargado then
+    Refrescar;
+end;
+
+procedure TfrmDashboard.Refrescar(AForzar: Boolean = False);
 var
   S: TUserSession;
   Tipo: string;
   NumCal, NumCen, NumArea, NumDept, NumTurn, NumSkill, NumOp: Integer;
+  T0, TGlobal: TDateTime;
+
+  procedure Tic(const AEtapa: string);
+  begin
+    PlanLog.Linea('  DASH.%s: %d ms', [AEtapa, MilliSecondsBetween(Now, T0)]);
+    T0 := Now;
+  end;
+
 begin
+  TGlobal := Now;
+  T0 := Now;
+  PlanLog.Linea('DASH.Refrescar INICIO (Forzar=%s Demo=%s)',
+    [BoolToStr(AForzar, True), BoolToStr(DemoMode.Active, True)]);
+  // AForzar solo lo respeta MostrarDashboard (Main) para evitar recalcular al
+  // volver de otra pantalla si ya se cargo. Los refrescos internos (cambio de
+  // periodo, botones, FormShow) llaman sin forzar pero SIEMPRE deben recalcular,
+  // por eso la cache solo corta cuando el llamante es MostrarDashboard, que usa
+  // PuedeSaltarRefresco. Aqui simplemente marcamos que ya hay datos.
+  FCargado := True;
   // Empresa
   if DMPlanner.CurrentEmpresaNombre <> '' then
     lblEmpresaNombre.Caption := DMPlanner.CurrentEmpresaNombre
   else
     lblEmpresaNombre.Caption := '--';
   lblEmpresaCodigo.Caption := 'Código: ' + IntToStr(DMPlanner.CodigoEmpresa);
-  NumCal := 0;
-  if DMPlanner.CalendarsRepo <> nil then
-    NumCal := DMPlanner.CalendarsRepo.Count;
-  NumCen := 0;
-  if DMPlanner.CentresRepo <> nil then
-    NumCen := DMPlanner.CentresRepo.Count;
-  NumArea := DMPlanner.CountTable('FS_PL_Area');
-  NumDept := DMPlanner.CountTable('FS_PL_Department');
-  NumTurn := DMPlanner.CountTable('FS_PL_Shift');
-  NumSkill := DMPlanner.CountTable('FS_PL_OperatorSkill');
-  NumOp := DMPlanner.CountTable('FS_PL_Operator');
+  if DemoMode.Active then
+  begin
+    // Modo Demo: contadores de configuracion ficticios (no se toca la BD; los 5
+    // COUNT(*) eran el mayor coste de cada refresco al volver al Dashboard).
+    NumCal := 6; NumCen := 10; NumArea := 4; NumDept := 5;
+    NumTurn := 3; NumSkill := 8; NumOp := 18;
+  end
+  else
+  begin
+    NumCal := 0;
+    if DMPlanner.CalendarsRepo <> nil then
+      NumCal := DMPlanner.CalendarsRepo.Count;
+    NumCen := 0;
+    if DMPlanner.CentresRepo <> nil then
+      NumCen := DMPlanner.CentresRepo.Count;
+    // Un UNICO round-trip para los 5 contadores (antes eran 5 COUNT(*)
+    // separados = 5x latencia; en BD real remota eso era ~1,2s). Cada subconsulta
+    // se protege por si una tabla no existe (migracion no aplicada): si falla el
+    // conjunto, caemos a los CountTable individuales.
+    NumArea := 0; NumDept := 0; NumTurn := 0; NumSkill := 0; NumOp := 0;
+    var QC := TADOQuery.Create(nil);
+    try
+      QC.Connection := DMPlanner.ADOConnection;
+      var CEc := IntToStr(DMPlanner.CodigoEmpresa);
+      QC.SQL.Text :=
+        'SELECT ' +
+        '  (SELECT COUNT(*) FROM FS_PL_Area WHERE CodigoEmpresa=' + CEc + ') AS NArea, ' +
+        '  (SELECT COUNT(*) FROM FS_PL_Department WHERE CodigoEmpresa=' + CEc + ') AS NDept, ' +
+        '  (SELECT COUNT(*) FROM FS_PL_Shift WHERE CodigoEmpresa=' + CEc + ') AS NTurn, ' +
+        '  (SELECT COUNT(*) FROM FS_PL_OperatorSkill WHERE CodigoEmpresa=' + CEc + ') AS NSkill, ' +
+        '  (SELECT COUNT(*) FROM FS_PL_Operator WHERE CodigoEmpresa=' + CEc + ') AS NOp';
+      try
+        QC.Open;
+        NumArea := QC.FieldByName('NArea').AsInteger;
+        NumDept := QC.FieldByName('NDept').AsInteger;
+        NumTurn := QC.FieldByName('NTurn').AsInteger;
+        NumSkill := QC.FieldByName('NSkill').AsInteger;
+        NumOp := QC.FieldByName('NOp').AsInteger;
+      except
+        // Fallback individual (alguna tabla puede no existir).
+        NumArea := DMPlanner.CountTable('FS_PL_Area');
+        NumDept := DMPlanner.CountTable('FS_PL_Department');
+        NumTurn := DMPlanner.CountTable('FS_PL_Shift');
+        NumSkill := DMPlanner.CountTable('FS_PL_OperatorSkill');
+        NumOp := DMPlanner.CountTable('FS_PL_Operator');
+      end;
+    finally
+      QC.Free;
+    end;
+  end;
   lblValCalendarios.Caption := IntToStr(NumCal);
   lblValCentros.Caption := IntToStr(NumCen);
   lblValAreas.Caption := IntToStr(NumArea);
@@ -2028,10 +2159,17 @@ begin
   lblValTurnos.Caption := IntToStr(NumTurn);
   lblValCapacitaciones.Caption := IntToStr(NumSkill);
   lblValOperarios.Caption := IntToStr(NumOp);
+  Tic('Contadores');
   RefrescarProyectoActivo;
+  Tic('ProyectoActivo');
   RefrescarPendingSync;
+  Tic('PendingSync');
   RefrescarSalud;
+  Tic('Salud');
   RefrescarKPIsAvanzados;
+  Tic('KPIsAvanzados');
+  RefrescarKPIsStock;
+  Tic('KPIsStock');
   // Proyecto
   if DMPlanner.CurrentProjectId > 0 then
   begin
@@ -2062,6 +2200,7 @@ begin
     lblUsuarioNombre.Caption := '--';
     lblUsuarioRol.Caption := 'Rol: --';
   end;
+  PlanLog.Linea('DASH.Refrescar TOTAL: %d ms', [MilliSecondsBetween(Now, TGlobal)]);
 end;
 
 // Resumen del plan para el mini-Gantt del cronograma: por cada centro con
@@ -2286,83 +2425,60 @@ begin
     end;
     Exit;
   end;
+  // En Demo NO tocamos la BD: estos 4 SELECT sobre FS_PL_Node/NodeData eran el
+  // grueso del tiempo (ProyectoActivo ~1300 ms en real). Valores ficticios; los
+  // widgets del mini-Gantt los rellena la rama Demo de mas abajo.
+  if DemoMode.Active then
+  begin
+    NodosTotal := 128; NodosPlan := 112;
+    OFsTotal := 24;    OFsPlan := 21;
+    PedidosTotal := 17; PedidosPlan := 15;
+    CentrosUsados := 9; OpAsig := 14; Dependencias := 72; Marcadores := 5;
+    DuracionTotal := 304 * 60.0;              // 304 h en minutos
+    FInicio := Trunc(Date) - 21;
+    FFin := Trunc(Date) + 63;
+  end
+  else
+  begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   PID := IntToStr(ProjectId);
-  // Nodos: planificados vs total, fechas min/max, duración
+  // UN SOLO round-trip para TODOS los indicadores del proyecto activo. Antes
+  // eran 4 queries separadas sobre FS_PL_Node/NodeData (la tabla grande) = 4x
+  // latencia; en BD real remota eso era ~1,8s. Ahora una sola sentencia con
+  // subconsultas correlacionadas. El JOIN NodeData solo se hace para OFs/Pedidos.
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := DMPlanner.ADOConnection;
     Q.SQL.Text :=
       'SELECT ' +
-      '  COUNT(*) AS Total, ' +
-      '  SUM(CASE WHEN FechaInicio IS NOT NULL THEN 1 ELSE 0 END) AS Planificados, ' +
-      '  MIN(FechaInicio) AS FInicio, ' +
-      '  MAX(FechaFin) AS FFin, ' +
-      '  ISNULL(SUM(CASE WHEN FechaInicio IS NOT NULL THEN DuracionMin ELSE 0 END), 0) AS DurTotal ' +
-      'FROM FS_PL_Node ' +
-      'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+      '  (SELECT COUNT(*) FROM FS_PL_Node WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ') AS Total, ' +
+      '  (SELECT COUNT(*) FROM FS_PL_Node WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ' AND FechaInicio IS NOT NULL) AS Planificados, ' +
+      '  (SELECT MIN(FechaInicio) FROM FS_PL_Node WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ') AS FInicio, ' +
+      '  (SELECT MAX(FechaFin) FROM FS_PL_Node WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ') AS FFin, ' +
+      '  (SELECT ISNULL(SUM(DuracionMin),0) FROM FS_PL_Node WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ' AND FechaInicio IS NOT NULL) AS DurTotal, ' +
+      '  (SELECT COUNT(DISTINCT nd.NumeroOF) FROM FS_PL_Node n INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa=n.CodigoEmpresa AND nd.NodeId=n.NodeId ' +
+      '   WHERE n.CodigoEmpresa=' + CE + ' AND n.ProjectId=' + PID + ' AND nd.NumeroOF IS NOT NULL) AS OFsTotal, ' +
+      '  (SELECT COUNT(DISTINCT CASE WHEN n.FechaInicio IS NOT NULL THEN nd.NumeroOF END) FROM FS_PL_Node n INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa=n.CodigoEmpresa AND nd.NodeId=n.NodeId ' +
+      '   WHERE n.CodigoEmpresa=' + CE + ' AND n.ProjectId=' + PID + ' AND nd.NumeroOF IS NOT NULL) AS OFsPlan, ' +
+      '  (SELECT COUNT(DISTINCT nd.NumeroPedido) FROM FS_PL_Node n INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa=n.CodigoEmpresa AND nd.NodeId=n.NodeId ' +
+      '   WHERE n.CodigoEmpresa=' + CE + ' AND n.ProjectId=' + PID + ' AND nd.NumeroPedido IS NOT NULL) AS PedidosTotal, ' +
+      '  (SELECT COUNT(DISTINCT CASE WHEN n.FechaInicio IS NOT NULL THEN nd.NumeroPedido END) FROM FS_PL_Node n INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa=n.CodigoEmpresa AND nd.NodeId=n.NodeId ' +
+      '   WHERE n.CodigoEmpresa=' + CE + ' AND n.ProjectId=' + PID + ' AND nd.NumeroPedido IS NOT NULL) AS PedidosPlan, ' +
+      '  (SELECT COUNT(DISTINCT CenterId) FROM FS_PL_Node WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ' AND CenterId IS NOT NULL AND FechaInicio IS NOT NULL) AS CentrosUsados, ' +
+      '  (SELECT COUNT(DISTINCT oa.OperatorId) FROM FS_PL_OperatorAssignment oa INNER JOIN FS_PL_Node n2 ON n2.CodigoEmpresa=oa.CodigoEmpresa AND n2.NodeId=oa.NodeId ' +
+      '   WHERE n2.CodigoEmpresa=' + CE + ' AND n2.ProjectId=' + PID + ') AS OpAsig, ' +
+      '  (SELECT COUNT(*) FROM FS_PL_Dependency WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ') AS Deps, ' +
+      '  (SELECT COUNT(*) FROM FS_PL_Marker WHERE CodigoEmpresa=' + CE + ' AND ProjectId=' + PID + ') AS Marcadores';
     Q.Open;
     NodosTotal := Q.FieldByName('Total').AsInteger;
     NodosPlan := Q.FieldByName('Planificados').AsInteger;
     FInicio := Q.FieldByName('FInicio').Value;
     FFin := Q.FieldByName('FFin').Value;
     DuracionTotal := Q.FieldByName('DurTotal').AsFloat;
-  finally
-    Q.Free;
-  end;
-  // OFs: distintos NumeroOF planificados vs totales
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text :=
-      'SELECT ' +
-      '  COUNT(DISTINCT nd.NumeroOF) AS Total, ' +
-      '  COUNT(DISTINCT CASE WHEN n.FechaInicio IS NOT NULL THEN nd.NumeroOF END) AS Planificados ' +
-      'FROM FS_PL_Node n ' +
-      'INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa AND nd.NodeId = n.NodeId ' +
-      'WHERE n.CodigoEmpresa = ' + CE + ' AND n.ProjectId = ' + PID +
-      '  AND nd.NumeroOF IS NOT NULL';
-    Q.Open;
-    OFsTotal := Q.FieldByName('Total').AsInteger;
-    OFsPlan := Q.FieldByName('Planificados').AsInteger;
-  finally
-    Q.Free;
-  end;
-  // Pedidos: distintos NumeroPedido planificados vs totales
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text :=
-      'SELECT ' +
-      '  COUNT(DISTINCT nd.NumeroPedido) AS Total, ' +
-      '  COUNT(DISTINCT CASE WHEN n.FechaInicio IS NOT NULL THEN nd.NumeroPedido END) AS Planificados ' +
-      'FROM FS_PL_Node n ' +
-      'INNER JOIN FS_PL_NodeData nd ON nd.CodigoEmpresa = n.CodigoEmpresa AND nd.NodeId = n.NodeId ' +
-      'WHERE n.CodigoEmpresa = ' + CE + ' AND n.ProjectId = ' + PID +
-      '  AND nd.NumeroPedido IS NOT NULL';
-    Q.Open;
-    PedidosTotal := Q.FieldByName('Total').AsInteger;
-    PedidosPlan := Q.FieldByName('Planificados').AsInteger;
-  finally
-    Q.Free;
-  end;
-  // Centros utilizados + operarios asignados + dependencias
-  Q := TADOQuery.Create(nil);
-  try
-    Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text :=
-      'SELECT ' +
-      '  (SELECT COUNT(DISTINCT CenterId) FROM FS_PL_Node ' +
-      '   WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID +
-      '     AND CenterId IS NOT NULL AND FechaInicio IS NOT NULL) AS CentrosUsados, ' +
-      '  (SELECT COUNT(DISTINCT oa.OperatorId) FROM FS_PL_OperatorAssignment oa ' +
-      '   INNER JOIN FS_PL_Node n2 ON n2.CodigoEmpresa = oa.CodigoEmpresa AND n2.NodeId = oa.NodeId ' +
-      '   WHERE n2.CodigoEmpresa = ' + CE + ' AND n2.ProjectId = ' + PID + ') AS OpAsig, ' +
-      '  (SELECT COUNT(*) FROM FS_PL_Dependency ' +
-      '   WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID + ') AS Deps, ' +
-      '  (SELECT COUNT(*) FROM FS_PL_Marker ' +
-      '   WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID + ') AS Marcadores';
-    Q.Open;
+    OFsTotal := Q.FieldByName('OFsTotal').AsInteger;
+    OFsPlan := Q.FieldByName('OFsPlan').AsInteger;
+    PedidosTotal := Q.FieldByName('PedidosTotal').AsInteger;
+    PedidosPlan := Q.FieldByName('PedidosPlan').AsInteger;
     CentrosUsados := Q.FieldByName('CentrosUsados').AsInteger;
     OpAsig := Q.FieldByName('OpAsig').AsInteger;
     Dependencias := Q.FieldByName('Deps').AsInteger;
@@ -2370,6 +2486,7 @@ begin
   finally
     Q.Free;
   end;
+  end;  // else (no Demo)
   lblValFechaInicio.Caption := FmtDate(FInicio);
   lblValFechaFin.Caption := FmtDate(FFin);
   if DMPlanner.CurrentProjectTieneBloqueo then
@@ -2789,6 +2906,16 @@ begin
   TotalNodos := 0;
   Alertas := nil;
 
+  // Modo Demo: salud ficticia realista, sin query pesada ni UpsertMetricDia
+  // (escritura a BD). Era ~500 ms en real.
+  if DemoMode.Active then
+  begin
+    TKPICard(FKPISalud).ColorTone := kctVerde;
+    TKPICard(FKPISalud).Caption := 'Salud del plan - Bueno';
+    SetKPI(FKPISalud, 88, SerieKPI('Salud', 88));
+    Exit;
+  end;
+
   if (not DMPlanner.IsConnected) or (DMPlanner.CurrentProjectId <= 0) then
   begin
     SetKPI(FKPISalud, 0, SerieKPI('Salud', 0));
@@ -2884,6 +3011,8 @@ procedure TfrmDashboard.CardDblClick(Sender: TObject);
     else if AKey = 'CargaH' then Result := 'CargaPlanificadaH'
     else if AKey = 'Saturacion' then Result := 'SaturacionMedia'
     else if AKey = 'OFsRiesgo' then Result := 'OFsEnRiesgo'
+    else if AKey = 'StockOk' then Result := 'CoberturaStockOk'
+    else if AKey = 'Rotura' then Result := 'RoturaStock'
     else Result := AKey;   // Salud, Otif, CuelloBotella, SatOperarios coinciden
   end;
 
@@ -3121,6 +3250,44 @@ begin
   SetKPI(FKPIOtif,          Otif,   SerieKPI('Otif', Otif), '%');
   SetKPI(FKPICuelloBotella, Cuello, SerieKPI('CuelloBotella', Cuello), '%');
   SetKPI(FKPISatOperarios,  SatOp,  SerieKPI('SatOperarios', SatOp), '%');
+end;
+
+procedure TfrmDashboard.RefrescarKPIsStock;
+var
+  StockOk, Rotura: Double;
+begin
+  if FKPIStockOk = nil then Exit;
+
+  // ---- Modo DEMO: cobertura de material ficticia y coherente. ----
+  // % con stock suficiente + % con rotura suman 100. Escenario "buen plan con
+  // algunas roturas por resolver" (lo que un jefe de compras querria ver).
+  if DemoMode.Active then
+  begin
+    StockOk := 86;
+    Rotura := 100 - StockOk;   // 14
+    // Restaurar formato numerico (un refresco real previo pudo dejar 'N/D').
+    TKPICard(FKPIStockOk).FormatStr := '%.0f';
+    TKPICard(FKPIRotura).FormatStr := '%.0f';
+    TKPICard(FKPIStockOk).ColorTone := kctVerde;
+    TKPICard(FKPIRotura).ColorTone := kctRojo;
+    SetKPI(FKPIStockOk, StockOk, SerieKPI('StockOk', StockOk), '%');
+    SetKPI(FKPIRotura,  Rotura,  SerieKPI('Rotura',  Rotura),  '%');
+    Exit;
+  end;
+
+  // ---- Real: calculo PENDIENTE (requiere explotar escandallo + proyeccion de
+  // stock por componente, coste alto). De momento mostramos N/D en gris para no
+  // dar un numero falso. El KPI queda registrado en el catalogo y listo para
+  // conectar el calculo real cuando se implemente. Truco: FormatStr sin '%f'
+  // hace que Format() ignore el valor y pinte el literal 'N/D'.
+  TKPICard(FKPIStockOk).ColorTone := kctNeutro;
+  TKPICard(FKPIRotura).ColorTone := kctNeutro;
+  TKPICard(FKPIStockOk).Unidad := '';
+  TKPICard(FKPIRotura).Unidad := '';
+  TKPICard(FKPIStockOk).FormatStr := 'N/D';
+  TKPICard(FKPIStockOk).SetValueAndSeries(0, []);
+  TKPICard(FKPIRotura).FormatStr := 'N/D';
+  TKPICard(FKPIRotura).SetValueAndSeries(0, []);
 end;
 
 procedure TfrmDashboard.lblPendingSyncClick(Sender: TObject);

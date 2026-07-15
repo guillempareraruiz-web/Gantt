@@ -46,6 +46,9 @@ uses
   dxGDIPlusClasses, cxImage;
 type
   TfrmArticleDetail = class(TForm)
+    pnlNav: TPanel;
+    tvNav: TTreeView;
+    btnObs: TButton;
     pgcTabs: TcxPageControl;
     tabATP: TcxTabSheet;
     tabPartidas: TcxTabSheet;
@@ -137,6 +140,8 @@ type
     edArticulo: TEdit;
     btnBuscarArticulo: TButton;
     lblDescripcion: TLabel;
+    pnlTipoAprov: TPanel;
+    lblTipoAprov: TLabel;
     lblAlmacenes: TLabel;
     ccbAlmacenes: TcxCheckComboBox;
     lblFecha: TLabel;
@@ -215,6 +220,11 @@ type
     Panel9: TPanel;
     lblAviso: TLabel;
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
+    procedure tvNavClick(Sender: TObject);
+    procedure tvNavCustomDrawItem(Sender: TCustomTreeView; Node: TTreeNode;
+      State: TCustomDrawState; var DefaultDraw: Boolean);
+    procedure btnObsClick(Sender: TObject);
     procedure btnBuscarArticuloClick(Sender: TObject);
     procedure btnCalcularClick(Sender: TObject);
     procedure btnToggleLogClick(Sender: TObject);
@@ -248,6 +258,8 @@ type
     FCodigoArticulo: string;
     FDescripcionArticulo: string;
     FStockMinimo: Double;
+    FObsVisible: Boolean;   // estado del panel Observaciones (toggle global)
+    FPanelesObs: TList<TPanel>;   // un panel por seccion (tab)
     // MRP: ultima recomendacion calculada (para el boton de accion) y articulo
     // Sage leido en el ultimo calculo (lleva los parametros: lead time, lote...).
     FUltimaRecom: TMrpRecommendation;
@@ -296,12 +308,34 @@ type
     procedure CargarClientes;
     procedure SetKPI(APanel: TPanel; AValLbl: TLabel; const AValor: string;
       AColorFondo: TColor);
+    // Pinta el badge FABRICAR / COMPRAR segun FArticuloActual.TieneFormula.
+    procedure ActualizarTipoAprov;
+    // Navegacion por arbol lateral (sustituye a las pestanas visibles).
+    procedure ConstruirArbolNav;
+    // Paneles Observaciones: uno por seccion (tab), texto fijo explicativo.
+    procedure ConstruirPanelesObs;
+    procedure AplicarVisibilidadObs;
+    // Texto de observaciones para una pagina (tab) dada.
+    function TextoObsDe(APage: TcxTabSheet): string;
     procedure ResetKPIs;
     procedure ActualizarKPIs(AStockTotal, ADisponible, APendRecibir,
       APendServir: Double);
     procedure LogInfo(const AMsg: string);
     procedure LogError(const AMsg: string);
     function TipoToStr(ATipo: TTipoMovStock): string;
+    // Modo Demo: al conmutar, refresca almacenes y recalcula (si hay articulo).
+    procedure DemoChanged(Sender: TObject);
+    // Devuelve el siguiente codigo del catalogo demo respecto al actual (ciclo).
+    function SiguienteArticuloDemo: string;
+    // True si estamos en Demo. Solo lo usa el tab Disponibilidad (explosion de
+    // BOM), que no tiene datos demo -> avisa y no consulta el ERP.
+    function TabNoDisponibleEnDemo: Boolean;
+    // En Demo, carga TODOS los tabs de golpe (llenos con datos ficticios) al
+    // abrir/cambiar de articulo. Reutiliza cada CargarXxx (que ya sabe demo).
+    procedure CargarTabsDemo;
+    // Oculta los botones "Recargar" de cada tab en Demo (no aplican: los datos
+    // ya estan y no vienen del ERP). Los restaura al salir de Demo.
+    procedure AjustarBotonesRecargarDemo;
   public
     class procedure Execute(const AReader: IErpReader); overload;
     class procedure Execute(const AReader: IErpReader;
@@ -313,7 +347,8 @@ type
   end;
 implementation
 uses
-  uArticuloPicker, uDMPlanner, uMrpPropuestaBacklog, uGanttTypes, uBusyDialog;
+  uArticuloPicker, uDMPlanner, uMrpPropuestaBacklog, uGanttTypes, uBusyDialog,
+  uDemoMode;
 {$R *.dfm}
 class procedure TfrmArticleDetail.Execute(const AReader: IErpReader);
 begin
@@ -347,7 +382,7 @@ begin
   // vez y lo reutiliza; aqui solo refrescamos el reader y los almacenes.
   FReader := AReader;
   CargarAlmacenes;
-
+  AjustarBotonesRecargarDemo;   // el estado Demo pudo cambiar entre visitas
 end;
 
 procedure TfrmArticleDetail.CargarArticulo(const ACodigo: string);
@@ -381,6 +416,298 @@ begin
   SetLength(FHistorico, 0);
   LimpiarResultados;
   btnFocus.Left := -100;
+  FObsVisible := False;
+  FPanelesObs := TList<TPanel>.Create;
+  ConstruirArbolNav;
+  ConstruirPanelesObs;
+  DemoMode.AddListener(DemoChanged);
+  AjustarBotonesRecargarDemo;
+end;
+
+procedure TfrmArticleDetail.FormDestroy(Sender: TObject);
+begin
+  DemoMode.RemoveListener(DemoChanged);
+  FPanelesObs.Free;
+end;
+
+// ============================================================================
+// Navegacion por arbol lateral (izquierda) + panel Observaciones
+// ============================================================================
+
+// Construye el arbol de secciones. Cada nodo-hoja lleva en Data el puntero a
+// su TcxTabSheet; al hacer clic, se activa esa pagina (las pestanas del
+// PageControl estan ocultas: Properties.HideTabs = True).
+procedure TfrmArticleDetail.ConstruirArbolNav;
+var
+  NCat: TTreeNode;
+
+  procedure Hoja(const ACaption: string; APage: TcxTabSheet);
+  var
+    N: TTreeNode;
+  begin
+    N := tvNav.Items.AddChild(NCat, ACaption);
+    N.Data := APage;
+  end;
+
+begin
+  tvNav.Items.BeginUpdate;
+  try
+    tvNav.Items.Clear;
+
+    NCat := tvNav.Items.Add(nil, 'Proyecci'#243'n de stock');
+    NCat.Data := nil;
+    Hoja('Stock proyectado (ATP)', tabATP);
+    Hoja('Movimientos futuros', tabMovimientos);
+    Hoja('Partidas / lotes', tabPartidas);
+    Hoja('Disponibilidad fabricaci'#243'n', tabDisponibilidad);
+
+    NCat := tvNav.Items.Add(nil, 'Consumo');
+    NCat.Data := nil;
+    Hoja('D'#243'nde se usa', tabDondeUsa);
+    Hoja('Hist'#243'rico mensual', tabHistorico);
+
+    NCat := tvNav.Items.Add(nil, 'Fabricaci'#243'n');
+    NCat.Data := nil;
+    Hoja('OFs activas', tabOFs);
+
+    NCat := tvNav.Items.Add(nil, 'Comercial');
+    NCat.Data := nil;
+    Hoja('Proveedores', tabProveedores);
+    Hoja('Clientes', tabClientes);
+
+    tvNav.FullExpand;
+  finally
+    tvNav.Items.EndUpdate;
+  end;
+  // Seleccion inicial: el nodo del ATP (primera hoja).
+  if tvNav.Items.Count > 1 then
+    tvNav.Selected := tvNav.Items[1];
+end;
+
+procedure TfrmArticleDetail.tvNavCustomDrawItem(Sender: TCustomTreeView;
+  Node: TTreeNode; State: TCustomDrawState; var DefaultDraw: Boolean);
+begin
+  DefaultDraw := True;
+  // Categoria (Data=nil): negrita. Hoja (Data=TcxTabSheet): normal.
+  if Node.Data = nil then
+    Sender.Canvas.Font.Style := [fsBold]
+  else
+    Sender.Canvas.Font.Style := [];
+end;
+
+procedure TfrmArticleDetail.tvNavClick(Sender: TObject);
+var
+  N: TTreeNode;
+begin
+  N := tvNav.Selected;
+  if (N = nil) or (N.Data = nil) then Exit;   // categoria: no navega
+  pgcTabs.ActivePage := TcxTabSheet(N.Data);
+  // pgcTabsChange se dispara con el cambio de pagina y carga el tab si toca.
+  pgcTabsChange(nil);
+  AplicarVisibilidadObs;
+end;
+
+// Crea un panel Observaciones (oculto) al pie de cada tab, con su texto fijo.
+procedure TfrmArticleDetail.ConstruirPanelesObs;
+
+  procedure PanelEn(APage: TcxTabSheet);
+  var
+    Pnl: TPanel;
+    Lbl: TLabel;
+    Memo: TMemo;
+  begin
+    Pnl := TPanel.Create(Self);
+    Pnl.Parent := APage;
+    Pnl.Align := alBottom;
+    Pnl.Height := 130;
+    Pnl.BevelOuter := bvNone;
+    Pnl.Color := $00EDEDED;
+    Pnl.ParentBackground := False;
+    Pnl.Padding.SetBounds(12, 8, 12, 10);
+    Pnl.Visible := False;   // el boton global lo conmuta
+
+    Lbl := TLabel.Create(Self);
+    Lbl.Parent := Pnl;
+    Lbl.Align := alTop;
+    Lbl.Caption := 'Observaciones  '#183'  ' + APage.Caption;
+    Lbl.Font.Style := [fsBold];
+    Lbl.Font.Size := 9;
+    Lbl.Font.Color := $00404040;
+    Lbl.Height := 18;
+    Lbl.Layout := tlCenter;
+
+    Memo := TMemo.Create(Self);
+    Memo.Parent := Pnl;
+    Memo.Align := alClient;
+    Memo.BorderStyle := bsNone;
+    Memo.Color := Pnl.Color;
+    Memo.ReadOnly := True;
+    Memo.TabStop := False;
+    Memo.WordWrap := True;
+    Memo.ScrollBars := ssVertical;
+    Memo.Font.Size := 8;
+    Memo.Font.Color := $00303030;
+    Memo.Text := TextoObsDe(APage);
+
+    FPanelesObs.Add(Pnl);
+  end;
+
+begin
+  PanelEn(tabATP);
+  PanelEn(tabMovimientos);
+  PanelEn(tabPartidas);
+  PanelEn(tabDisponibilidad);
+  PanelEn(tabDondeUsa);
+  PanelEn(tabHistorico);
+  PanelEn(tabOFs);
+  PanelEn(tabProveedores);
+  PanelEn(tabClientes);
+end;
+
+procedure TfrmArticleDetail.AplicarVisibilidadObs;
+var
+  Pnl: TPanel;
+begin
+  for Pnl in FPanelesObs do
+    Pnl.Visible := FObsVisible;
+end;
+
+procedure TfrmArticleDetail.btnObsClick(Sender: TObject);
+begin
+  FObsVisible := not FObsVisible;
+  AplicarVisibilidadObs;
+  if FObsVisible then btnObs.Caption := 'Ocultar observaciones'
+  else btnObs.Caption := 'Observaciones';
+end;
+
+// Texto explicativo fijo por seccion (que muestra y como leerlo).
+function TfrmArticleDetail.TextoObsDe(APage: TcxTabSheet): string;
+begin
+  if APage = tabATP then
+    Result :=
+      'Proyecci'#243'n de stock disponible en el tiempo (ATP): parte del saldo ' +
+      'actual y aplica las entradas previstas (compras y OFs de producci'#243'n) ' +
+      'y las salidas (pedidos de venta y consumos). Las filas en ROJO marcan ' +
+      'rupturas (saldo negativo), en ROSA por debajo del m'#237'nimo, y en VERDE ' +
+      'la recuperaci'#243'n tras una ruptura. Debajo, la recomendaci'#243'n MRP indica ' +
+      'cu'#225'nto y cu'#225'ndo reponer (fabricar o comprar seg'#250'n el art'#237'culo).'
+  else if APage = tabMovimientos then
+    Result :=
+      'Detalle cronol'#243'gico de los movimientos futuros que afectan al stock: ' +
+      'entradas (+) de compras y producci'#243'n de OFs, y salidas (-) de ventas ' +
+      'y consumos. Es el desglose que alimenta la proyecci'#243'n del tab ATP.'
+  else if APage = tabPartidas then
+    Result :=
+      'Desglose del saldo f'#237'sico actual por almac'#233'n y partida/lote, con ' +
+      'ubicaci'#243'n, precio medio y caducidad. Las filas resaltadas indican ' +
+      'lotes con caducidad pasada o pr'#243'xima (30 d'#237'as): revisar rotaci'#243'n.'
+  else if APage = tabDisponibilidad then
+    Result :=
+      'Comprueba si hay stock proyectado de todos los componentes para ' +
+      'fabricar una cantidad objetivo a una fecha. Explosiona la f'#243'rmula ' +
+      'nivel a nivel; en rojo los componentes que faltar'#237'an.'
+  else if APage = tabDondeUsa then
+    Result :=
+      'D'#243'nde se usa (pegging inverso): f'#243'rmulas de otros art'#237'culos que ' +
+      'consumen '#233'ste como componente, con la cantidad por unidad y la merma. ' +
+      #218'til para valorar el impacto de una ruptura de este material.'
+  else if APage = tabHistorico then
+    Result :=
+      'Hist'#243'rico mensual de entradas y salidas de los '#250'ltimos meses. Ayuda ' +
+      'a ver la estacionalidad y la tendencia de consumo para dimensionar ' +
+      'stock de seguridad y lotes de reposici'#243'n.'
+  else if APage = tabOFs then
+    Result :=
+      #211'rdenes de fabricaci'#243'n activas (en curso o pendientes) que producen ' +
+      'este art'#237'culo, con su avance y fechas previstas. Solo aplica a ' +
+      'art'#237'culos fabricables (con f'#243'rmula).'
+  else if APage = tabProveedores then
+    Result :=
+      'Proveedores hist'#243'ricos del art'#237'culo, con precio medio de compra, ' +
+      'lead time y volumen. Base para elegir proveedor y estimar el plazo ' +
+      'de reposici'#243'n en una recomendaci'#243'n de compra.'
+  else if APage = tabClientes then
+    Result :=
+      'Clientes hist'#243'ricos del art'#237'culo, con unidades e importe vendido. ' +
+      'Ayuda a priorizar seg'#250'n qui'#233'n depende del stock y a valorar el ' +
+      'impacto comercial de una ruptura.'
+  else
+    Result := '';
+end;
+
+function TfrmArticleDetail.TabNoDisponibleEnDemo: Boolean;
+begin
+  Result := DemoMode.Active;
+  if Result then
+    LogInfo('La disponibilidad (explosi'#243'n de f'#243'rmula) no tiene datos demo.');
+end;
+
+procedure TfrmArticleDetail.CargarTabsDemo;
+begin
+  // Fuerza la recarga (marcamos como no cargados) y llena cada tab. Cada
+  // CargarXxx ya usa datos demo cuando DemoMode.Active.
+  FPartidasCargadas := False;  CargarPartidas;
+  FMovsFutCargados := False;   CargarMovsFut;
+  FDondeUsaCargado := False;   CargarDondeUsa;
+  FHistoricoCargado := False;  CargarHistorico;
+  FOFsCargadas := False;       CargarOFs;
+  FProvCargados := False;      CargarProveedores;
+  FCliCargados := False;       CargarClientes;
+  // Disponibilidad (explosion BOM) no tiene datos demo: se deja sin cargar.
+end;
+
+procedure TfrmArticleDetail.AjustarBotonesRecargarDemo;
+var
+  Mostrar: Boolean;
+begin
+  // En Demo no tiene sentido "Recargar" (los datos no vienen del ERP).
+  Mostrar := not DemoMode.Active;
+  btnRecargarPartidas.Visible := Mostrar;
+  btnRecargarMovsFut.Visible  := Mostrar;
+  btnRecargarDondeUsa.Visible := Mostrar;
+  btnRecargarHist.Visible     := Mostrar;
+  btnRecargarOFs.Visible      := Mostrar;
+  btnRecargarProv.Visible     := Mostrar;
+  btnRecargarCli.Visible      := Mostrar;
+  btnRecargarDisp.Visible     := Mostrar;
+  // En Demo ocultamos el edit de codigo suelto (Edit1, 'AUT0801KIT'): el
+  // articulo se elige con el catalogo demo (boton Buscar), no tecleandolo.
+  Edit1.Visible := Mostrar;
+end;
+
+function TfrmArticleDetail.SiguienteArticuloDemo: string;
+var
+  Cods: TArray<string>;
+  I, Idx: Integer;
+begin
+  Cods := uDemoMode.DemoArticuloCodigos;
+  if Length(Cods) = 0 then Exit('');
+  Idx := 0;
+  for I := 0 to High(Cods) do
+    if SameText(Cods[I], Trim(edArticulo.Text)) then
+    begin
+      Idx := (I + 1) mod Length(Cods);
+      Break;
+    end;
+  Result := Cods[Idx];
+end;
+
+procedure TfrmArticleDetail.DemoChanged(Sender: TObject);
+begin
+  // Solo actuamos si la ficha esta visible: si el usuario conmuta Demo desde
+  // otra pantalla (Gantt, etc.) no debemos disparar aqui un ShowBusy invisible.
+  // Al volver a mostrar la ficha, MostrarArticleDetail ya recarga.
+  if not Visible then Exit;
+  AjustarBotonesRecargarDemo;
+  // Al entrar/salir de Demo cambian los almacenes disponibles. Si ya hay un
+  // articulo cargado, recalculamos con la nueva fuente (demo <-> ERP). Al entrar
+  // en Demo sin articulo, cargamos uno por defecto para que la ficha no salga
+  // vacia.
+  CargarAlmacenes;
+  if Trim(edArticulo.Text) <> '' then
+    btnCalcularClick(nil)
+  else if DemoMode.Active then
+    CargarArticulo(uDemoMode.DemoArticuloCodigos[0]);
 end;
 procedure TfrmArticleDetail.CargarAlmacenes;
 var
@@ -389,14 +716,20 @@ var
   Item: TcxCheckComboBoxItem;
 begin
   ccbAlmacenes.Properties.Items.Clear;
-  if FReader = nil then Exit;
-  try
-    Almacenes := FReader.ReadAlmacenes;
-  except
-    on E: Exception do
-    begin
-      LogError('Error cargando almacenes: ' + E.Message);
-      Exit;
+  // En modo Demo, almacenes ficticios (no se toca el ERP).
+  if DemoMode.Active then
+    Almacenes := uDemoMode.DemoAlmacenes
+  else
+  begin
+    if FReader = nil then Exit;
+    try
+      Almacenes := FReader.ReadAlmacenes;
+    except
+      on E: Exception do
+      begin
+        LogError('Error cargando almacenes: ' + E.Message);
+        Exit;
+      end;
     end;
   end;
   for i := 0 to High(Almacenes) do
@@ -424,6 +757,7 @@ end;
 procedure TfrmArticleDetail.LimpiarResultados;
 begin
   lblDescripcion.Caption := '';
+  pnlTipoAprov.Visible := False;
   lblValStockInicial.Caption := '-';
   lblValTotalEntradas.Caption := '-';
   lblValTotalSalidas.Caption := '-';
@@ -463,6 +797,15 @@ procedure TfrmArticleDetail.btnBuscarArticuloClick(Sender: TObject);
 var
   Cod, Desc: string;
 begin
+  // En Demo el picker del ERP no aplica: rotamos por el catalogo demo (cada
+  // clic pasa al siguiente articulo y recalcula), asi se ven las distintas
+  // situaciones (fabricado con OF, compra pura, critico).
+  if DemoMode.Active then
+  begin
+    Cod := SiguienteArticuloDemo;
+    CargarArticulo(Cod);
+    Exit;
+  end;
   if FReader = nil then
   begin
     ShowMessage('No hay conector ERP activo.');
@@ -650,6 +993,21 @@ begin
   if FUltimaRecom.Accion = maNinguna then Exit;
   if not (FUltimaRecom.Accion in [maFabricar, maSubcontratar]) then Exit;
 
+  // En Demo no se crea nada real en el Backlog (datos ficticios).
+  if DemoMode.Active then
+  begin
+    ShowMessage(Format(
+      'MODO DEMO'#13#10#13#10 +
+      'Aqu'#237' se crear'#237'a una propuesta de fabricaci'#243'n en el Backlog:'#13#10#13#10 +
+      'Art'#237'culo: %s'#13#10'Cantidad: %s ud.'#13#10 +
+      'Lanzar antes de: %s'#13#10#13#10 +
+      'En modo Demo no se crea ninguna orden real.',
+      [FUltimaRecom.CodigoArticulo,
+       FormatFloat('#,##0.##', FUltimaRecom.Cantidad),
+       FormatDateTime('dd/mm/yyyy', FUltimaRecom.FechaLanzamiento)]));
+    Exit;
+  end;
+
   if MessageDlg(Format(
       'Crear propuesta de fabricaci'#243'n en el Backlog?'#13#10#13#10 +
       'Art'#237'culo: %s'#13#10'Cantidad: %s ud.'#13#10 +
@@ -711,7 +1069,8 @@ end;
 
 procedure TfrmArticleDetail.btnCalcularClick(Sender: TObject);
 begin
-  if FReader = nil then
+  // En modo Demo no hace falta ERP (los datos son ficticios).
+  if (FReader = nil) and (not DemoMode.Active) then
   begin
     ShowMessage('No hay conector ERP activo.');
     Exit;
@@ -760,8 +1119,26 @@ begin
   Screen.Cursor := crHourGlass;
   try
     try
-      // 1) Stock m'inimo (para alerta) + datos del articulo (parametros MRP)
-      Articulos := FReader.ReadArticulos(FCodigoArticulo);
+      // ------------------------------------------------------------------
+      // MODO DEMO: en vez de las 5 lecturas del ERP, generamos un escenario
+      // MRP coherente y ficticio (stock + compras + ventas que provocan
+      // ruptura + OF que la recupera). La proyeccion, el time-phased view,
+      // los KPIs y la recomendacion se calculan igual a partir de estos datos.
+      // ------------------------------------------------------------------
+      if DemoMode.Active then
+      begin
+        LogInfo('== MODO DEMO: datos ficticios (no se consulta el ERP) ==');
+        Articulos := TArray<TArticuloErp>.Create(uDemoMode.DemoArticulo(FCodigoArticulo));
+        StockBase := uDemoMode.DemoStockDisponible(FCodigoArticulo);
+        Compras   := uDemoMode.DemoEntradasCompra(FCodigoArticulo, Date);
+        Ventas    := uDemoMode.DemoSalidasVenta(FCodigoArticulo, Date);
+        MovsOF    := uDemoMode.DemoMovimientosOF(FCodigoArticulo, Date);
+      end
+      else
+      begin
+        // 1) Stock m'inimo (para alerta) + datos del articulo (parametros MRP)
+        Articulos := FReader.ReadArticulos(FCodigoArticulo);
+      end;
       FStockMinimo := 0;
       FDescripcionArticulo := '';
       FArticuloLeido := False;
@@ -775,12 +1152,17 @@ begin
           Break;
         end;
       lblDescripcion.Caption := FDescripcionArticulo;
+      // Indicador FABRICAR (tiene formula) / COMPRAR (sin formula). Sirve tanto
+      // en modo real como en Demo: se lee de los parametros del articulo.
+      ActualizarTipoAprov;
       LogInfo(Format('Art'#237'culo %s - %s (m'#237'nimo: %s)',
         [FCodigoArticulo, FDescripcionArticulo,
          FormatFloat('#,##0.##', FStockMinimo)]));
       // 2) Stock inicial: agregat de AcumuladoStock_Neco
       //    base = Saldo - Reservado, filtrant per almacenes si n'hi ha.
-      StockBase := FReader.ReadStockDisponible(FCodigoArticulo, '');
+      //    (En Demo StockBase ya viene de DemoStockDisponible.)
+      if not DemoMode.Active then
+        StockBase := FReader.ReadStockDisponible(FCodigoArticulo, '');
       StockInicial := 0;
       StockTotal := 0;
       for i := 0 to High(StockBase) do
@@ -793,23 +1175,26 @@ begin
       end;
       LogInfo(Format('Stock inicial (Saldo - Reservado): %s',
         [FormatFloat('#,##0.##', StockInicial)]));
-      // 3) Compras pendents (entrades futures)
-      Compras := FReader.ReadEntradasFuturasFiltered(
-        FCodigoArticulo, Almacenes, 0, FechaCorte);
+      // 3) Compras pendents (entrades futures). En Demo ya viene generado.
+      if not DemoMode.Active then
+        Compras := FReader.ReadEntradasFuturasFiltered(
+          FCodigoArticulo, Almacenes, 0, FechaCorte);
       PendRecibir := 0;
       for i := 0 to High(Compras) do
         PendRecibir := PendRecibir + Compras[i].UnidadesPendientes;
       LogInfo(Format('Pedidos compra pendientes: %d l'#237'neas', [Length(Compras)]));
-      // 4) Ventas pendents (sortides futures)
-      Ventas := FReader.ReadSalidasFuturasVenta(
-        FCodigoArticulo, Almacenes, 0, FechaCorte);
+      // 4) Ventas pendents (sortides futures). En Demo ya viene generado.
+      if not DemoMode.Active then
+        Ventas := FReader.ReadSalidasFuturasVenta(
+          FCodigoArticulo, Almacenes, 0, FechaCorte);
       PendServir := 0;
       for i := 0 to High(Ventas) do
         PendServir := PendServir + Ventas[i].UnidadesPendientes;
       LogInfo(Format('Pedidos venta pendientes: %d l'#237'neas', [Length(Ventas)]));
-      // 5) OFs pendents (producci'o + consums)
-      MovsOF := FReader.ReadMovimientosOFsPendientes(
-        FCodigoArticulo, Almacenes, FechaCorte);
+      // 5) OFs pendents (producci'o + consums). En Demo ya viene generado.
+      if not DemoMode.Active then
+        MovsOF := FReader.ReadMovimientosOFsPendientes(
+          FCodigoArticulo, Almacenes, FechaCorte);
       LogInfo(Format('Movimientos OF pendientes: %d', [Length(MovsOF)]));
     except
       on E: Exception do
@@ -839,6 +1224,10 @@ begin
     finally
       Proy.Free;
     end;
+    // En Demo, llenamos tambien el resto de tabs de golpe (con datos ficticios)
+    // para que toda la ficha salga completa, no solo la proyeccion.
+    if DemoMode.Active then
+      CargarTabsDemo;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -976,7 +1365,7 @@ var
   TotalSaldo, TotalImporte: Double;
   AlmFiltro: string;
 begin
-  if FReader = nil then
+  if (FReader = nil) and (not DemoMode.Active) then
   begin
     ShowMessage('No hay conector ERP activo.');
     Exit;
@@ -989,9 +1378,12 @@ begin
   try
     cdsPartidas.EmptyDataSet;
     try
-      // Periodo=99 = acumulado del ejercicio (saldo actual por partida).
-      // Ejercicio=0 -> el reader pilla el ultimo.
-      Data := FReader.ReadStockArticulo(FCodigoArticulo, '', '', 0, 99);
+      if DemoMode.Active then
+        Data := uDemoMode.DemoPartidas(FCodigoArticulo, Date)
+      else
+        // Periodo=99 = acumulado del ejercicio (saldo actual por partida).
+        // Ejercicio=0 -> el reader pilla el ultimo.
+        Data := FReader.ReadStockArticulo(FCodigoArticulo, '', '', 0, 99);
     except
       on E: Exception do
       begin
@@ -1148,7 +1540,7 @@ var
   i, NTot: Integer;
   TotEntradas, TotSalidas: Double;
 begin
-  if FReader = nil then
+  if (FReader = nil) and (not DemoMode.Active) then
   begin
     ShowMessage('No hay conector ERP activo.');
     Exit;
@@ -1163,12 +1555,22 @@ begin
   try
     cdsMovsFut.EmptyDataSet;
     try
-      Compras := FReader.ReadEntradasFuturasFiltered(
-        FCodigoArticulo, Almacenes, Desde, Hasta);
-      Ventas := FReader.ReadSalidasFuturasVenta(
-        FCodigoArticulo, Almacenes, Desde, Hasta);
-      MovsOF := FReader.ReadMovimientosOFsPendientes(
-        FCodigoArticulo, Almacenes, Hasta);
+      if DemoMode.Active then
+      begin
+        // Reutiliza el mismo escenario que el ATP (compras + ventas + OF).
+        Compras := uDemoMode.DemoEntradasCompra(FCodigoArticulo, Date);
+        Ventas  := uDemoMode.DemoSalidasVenta(FCodigoArticulo, Date);
+        MovsOF  := uDemoMode.DemoMovimientosOF(FCodigoArticulo, Date);
+      end
+      else
+      begin
+        Compras := FReader.ReadEntradasFuturasFiltered(
+          FCodigoArticulo, Almacenes, Desde, Hasta);
+        Ventas := FReader.ReadSalidasFuturasVenta(
+          FCodigoArticulo, Almacenes, Desde, Hasta);
+        MovsOF := FReader.ReadMovimientosOFsPendientes(
+          FCodigoArticulo, Almacenes, Hasta);
+      end;
     except
       on E: Exception do
       begin
@@ -1515,6 +1917,7 @@ var
   Cab: TFormulaCabecera;
   StkRoot: TStockArtCache;
 begin
+  if TabNoDisponibleEnDemo then Exit;
   if FReader = nil then
   begin
     ShowMessage('No hay conector ERP activo.');
@@ -1635,7 +2038,7 @@ var
   i: Integer;
   Padres: TDictionary<string, Boolean>;
 begin
-  if FReader = nil then Exit;
+  if (FReader = nil) and (not DemoMode.Active) then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Screen.Cursor := crHourGlass;
@@ -1644,7 +2047,10 @@ begin
     try
       cdsDondeUsa.EmptyDataSet;
       try
-        Data := FReader.ReadDondeSeUsa(FCodigoArticulo);
+        if DemoMode.Active then
+          Data := uDemoMode.DemoDondeSeUsa(FCodigoArticulo)
+        else
+          Data := FReader.ReadDondeSeUsa(FCodigoArticulo);
       except
         on E: Exception do
         begin
@@ -1715,6 +2121,29 @@ begin
   SetKPI(pnlKPI5, lblKPI5Val, '-', KPI_COLOR_NEUTRE);
   SetKPI(pnlKPI6, lblKPI6Val, '-', KPI_COLOR_NEUTRE);
 end;
+procedure TfrmArticleDetail.ActualizarTipoAprov;
+begin
+  // Badge en la cabecera: FABRICAR (verde) si el articulo tiene formula, o
+  // COMPRAR (azul) si es de aprovisionamiento externo. Si no hay articulo
+  // leido aun, se oculta. Vale igual en modo real y en Demo.
+  if not FArticuloLeido then
+  begin
+    pnlTipoAprov.Visible := False;
+    Exit;
+  end;
+  if FArticuloActual.TieneFormula then
+  begin
+    lblTipoAprov.Caption := 'FABRICAR';
+    pnlTipoAprov.Color := TColor($002D7D2D);   // verde
+  end
+  else
+  begin
+    lblTipoAprov.Caption := 'COMPRAR';
+    pnlTipoAprov.Color := TColor($00A6651C);    // azul-info corporativo
+  end;
+  pnlTipoAprov.Visible := True;
+end;
+
 procedure TfrmArticleDetail.ActualizarKPIs(AStockTotal, ADisponible,
   APendRecibir, APendServir: Double);
 var
@@ -1738,6 +2167,12 @@ begin
     ColorDisp := KPI_COLOR_OK;
   SetKPI(pnlKPI2, lblKPI2Val, FormatFloat('#,##0.##', ADisponible), ColorDisp);
   // 3) Dias cobertura: verd >30d, ambar 7-30d, vermell <7d, gris N/A
+  if DemoMode.Active then
+  begin
+    Cob := Default(TCoberturaErp);
+    Cob.DiasCobertura := uDemoMode.DemoDiasCobertura(FCodigoArticulo);
+  end
+  else
   try
     Cob := FReader.ReadCoberturaArticulo(FCodigoArticulo, AlmacenesSeleccionados);
   except
@@ -1787,6 +2222,9 @@ begin
   else
     SetKPI(pnlKPI5, lblKPI5Val, '-' + FormatFloat('#,##0.##', APendServir), KPI_COLOR_INFO);
   // 6) Clasificacion ABC: A=vermell-info (top valor), B=ambar, C=gris-neutre
+  if DemoMode.Active then
+    ABC := uDemoMode.DemoCategoriaABC(FCodigoArticulo)
+  else
   try
     ABC := FReader.ReadCategoriaABCArticulo(FCodigoArticulo);
   except
@@ -1847,7 +2285,7 @@ var
   TotalEnt, TotalSal: Double;
   i: Integer;
 begin
-  if FReader = nil then Exit;
+  if (FReader = nil) and (not DemoMode.Active) then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Almacenes := AlmacenesSeleccionados;
@@ -1856,7 +2294,10 @@ begin
   Screen.Cursor := crHourGlass;
   try
     try
-      FHistorico := FReader.ReadHistoricoMensual(FCodigoArticulo, Almacenes, Meses);
+      if DemoMode.Active then
+        FHistorico := uDemoMode.DemoHistoricoMensual(FCodigoArticulo, Meses, Date)
+      else
+        FHistorico := FReader.ReadHistoricoMensual(FCodigoArticulo, Almacenes, Meses);
     except
       on E: Exception do
       begin
@@ -2038,7 +2479,7 @@ var
   i, Curso, Pendientes: Integer;
   TotalAFab: Double;
 begin
-  if FReader = nil then Exit;
+  if (FReader = nil) and (not DemoMode.Active) then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Screen.Cursor := crHourGlass;
@@ -2047,7 +2488,10 @@ begin
     try
       cdsOFs.EmptyDataSet;
       try
-        Data := FReader.ReadOFsActivasArticulo(FCodigoArticulo);
+        if DemoMode.Active then
+          Data := uDemoMode.DemoOFsActivas(FCodigoArticulo, Date)
+        else
+          Data := FReader.ReadOFsActivasArticulo(FCodigoArticulo);
       except
         on E: Exception do
         begin
@@ -2120,7 +2564,7 @@ var
   Data: TArray<TProveedorArticuloErp>;
   i, Meses: Integer;
 begin
-  if FReader = nil then Exit;
+  if (FReader = nil) and (not DemoMode.Active) then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Meses := Trunc(seProvMeses.Value);
@@ -2130,7 +2574,10 @@ begin
     try
       cdsProv.EmptyDataSet;
       try
-        Data := FReader.ReadProveedoresArticulo(FCodigoArticulo, Meses);
+        if DemoMode.Active then
+          Data := uDemoMode.DemoProveedores(FCodigoArticulo, Date)
+        else
+          Data := FReader.ReadProveedoresArticulo(FCodigoArticulo, Meses);
       except
         on E: Exception do
         begin
@@ -2194,7 +2641,7 @@ var
   i, Meses: Integer;
   TotalUd, TotalImp: Double;
 begin
-  if FReader = nil then Exit;
+  if (FReader = nil) and (not DemoMode.Active) then Exit;
   FCodigoArticulo := Trim(edArticulo.Text);
   if FCodigoArticulo = '' then Exit;
   Meses := Trunc(seCliMeses.Value);
@@ -2204,7 +2651,10 @@ begin
     try
       cdsCli.EmptyDataSet;
       try
-        Data := FReader.ReadClientesArticulo(FCodigoArticulo, Meses);
+        if DemoMode.Active then
+          Data := uDemoMode.DemoClientes(FCodigoArticulo, Date)
+        else
+          Data := FReader.ReadClientesArticulo(FCodigoArticulo, Meses);
       except
         on E: Exception do
         begin

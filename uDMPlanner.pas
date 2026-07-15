@@ -4,11 +4,11 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
-  System.Generics.Collections,
+  System.StrUtils, System.Generics.Collections,
   Data.DB, Data.Win.ADODB,
   uDataConnector, uSQLServerConnector, uDBMigrations, uUserPreferencesRepo,
   uCalendarsRepo, uCentresRepo, uNodesRepo, uNodeDataRepo, uAlertRulesRepo,
-  uSnapshotRepo;
+  uSnapshotRepo, uSetupRules;
 
 function UserCanAccessProject(AUserId, AProjectId: Integer): Boolean;
 
@@ -88,6 +88,16 @@ type
     procedure Disconnect;
     function IsConnected: Boolean;
     procedure InstallTvfPendingErp;
+
+    // Perfil de reglas de tiempo de cambio (setup secuencia-dependiente) activo
+    // del proyecto/empresa. Lee FS_PL_SetupRule si existe; si la tabla aun no
+    // esta (BD sin la migracion) o no hay reglas, devuelve un perfil vacio y el
+    // planificador se comporta como antes. Ver uSetupRules.
+    function GetActiveSetupProfile: TSetupProfile;
+    // Persiste el conjunto completo de reglas de setup de la empresa (borra las
+    // existentes e inserta las nuevas, en una transaccion). Editor: tab
+    // "Tiempo de cambio" de TfrmPlanningRulesEditor.
+    procedure SaveSetupRules(const ARules: TArray<TSetupRule>);
 
     // Gestión de proyecto activo
     procedure LoadMasterProject;
@@ -234,6 +244,96 @@ begin
       // dashboard mostrara "0 pendientes" en comptes de fallar.
     end;
   finally
+    Cmd.Free;
+  end;
+end;
+
+function TDMPlanner.GetActiveSetupProfile: TSetupProfile;
+var
+  Q: TADOQuery;
+  L: TList<TSetupRule>;
+  R: TSetupRule;
+begin
+  Result.Name := 'Activo';
+  SetLength(Result.Rules, 0);
+  if (ADOConnection = nil) or not ADOConnection.Connected then Exit;
+
+  L := TList<TSetupRule>.Create;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := ADOConnection;
+    // Tolerante: si la tabla no existe (BD sin la migracion) o falla, se
+    // devuelve el perfil vacio y el planificador usa la distancia fija.
+    try
+      Q.SQL.Text :=
+        'SELECT AttrName, SetupMin, CentreCode, Enabled ' +
+        'FROM FS_PL_SetupRule ' +
+        'WHERE Enabled = 1 AND CodigoEmpresa = :Emp ' +
+        'ORDER BY Id';
+      Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        R.AttrName := Q.FieldByName('AttrName').AsString;
+        R.SetupMin := Q.FieldByName('SetupMin').AsInteger;
+        R.CentreCode := Q.FieldByName('CentreCode').AsString;
+        // El WHERE ya filtra Enabled=1; evitamos AsBoolean sobre BIT (fragil
+        // segun driver ADO, mismo motivo que FieldBoolVar en uBacklog).
+        R.Enabled := True;
+        L.Add(R);
+        Q.Next;
+      end;
+      Result.Rules := L.ToArray;
+    except
+      // Tabla ausente o error: perfil vacio (comportamiento clasico).
+      SetLength(Result.Rules, 0);
+    end;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+procedure TDMPlanner.SaveSetupRules(const ARules: TArray<TSetupRule>);
+var
+  Cmd: TADOCommand;
+  I: Integer;
+  InTran: Boolean;
+begin
+  if (ADOConnection = nil) or not ADOConnection.Connected then Exit;
+
+  InTran := False;
+  Cmd := TADOCommand.Create(nil);
+  try
+    Cmd.Connection := ADOConnection;
+    ADOConnection.BeginTrans;
+    InTran := True;
+
+    // Reemplazo completo: borrar las de la empresa e insertar el nuevo conjunto.
+    Cmd.CommandText :=
+      'DELETE FROM dbo.FS_PL_SetupRule WHERE CodigoEmpresa = ' +
+      IntToStr(FCodigoEmpresa);
+    Cmd.Execute;
+
+    for I := 0 to High(ARules) do
+    begin
+      if Trim(ARules[I].AttrName) = '' then Continue;  // regla vacia: ignorar
+      Cmd.CommandText :=
+        'INSERT INTO dbo.FS_PL_SetupRule ' +
+        '(CodigoEmpresa, AttrName, SetupMin, CentreCode, Enabled) VALUES (' +
+        IntToStr(FCodigoEmpresa) + ', ' +
+        QuotedStr(ARules[I].AttrName) + ', ' +
+        IntToStr(ARules[I].SetupMin) + ', ' +
+        QuotedStr(ARules[I].CentreCode) + ', ' +
+        IfThen(ARules[I].Enabled, '1', '0') + ')';
+      Cmd.Execute;
+    end;
+
+    ADOConnection.CommitTrans;
+    InTran := False;
+  finally
+    if InTran then
+      try ADOConnection.RollbackTrans; except end;
     Cmd.Free;
   end;
 end;
@@ -1052,8 +1152,11 @@ begin
     Q.Free;
   end;
 
+  var TL := Now;
   LoadCalendars;
+  PlanLog.Linea('    DM.LoadCalendars: %d ms', [MilliSecondsBetween(Now, TL)]); TL := Now;
   LoadCentres;
+  PlanLog.Linea('    DM.LoadCentres: %d ms', [MilliSecondsBetween(Now, TL)]);
 end;
 
 procedure TDMPlanner.SaveEmpresaPreferencias(APlanificaOperarios,

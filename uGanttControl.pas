@@ -9,7 +9,7 @@ uses
   Vcl.Controls, Vcl.Graphics, System.Generics.Collections, System.Generics.Defaults,
   uGanttTypes, uCentreCalendar, Vcl.Menus, uNodeDataRepo, uGanttNodeHint,
   Vcl.Forms, Vcl.Direct2D, Winapi.D2D1, Winapi.DXGIFormat, uErpTypes, uGanttHistory,
-  Vcl.ExtCtrls, uCardLayout, uNodeCardLayout, uGanttHintConfig;
+  Vcl.ExtCtrls, uCardLayout, uNodeCardLayout, uGanttHintConfig, uSetupRules;
 
 type
   TGanttViewportChangedEvent = procedure(Sender: TObject; const StartTime: TDateTime;
@@ -101,6 +101,15 @@ type
 
     FNodeRepo: TNodeDataRepo;
     FDataIdToNodeIdxs: TDictionary<Integer, TList<Integer>>;
+
+    // Motor de tiempo de cambio (setup) para pintar la franja entre nodos
+    // consecutivos cuando cambia un atributo. Creado una vez y recargado con
+    // RefreshSetupEngine (al cargar plan / volver del editor de reglas). Si no
+    // hay reglas, HasRules=False y no se pinta nada (sin coste en el paint).
+    FSetupEngine: TSetupRuleEngine;
+    // Politica al mover un nodo sobre la franja de setup (de uGanttConfig, por
+    // usuario). Default scmAvisar. La asigna el caller al aplicar la config.
+    FSetupCollisionMode: TSetupCollisionMode;
 
     FRows: TArray<TRowLayout>;
     FNodeLayouts: TArray<TNodeLayout>;
@@ -232,6 +241,10 @@ type
     FHintWnd: TGanttNodeHintWindow;
     FHintNodeIndex: Integer;
     FHintShown: Boolean;
+    // Estado del hint de la franja de setup: NodeIndex del nodo posterior del
+    // gap actualmente mostrado (-1 = ninguno). Evita re-activar el hint en cada
+    // MouseMove (parpadeo) mientras el cursor sigue sobre el mismo gap.
+    FSetupHintCurrIdx: Integer;
     // Hint amb delay: en lloc de mostrar-lo a l'instant en entrar a un node,
     // arrenquem un timer; si el cursor segueix sobre el mateix node quan salta,
     // el mostrem. Aixi s'evita el parpelleig en passar per sobre rapidament.
@@ -333,6 +346,9 @@ type
     procedure SetRenderMode(const Value: TGanttRenderMode);
     procedure HideNodeHint;
     procedure ShowNodeHint(const NodeIndex: Integer; const MouseScreen: TPoint);
+    // Si (X,Y) client cae sobre una franja de setup (hueco entre dos nodos con
+    // cambio de atributo), muestra un hint "Cambio: +N min" y devuelve True.
+    function TrySetupGapHint(const X, Y: Integer): Boolean;
     function BuildNodeHintText(const NodeIndex: Integer): string;
     function BuildNodeHintTextFromConfig(const NodeIndex: Integer;
       out AText: string): Boolean;
@@ -652,6 +668,8 @@ type
     procedure GoToNextOF;
 
     property HideWeekends: Boolean read FHideWeekends write SetHideWeekends;
+    property SetupCollisionMode: TSetupCollisionMode
+      read FSetupCollisionMode write FSetupCollisionMode;
 
     procedure MarkAllNodesModified(const AValue: Boolean);
 
@@ -713,6 +731,15 @@ type
     function XToTime(const AX: Single): TDateTime;
 
     procedure SetNodeRepo(const ARepo: TNodeDataRepo);
+
+    // Recarga las reglas de tiempo de cambio activas (FS_PL_SetupRule) en el
+    // motor y repinta. Llamar al cargar el plan y al volver del editor de reglas.
+    procedure RefreshSetupEngine;
+    // Minutos de cambio entre dos nodos consecutivos (por NodeIndex) en la misma
+    // linea. 0 si no hay reglas o no cambia ningun atributo. Reutilizado por el
+    // paint (franja) y el hint.
+    function SetupMinBetween(APrevNodeIdx, ACurrNodeIdx: Integer;
+      const ACentreCode: string): Integer;
 
     function FindNodesByOF(const NumeroOF: Integer; const Serie: string): TArray<Integer>;      // NodeIndex[]
     function FindNodesByTrabajo(const NumeroTrabajo: string): TArray<Integer>;                  // NodeIndex[]
@@ -1018,7 +1045,7 @@ const
 implementation
 
 uses uGanttHelpers, uErpSampleBuilder, uGanttTimeline, Main, System.Diagnostics,
-  uPlanLog;
+  uPlanLog, uDMPlanner;
 
 // ===== LOG DEBUG LOTE (permanente, util para futuras depuraciones) =====
 // Escribe en C:\lote_debug.log. Es a prueba de fallos (no rompe nada si no
@@ -1997,6 +2024,8 @@ begin
   FHintWnd := TGanttNodeHintWindow.Create(Self);
   FHintNodeIndex := -1;
   FHintShown := False;
+  FSetupHintCurrIdx := -1;
+  FSetupCollisionMode := scmAvisar;
   FHintPendingNode := -1;
   FHintConfigSet_Set := False;
   FNodeLayoutSet_Set := False;
@@ -2029,6 +2058,7 @@ begin
   FCentreNodeIdx.Free;
   FHighlightSet.Free;
   FOpFilterDataIds.Free;
+  FSetupEngine.Free;
 
   FSelectedNodeIndexes.Free;
   FFrameBmp.Free;
@@ -2367,10 +2397,116 @@ begin
   FHintNodeIndex := NodeIndex;
 end;
 
+function TGanttControl.TrySetupGapHint(const X, Y: Integer): Boolean;
+var
+  W: TPointF;
+  i, k: Integer;
+  Row: TRowLayout;
+  CentCode: string;
+  CentIdx: Integer;
+  PrevNL, NL: TNodeLayout;
+  SetMin: Integer;
+  GapL, GapR: Single;
+  s: string;
+  r: TRect;
+  pt: TPoint;
+begin
+  Result := False;
+  if (FSetupEngine = nil) or not FSetupEngine.HasRules then Exit;
+
+  W := ClientToWorld(Point(X, Y));
+
+  // Buscar la fila que contiene Y (world).
+  for i := 0 to High(FRows) do
+  begin
+    Row := FRows[i];
+    if (W.Y < Row.TopY) or (W.Y > Row.TopY + Row.Height) then Continue;
+    if Row.FirstNodeLayout > Row.LastNodeLayout then Exit;
+
+    CentIdx := FindCentreIndexById(Row.CentreId);
+    CentCode := '';
+    // Solo centros secuenciales (coherente con el paint de la franja).
+    if CentIdx < 0 then Exit;
+    if not FCentres[CentIdx].IsSequencial then Exit;
+    CentCode := FCentres[CentIdx].CodiCentre;
+
+    // Recorrer pares consecutivos (mismo lane) buscando el hueco bajo el cursor.
+    for k := Row.FirstNodeLayout + 1 to Row.LastNodeLayout do
+    begin
+      PrevNL := FNodeLayouts[k - 1];
+      NL := FNodeLayouts[k];
+      if PrevNL.LaneIndex <> NL.LaneIndex then Continue;
+      // El cursor debe caer verticalmente en el lane de estos nodos.
+      if (W.Y < NL.Rect.Top) or (W.Y > NL.Rect.Bottom) then Continue;
+
+      SetMin := SetupMinBetween(PrevNL.NodeIndex, NL.NodeIndex, CentCode);
+      if SetMin <= 0 then Continue;
+
+      GapL := PrevNL.Rect.Right;
+      GapR := PrevNL.Rect.Right + SetMin * FPxPerMinute;
+      if GapR > NL.Rect.Left then GapR := NL.Rect.Left;
+      if (W.X >= GapL) and (W.X <= GapR) then
+      begin
+        Result := True;  // el cursor esta sobre un gap (haya o no que reactivar)
+        // Solo (re)activar el hint si es un gap DISTINTO del ya mostrado: si no,
+        // parpadearia en cada MouseMove.
+        if FSetupHintCurrIdx = NL.NodeIndex then Exit;
+        FSetupHintCurrIdx := NL.NodeIndex;
+
+        s := Format('Tiempo de cambio: +%d min', [SetMin]) + sLineBreak +
+             'Preparaci'#243'n entre dos trabajos que cambian de atributo.';
+        FHintWnd.Caption := s;
+        r := FHintWnd.CalcHintRect(360, s, nil);
+        pt := ClientToScreen(Point(X, Y));
+        Inc(pt.X, 12); Inc(pt.Y, 18);
+        OffsetRect(r, pt.X, pt.Y);
+        if r.Right > Screen.Width then OffsetRect(r, Screen.Width - r.Right - 8, 0);
+        if r.Bottom > Screen.Height then OffsetRect(r, 0, Screen.Height - r.Bottom - 8);
+        FHintWnd.ActivateHint(r, s);
+        FHintShown := True;
+        Exit;
+      end;
+    end;
+    Exit;  // fila encontrada, sin gap bajo el cursor
+  end;
+end;
+
 procedure TGanttControl.SetNodeRepo(const ARepo: TNodeDataRepo);
 begin
   FNodeRepo := ARepo;
   BuildDataIdIndex;
+end;
+
+procedure TGanttControl.RefreshSetupEngine;
+begin
+  if FSetupEngine = nil then
+    FSetupEngine := TSetupRuleEngine.Create;
+  try
+    FSetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
+  except
+    // Sin BD/tabla: dejar el motor sin reglas (no se pinta nada).
+  end;
+  Invalidate;
+end;
+
+function TGanttControl.SetupMinBetween(APrevNodeIdx, ACurrNodeIdx: Integer;
+  const ACentreCode: string): Integer;
+var
+  DP, DC: TNodeData;
+  PrevAttrs, CurrAttrs: TSetupAttrList;
+begin
+  Result := 0;
+  if (FSetupEngine = nil) or not FSetupEngine.HasRules then Exit;
+  if (FNodeRepo = nil) then Exit;
+  if (APrevNodeIdx < 0) or (APrevNodeIdx > High(FNodes)) then Exit;
+  if (ACurrNodeIdx < 0) or (ACurrNodeIdx > High(FNodes)) then Exit;
+
+  if not FNodeRepo.TryGetById(FNodes[APrevNodeIdx].DataId, DP) then Exit;
+  if not FNodeRepo.TryGetById(FNodes[ACurrNodeIdx].DataId, DC) then Exit;
+
+  PrevAttrs := BuildSetupAttrsFromNode(DP);
+  CurrAttrs := BuildSetupAttrsFromNode(DC);
+  Result := FSetupEngine.CalcSetupMin(PrevAttrs, CurrAttrs, True, ACentreCode);
 end;
 
 procedure TGanttControl.SetLinks(const ALinks: TArray<TErpLink>);
@@ -3624,6 +3760,8 @@ begin
   BuildCentreNodeIndex;
   BuildDataIdIndex;
   RebuildGraphIndex;
+
+  RefreshSetupEngine;   // carga reglas de tiempo de cambio para pintar la franja
 
   RebuildLayout;
   Invalidate;
@@ -8649,6 +8787,23 @@ begin
           StartIdx := LowerBoundNodeRight(Row.FirstNodeLayout, Row.LastNodeLayout, VisibleXLeft);
           j := StartIdx;
 
+          // Codigo de linea de esta fila (para las reglas de setup), una vez.
+          // La franja de setup SOLO tiene sentido en centros SECUENCIALES (1
+          // lane = 1 flujo ordenado de trabajos, cada cambio es real). En
+          // multi-lane el LaneIndex es posicion de dibujo (first-fit), no una
+          // maquina fija, asi que "consecutivo" seria ambiguo -> no se pinta.
+          var RowSetupCode := '';
+          var RowSetupSeq := False;
+          if (FSetupEngine <> nil) and FSetupEngine.HasRules then
+          begin
+            var RCentIdx := FindCentreIndexById(Row.CentreId);
+            if RCentIdx >= 0 then
+            begin
+              RowSetupCode := FCentres[RCentIdx].CodiCentre;
+              RowSetupSeq := FCentres[RCentIdx].IsSequencial;
+            end;
+          end;
+
           while j <= Row.LastNodeLayout do
           begin
             NL := FNodeLayouts[j];
@@ -8781,6 +8936,55 @@ begin
               end;
               Inc(j);
               Continue;  // no pintar el nodo en su posicion original
+            end;
+
+            // ===== Franja de tiempo de cambio (setup) =====
+            // Entre el nodo anterior de la misma fila+lane y este, si cambia un
+            // atributo segun las reglas, pintar los primeros N min del hueco con
+            // trama diagonal granate. El nodo NO se alarga: solo el hueco.
+            if RowSetupSeq
+               and (j > Row.FirstNodeLayout)
+               and (FNodeLayouts[j - 1].LaneIndex = NL.LaneIndex) then
+            begin
+              var PrevNL := FNodeLayouts[j - 1];
+              var SetMin := SetupMinBetween(PrevNL.NodeIndex, NL.NodeIndex, RowSetupCode);
+              if SetMin > 0 then
+              begin
+                // Inicio del hueco = fin del nodo anterior (world->screen).
+                var GapL := PrevNL.Rect.Right - FScrollX;
+                // Fin del setup = inicio + N min; nunca mas alla del nodo actual.
+                var SetupEndW := PrevNL.Rect.Right +
+                  (SetMin * FPxPerMinute);
+                var GapR := SetupEndW - FScrollX;
+                if GapR > NL.Rect.Left - FScrollX then
+                  GapR := NL.Rect.Left - FScrollX;
+                if GapR - GapL >= 2 then
+                begin
+                  var SetupRect: TRectF;
+                  SetupRect.Left := GapL;
+                  SetupRect.Right := GapR;
+                  SetupRect.Top := DrawRect.Top;
+                  SetupRect.Bottom := DrawRect.Bottom;
+                  var SetupBrush: ID2D1BitmapBrush :=
+                    CreateDiagonalPatternBrush(RT, $BE, $1E, $2D, 150);  // granate
+                  if Assigned(SetupBrush) then
+                    RT.FillRectangle(RectFToD2D(SetupRect), SetupBrush);
+                  // Etiqueta "+Nmin" si cabe (via TDirect2DCanvas.TextOut).
+                  if (SetupRect.Right - SetupRect.Left) >= 26 then
+                  begin
+                    D2D.Brush.Style := bsClear;
+                    D2D.Font.Color := $002D1EBE;   // granate BGR
+                    D2D.Font.Size := 6;
+                    D2D.Font.Style := [fsBold];
+                    D2D.TextOut(Round(SetupRect.Left + 2),
+                      Round(SetupRect.Top + (SetupRect.Bottom - SetupRect.Top) / 2 - 6),
+                      Format('+%d', [SetMin]));
+                    D2D.Font.Style := [];
+                    D2D.Font.Size := 7;
+                    D2D.Brush.Style := bsSolid;
+                  end;
+                end;
+              end;
             end;
 
             if (DrawRect.Right >= 0) and (DrawRect.Left <= ClientWidth) and
@@ -10351,6 +10555,7 @@ var
   Nodes: TArray<TNode>;
   k, blocked, prevIdx: Integer;
   candEnd: TDateTime;
+  codiCentre: string;
 
   function FindPos(const A: TIdxArray; const NodeIdx: Integer): Integer;
   var j: Integer;
@@ -10383,6 +10588,17 @@ var
       Result := cal.NextWorkingTime(Result);
   end;
 
+  // Gap efectivo entre el nodo APrev (que va delante) y ACurr (empujado): la
+  // distancia minima fija MAS el tiempo de cambio (setup) si la politica es
+  // scmBloquear y hay cambio de atributo. Centraliza aqui el setup para que
+  // cubra move + resize + cascada (todos pasan por esta funcion).
+  function GapMinWithSetup(const APrevIdx, ACurrIdx: Integer): Integer;
+  begin
+    Result := MinGapMin;
+    if FSetupCollisionMode = scmBloquear then
+      Inc(Result, SetupMinBetween(APrevIdx, ACurrIdx, codiCentre));
+  end;
+
 begin
   Result := False;
   SetLength(MovedNodes, 0);
@@ -10393,6 +10609,11 @@ begin
 
   cal := GetCalendar(CentreId);
   Nodes := FNodes; // referència local per accés ràpid
+
+  // Codigo de linea del centro (para las reglas de setup). Una vez.
+  codiCentre := '';
+  var CCidx := FindCentreIndexById(CentreId);
+  if CCidx >= 0 then codiCentre := FCentres[CCidx].CodiCentre;
 
   // Obtenir nodes del centre des del cache existent
   if not FCentreNodeIdx.TryGetValue(CentreId, cachedArr) then Exit;
@@ -10424,8 +10645,14 @@ begin
     // que el bucle de cascada de mas abajo.
     if (Nodes[ChangedIdx].LoteId > 0) and
        (Nodes[list[i]].LoteId = Nodes[ChangedIdx].LoteId) then Continue;
+    // Zona ocupada de list[i] = su barra MAS su franja de setup hacia ChangedIdx
+    // (si la politica es scmBloquear y hay cambio de atributo). Asi, si B cae
+    // DENTRO de la franja (despues de A.End pero antes de A.End+setup), tambien
+    // cuenta como colision y se empuja detras del setup.
+    var OccEndI := IncMinute(Nodes[list[i]].EndTime,
+      GapMinWithSetup(list[i], ChangedIdx));
     if (Nodes[ChangedIdx].StartTime >= Nodes[list[i]].StartTime) and
-       (Nodes[ChangedIdx].StartTime <  Nodes[list[i]].EndTime) then
+       (Nodes[ChangedIdx].StartTime <  OccEndI) then
     begin
       if (posB < 0) or (Nodes[list[i]].EndTime > Nodes[list[posB]].EndTime) then
         posB := i;
@@ -10434,7 +10661,8 @@ begin
 
   if posB >= 0 then
   begin
-    desiredStart := IncMinute(Nodes[list[posB]].EndTime, MinGapMin);
+    desiredStart := IncMinute(Nodes[list[posB]].EndTime,
+      GapMinWithSetup(list[posB], ChangedIdx));
     desiredStart := ApplyOverlayAndCalendar(desiredStart);
     if FNodes[ChangedIdx].StartTime < desiredStart then
     begin
@@ -10486,7 +10714,8 @@ begin
         end;
       end;
       if posB < 0 then Break;  // ya no choca con ningun bloqueado
-      desiredStart := IncMinute(FNodes[list[posB]].EndTime, MinGapMin);
+      desiredStart := IncMinute(FNodes[list[posB]].EndTime,
+        GapMinWithSetup(list[posB], ChangedIdx));
       desiredStart := ApplyOverlayAndCalendar(desiredStart);
       if MoveNodeKeepingDuration(ChangedIdx, desiredStart) then
       begin
@@ -10533,7 +10762,7 @@ begin
     // se empuja: se respeta su posicion y el cursor de cascada salta tras el.
     if IsNodeMovable(list[i]) then
     begin
-      desiredStart := IncMinute(prevEnd, MinGapMin);
+      desiredStart := IncMinute(prevEnd, GapMinWithSetup(prevIdx, list[i]));
       desiredStart := ApplyOverlayAndCalendar(desiredStart);
 
       // Si al empujar este movil su intervalo trepitjaria un nodo BLOQUEADO
@@ -10553,7 +10782,8 @@ begin
         end;
         if blocked < 0 then Break;
         desiredStart := ApplyOverlayAndCalendar(
-          IncMinute(FNodes[list[blocked]].EndTime, MinGapMin));
+          IncMinute(FNodes[list[blocked]].EndTime,
+            GapMinWithSetup(list[blocked], list[i])));
       until False;
 
       if FNodes[list[i]].StartTime < desiredStart then
@@ -11745,6 +11975,10 @@ begin
     end;
   end;
 
+  // El tiempo de cambio (setup) al colocar el nodo lo aplica de forma
+  // centralizada ResolveSequentialCollisionsFromNode (via CommitNodeMoveOrResize
+  // mas abajo), que cubre move + resize + cascada. No se duplica aqui.
+
   // només si realment el teu mapa depèn del centre
   bRebuildMap := (FNodes[idx].CentreId <> newCentreId);
 
@@ -12097,6 +12331,13 @@ begin
       Invalidate;
     end;
 
+    // Franja de setup: si el cursor esta sobre un gap, mostrar su hint (sin
+    // reactivar si ya estaba: TrySetupGapHint gestiona el estado) y salir SIN
+    // llamar a HideNodeHint (eso provocaria parpadeo).
+    if TrySetupGapHint(X, Y) then Exit;
+
+    // No hay gap bajo el cursor: resetear estado del hint de gap y ocultar.
+    FSetupHintCurrIdx := -1;
     HideNodeHint;
 
     // Hit-test de links quan no hi ha node sota el cursor
@@ -12113,6 +12354,9 @@ begin
 
     Exit;
   end;
+
+  // Sobre un nodo: ya no estamos sobre un gap de setup.
+  FSetupHintCurrIdx := -1;
 
   // Si estem sobre un node, treure hover del link
   if FHoverLinkIndex <> -1 then

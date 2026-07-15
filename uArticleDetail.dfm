@@ -15,6 +15,7 @@ object frmArticleDetail: TfrmArticleDetail
   Font.Style = []
   Position = poMainFormCenter
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 15
   object pnlTop: TPanel
@@ -27,7 +28,6 @@ object frmArticleDetail: TfrmArticleDetail
     Color = 6313290
     ParentBackground = False
     TabOrder = 0
-    ExplicitTop = 67
     DesignSize = (
       1116
       51)
@@ -139,37 +139,88 @@ object frmArticleDetail: TfrmArticleDetail
       TabOrder = 5
       Text = 'AUT0801KIT'
     end
+    object btnObs: TButton
+      Left = 989
+      Top = 2
+      Width = 116
+      Height = 15
+      Anchors = [akTop, akRight]
+      Caption = 'Observaciones'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+      TabOrder = 6
+      OnClick = btnObsClick
+    end
+  end
+  object pnlNav: TPanel
+    Left = 0
+    Top = 121
+    Width = 210
+    Height = 618
+    Align = alLeft
+    BevelOuter = bvNone
+    Color = 15921906
+    ParentBackground = False
+    TabOrder = 3
+    object tvNav: TTreeView
+      Left = 0
+      Top = 0
+      Width = 210
+      Height = 618
+      Align = alClient
+      BorderStyle = bsNone
+      Color = 16448250
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      HideSelection = False
+      Indent = 15
+      ParentFont = False
+      ReadOnly = True
+      RowSelect = True
+      ShowButtons = False
+      ShowLines = False
+      ShowRoot = False
+      TabOrder = 0
+      OnClick = tvNavClick
+      OnCustomDrawItem = tvNavCustomDrawItem
+    end
   end
   object pgcTabs: TcxPageControl
     AlignWithMargins = True
-    Left = 3
+    Left = 213
     Top = 124
-    Width = 1110
+    Width = 900
     Height = 612
     Align = alClient
     TabOrder = 1
     Properties.ActivePage = tabATP
     Properties.CustomButtons.Buttons = <>
+    Properties.HideTabs = True
     Properties.TabHeight = 28
     OnChange = pgcTabsChange
-    ExplicitHeight = 422
     ClientRectBottom = 608
     ClientRectLeft = 4
-    ClientRectRight = 1106
-    ClientRectTop = 34
+    ClientRectRight = 896
+    ClientRectTop = 4
     object tabDisponibilidad: TcxTabSheet
       Caption = 'Disponibilidad fabricaci'#243'n'
-      ExplicitHeight = 384
       object pnlDispTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 70
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           70)
         object lblDispCantidad: TLabel
           Left = 12
@@ -220,7 +271,7 @@ object frmArticleDetail: TfrmArticleDetail
           TabOrder = 1
         end
         object btnRecargarDisp: TButton
-          Left = 988
+          Left = 778
           Top = 6
           Width = 110
           Height = 26
@@ -234,8 +285,8 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 73
-        Width = 1096
-        Height = 457
+        Width = 886
+        Height = 487
         Align = alClient
         Bands = <
           item
@@ -247,7 +298,6 @@ object frmArticleDetail: TfrmArticleDetail
         ScrollbarAnnotations.CustomAnnotations = <>
         TabOrder = 1
         OnCustomDrawDataCell = tlDispCustomDrawDataCell
-        ExplicitHeight = 308
         object colDispArticulo: TcxTreeListColumn
           Caption.Text = 'Art'#237'culo'
           Width = 180
@@ -332,22 +382,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel1: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblDispVeredicto: TLabel
           AlignWithMargins = True
           Left = 3
           Top = 3
-          Width = 1096
+          Width = 886
           Height = 35
           Align = alClient
           AutoSize = False
@@ -365,20 +412,19 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabDondeUsa: TcxTabSheet
       Caption = 'D'#243'nde se usa'
-      ExplicitHeight = 384
       object pnlDondeUsaTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object btnRecargarDondeUsa: TButton
-          Left = 969
+          Left = 759
           Top = 7
           Width = 110
           Height = 26
@@ -392,11 +438,10 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         TabOrder = 1
-        ExplicitHeight = 338
         object grdDondeUsaView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -416,22 +461,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel2: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblDondeUsaResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1091
+          Width = 881
           Height = 35
           Margins.Left = 8
           Align = alClient
@@ -451,29 +493,29 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabHistorico: TcxTabSheet
       Caption = 'Hist'#243'rico'
-      ExplicitHeight = 384
       object pbHistorico: TPaintBox
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         OnPaint = pbHistoricoPaint
         ExplicitLeft = 0
         ExplicitTop = 40
+        ExplicitWidth = 1096
         ExplicitHeight = 506
       end
       object pnlHistTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object lblHistMeses: TLabel
           Left = 12
@@ -492,7 +534,7 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 80
         end
         object btnRecargarHist: TButton
-          Left = 970
+          Left = 760
           Top = 7
           Width = 110
           Height = 26
@@ -504,22 +546,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel3: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 1
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblHistResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1086
+          Width = 876
           Height = 35
           Margins.Left = 8
           Margins.Right = 8
@@ -540,20 +579,19 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabOFs: TcxTabSheet
       Caption = 'OFs activas'
-      ExplicitHeight = 384
       object pnlOFsTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object btnRecargarOFs: TButton
-          Left = 970
+          Left = 760
           Top = 7
           Width = 110
           Height = 26
@@ -567,14 +605,10 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         TabOrder = 1
-        ExplicitLeft = 0
-        ExplicitTop = 40
-        ExplicitWidth = 1102
-        ExplicitHeight = 344
         object grdOFsView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -593,22 +627,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel4: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblOFsResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1086
+          Width = 876
           Height = 35
           Margins.Left = 8
           Margins.Right = 8
@@ -629,17 +660,16 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabProveedores: TcxTabSheet
       Caption = 'Proveedores'
-      ExplicitHeight = 384
       object pnlProvTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object lblProvMeses: TLabel
           Left = 12
@@ -658,7 +688,7 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 80
         end
         object btnRecargarProv: TButton
-          Left = 970
+          Left = 760
           Top = 7
           Width = 110
           Height = 26
@@ -672,14 +702,10 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         TabOrder = 1
-        ExplicitLeft = 0
-        ExplicitTop = 40
-        ExplicitWidth = 1102
-        ExplicitHeight = 344
         object grdProvView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -698,22 +724,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel5: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblProvResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1086
+          Width = 876
           Height = 35
           Margins.Left = 8
           Margins.Right = 8
@@ -734,17 +757,16 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabClientes: TcxTabSheet
       Caption = 'Clientes'
-      ExplicitHeight = 384
       object pnlCliTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object lblCliMeses: TLabel
           Left = 12
@@ -763,7 +785,7 @@ object frmArticleDetail: TfrmArticleDetail
           Width = 80
         end
         object btnRecargarCli: TButton
-          Left = 970
+          Left = 760
           Top = 7
           Width = 110
           Height = 26
@@ -777,14 +799,10 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         TabOrder = 1
-        ExplicitLeft = 0
-        ExplicitTop = 40
-        ExplicitWidth = 1102
-        ExplicitHeight = 344
         object grdCliView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -803,22 +821,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel6: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblCliResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1086
+          Width = 876
           Height = 35
           Margins.Left = 8
           Margins.Right = 8
@@ -839,17 +854,16 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabMovimientos: TcxTabSheet
       Caption = 'Movimientos futuros'
-      ExplicitHeight = 384
       object pnlMovsFutTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object lblMovsFutDesde: TLabel
           Left = 12
@@ -917,7 +931,7 @@ object frmArticleDetail: TfrmArticleDetail
           OnClick = MovFutTipoChange
         end
         object btnRecargarMovsFut: TButton
-          Left = 970
+          Left = 760
           Top = 7
           Width = 110
           Height = 26
@@ -931,14 +945,10 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         TabOrder = 1
-        ExplicitLeft = 0
-        ExplicitTop = 40
-        ExplicitWidth = 1102
-        ExplicitHeight = 344
         object grdMovsFutView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -959,22 +969,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel7: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblMovsFutResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1086
+          Width = 876
           Height = 35
           Margins.Left = 8
           Margins.Right = 8
@@ -995,20 +1002,19 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabPartidas: TcxTabSheet
       Caption = 'Stock por partida / lote'
-      ExplicitHeight = 384
       object pnlPartidasTop: TPanel
         Left = 0
         Top = 0
-        Width = 1102
+        Width = 892
         Height = 40
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 0
         DesignSize = (
-          1102
+          892
           40)
         object btnRecargarPartidas: TButton
-          Left = 970
+          Left = 760
           Top = 7
           Width = 110
           Height = 26
@@ -1033,14 +1039,10 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 43
-        Width = 1096
-        Height = 487
+        Width = 886
+        Height = 517
         Align = alClient
         TabOrder = 1
-        ExplicitLeft = 0
-        ExplicitTop = 40
-        ExplicitWidth = 1102
-        ExplicitHeight = 344
         object grdPartidasView: TcxGridDBTableView
           Navigator.Buttons.CustomButtons = <>
           ScrollbarAnnotations.CustomAnnotations = <>
@@ -1062,22 +1064,19 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel8: TPanel
         Left = 0
-        Top = 533
-        Width = 1102
+        Top = 563
+        Width = 892
         Height = 41
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
-        ExplicitLeft = 456
-        ExplicitTop = 264
-        ExplicitWidth = 185
         object lblPartidasResumen: TLabel
           AlignWithMargins = True
           Left = 8
           Top = 3
-          Width = 1086
+          Width = 876
           Height = 35
           Margins.Left = 8
           Margins.Right = 8
@@ -1098,21 +1097,17 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object tabATP: TcxTabSheet
       Caption = 'Projected Stock (ATP)'
-      ExplicitHeight = 384
       object pnlResumen: TPanel
         AlignWithMargins = True
         Left = 3
         Top = 3
-        Width = 1096
+        Width = 886
         Height = 90
         Align = alTop
         BevelOuter = bvLowered
         Color = clInfoBk
         ParentBackground = False
         TabOrder = 0
-        ExplicitLeft = 0
-        ExplicitTop = 0
-        ExplicitWidth = 1102
         object lblTitResumen: TLabel
           Left = 12
           Top = 6
@@ -1236,7 +1231,7 @@ object frmArticleDetail: TfrmArticleDetail
         AlignWithMargins = True
         Left = 3
         Top = 99
-        Width = 1096
+        Width = 886
         Height = 44
         Align = alTop
         BevelOuter = bvLowered
@@ -1244,11 +1239,8 @@ object frmArticleDetail: TfrmArticleDetail
         ParentBackground = False
         TabOrder = 2
         Visible = False
-        ExplicitLeft = 0
-        ExplicitTop = 90
-        ExplicitWidth = 1102
         DesignSize = (
-          1096
+          886
           44)
         object lblRecomendacion: TLabel
           Left = 12
@@ -1265,7 +1257,7 @@ object frmArticleDetail: TfrmArticleDetail
           ParentFont = False
         end
         object btnAccionMrp: TButton
-          Left = 940
+          Left = 730
           Top = 8
           Width = 144
           Height = 28
@@ -1274,31 +1266,24 @@ object frmArticleDetail: TfrmArticleDetail
           TabOrder = 0
           Visible = False
           OnClick = btnAccionMrpClick
-          ExplicitLeft = 946
         end
       end
       object pnlMovsContainer: TPanel
         Left = 0
         Top = 146
-        Width = 1102
-        Height = 428
+        Width = 892
+        Height = 458
         Align = alClient
         BevelOuter = bvNone
         TabOrder = 1
-        ExplicitTop = 134
-        ExplicitHeight = 250
         object grdMovs: TcxGrid
           AlignWithMargins = True
           Left = 3
           Top = 3
-          Width = 1096
-          Height = 381
+          Width = 886
+          Height = 411
           Align = alClient
           TabOrder = 0
-          ExplicitLeft = 0
-          ExplicitTop = 0
-          ExplicitWidth = 1102
-          ExplicitHeight = 250
           object grdMovsView: TcxGridDBTableView
             Navigator.Buttons.CustomButtons = <>
             ScrollbarAnnotations.CustomAnnotations = <>
@@ -1319,22 +1304,19 @@ object frmArticleDetail: TfrmArticleDetail
         end
         object Panel9: TPanel
           Left = 0
-          Top = 387
-          Width = 1102
+          Top = 417
+          Width = 892
           Height = 41
           Align = alBottom
           BevelOuter = bvNone
           Color = 15921906
           ParentBackground = False
           TabOrder = 1
-          ExplicitLeft = 456
-          ExplicitTop = 264
-          ExplicitWidth = 185
           object lblAviso: TLabel
             AlignWithMargins = True
             Left = 8
             Top = 3
-            Width = 1086
+            Width = 876
             Height = 35
             Margins.Left = 8
             Margins.Right = 8
@@ -1358,13 +1340,12 @@ object frmArticleDetail: TfrmArticleDetail
     object cxTabSheet1: TcxTabSheet
       Caption = 'Log'
       ImageIndex = 9
-      ExplicitHeight = 384
       object mmoLog: TMemo
         AlignWithMargins = True
         Left = 3
         Top = 3
-        Width = 1096
-        Height = 568
+        Width = 886
+        Height = 598
         Align = alClient
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWindowText
@@ -1375,10 +1356,6 @@ object frmArticleDetail: TfrmArticleDetail
         ReadOnly = True
         ScrollBars = ssVertical
         TabOrder = 0
-        ExplicitLeft = 40
-        ExplicitTop = 6
-        ExplicitWidth = 1116
-        ExplicitHeight = 140
       end
     end
   end
@@ -1472,20 +1449,55 @@ object frmArticleDetail: TfrmArticleDetail
     end
     object pnlKPIs: TPanel
       AlignWithMargins = True
-      Left = 341
+      Left = 313
       Top = 3
-      Width = 772
+      Width = 800
       Height = 64
       Align = alRight
       BevelOuter = bvNone
       Color = 3748653
       ParentBackground = False
       TabOrder = 2
+      object pnlTipoAprov: TPanel
+        AlignWithMargins = True
+        Left = 40
+        Top = 10
+        Width = 80
+        Height = 44
+        Margins.Top = 10
+        Margins.Right = 6
+        Margins.Bottom = 10
+        Align = alRight
+        BevelOuter = bvNone
+        Color = 3050327
+        ParentBackground = False
+        TabOrder = 6
+        Visible = False
+        ExplicitLeft = 3
+        object lblTipoAprov: TLabel
+          Left = 0
+          Top = 0
+          Width = 80
+          Height = 44
+          Align = alClient
+          Alignment = taCenter
+          Caption = 'FABRICAR'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWhite
+          Font.Height = -13
+          Font.Name = 'Segoe UI'
+          Font.Style = [fsBold]
+          ParentFont = False
+          Layout = tlCenter
+          ExplicitLeft = 8
+          ExplicitTop = 7
+        end
+      end
       object pnlKPI2: TPanel
         AlignWithMargins = True
-        Left = 145
+        Left = 233
         Top = 0
-        Width = 120
+        Width = 100
         Height = 64
         Margins.Top = 0
         Margins.Bottom = 0
@@ -1494,11 +1506,12 @@ object frmArticleDetail: TfrmArticleDetail
         Color = 8220514
         ParentBackground = False
         TabOrder = 0
+        ExplicitLeft = 193
         object lblKPI2Cap: TLabel
           AlignWithMargins = True
           Left = 5
           Top = 3
-          Width = 110
+          Width = 90
           Height = 15
           Margins.Left = 5
           Margins.Right = 5
@@ -1521,7 +1534,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 18
-          Width = 110
+          Width = 90
           Height = 24
           Margins.Left = 5
           Margins.Top = 0
@@ -1545,7 +1558,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 47
-          Width = 110
+          Width = 90
           Height = 14
           Margins.Left = 5
           Margins.Top = 0
@@ -1566,9 +1579,9 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object pnlKPI3: TPanel
         AlignWithMargins = True
-        Left = 271
+        Left = 339
         Top = 0
-        Width = 120
+        Width = 100
         Height = 64
         Margins.Top = 0
         Margins.Bottom = 0
@@ -1577,11 +1590,12 @@ object frmArticleDetail: TfrmArticleDetail
         Color = 8220514
         ParentBackground = False
         TabOrder = 1
+        ExplicitLeft = 319
         object lblKPI3Cap: TLabel
           AlignWithMargins = True
           Left = 5
           Top = 3
-          Width = 110
+          Width = 90
           Height = 15
           Margins.Left = 5
           Margins.Right = 5
@@ -1604,7 +1618,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 18
-          Width = 110
+          Width = 90
           Height = 24
           Margins.Left = 5
           Margins.Top = 0
@@ -1628,7 +1642,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 47
-          Width = 110
+          Width = 90
           Height = 14
           Margins.Left = 5
           Margins.Top = 0
@@ -1649,9 +1663,9 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object pnlKPI4: TPanel
         AlignWithMargins = True
-        Left = 397
+        Left = 445
         Top = 0
-        Width = 120
+        Width = 110
         Height = 64
         Margins.Top = 0
         Margins.Bottom = 0
@@ -1660,11 +1674,12 @@ object frmArticleDetail: TfrmArticleDetail
         Color = 8220514
         ParentBackground = False
         TabOrder = 2
+        ExplicitLeft = 435
         object lblKPI4Cap: TLabel
           AlignWithMargins = True
           Left = 5
           Top = 3
-          Width = 110
+          Width = 100
           Height = 15
           Margins.Left = 5
           Margins.Right = 5
@@ -1687,7 +1702,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 18
-          Width = 110
+          Width = 100
           Height = 24
           Margins.Left = 5
           Margins.Top = 0
@@ -1711,7 +1726,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 47
-          Width = 110
+          Width = 100
           Height = 14
           Margins.Left = 5
           Margins.Top = 0
@@ -1732,9 +1747,9 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object pnlKPI5: TPanel
         AlignWithMargins = True
-        Left = 523
+        Left = 561
         Top = 0
-        Width = 120
+        Width = 110
         Height = 64
         Margins.Top = 0
         Margins.Bottom = 0
@@ -1747,7 +1762,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 3
-          Width = 110
+          Width = 100
           Height = 15
           Margins.Left = 5
           Margins.Right = 5
@@ -1770,7 +1785,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 18
-          Width = 110
+          Width = 100
           Height = 24
           Margins.Left = 5
           Margins.Top = 0
@@ -1794,7 +1809,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 47
-          Width = 110
+          Width = 100
           Height = 14
           Margins.Left = 5
           Margins.Top = 0
@@ -1815,7 +1830,7 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object pnlKPI6: TPanel
         AlignWithMargins = True
-        Left = 649
+        Left = 677
         Top = 0
         Width = 120
         Height = 64
@@ -1898,9 +1913,9 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object pnlKPI1: TPanel
         AlignWithMargins = True
-        Left = 19
+        Left = 127
         Top = 0
-        Width = 120
+        Width = 100
         Height = 64
         Margins.Left = 1
         Margins.Top = 0
@@ -1917,11 +1932,12 @@ object frmArticleDetail: TfrmArticleDetail
         ParentFont = False
         ShowCaption = False
         TabOrder = 5
+        ExplicitLeft = 67
         object lblKPI1Cap: TLabel
           AlignWithMargins = True
           Left = 5
           Top = 3
-          Width = 110
+          Width = 90
           Height = 16
           Cursor = crHandPoint
           Margins.Left = 5
@@ -1946,7 +1962,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 47
-          Width = 110
+          Width = 90
           Height = 14
           Margins.Left = 5
           Margins.Top = 0
@@ -1968,7 +1984,7 @@ object frmArticleDetail: TfrmArticleDetail
           AlignWithMargins = True
           Left = 5
           Top = 19
-          Width = 110
+          Width = 90
           Height = 24
           Margins.Left = 5
           Margins.Top = 0

@@ -93,8 +93,7 @@ type
     FCustomFieldDefs: TCustomFieldDefs;  // referència, no propietari
     FFileName: string;
 
-    // Builtin field names
-    class function GetBuiltinFieldNames: TArray<string>; static;
+    // Builtin field value (usat internament)
     class function GetBuiltinFieldValue(const ANode: TNodeData;
       const AFieldName: string): Variant; static;
 
@@ -114,6 +113,10 @@ type
     // Obtenir valor d'un camp (builtin o custom)
     class function GetFieldValue(const ANode: TNodeData;
       const AFieldName: string): Variant; static;
+
+    // Noms dels camps builtin (public: el motor de setup els necessita per
+    // exposar els mateixos atributs que ofereix aquest editor).
+    class function GetBuiltinFieldNames: TArray<string>; static;
 
     // Llista de tots els camps disponibles (builtin + custom)
     function GetAvailableFields: TArray<string>;

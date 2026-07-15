@@ -351,7 +351,7 @@ implementation
 
 uses
   uDMPlanner, uLogin, uGanttTypes, uCentreCalendar, uBacklogCustomCols,
-  uBusyDialog,
+  uBusyDialog, uSetupRules,
   uBacklogSchedParams, uBacklogSchedWizard, uBacklogSchedPreview, uUserPrefs,
   uGenerarNodosDemo,
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
@@ -649,6 +649,36 @@ begin
   ApplyRowsToGrid;
 end;
 
+// Construye la lista de atributos de un trabajo para el motor de tiempo de
+// cambio (uSetupRules): builtin relevantes + todos los campos personalizados
+// (Extras). Generico: no hardcodea 'Color'/'Substrato', expone lo que haya y el
+// motor usa solo los atributos que sus reglas referencien.
+function BuildSetupAttrs(const Row: TBacklogRow): TSetupAttrList;
+var
+  L: TList<TSetupPair>;
+  P: TSetupPair;
+  Pair: TPair<string, Variant>;
+begin
+  L := TList<TSetupPair>.Create;
+  try
+    // Builtin util para secuenciacion.
+    P.Name := 'CodigoArticulo'; P.Value := Row.CodigoArticulo; L.Add(P);
+    P.Name := 'DescripcionArticulo'; P.Value := Row.DescripcionArticulo; L.Add(P);
+    P.Name := 'CodigoCliente'; P.Value := Row.CodigoCliente; L.Add(P);
+    // Campos personalizados del backlog (Substrato, Color, AnchoBobina, ...).
+    if Row.Extras <> nil then
+      for Pair in Row.Extras do
+      begin
+        P.Name := Pair.Key;
+        P.Value := VarToStr(Pair.Value);
+        L.Add(P);
+      end;
+    Result := L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
 // Mapea una fila del backlog (cualquier nivel) a un TSchedInput. Para filas de
 // OP (Nivel 3) el input es planificable directamente. Para OF/OT (Nivel 1/2) el
 // input solo sirve de portador; quien planifica debe explosionarlo a OPs antes.
@@ -706,6 +736,12 @@ begin
   // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
   Result.RawItemClaveERP := Row.ClaveERP;
   Result.RawItemTipoOrigen := Row.TipoOrigen;
+
+  // Atributos para el tiempo de cambio secuencia-dependiente (uSetupRules):
+  // builtin relevantes + todos los campos personalizados del backlog (Extras).
+  // Asi cualquier regla de setup que referencie 'Color', 'Substrato',
+  // 'AnchoBobina'... (custom) o 'CodigoArticulo' (builtin) encuentra su valor.
+  Result.SetupAttrs := BuildSetupAttrs(Row);
 
   PlanLog.Linea('BUILD_FROM_ROW: Tipo=[%s] Nivel=%d | Row.NumeroOF=%d ' +
     'Row.SerieOF=%s Row.NumeroDoc=%d Row.CodigoOT=%s Row.CodigoProyecto=%s | ' +
@@ -1141,6 +1177,7 @@ var
   PerfilesCustom, CentrosPlan: TArray<string>;
   PerfilSel, PCI: Integer;
   C: TCentreTreball;
+  SetupEngine: TSetupRuleEngine;
 begin
   if tvBacklog.Controller.SelectedRowCount = 0 then
   begin
@@ -1255,7 +1292,19 @@ begin
       [Ord(Params.Mode), Ord(Params.Order), DateToStr(Params.FechaBase),
        Ord(Params.Agrupacion)]);
     TCol := Now;
-    SR := RunAutoScheduling(Inputs, Params);
+    // Motor de tiempo de cambio secuencia-dependiente (uSetupRules). Carga el
+    // perfil de reglas activo; si no hay reglas, SetupEngine actua como nil
+    // (comportamiento clasico con DistanciaMinNodos fija). El scheduler NO es
+    // propietario del engine: lo liberamos aqui tras planificar.
+    SetupEngine := TSetupRuleEngine.Create;
+    try
+      SetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
+      Params.SetupEngine := SetupEngine;
+      SR := RunAutoScheduling(Inputs, Params);
+    finally
+      Params.SetupEngine := nil;
+      SetupEngine.Free;
+    end;
     PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados en %d ms ---',
       [Length(SR.Items), SR.TotalPlanificados, MilliSecondsBetween(Now, TCol)]);
 

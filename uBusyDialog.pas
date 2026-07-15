@@ -65,6 +65,15 @@ procedure ShowBusy(AOwner: TForm; const AMessage: string; AProc: TProc);
 // procesa despues, ya de vuelta en el hilo principal, por el llamador.
 procedure RunBusy(AOwner: TForm; const AMessage: string; AWork: TProc);
 
+// --- Busy de ARRANQUE (singleton) ------------------------------------------
+// Feedback visual durante la carga inicial, que ocurre en DOS sitios (login +
+// Main.FormCreate). Un unico dialogo persistente que se muestra al empezar el
+// login, se va actualizando por etapa (StartupBusyUpdate) y se cierra cuando el
+// Main termina de cargar (StartupBusyClose). Idempotente y seguro si ya cerrado.
+procedure StartupBusyShow(const AMessage: string);
+procedure StartupBusyUpdate(const AMessage: string);
+procedure StartupBusyClose;
+
 implementation
 
 {$R *.dfm}
@@ -252,6 +261,54 @@ begin
 
   if WorkErr <> '' then
     raise Exception.Create(WorkErr);
+end;
+
+// --- Busy de ARRANQUE (singleton) ------------------------------------------
+
+var
+  GStartupBusy: TfrmBusyDialog = nil;
+
+// Reasserta el dialogo como TOPMOST y al frente. Necesario porque durante el
+// arranque aparecen otras ventanas (el form principal, el Dashboard con
+// BringToFront) que pueden robar el orden Z aunque FormStyle=fsStayOnTop.
+procedure StartupBusyBringFront;
+begin
+  if GStartupBusy = nil then Exit;
+  if not GStartupBusy.HandleAllocated then Exit;
+  SetWindowPos(GStartupBusy.Handle, HWND_TOPMOST, 0, 0, 0, 0,
+    SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+end;
+
+procedure StartupBusyShow(const AMessage: string);
+begin
+  if GStartupBusy <> nil then
+  begin
+    GStartupBusy.UpdateMessage(AMessage);
+    StartupBusyBringFront;
+    Exit;
+  end;
+  // Owner=nil: el dialogo debe sobrevivir al cierre del form de login y seguir
+  // vivo durante Main.FormCreate. Se centra en pantalla (Position en Create).
+  GStartupBusy := TfrmBusyDialog.Display(nil, AMessage);
+  StartupBusyBringFront;
+end;
+
+procedure StartupBusyUpdate(const AMessage: string);
+begin
+  if GStartupBusy <> nil then
+  begin
+    GStartupBusy.UpdateMessage(AMessage);
+    StartupBusyBringFront;   // reasserta el TOPMOST tras cada etapa
+  end;
+end;
+
+procedure StartupBusyClose;
+begin
+  if GStartupBusy <> nil then
+  begin
+    GStartupBusy.Free;
+    GStartupBusy := nil;
+  end;
 end;
 
 end.

@@ -72,7 +72,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uDMPlanner, uAppConfig, uDBConfig;
+  uDMPlanner, uAppConfig, uDBConfig, uPlanLog, System.DateUtils, uBusyDialog;
 
 var
   GSession: TUserSession;
@@ -281,9 +281,18 @@ begin
         Exit;
   end;
 
+  // Inicio() vacia el log: cada arranque deja datos aislados (regla del proyecto).
+  PlanLog.Inicio('LOGIN normal (arranque)');
+  StartupBusyShow('Cargando FSPlanner...');
+  var TLog := Now;
   LoadPermissions;
+  PlanLog.Linea('  LOGIN.LoadPermissions: %d ms', [MilliSecondsBetween(Now, TLog)]); TLog := Now;
+  StartupBusyUpdate('Cargando calendarios y centros...');
   DMPlanner.LoadEmpresaInfo;
+  PlanLog.Linea('  LOGIN.LoadEmpresaInfo: %d ms', [MilliSecondsBetween(Now, TLog)]); TLog := Now;
+  StartupBusyUpdate('Cargando proyecto...');
   DMPlanner.LoadUserActiveProject(FSession.UserId);
+  PlanLog.Linea('  LOGIN.LoadUserActiveProject: %d ms', [MilliSecondsBetween(Now, TLog)]);
   Screen.Cursor := crDefault;
 
   if (not IsAdmin) and (DMPlanner.CurrentProjectId <= 0) then
@@ -504,27 +513,45 @@ begin
 
   DMPlanner.CodigoEmpresa := GetSelectedEmpresa;
 
+  // Inicio() vacia el log: cada arranque deja datos aislados (regla del proyecto).
+  PlanLog.Inicio('LOGIN btnDevAdmin (arranque)');
+  // Busy persistente durante todo el arranque (login + Main.FormCreate). Se
+  // cierra al final de Main.FormCreate (StartupBusyClose).
+  StartupBusyShow('Conectando a la base de datos...');
+  var TLog := Now;
   if not DMPlanner.IsConnected then
   begin
     var R := DMPlanner.Connect;
     if not R.Success then
     begin
+      StartupBusyClose;
       ShowError('No se puede conectar: ' + R.ErrorMessage);
       Exit;
     end;
   end;
+  PlanLog.Linea('  LOGIN.Connect (con migraciones): %d ms', [MilliSecondsBetween(Now, TLog)]); TLog := Now;
 
   edtUsuario.Text := 'admin';
   edtPassword.Text := 'admin';
 
+  StartupBusyUpdate('Validando usuario...');
   if ValidateUser('admin', HashPassword('admin')) then
   begin
+    PlanLog.Linea('  LOGIN.ValidateUser: %d ms', [MilliSecondsBetween(Now, TLog)]); TLog := Now;
     LoadPermissions;
-    DMPlanner.LoadEmpresaInfo;
+    PlanLog.Linea('  LOGIN.LoadPermissions: %d ms', [MilliSecondsBetween(Now, TLog)]); TLog := Now;
+    StartupBusyUpdate('Cargando calendarios y centros...');
+    DMPlanner.LoadEmpresaInfo;   // incluye LoadCalendars + LoadCentres
+    PlanLog.Linea('  LOGIN.LoadEmpresaInfo (+Calendars+Centres): %d ms', [MilliSecondsBetween(Now, TLog)]); TLog := Now;
+    StartupBusyUpdate('Cargando proyecto...');
     DMPlanner.LoadMasterProject;
+    PlanLog.Linea('  LOGIN.LoadMasterProject: %d ms', [MilliSecondsBetween(Now, TLog)]);
+    PlanLog.Linea('======== LOGIN btnDevAdmin FIN ========');
     FLoginOK := True;
     Close;
-  end;
+  end
+  else
+    StartupBusyClose;   // validacion fallida: no seguimos al Main
 end;
 
 procedure TfrmLogin.btnCancelarClick(Sender: TObject);
