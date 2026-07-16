@@ -32,7 +32,8 @@ uses
   dxDateRanges, dxScrollbarAnnotations,
   cxInplaceContainer, cxVGrid, cxGridStrs, dxCore,
   Data.Win.ADODB, Data.DB,
-  uBacklogScheduler, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
+  uBacklogScheduler, uUtillajeTypes,
+  dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
   dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
@@ -266,6 +267,10 @@ type
     // refrescar. Clave = 'tab|nivel' (p.ej. '1|3').
     FRecordsetCache: TObjectDictionary<string, TCustomADODataSet>;
 
+    // Reglas utillaje del maestro, cacheadas por sesion de planificacion: se
+    // consultan por cada fila y son pocas (una por operacion/articulo ligado).
+    FUtilReglas: TArray<TUtillajeRegla>;
+    FUtilReglasCargadas: Boolean;
 
     FCustomCols: TArray<TCustomColumnDef>;
     FBaseColumns: TArray<TcxGridColumn>;
@@ -318,6 +323,13 @@ type
     procedure PlanificarSeleccion(AExpress: Boolean);
     function CollectSelectedInputs: TArray<TSchedInput>;
     function BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
+    // Reglas "operacion/articulo -> utillaje" del maestro. Se cargan UNA vez
+    // por sesion de planificacion (BD) y se resuelven en memoria por fila.
+    function GetUtillajeReglas: TArray<TUtillajeRegla>;
+    // Ocupacion de utillajes para una pasada de planificacion: capacidades del
+    // maestro + carga YA planificada del proyecto. nil si no hay reglas (asi el
+    // motor no cambia de comportamiento).
+    function BuildUtillajeOccupancy: TUtillajeOccupancy;
     function ExplodeToOpInputs(ARawId: Int64; ANivel: Integer): TArray<TSchedInput>;
     // Explosion en LOTE: todas las OP descendientes de un conjunto de ancestros
     // del mismo nivel, en UNA sola consulta (IN). Evita N round-trips.
@@ -351,7 +363,7 @@ implementation
 
 uses
   uDMPlanner, uLogin, uGanttTypes, uCentreCalendar, uBacklogCustomCols,
-  uBusyDialog, uSetupRules,
+  uBusyDialog, uSetupRules, uUtillajesRepo,
   uBacklogSchedParams, uBacklogSchedWizard, uBacklogSchedPreview, uUserPrefs,
   uGenerarNodosDemo,
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
@@ -653,11 +665,15 @@ end;
 // cambio (uSetupRules): builtin relevantes + todos los campos personalizados
 // (Extras). Generico: no hardcodea 'Color'/'Substrato', expone lo que haya y el
 // motor usa solo los atributos que sus reglas referencien.
-function BuildSetupAttrs(const Row: TBacklogRow): TSetupAttrList;
+function BuildSetupAttrs(const Row: TBacklogRow;
+  const AUtilReglas: TArray<TUtillajeRegla>): TSetupAttrList;
 var
   L: TList<TSetupPair>;
   P: TSetupPair;
   Pair: TPair<string, Variant>;
+  Reqs: TArray<TUtillajeRequisito>;
+  I: Integer;
+  Codigos: string;
 begin
   L := TList<TSetupPair>.Create;
   try
@@ -665,6 +681,28 @@ begin
     P.Name := 'CodigoArticulo'; P.Value := Row.CodigoArticulo; L.Add(P);
     P.Name := 'DescripcionArticulo'; P.Value := Row.DescripcionArticulo; L.Add(P);
     P.Name := 'CodigoCliente'; P.Value := Row.CodigoCliente; L.Add(P);
+
+    // Utillaje: se expone como UN atributo mas para que el usuario pueda
+    // escribir la regla "Utillaje cambia -> +45 min" desde el editor, sin
+    // tocar codigo. El valor es la lista de codigos que exige la operacion o
+    // el articulo; si cambia entre dos nodos consecutivos, hay cambio real de
+    // utillaje en la maquina.
+    // OJO: esto solo da el COSTE del cambio. Que dos nodos no puedan compartir
+    // el mismo utillaje a la vez es otra cosa (restriccion dura), y una regla
+    // de setup no puede expresarlo.
+    if Length(AUtilReglas) > 0 then
+    begin
+      // CodigoOP, NO CodigoDocumento: este ultimo es la etiqueta para mostrar
+      // ('DEMO-PRJ-002 / MECANIZAR') y nunca casaria con la regla, que va por
+      // el codigo de operacion pelado ('MECANIZAR').
+      Reqs := ResolverUtillajes(AUtilReglas, Row.CodigoOP,
+        Row.CodigoArticulo);
+      Codigos := '';
+      for I := 0 to High(Reqs) do
+        if Codigos = '' then Codigos := Reqs[I].Codigo
+        else Codigos := Codigos + '+' + Reqs[I].Codigo;
+      P.Name := 'Utillaje'; P.Value := Codigos; L.Add(P);
+    end;
     // Campos personalizados del backlog (Substrato, Color, AnchoBobina, ...).
     if Row.Extras <> nil then
       for Pair in Row.Extras do
@@ -682,12 +720,67 @@ end;
 // Mapea una fila del backlog (cualquier nivel) a un TSchedInput. Para filas de
 // OP (Nivel 3) el input es planificable directamente. Para OF/OT (Nivel 1/2) el
 // input solo sirve de portador; quien planifica debe explosionarlo a OPs antes.
+function TfrmBacklog.GetUtillajeReglas: TArray<TUtillajeRegla>;
+var
+  Repo: TUtillajesRepo;
+begin
+  if not FUtilReglasCargadas then
+  begin
+    SetLength(FUtilReglas, 0);
+    try
+      Repo := TUtillajesRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+      try
+        FUtilReglas := Repo.LoadReglas;
+      finally
+        Repo.Free;
+      end;
+    except
+      // Sin V072/V073 aplicadas o cualquier error: se planifica igual que
+      // siempre, sin atributo de utillaje.
+      SetLength(FUtilReglas, 0);
+    end;
+    FUtilReglasCargadas := True;
+  end;
+  Result := FUtilReglas;
+end;
+
+function TfrmBacklog.BuildUtillajeOccupancy: TUtillajeOccupancy;
+var
+  Repo: TUtillajesRepo;
+begin
+  Result := nil;
+  // Sin reglas no hay nada que restringir: devolver nil deja el motor
+  // exactamente como estaba (cero riesgo para quien no usa utillajes).
+  if Length(GetUtillajeReglas) = 0 then Exit;
+  if DMPlanner.CurrentProjectId <= 0 then Exit;
+
+  Result := TUtillajeOccupancy.Create;
+  try
+    Repo := TUtillajesRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    try
+      Repo.CargarOcupacion(Result, DMPlanner.CurrentProjectId);
+    finally
+      Repo.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      // Si no se puede cargar la ocupacion, es preferible planificar sin la
+      // restriccion (como siempre) que no planificar.
+      PlanLog.Linea('utillajes: ocupacion no cargada (%s) -> se planifica sin ' +
+        'restriccion de utillaje', [E.Message]);
+      FreeAndNil(Result);
+    end;
+  end;
+end;
+
 function TfrmBacklog.BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
 begin
   Result := Default(TSchedInput);
   Result.RawId := Row.RawId;
   Result.Origen := Row.Origen;
   Result.CodigoDocumento := Row.CodigoDocumento;
+  Result.CodigoOP := Row.CodigoOP;
   Result.CentroPreferente := Row.CentroPreferente;
   Result.HorasEstimadas := Row.HorasEstimadas;
   Result.FechaCompromiso := Row.FechaCompromiso;
@@ -741,7 +834,15 @@ begin
   // builtin relevantes + todos los campos personalizados del backlog (Extras).
   // Asi cualquier regla de setup que referencie 'Color', 'Substrato',
   // 'AnchoBobina'... (custom) o 'CodigoArticulo' (builtin) encuentra su valor.
-  Result.SetupAttrs := BuildSetupAttrs(Row);
+  Result.SetupAttrs := BuildSetupAttrs(Row, GetUtillajeReglas);
+
+  // Utillajes que exige esta operacion: se resuelven AQUI (fuera del motor),
+  // porque RunAutoScheduling corre en los hilos del optimizador y no puede
+  // tocar BD. Vacio = el nodo no restringe por utillaje.
+  // Va por CodigoOP (el codigo de operacion), no por CodigoDocumento, que es
+  // la etiqueta compuesta 'DEMO-PRJ-002 / MECANIZAR'.
+  Result.UtillajeReqs := ResolverUtillajes(GetUtillajeReglas,
+    Row.CodigoOP, Row.CodigoArticulo);
 
   PlanLog.Linea('BUILD_FROM_ROW: Tipo=[%s] Nivel=%d | Row.NumeroOF=%d ' +
     'Row.SerieOF=%s Row.NumeroDoc=%d Row.CodigoOT=%s Row.CodigoProyecto=%s | ' +
@@ -963,8 +1064,12 @@ begin
   for I := 0 to High(AResult.Items) do
   begin
     Item := AResult.Items[I];
-    // Solo planificamos los que tienen fechas y centro valido
-    if (Item.Status = ssSinCentro) or (Item.Status = ssSinCalendario) then
+    // Solo planificamos los que tienen fechas y centro valido.
+    // ssSinUtillaje va aqui a proposito: el motor le deja fechas y centro
+    // (son validos para la maquina), pero NO hay utillaje libre. Si no se
+    // filtrase, se crearia el nodo igual y la restriccion no serviria de nada.
+    if (Item.Status = ssSinCentro) or (Item.Status = ssSinCalendario) or
+       (Item.Status = ssSinUtillaje) then
       Continue;
     if (Item.FechaInicio = 0) or (Item.FechaFin = 0) then Continue;
     if Item.CenterId <= 0 then Continue;
@@ -976,7 +1081,14 @@ begin
     Row.FechaFin := Item.FechaFin;
     Row.DuracionMin := Item.DuracionMin;
     Row.Caption := Item.Input.CodigoDocumento;
-    Row.Operacion := Item.Input.CodigoDocumento;
+    // Operacion = codigo pelado ('MECANIZAR'), NO la etiqueta compuesta: es la
+    // clave contra la que casan la vista de utillajes (R02/restriccion) y las
+    // reglas de setup. Fallback al documento si el origen no trae CodigoOP
+    // (comportamiento anterior).
+    if Trim(Item.Input.CodigoOP) <> '' then
+      Row.Operacion := Item.Input.CodigoOP
+    else
+      Row.Operacion := Item.Input.CodigoDocumento;
     Row.NumeroOF := Item.Input.NumeroOF;
     Row.SerieOF := Item.Input.SerieOF;
     Row.NumeroPedido := Item.Input.NumeroPedido;
@@ -1178,6 +1290,7 @@ var
   PerfilSel, PCI: Integer;
   C: TCentreTreball;
   SetupEngine: TSetupRuleEngine;
+  UtilOcc: TUtillajeOccupancy;
 begin
   if tvBacklog.Controller.SelectedRowCount = 0 then
   begin
@@ -1297,13 +1410,20 @@ begin
     // (comportamiento clasico con DistanciaMinNodos fija). El scheduler NO es
     // propietario del engine: lo liberamos aqui tras planificar.
     SetupEngine := TSetupRuleEngine.Create;
+    // Utillajes como restriccion dura. Mismo contrato que SetupEngine: lo crea
+    // y lo libera el caller. Si no hay reglas de utillaje, se deja nil y el
+    // motor se comporta como siempre.
+    UtilOcc := BuildUtillajeOccupancy;
     try
       SetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
       Params.SetupEngine := SetupEngine;
+      Params.UtillajeOcc := UtilOcc;
       SR := RunAutoScheduling(Inputs, Params);
     finally
       Params.SetupEngine := nil;
+      Params.UtillajeOcc := nil;
       SetupEngine.Free;
+      UtilOcc.Free;
     end;
     PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados en %d ms ---',
       [Length(SR.Items), SR.TotalPlanificados, MilliSecondsBetween(Now, TCol)]);
@@ -2020,6 +2140,11 @@ procedure TfrmBacklog.InvalidateDataCache;
 begin
   if FRecordsetCache <> nil then
     FRecordsetCache.Clear;   // doOwnsValues libera cada recordset
+
+  // Tambien las reglas de utillaje: el usuario puede haber cambiado las
+  // relaciones (operacion -> utillaje) desde la ficha mientras tanto.
+  FUtilReglasCargadas := False;
+  SetLength(FUtilReglas, 0);
 end;
 
 // ---------------------------------------------------------------------------

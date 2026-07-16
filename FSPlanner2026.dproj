@@ -190,9 +190,14 @@
             <Form>frmGestionMoldes</Form>
         </DCCReference>
         <DCCReference Include="uMoldeRepoSQL.pas"/>
+        <DCCReference Include="uUtillajeTypes.pas"/>
         <DCCReference Include="uUtillajesRepo.pas"/>
+        <DCCReference Include="uDemoUtillajes.pas"/>
         <DCCReference Include="uGestionUtillajes.pas">
             <Form>frmGestionUtillajes</Form>
+        </DCCReference>
+        <DCCReference Include="uUtillajeFicha.pas">
+            <Form>frmUtillajeFicha</Form>
         </DCCReference>
         <DCCReference Include="uUtillajePicker.pas">
             <Form>frmUtillajePicker</Form>

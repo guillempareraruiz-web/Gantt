@@ -40,7 +40,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.DateUtils,
   System.Generics.Collections,
-  uGanttTypes, uSetupRules;
+  uGanttTypes, uSetupRules, uUtillajeTypes;
 
 type
   TSchedMode = (smForward, smBackward);
@@ -51,7 +51,13 @@ type
   TSchedInput = record
     RawId: Int64;
     Origen: string;
+    // Etiqueta legible del documento ('DEMO-PRJ-002 / MECANIZAR'). Es para
+    // MOSTRAR (caption del nodo, preview): no sirve como clave de nada.
     CodigoDocumento: string;
+    // Codigo de operacion pelado ('MECANIZAR'). Esta es la clave real: es lo
+    // que se graba en NodeData.Operacion y contra lo que casan las reglas de
+    // utillaje (FS_PL_V_NodeUtillaje) y las de setup.
+    CodigoOP: string;
     CentroPreferente: string;
     HorasEstimadas: Double;
     FechaCompromiso: TDateTime;
@@ -81,9 +87,15 @@ type
     // El caller (p.ej. BuildInputFromRow) los rellena desde builtin+CustomFields
     // del nodo: Color, Substrato, AnchoBobina, Molde... Vacio = sin setup rules.
     SetupAttrs: TSetupAttrList;
+    // Utillajes que exige esta operacion (recurso secundario). Los rellena el
+    // caller ANTES de planificar resolviendo las reglas del maestro sobre
+    // (operacion, articulo): aqui dentro no se puede tocar BD porque el
+    // optimizador corre esto en varios hilos. Vacio = sin restriccion.
+    UtillajeReqs: TArray<TUtillajeRequisito>;
   end;
 
-  TSchedStatus = (ssOK, ssSaturado, ssFueraPlazo, ssSinCentro, ssSinCalendario);
+  TSchedStatus = (ssOK, ssSaturado, ssFueraPlazo, ssSinCentro, ssSinCalendario,
+                  ssSinUtillaje);
 
   TSchedOutput = record
     Input: TSchedInput;
@@ -143,6 +155,23 @@ type
     // lugar de la DistanciaMinNodos fija. El caller es el propietario del engine
     // (no lo libera el scheduler). nil = comportamiento clasico.
     SetupEngine: TSetupRuleEngine;
+    // --- Utillajes como restriccion dura (recurso secundario) --------------
+    // Si <> nil, un nodo no se coloca donde alguno de sus UtillajeReqs ya este
+    // ocupado por encima de su Cantidad: se retrasa hasta que quede libre. El
+    // caller es el duenyo del objeto (no lo libera el scheduler).
+    // nil = comportamiento clasico (los utillajes solo generan alerta R02).
+    // OJO: es CROSS-CENTRO, a diferencia de la ocupacion por lanes.
+    //
+    // NO THREAD-SAFE. TUtillajeOccupancy tiene estado (se va ocupando segun
+    // avanza la pasada), asi que UNA instancia sirve para UNA pasada de
+    // RunAutoScheduling. El optimizador (uPlanOptimizer) copia TSchedParams a
+    // todos sus hilos SA: si le llegase con UtillajeOcc <> nil, todos los hilos
+    // compartirian el mismo objeto y se corromperia. Por eso el optimizador lo
+    // pone a nil explicitamente y optimiza SIN esta restriccion (ver
+    // uPlanOptimizer). Consecuencia asumida: el plan optimizado puede violar
+    // utillajes y la alerta R02 lo cantara. Pendiente: dar a cada hilo su
+    // propia copia.
+    UtillajeOcc: TUtillajeOccupancy;
   end;
 
   TSchedResult = record
@@ -228,6 +257,10 @@ function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
 
 function StatusToStr(AStatus: TSchedStatus): string;
 function PlacementToStr(P: TPlacementPolicy): string;
+
+// Codigos de los utillajes que exige un nodo, separados por coma. Lo usan el
+// motor (mensaje de "sin utillaje libre") y el preview (columna Utillaje).
+function UtillajeReqsToStr(const AReqs: TArray<TUtillajeRequisito>): string;
 
 // Ordena la cola segun un conjunto de reglas con desempate multinivel.
 // AFechaBase se usa como referencia para CriticalRatio y Slack.
@@ -352,6 +385,7 @@ begin
     ssFueraPlazo:    Result := 'FUERA DE PLAZO';
     ssSinCentro:     Result := 'SIN CENTRO';
     ssSinCalendario: Result := 'SIN CALENDARIO';
+    ssSinUtillaje:   Result := 'SIN UTILLAJE LIBRE';
   else
     Result := '?';
   end;
@@ -649,6 +683,22 @@ const
   // desempate: mismo dia natural cuenta como empate y pasa al siguiente nivel.
   RULE_DATE_TOL = 0.5;
 
+  // Tope de reintentos al buscar hueco de utillaje para un nodo. Cada vuelta
+  // avanza en el tiempo (se salta al fin de un uso que se solapaba), asi que
+  // el bucle termina siempre; esto solo evita que un caso patologico (muchos
+  // nodos peleandose por un utillaje con Cantidad alta) se coma la pasada.
+  MAX_UTIL_RETRIES = 200;
+
+function UtillajeReqsToStr(const AReqs: TArray<TUtillajeRequisito>): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to High(AReqs) do
+    if Result = '' then Result := AReqs[I].Codigo
+    else Result := Result + ', ' + AReqs[I].Codigo;
+end;
+
 // Trabajo restante (en horas) usado por CriticalRatio y Slack. Hoy se usa
 // HorasEstimadas como proxy (no hay horas-hechas en el input). Minimo 0.
 function WorkHours(const A: TSchedInput): Double;
@@ -913,6 +963,10 @@ var
   J, DurSlotMin: Integer;
   ShiftTo: TDateTime;
   EffDist: Integer;
+  // Utillajes (restriccion dura).
+  UtilOK: Boolean;
+  UtilBase, UtilLibre: TDateTime;
+  UtilIter: Integer;
 
 begin
   Result := Default(TSchedResult);
@@ -1017,6 +1071,11 @@ begin
       Output.DuracionMin := DurMin;
 
       NeedsShift := False;
+      // Lane se asigna dentro del case, pero el registro de ocupacion de mas
+      // abajo lo comprueba SIEMPRE: sin resetear aqui, un camino que no pase
+      // por PickLane arrastraria el lane de la fila anterior, que ademas puede
+      // ser de OTRO centro (Cursor tambien cambia por fila).
+      Lane := -1;
       case Params.Mode of
         smBackward:
           begin
@@ -1084,10 +1143,60 @@ begin
               EffDist, NeedsShift);
             EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
 
+            // --- Utillajes: restriccion dura (recurso secundario) -----------
+            // El hueco puede ser bueno para el CENTRO y aun asi no servir: el
+            // utillaje que exige la operacion puede estar en uso (incluso en
+            // OTRO centro). Se reintenta desde que se libera, en vez de
+            // rechazar sin mas, para que el nodo se MUEVA a un sitio valido.
+            UtilOK := True;
+            if (Params.UtillajeOcc <> nil) and (Length(Input.UtillajeReqs) > 0) then
+            begin
+              UtilBase := Params.FechaBase;
+              UtilIter := 0;
+              while not Params.UtillajeOcc.CabenTodos(Input.UtillajeReqs,
+                      StartDT, EndDT) do
+              begin
+                Inc(UtilIter);
+                // Tope de seguridad: el bucle avanza siempre (UtilLibre es un
+                // fin de slot que se solapa, luego > StartDT), pero con muchos
+                // nodos y ejemplares no conviene dejarlo abierto.
+                if UtilIter > MAX_UTIL_RETRIES then
+                begin
+                  UtilOK := False;
+                  Break;
+                end;
+
+                UtilLibre := Params.UtillajeOcc.ProximoHuecoTodos(
+                  Input.UtillajeReqs, StartDT, EndDT);
+                if UtilLibre <= UtilBase then
+                begin
+                  UtilOK := False;
+                  Break;
+                end;
+
+                // Recolocar a partir de que el utillaje queda libre: se vuelve
+                // a pasar por PlaceForward para no pisar el centro ni salirse
+                // del calendario.
+                UtilBase := UtilLibre;
+                StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
+                  UtilBase, DurMin, Params.Placement,
+                  Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
+                  EffDist, NeedsShift);
+                EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
+              end;
+            end;
+
             Output.FechaInicio := StartDT;
             Output.FechaFin := EndDT;
 
-            if (Input.FechaCompromiso <> 0) and (EndDT > Input.FechaCompromiso) then
+            if not UtilOK then
+            begin
+              Output.Status := ssSinUtillaje;
+              Output.Observaciones := 'Sin utillaje libre: ' +
+                UtillajeReqsToStr(Input.UtillajeReqs);
+              Inc(Result.TotalNoPlanificados);
+            end
+            else if (Input.FechaCompromiso <> 0) and (EndDT > Input.FechaCompromiso) then
             begin
               Output.Status := ssFueraPlazo;
               Output.Observaciones := 'Supera FechaCompromiso';
@@ -1103,7 +1212,8 @@ begin
 
       // Registrar el nuevo nodo como ocupacion para que los siguientes de esta
       // tanda no lo pisen.
-      if (Output.Status <> ssSaturado) and (Lane >= 0) and (Lane <= High(Cursor.LaneOcc)) then
+      if (Output.Status <> ssSaturado) and (Output.Status <> ssSinUtillaje) and
+         (Lane >= 0) and (Lane <= High(Cursor.LaneOcc)) then
       begin
         NewSlot.StartDT := StartDT;
         NewSlot.EndDT := EndDT;
@@ -1112,6 +1222,11 @@ begin
         // el en este lane pueda calcular su tiempo de cambio (uSetupRules).
         NewSlot.SetupAttrs := Input.SetupAttrs;
         InsertSlotOrdered(Cursor.LaneOcc[Lane], NewSlot);
+
+        // Y ocupar sus utillajes, para que los siguientes nodos de esta tanda
+        // (de este centro o de cualquier otro) los vean cogidos.
+        if (Params.UtillajeOcc <> nil) and (Length(Input.UtillajeReqs) > 0) then
+          Params.UtillajeOcc.OcuparTodos(Input.UtillajeReqs, StartDT, EndDT);
 
         // Shift (solo politica ppHuecoShift): tras insertar el nuevo nodo,
         // empujar en cascada los slots posteriores que solapen, en orden por

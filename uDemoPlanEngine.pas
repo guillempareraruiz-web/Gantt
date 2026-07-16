@@ -96,7 +96,7 @@ implementation
 
 uses
   System.StrUtils,
-  uDMPlanner, uPlanLog;
+  uDMPlanner, uPlanLog, uDemoUtillajes;
 
 const
   OPERS: array[0..9] of string = (
@@ -1131,6 +1131,13 @@ begin
       raise;
     end;
     Result.MillisPersistir := MilliSecondsBetween(Now, SWPart);
+
+    // Utillajes demo: se ligan a las operaciones de OPERS, de modo que los
+    // nodos recien creados heredan el requisito y la alerta R02 tiene algo
+    // que detectar. Fuera de la transaccion de nodos a proposito: es un
+    // extra, y un fallo aqui no debe tumbar la generacion del plan.
+    // La propia funcion se autolimita al proyecto demo (EsDemo=1).
+    GenerarUtillajesDemo(Conn, DMPlanner.CodigoEmpresa, AParams.ProjectId);
 
     Result.MillisTotal := MilliSecondsBetween(Now, SW);
     PlanLog.Linea('PERSISTIDO. persist=%dms | TOTAL=%dms para %d nodos',

@@ -310,7 +310,7 @@ implementation
 
 uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList,
   uAlertConfig, uRestorePoints,
-  uDemoBacklog, uDemoMode,
+  uDemoBacklog, uDemoMode, uDemoUtillajes,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
   uBacklogScheduler, uSetupRules, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
@@ -773,6 +773,12 @@ begin
       ShowMessage('No se ha podido preparar el proyecto de demostraci'#243'n.');
       Exit;
     end;
+    // Utillajes de demostracion: son datos MAESTROS, no dependen de que se
+    // regeneren los nodos, asi que se aseguran en cada entrada al modo demo.
+    // Es idempotente (borra los DEMO- y los rehace) y solo toca el proyecto
+    // demo, de modo que el catalogo real del cliente no se ve afectado.
+    GenerarUtillajesDemo(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa, DemoId);
+
     // Si el proyecto demo esta vacio, generar automaticamente con valores por
     // defecto (sin dialogo): el motor real coloca los nodos (colisiones/lanes/
     // calendario) y reencadena dependencias. Para personalizar, usar
@@ -2499,6 +2505,8 @@ var
         Input := Default(TSchedInput);
         Input.RawId := Node.DataId;
         Input.CodigoDocumento := Node.Operacion;
+        // Aqui el nodo ya existe: su Operacion ES el codigo pelado.
+        Input.CodigoOP := Node.Operacion;
 
         // El nodo planificado (centro + duracion reales) se obtiene de NodesRepo
         // via DataId. TNodeData.DurationMin / CentresTrabajo no siempre estan

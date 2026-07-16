@@ -618,7 +618,8 @@ uses
   uNodeCardLayout, uNodeLayoutSetRepo,
   uAssignOperaris, uGestionOperaris, uLinkEditor,
   uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts,
-  uMoverFecha, Main, uBacklogScheduler;
+  uMoverFecha, Main, uBacklogScheduler,
+  uUtillajeTypes, uUtillajesRepo;
 
 procedure TfrmVistaGantt.Colordelnode1Click(Sender: TObject);
  var
@@ -2717,6 +2718,7 @@ begin
   Inp := Default(TSchedInput);
   Inp.Origen := 'MANUAL';
   Inp.CodigoDocumento := AData.Caption;
+  Inp.CodigoOP := AData.Operacion;   // clave real (utillajes/setup)
   Inp.CentroPreferente := CodiCentre;
   Inp.HorasEstimadas := AData.DuracionMin / 60.0;
   Inp.FechaCompromiso := AData.FechaCompromiso;
@@ -4079,6 +4081,51 @@ begin
   RecalcAlertas;
 end;
 
+// Construye el lookup de requisitos de utillaje (alerta R02) para el proyecto
+// activo. Los requisitos se cargan de UNA vez y se sirven desde memoria: el
+// detector los pide nodo a nodo y una query por nodo seria inviable.
+// Devuelve nil si no se pueden cargar -> R02 no se evalua (no rompe el resto).
+function CrearUtillajeReqLookup: TUtillajeReqLookup;
+var
+  Repo: TUtillajesRepo;
+  Filas: TArray<TUtillajeRequisitoNodo>;
+begin
+  Result := nil;
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) or
+     (not DMPlanner.ADOConnection.Connected) or
+     (DMPlanner.CurrentProjectId <= 0) then Exit;
+
+  Repo := TUtillajesRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    try
+      Filas := Repo.LoadRequisitosPorNodo(DMPlanner.CurrentProjectId);
+    except
+      // Sin la vista FS_PL_V_NodeUtillaje (migracion V073 no aplicada) o ante
+      // cualquier error de BD, R02 simplemente no se evalua.
+      Exit;
+    end;
+  finally
+    Repo.Free;
+  end;
+
+  if Length(Filas) = 0 then Exit;   // nadie ha definido requisitos
+
+  // La clausura captura el array (managed type: se copia por referencia y vive
+  // mientras viva la clausura). Los nodos con utillaje son pocos frente al
+  // total del plan, asi que el barrido lineal no es un problema.
+  Result :=
+    function(const ADataId: Integer): TArray<TUtillajeRequisito>
+    begin
+      SetLength(Result, 0);
+      for var F in Filas do
+        if F.NodeId = ADataId then
+        begin
+          SetLength(Result, Length(Result) + 1);
+          Result[High(Result)] := F.Req;
+        end;
+    end;
+end;
+
 procedure TfrmVistaGantt.RecalcAlertas;
 const
   COL_ALERT_NONE = $00C8C8C8;  // gris: sin alertas
@@ -4112,7 +4159,10 @@ begin
 
   // Para el KPI solo cuentan las alertas IMPLEMENTADAS con incidencias reales
   // (las pendientes/roadmap y las cumplidas no inflan el contador).
-  Alertas := DetectarAlertas(FGanttControl, Lookup, Now, 3, False, Config);
+  // Los parentesis son obligatorios: sin ellos, al asignarse a un parametro de
+  // tipo procedural, Delphi toma el NOMBRE de la funcion en vez de llamarla.
+  Alertas := DetectarAlertas(FGanttControl, Lookup, Now, 3, False, Config,
+    CrearUtillajeReqLookup());
   FAlertas := Alertas;
 
   total := 0;
@@ -4190,7 +4240,7 @@ begin
       else
         Config := nil;
       Result := DetectarAlertas(FGanttControl, Lookup, Now, 3,
-        AIncluirCumplidas, Config);
+        AIncluirCumplidas, Config, CrearUtillajeReqLookup());
     end;
 
   if TfrmAlertasViewer.Ejecutar(Self, Provider, Ids,

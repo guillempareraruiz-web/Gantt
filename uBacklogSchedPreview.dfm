@@ -123,6 +123,11 @@ object frmBacklogSchedPreview: TfrmBacklogSchedPreview
         Caption = 'Centro'
         Width = 110
       end
+      object colUtillaje: TcxGridColumn
+        Caption = 'Utillaje'
+        Options.Editing = False
+        Width = 110
+      end
       object colIni: TcxGridColumn
         Caption = 'Inicio'
         Width = 140

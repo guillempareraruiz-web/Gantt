@@ -291,6 +291,11 @@ begin
 
   Ctx.SchedParams := ASchedParams;
   Ctx.SchedParams.Order := soPreordenado;   // respetar el orden que damos
+  // TUtillajeOccupancy NO es thread-safe: tiene estado y aqui se lanzan varios
+  // hilos SA que comparten este record. Se anula explicitamente para que nadie
+  // lo comparta por accidente. El optimizador, por tanto, NO respeta la
+  // restriccion de utillaje (la alerta R02 seguira avisando si la viola).
+  Ctx.SchedParams.UtillajeOcc := nil;
   Ctx.OptParams := AOptParams;
   Ctx.Base := AInicial;
 

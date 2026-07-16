@@ -29,7 +29,7 @@ object frmUtillajePicker: TfrmUtillajePicker
     object lblTitle: TLabel
       Left = 16
       Top = 8
-      Width = 220
+      Width = 145
       Height = 21
       Caption = 'Utillajes disponibles'
       Font.Charset = DEFAULT_CHARSET
@@ -42,7 +42,7 @@ object frmUtillajePicker: TfrmUtillajePicker
     object lblFiltro: TLabel
       Left = 16
       Top = 32
-      Width = 60
+      Width = 30
       Height = 15
       Caption = 'Filtro:'
       Font.Charset = DEFAULT_CHARSET
@@ -87,7 +87,9 @@ object frmUtillajePicker: TfrmUtillajePicker
     Align = alClient
     TabOrder = 2
     object tvUtil: TcxGridTableView
+      OnDblClick = tvUtilDblClick
       Navigator.Buttons.CustomButtons = <>
+      ScrollbarAnnotations.CustomAnnotations = <>
       DataController.Summary.DefaultGroupSummaryItems = <>
       DataController.Summary.FooterSummaryItems = <>
       DataController.Summary.SummaryGroups = <>
@@ -97,7 +99,6 @@ object frmUtillajePicker: TfrmUtillajePicker
       OptionsSelection.CellSelect = False
       OptionsView.GroupByBox = False
       OptionsView.Indicator = True
-      OnDblClick = tvUtilDblClick
       object colCodigo: TcxGridColumn
         Caption = 'C'#243'digo'
         Width = 130

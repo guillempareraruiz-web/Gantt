@@ -20,7 +20,8 @@ uses
   cxFilter, dxSkinsCore, dxSkinOffice2019Colorful,
   dxBarBuiltInMenu, cxCustomData, cxData, cxDataStorage, cxNavigator,
   dxDateRanges, dxScrollbarAnnotations,
-  uBacklogScheduler, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
+  uBacklogScheduler, uUtillajeTypes,
+  dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
   dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
   dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
   dxSkinGlassOceans, dxSkinHighContrast, dxSkiniMaginary, dxSkinLilian,
@@ -55,6 +56,7 @@ type
     colDoc: TcxGridColumn;
     colOrigen: TcxGridColumn;
     colCentro: TcxGridColumn;
+    colUtillaje: TcxGridColumn;
     colIni: TcxGridColumn;
     colFin: TcxGridColumn;
     colDurMin: TcxGridColumn;
@@ -144,9 +146,13 @@ begin
   St := V;
 
   case TSchedStatus(St) of
-    ssOK:         Fondo := $00DFF5DF;  // verde claro (BGR)
-    ssSaturado:   Fondo := $0080C0FF;  // naranja
-    ssFueraPlazo: Fondo := $00C5C5FF;  // rojo claro
+    ssOK:          Fondo := $00DFF5DF;  // verde claro (BGR)
+    ssSaturado:    Fondo := $0080C0FF;  // naranja
+    ssFueraPlazo:  Fondo := $00C5C5FF;  // rojo claro
+    // No se planifica: no hay utillaje libre. Se tinta como rechazo real
+    // (mas fuerte que FueraPlazo, que si se crea) para que se vea que esa
+    // fila NO va a generar nodo.
+    ssSinUtillaje: Fondo := $009999FF;  // rojo
   else
     Exit;  // resto: sin tinte (fondo por defecto)
   end;
@@ -204,6 +210,13 @@ begin
       tvPreview.DataController.Values[I, colOrigen.Index] := Item.Input.Origen;
       tvPreview.DataController.Values[I, colCentro.Index] := Item.CenterCode;
       tvPreview.DataController.Values[I, colStatusVal.Index] := Ord(Item.Status);
+
+      // Utillajes que exige la operacion. Se muestra tambien en las filas que
+      // SI se colocan: es la forma de ver de un vistazo que operaciones mueven
+      // utillaje y, sobre todo, de entender por que una va tarde (a menudo es
+      // porque esperaba al utillaje, no por capacidad de la maquina).
+      tvPreview.DataController.Values[I, colUtillaje.Index] :=
+        UtillajeReqsToStr(Item.Input.UtillajeReqs);
 
       if Item.FechaInicio <> 0 then
         tvPreview.DataController.Values[I, colIni.Index] :=

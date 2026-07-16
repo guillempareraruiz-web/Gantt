@@ -310,10 +310,20 @@ begin
   else
     SetLength(Defs, 0);
 
-  SetLength(Result, Length(Builtin) + Length(Defs));
+  // +1: 'Utillaje' (V073). Se ofrece al editor para poder escribir la regla de
+  // tiempo de cambio "Utillaje cambia -> +N min".
+  //
+  // Va AQUI y no en GetBuiltinFieldNames a proposito: aquella lista la recorre
+  // BuildSetupAttrsFromNode pidiendo el valor a GetFieldValue, que resuelve
+  // sobre un TNodeData y NO sabe de utillajes (el requisito vive en BD, ligado
+  // a la operacion/articulo). Quien rellena el atributo es el caller que si
+  // tiene las reglas cargadas (uBacklog.BuildSetupAttrs).
+  SetLength(Result, Length(Builtin) + Length(Defs) + 1);
   for I := 0 to High(Builtin) do
     Result[I] := Builtin[I];
   N := Length(Builtin);
+  Result[N] := 'Utillaje';
+  Inc(N);
   for I := 0 to High(Defs) do
     Result[N + I] := Defs[I].FieldName;
 end;

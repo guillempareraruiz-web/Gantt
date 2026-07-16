@@ -9,8 +9,8 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Generics.Collections,
-  System.Generics.Defaults, System.DateUtils,
-  uGanttTypes, uGanttControl, uCentreCalendar;
+  System.Generics.Defaults, System.DateUtils, System.Math,
+  uGanttTypes, uGanttControl, uCentreCalendar, uUtillajeTypes;
 
 type
   // Severidad de la alerta (define color y orden de presentacion).
@@ -91,12 +91,24 @@ type
   TAlertConfigLookup = reference to function(const ACodigo: string;
     out AActiva: Boolean; out APeso: Integer): Boolean;
 
+  // Requisito de utillaje de un nodo (alerta R02). El utillaje es un recurso
+  // secundario: no se planifica sobre el, pero N nodos solapados que requieran
+  // el mismo utillaje solo caben si hay ejemplares suficientes (Cantidad).
+  // Alias del tipo de uUtillajeTypes para no duplicar la definicion.
+  TUtillajeReq = uUtillajeTypes.TUtillajeRequisito;
+
+  // Devuelve los utillajes que requiere un nodo (por su operacion o articulo).
+  // La implementa el caller (uVistaGantt delega en uUtillajesRepo) para no
+  // acoplar el motor a la BD. Nil = no evaluar R02.
+  TUtillajeReqLookup = reference to function(const ADataId: Integer)
+    : TArray<TUtillajeReq>;
+
 const
   // Conjunto de tipos pendientes de implementar (roadmap).
   ALERTAS_PENDIENTES: TAlertaTiposPendientes = [
     atSolapamientoSecuencial, atDependenciaViolada, atSaltoExcesivoOF,
     atMaterialNoDisponible,
-    atOperarioSobrecargado, atOperarioSinCompetencia, atUtillajeEnConflicto,
+    atOperarioSobrecargado, atOperarioSinCompetencia,
     atMaquinaNoOperativa, atCuelloBotellaSobrecargado,
     atDiaSobrecargado, atMargenEntregaInsuf, atOFEnRiesgo,
     atStockParcial, atNodoBloqueado, atPrioridadTardia,
@@ -140,11 +152,15 @@ const
   //     Si AConfig=nil o no conoce el codigo, el tipo se considera activo con
   //     su peso por defecto.
   // Ordenado por: implementadas con incidencias (peso desc), cumplidas, pendientes.
+  //   AUtillajeReq (opcional): requisitos de utillaje por nodo. Si es nil, la
+  //     alerta R02 (utillaje en conflicto) no se evalua y se lista como
+  //     cumplida; el resto de alertas no se ven afectadas.
   function DetectarAlertas(AGantt: TGanttControl;
     const ALookup: TNodeDataLookup; const AHoraActual: TDateTime;
     const AProximoDias: Integer = 3;
     const AIncluirCumplidas: Boolean = False;
-    const AConfig: TAlertConfigLookup = nil): TArray<TAlertaItem>;
+    const AConfig: TAlertConfigLookup = nil;
+    const AUtillajeReq: TUtillajeReqLookup = nil): TArray<TAlertaItem>;
 
 implementation
 
@@ -369,9 +385,20 @@ end;
 function DetectarAlertas(AGantt: TGanttControl;
   const ALookup: TNodeDataLookup; const AHoraActual: TDateTime;
   const AProximoDias: Integer; const AIncluirCumplidas: Boolean;
-  const AConfig: TAlertConfigLookup): TArray<TAlertaItem>;
+  const AConfig: TAlertConfigLookup;
+  const AUtillajeReq: TUtillajeReqLookup): TArray<TAlertaItem>;
+type
+  // Uso de un utillaje por un nodo, para el barrido de solapamientos (R02).
+  TUsoUtillaje = record
+    UtillajeId: Integer;
+    Cantidad: Integer;
+    DataId: Integer;
+    Ini: TDateTime;
+    Fin: TDateTime;
+  end;
 var
   Listas: array[TAlertaTipo] of TList<Integer>;
+  Usos: TList<TUsoUtillaje>;
   T: TAlertaTipo;
   I: Integer;
   N: TNode;
@@ -404,6 +431,7 @@ var
 begin
   for T := Low(TAlertaTipo) to High(TAlertaTipo) do
     Listas[T] := TList<Integer>.Create;
+  Usos := TList<TUsoUtillaje>.Create;
   try
     if (AGantt <> nil) and Assigned(ALookup) then
       for I := 0 to AGantt.NodeCount - 1 do
@@ -466,7 +494,63 @@ begin
         //     1) ya esta cerrada -> no deberia fabricarse, hay que revisarlo.
         if D.EstadoOFCerrada then
           Add(atOFCerradaERP, N.DataId);
+
+        // 14. R02: recoger los utillajes que usa este nodo. El conflicto no se
+        //     puede decidir aqui (depende de los demas nodos), asi que solo se
+        //     acumula; el barrido de solapamientos va despues del bucle.
+        if Assigned(AUtillajeReq) and (N.EndTime > N.StartTime) then
+        begin
+          var Reqs := AUtillajeReq(N.DataId);
+          for var R in Reqs do
+          begin
+            var Uso: TUsoUtillaje;
+            Uso.UtillajeId := R.UtillajeId;
+            Uso.Cantidad := Max(1, R.Cantidad);
+            Uso.DataId := N.DataId;
+            Uso.Ini := N.StartTime;
+            Uso.Fin := N.EndTime;
+            Usos.Add(Uso);
+          end;
+        end;
       end;
+
+    // --- R02: utillaje en conflicto -----------------------------------------
+    // Un utillaje con Cantidad = N admite hasta N nodos a la vez. Se marca el
+    // nodo cuando en algun instante de su intervalo el numero de nodos que
+    // comparten el utillaje supera los ejemplares disponibles.
+    //
+    // Barrido O(n^2) por utillaje: se compara cada nodo con los demas usos del
+    // mismo utillaje. Suficiente porque el numero de nodos con utillaje suele
+    // ser pequenyo frente al total del plan.
+    if Assigned(AUtillajeReq) and (Usos.Count > 1) then
+    begin
+      var Marcados := TDictionary<Integer, Boolean>.Create;
+      try
+        for var A := 0 to Usos.Count - 1 do
+        begin
+          if Marcados.ContainsKey(Usos[A].DataId) then Continue;
+
+          var Solapados := 1;   // el propio nodo
+          for var B := 0 to Usos.Count - 1 do
+          begin
+            if A = B then Continue;
+            if Usos[B].UtillajeId <> Usos[A].UtillajeId then Continue;
+            if Usos[B].DataId = Usos[A].DataId then Continue;
+            // Solapamiento estricto: tocarse en el limite no es conflicto.
+            if (Usos[B].Ini < Usos[A].Fin) and (Usos[B].Fin > Usos[A].Ini) then
+              Inc(Solapados);
+          end;
+
+          if Solapados > Usos[A].Cantidad then
+          begin
+            Add(atUtillajeEnConflicto, Usos[A].DataId);
+            Marcados.Add(Usos[A].DataId, True);
+          end;
+        end;
+      finally
+        Marcados.Free;
+      end;
+    end;
 
     // Construir el resultado.
     Res := TList<TAlertaItem>.Create;
@@ -532,6 +616,7 @@ begin
   finally
     for T := Low(TAlertaTipo) to High(TAlertaTipo) do
       Listas[T].Free;
+    Usos.Free;
   end;
 end;
 

@@ -131,6 +131,14 @@ begin
   end;
 end;
 
+// LIMITACION CONOCIDA: no emite el atributo 'Utillaje'. El requisito de
+// utillaje no vive en el TNodeData: se deduce en BD de la operacion/articulo
+// (FS_PL_V_NodeUtillaje, V073), y esta funcion no puede tocar BD (la llama
+// tambien el Gantt al arrastrar). Consecuencia: una regla de tiempo de cambio
+// sobre 'Utillaje' aplica al planificar desde el Backlog (que si carga las
+// reglas, ver uBacklog.BuildSetupAttrs) pero NO al recolocar desde el Gantt.
+// No rompe nada: si el atributo no esta, FindAttr devuelve '' en ambos lados y
+// la regla simplemente no dispara.
 function BuildSetupAttrsFromNode(const ANode: TNodeData): TSetupAttrList;
 var
   L: TList<TSetupPair>;
