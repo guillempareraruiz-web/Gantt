@@ -34,7 +34,7 @@ uses
   cxDateUtils, cxCheckBox, Vcl.Menus, dxCoreGraphics, cxButtonEdit, cxScrollBox,
   cxButtons, cxDropDownEdit, cxCheckComboBox, Vcl.StdCtrls, Vcl.WinXCtrls,
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
-  uGanttControl, uGanttControlGrupo, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uGanttHistory, uErpTypes,
+  uGanttControl, uGanttControlGrupo, uGanttControlUtillajes, uGanttControlClientes, uGanttControlOperarios, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uGanttHistory, uErpTypes,
   System.Generics.Collections, System.Generics.Defaults,
   System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
@@ -195,6 +195,8 @@ type
     N3: TMenuItem;
     Indicadores1: TMenuItem;
     cbVistas: TcxComboBox;
+    lblRowMode: TLabel;
+    cbRowMode: TcxComboBox;
     btnFocus: TButton;
     imgSection: TcxImage;
     cxImageList1: TcxImageList;
@@ -355,6 +357,7 @@ type
     procedure Button21Click(Sender: TObject);
     procedure Button22Click(Sender: TObject);
     procedure cbVistasPropertiesChange(Sender: TObject);
+    procedure cbRowModePropertiesChange(Sender: TObject);
     procedure btnGanttDatesClick(Sender: TObject);
     procedure btnUndoClick(Sender: TObject);
     procedure btnRedoClick(Sender: TObject);
@@ -465,6 +468,8 @@ type
     function FechaReferenciaSeleccion: TDateTime;
   public
     FGanttControl: TGanttControl;
+    // Badge "SOLO LECTURA" sobre el Gantt, visible solo en modo UTILLAJES.
+    FLblReadOnly: TLabel;
     FTimelineControl: TGanttTimelineControl;
     FSummaryControl: TGanttSummaryControl;
     FCentrosControl: TGanttCentresControl;
@@ -599,6 +604,28 @@ type
     procedure RestoreViewportPrefs;
     procedure ApplyPendingViewport;
     procedure CargarCentros;
+    // Carga desde BD los requisitos de utillaje del proyecto activo y las
+    // capacidades, y los inyecta en el control de filas=utillajes (RowMode
+    // UTILLAJES). Solo se llama cuando FGanttControl es TGanttControlUtillajes.
+    procedure InyectarRequisitosUtillajes(ACtrl: TGanttControlUtillajes);
+    // Carga las asignaciones operario<-nodo del proyecto y las inyecta en el
+    // control de filas=operarios (RowMode OPERARIOS).
+    procedure InyectarAsignacionesOperarios(ACtrl: TGanttControlOperarios);
+    // Abre el dialogo de filtro por la entidad del RowMode activo y aplica el
+    // filtro del Gantt (o lo limpia). La icona del panel izquierdo lo invoca.
+    procedure AbrirFiltroPorModo;
+
+    // --- Selector de "Modo filas" (RowMode) en caliente ---
+    // Pone el combo cbRowMode en el valor que corresponde al RowMode activo,
+    // sin disparar su OnChange (evita recargar en bucle).
+    procedure SincronizarComboRowMode;
+    // Traduce el ItemIndex del combo (0/1/2) al string de RowMode.
+    function RowModeDelCombo: string;
+    // Preferencia por usuario y proyecto: recuerda el ultimo RowMode que el
+    // usuario eligio para ESTE proyecto (clave 'VistaGanttRowMode_<pid>').
+    procedure GuardarRowModePref(const ARowMode: string);
+    function CargarRowModePref(out ARowMode: string): Boolean;
+    function PrefKeyRowMode: string;
     procedure CargarDependencias;
     procedure CargarMarcadores;
     procedure AplicarCalendariosAGantt;
@@ -619,7 +646,7 @@ uses
   uAssignOperaris, uGestionOperaris, uLinkEditor,
   uAlertasViewer, uAlertConfig, uGanttHistoryTimeline, uGanttShortcuts,
   uMoverFecha, Main, uBacklogScheduler,
-  uUtillajeTypes, uUtillajesRepo;
+  uUtillajeTypes, uUtillajesRepo, uRowFilterDialog;
 
 procedure TfrmVistaGantt.Colordelnode1Click(Sender: TObject);
  var
@@ -746,6 +773,12 @@ begin
     TGanttControlGrupo(FGanttControl).NivelAgrupacion :=
       DMPlanner.CurrentProjectNivelAgrupacion;
   end
+  else if SameText(Trim(DMPlanner.CurrentProjectRowMode), 'UTILLAJES') then
+    FGanttControl := TGanttControlUtillajes.Create(Self)
+  else if SameText(Trim(DMPlanner.CurrentProjectRowMode), 'CLIENTES') then
+    FGanttControl := TGanttControlClientes.Create(Self)
+  else if SameText(Trim(DMPlanner.CurrentProjectRowMode), 'OPERARIOS') then
+    FGanttControl := TGanttControlOperarios.Create(Self)
   else
     FGanttControl := TGanttControl.Create(Self);
   FGanttControl.Parent := pnlGanttContainer;
@@ -798,6 +831,32 @@ begin
     begin
       Result := FGanttControl.GetMaxScrollY;
     end;
+
+  // Badge "SOLO LECTURA" sobre el Gantt (esquina superior derecha), visible
+  // solo en modos de diagnostico (UTILLAJES / GRUPO). Se crea como hijo del
+  // PROPIO control del Gantt (no del contenedor) para que quede pintado ENCIMA
+  // del render D2D; ponerlo como hermano del control D2D lo dejaba tapado.
+  FLblReadOnly := TLabel.Create(Self);
+  FLblReadOnly.Parent := FGanttControl;
+  FLblReadOnly.AutoSize := False;
+  FLblReadOnly.Alignment := taCenter;
+  FLblReadOnly.Layout := tlCenter;
+  FLblReadOnly.Transparent := False;
+  FLblReadOnly.Color := $002D2DFF;           // rojo (BGR) llamativo
+  FLblReadOnly.Font.Color := clWhite;
+  FLblReadOnly.Font.Style := [fsBold];
+  FLblReadOnly.Font.Name := 'Segoe UI Semibold';
+  FLblReadOnly.Font.Height := -11;
+  FLblReadOnly.Caption := 'SOLO LECTURA';
+  FLblReadOnly.Width := 150;
+  FLblReadOnly.Height := 22;
+  FLblReadOnly.Anchors := [akTop, akRight];
+  FLblReadOnly.Top := 8;
+  FLblReadOnly.Left := FGanttControl.ClientWidth - FLblReadOnly.Width - 20;
+  FLblReadOnly.Visible := False;
+
+  // El boton "Debug" (Button27) es una herramienta de desarrollo: ocultarlo.
+  Button27.Visible := False;
 
 end;
 
@@ -1111,10 +1170,12 @@ begin
   cbVistas.ItemIndex := 0;
   cbVistas.properties.onchange := cbVistasPropertiesChange;
 
-  // Modo de agrupacion (RowMode) del proyecto activo. Solo 'CENTROS' esta
-  // operativo. 'GRUPO' y 'TREE' requieren sus propios controles (fase 6.2 / 6.3)
-  // y aqui simplemente avisamos al usuario para que lo cambie en Gestion de
-  // Proyectos si lo habia configurado antes de tener las vistas implementadas.
+  // Combo "Modo filas" (RowMode): reflejar el mode activo. Inicializar tambien
+  // lo sincroniza al cargar, pero lo dejamos coherente ya desde el Show.
+  SincronizarComboRowMode;
+
+  // Modo de agrupacion (RowMode) del proyecto activo. TREE aun no tiene control
+  // propio (cae a CENTROS): avisamos si el proyecto lo tenia configurado.
   Modo := UpperCase(Trim(DMPlanner.CurrentProjectRowMode));
   if Modo = 'TREE' then
     ShowMessage(
@@ -1499,24 +1560,71 @@ procedure TfrmVistaGantt.Inicializar(const AFechaInicio, AFechaFin: TDateTime);
 var
   T0, T1: TDateTime;
   ModoActual: string;
-  NecesitaGrupo, EsGrupoActual: Boolean;
+  TipoActual: string;   // tipo concreto que hace falta segun el RowMode
+  TipoQueEs: string;    // tipo concreto del FGanttControl vivo
+
+  function TipoParaModo(const AModo: string): string;
+  begin
+    if AModo = 'GRUPO' then Result := 'GRUPO'
+    else if AModo = 'UTILLAJES' then Result := 'UTILLAJES'
+    else if AModo = 'CLIENTES' then Result := 'CLIENTES'
+    else if AModo = 'OPERARIOS' then Result := 'OPERARIOS'
+    else Result := 'CENTROS';
+  end;
+
+  function TipoDelControl: string;
+  begin
+    // OJO al orden: TGanttControlClientes hereda de TGanttControlGrupo, asi que
+    // hay que comprobar Clientes ANTES que Grupo (si no, un control Clientes se
+    // detectaria como GRUPO y no se recrearia al cambiar de modo).
+    if FGanttControl is TGanttControlClientes then Result := 'CLIENTES'
+    else if FGanttControl is TGanttControlUtillajes then Result := 'UTILLAJES'
+    else if FGanttControl is TGanttControlOperarios then Result := 'OPERARIOS'
+    else if FGanttControl is TGanttControlGrupo then Result := 'GRUPO'
+    else Result := 'CENTROS';
+  end;
+
+var
+  PrefRowMode: string;
 begin
+  // Si el usuario tiene una preferencia de RowMode guardada para ESTE proyecto
+  // (elegida antes con el combo "Modo filas"), prevalece sobre el RowMode por
+  // defecto del proyecto. Es idempotente: al conmutar el combo, la preferencia
+  // ya se guardo con el nuevo valor antes de llegar aqui.
+  if CargarRowModePref(PrefRowMode) then
+    DMPlanner.CurrentProjectRowMode := PrefRowMode;
+  SincronizarComboRowMode;
+
   // Asegurar que FGanttControl corresponde al RowMode del proyecto actual.
   // El form se crea una sola vez pero el usuario puede cambiar el mode del
   // proyecto entre aperturas, asi que recreamos el control si el tipo no
   // casa con el mode actual.
   ModoActual := UpperCase(Trim(DMPlanner.CurrentProjectRowMode));
-  NecesitaGrupo := ModoActual = 'GRUPO';
-  EsGrupoActual := FGanttControl is TGanttControlGrupo;
-  if NecesitaGrupo <> EsGrupoActual then
+  TipoActual := TipoParaModo(ModoActual);
+  TipoQueEs := TipoDelControl;
+  if TipoActual <> TipoQueEs then
   begin
+    // El badge SOLO LECTURA es hijo de FGanttControl: si liberamos el control
+    // sin reparentarlo, se destruye con el (puntero colgante). Lo movemos al
+    // contenedor mientras tanto; SincronizarComboRowMode lo reasigna despues.
+    if Assigned(FLblReadOnly) then
+    begin
+      FLblReadOnly.Visible := False;
+      FLblReadOnly.Parent := pnlGanttContainer;
+    end;
     FreeAndNil(FGanttControl);
-    if NecesitaGrupo then
+    if TipoActual = 'GRUPO' then
     begin
       FGanttControl := TGanttControlGrupo.Create(Self);
       TGanttControlGrupo(FGanttControl).NivelAgrupacion :=
         DMPlanner.CurrentProjectNivelAgrupacion;
     end
+    else if TipoActual = 'UTILLAJES' then
+      FGanttControl := TGanttControlUtillajes.Create(Self)
+    else if TipoActual = 'CLIENTES' then
+      FGanttControl := TGanttControlClientes.Create(Self)
+    else if TipoActual = 'OPERARIOS' then
+      FGanttControl := TGanttControlOperarios.Create(Self)
     else
       FGanttControl := TGanttControl.Create(Self);
     FGanttControl.Parent := pnlGanttContainer;
@@ -1543,7 +1651,7 @@ begin
     FGanttControl.OnOpFilterClear := btnClearOperariosClick;
     AplicarNodeLayoutSet;   // control recreat -> reaplicar el set de layout
   end
-  else if NecesitaGrupo then
+  else if TipoActual = 'GRUPO' then
   begin
     // Mismo tipo pero puede haber cambiado NivelAgrupacion
     TGanttControlGrupo(FGanttControl).NivelAgrupacion :=
@@ -1563,6 +1671,10 @@ begin
   // y el panning del timeline no puede desplazar el Gantt (MaxScrollX = 0).
   FGanttControl.SetTimeRange(T0, T1);
   CargarCentros;
+  // Reasignar el badge SOLO LECTURA al control definitivo (puede haberse
+  // recreado arriba) y mostrarlo/ocultarlo segun el modo. La llamada del inicio
+  // de Inicializar corria ANTES de recrear el control, asi que no bastaba.
+  SincronizarComboRowMode;
   // Centrar la vista en la fecha actual al abrir.
   IrAFecha(Now);
   // Sincronizar la banda de resumen con el viewport inicial del timeline y
@@ -2264,6 +2376,217 @@ begin
   ShowMessage( sMsg );
 end;
 
+procedure TfrmVistaGantt.InyectarRequisitosUtillajes(
+  ACtrl: TGanttControlUtillajes);
+var
+  Repo: TUtillajesRepo;
+  Reqs: TArray<TUtillajeRequisitoNodo>;
+  Utils: TArray<TUtillaje>;
+begin
+  if ACtrl = nil then Exit;
+  if DMPlanner.ADOConnection = nil then Exit;
+
+  Repo := TUtillajesRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Reqs := Repo.LoadRequisitosPorNodo(DMPlanner.CurrentProjectId);
+    Utils := Repo.LoadAll;   // para conocer la Cantidad (capacidad) de cada uno
+  finally
+    Repo.Free;
+  end;
+
+  ACtrl.SetCantidades(Utils);
+  ACtrl.SetRequisitos(Reqs);
+end;
+
+procedure TfrmVistaGantt.InyectarAsignacionesOperarios(
+  ACtrl: TGanttControlOperarios);
+var
+  Asigs: TArray<TAsignacionOperario>;
+  Filas: TArray<TAsignacionOperarioFila>;
+  Nombres: TDictionary<Integer, string>;
+  Op: TOperario;
+  I: Integer;
+  Nom: string;
+begin
+  if ACtrl = nil then Exit;
+  if not Assigned(FOperariosRepo) then Exit;
+
+  Asigs := FOperariosRepo.GetAllAsignacions;
+  Nombres := TDictionary<Integer, string>.Create;
+  try
+    SetLength(Filas, Length(Asigs));
+    for I := 0 to High(Asigs) do
+    begin
+      if not Nombres.TryGetValue(Asigs[I].OperarioId, Nom) then
+      begin
+        if FOperariosRepo.GetOperarioById(Asigs[I].OperarioId, Op) then
+          Nom := Op.Nombre
+        else
+          Nom := '';
+        Nombres.Add(Asigs[I].OperarioId, Nom);
+      end;
+      Filas[I].DataId := Asigs[I].DataId;
+      Filas[I].OperarioId := Asigs[I].OperarioId;
+      Filas[I].Nombre := Nom;
+    end;
+  finally
+    Nombres.Free;
+  end;
+
+  ACtrl.SetAsignaciones(Filas);
+end;
+
+function TfrmVistaGantt.RowModeDelCombo: string;
+begin
+  // Indices: 0 Centros, 1 Ordenes(=GRUPO), 2 Utillajes, 3 Clientes, 4 Operarios.
+  case cbRowMode.ItemIndex of
+    1: Result := 'GRUPO';
+    2: Result := 'UTILLAJES';
+    3: Result := 'CLIENTES';
+    4: Result := 'OPERARIOS';
+  else
+    Result := 'CENTROS';
+  end;
+end;
+
+procedure TfrmVistaGantt.SincronizarComboRowMode;
+var
+  Modo: string;
+  Idx: Integer;
+begin
+  Modo := UpperCase(Trim(DMPlanner.CurrentProjectRowMode));
+  if Modo = 'GRUPO' then Idx := 1
+  else if Modo = 'UTILLAJES' then Idx := 2
+  else if Modo = 'CLIENTES' then Idx := 3
+  else if Modo = 'OPERARIOS' then Idx := 4
+  else Idx := 0;   // CENTROS (y TREE, que aun cae a CENTROS)
+
+  // Cambiar el ItemIndex sin disparar OnChange (evita recarga en bucle).
+  cbRowMode.Properties.OnChange := nil;
+  cbRowMode.ItemIndex := Idx;
+  cbRowMode.Properties.OnChange := cbRowModePropertiesChange;
+
+  // Titulo del panel izquierdo segun el modo (que es una fila).
+  if Modo = 'UTILLAJES' then Label12.Caption := 'Utillajes'
+  else if Modo = 'CLIENTES' then Label12.Caption := 'Clientes'
+  else if Modo = 'OPERARIOS' then Label12.Caption := 'Operarios'
+  else if Modo = 'GRUPO' then Label12.Caption := #211'rdenes'
+  else Label12.Caption := 'Centros de trabajo';
+
+  // Badge "SOLO LECTURA" en los modos de diagnostico (UTILLAJES y GRUPO). El
+  // control del Gantt puede haberse recreado (Inicializar), asi que reasignamos
+  // el parent al control vivo antes de mostrarlo.
+  if Assigned(FLblReadOnly) and Assigned(FGanttControl) then
+  begin
+    if FLblReadOnly.Parent <> FGanttControl then
+      FLblReadOnly.Parent := FGanttControl;
+    // Solo lectura en todos los modos de consulta (agrupaciones): UTILLAJES,
+    // CLIENTES y GRUPO/Ordenes. La edicion solo tiene sentido en Centros, donde
+    // el motor de secuencialidad de recursos es coherente. Ver memoria
+    // project_gantt_planning_paradigm.
+    FLblReadOnly.Visible := (Modo = 'UTILLAJES') or (Modo = 'CLIENTES')
+      or (Modo = 'GRUPO') or (Modo = 'OPERARIOS');
+    if FLblReadOnly.Visible then
+    begin
+      FLblReadOnly.Left := FGanttControl.ClientWidth - FLblReadOnly.Width - 20;
+      FLblReadOnly.Top := 8;
+      FLblReadOnly.BringToFront;
+    end;
+  end;
+end;
+
+function TfrmVistaGantt.PrefKeyRowMode: string;
+begin
+  // Preferencia por usuario Y proyecto: cada proyecto recuerda su modo por
+  // separado (no tiene sentido heredar el modo de otro proyecto).
+  Result := 'VistaGanttRowMode_' + IntToStr(DMPlanner.CurrentProjectId);
+end;
+
+procedure TfrmVistaGantt.GuardarRowModePref(const ARowMode: string);
+begin
+  if DMPlanner.CurrentProjectId <= 0 then Exit;
+  if DMPlanner.UserPrefs = nil then Exit;
+  DMPlanner.UserPrefs.Save(PrefKeyRowMode, ARowMode);
+end;
+
+function TfrmVistaGantt.CargarRowModePref(out ARowMode: string): Boolean;
+var
+  S: string;
+begin
+  ARowMode := '';
+  Result := False;
+  if DMPlanner.CurrentProjectId <= 0 then Exit;
+  if DMPlanner.UserPrefs = nil then Exit;
+  S := UpperCase(Trim(DMPlanner.UserPrefs.Load(PrefKeyRowMode)));
+  if (S = 'CENTROS') or (S = 'GRUPO') or (S = 'UTILLAJES') or (S = 'CLIENTES')
+     or (S = 'OPERARIOS') then
+  begin
+    ARowMode := S;
+    Result := True;
+  end;
+end;
+
+procedure TfrmVistaGantt.cbRowModePropertiesChange(Sender: TObject);
+var
+  NuevoModo: string;
+begin
+  NuevoModo := RowModeDelCombo;
+  if SameText(NuevoModo, Trim(DMPlanner.CurrentProjectRowMode)) then Exit;
+
+  // Conmutar el RowMode en memoria y recrear el control + recargar datos.
+  // Inicializar detecta que el tipo de control ya no casa con el mode y lo
+  // recrea; CargarCentros (dentro) reconstruye filas y, si toca, inyecta los
+  // requisitos de utillaje.
+  DMPlanner.CurrentProjectRowMode := NuevoModo;
+  GuardarRowModePref(NuevoModo);
+
+  // Un filtro activo (por cliente, operario, etc.) deja de tener sentido al
+  // cambiar de eje de filas: lo limpiamos para no arrastrar un realce que ya no
+  // corresponde. El motor de filtro es unico (SetOperarioFilter), compartido
+  // con el filtro nativo de operarios de la barra.
+  if Assigned(FGanttControl) then
+  begin
+    FGanttControl.ClearOperarioFilter;
+    FGanttControl.OpFilterLabel := '';
+  end;
+
+  // Aviso al entrar en un modo de consulta SOLO LECTURA. Todas las vistas de
+  // agrupacion (Ordenes/Utillajes/Clientes) son de consulta: editar por esos
+  // ejes seria otro paradigma de planificacion (project-based), no el de
+  // recursos con secuencialidad. Ver memoria project_gantt_planning_paradigm.
+  if NuevoModo = 'UTILLAJES' then
+    ShowMessage(
+      'Vista de UTILLAJES (solo lectura).'#13#10#13#10 +
+      'Cada fila es un utillaje y las barras son los nodos que lo usan. '#13#10 +
+      'Las filas marcadas con (!) tienen mas trabajos solapados que ejemplares '+
+      'disponibles (conflicto).'#13#10#13#10 +
+      'Para editar el plan, vuelve al modo Centros.')
+  else if NuevoModo = 'CLIENTES' then
+    ShowMessage(
+      'Vista de CLIENTES (solo lectura).'#13#10#13#10 +
+      'Cada fila es un cliente y las barras son los trabajos comprometidos '+
+      'con el.'#13#10#13#10 +
+      'Es una vista de consulta de carga: para mover nodos, vuelve al modo '+
+      'Centros.')
+  else if NuevoModo = 'GRUPO' then
+    ShowMessage(
+      'Vista de '#211'RDENES (solo lectura).'#13#10#13#10 +
+      'Las filas agrupan los nodos por su documento padre (OF / pedido / '+
+      'proyecto).'#13#10#13#10 +
+      'Es una vista de consulta: para mover nodos, vuelve al modo Centros.')
+  else if NuevoModo = 'OPERARIOS' then
+    ShowMessage(
+      'Vista de OPERARIOS (solo lectura).'#13#10#13#10 +
+      'Cada fila es un operario y las barras son las tareas que tiene '+
+      'asignadas.'#13#10 +
+      'Las filas marcadas con (!) tienen tareas solapadas: el operario esta '+
+      'asignado a dos cosas a la vez (sobrecarga).'#13#10#13#10 +
+      'Para reasignar, usa el panel de asignaci'#243'n; para mover en el tiempo, '+
+      'el modo Centros.');
+
+  Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
+end;
+
 procedure TfrmVistaGantt.CargarCentros;
 var
   Centres: TArray<TCentreTreball>;
@@ -2289,9 +2612,68 @@ begin
         // En modo GRUPO el "CentreId" del row es el indice del grupo.
         Result := TGanttControlGrupo(FGanttControl).GetGroupCaption(CentreId);
       end;
+    // Limpiar callbacks especificos de UTILLAJES (si venimos de ese modo).
+    FCentrosControl.GetRowSubtitle := nil;
+    FCentrosControl.GetRowSubtitle2 := nil;
+    FCentrosControl.GetRowBackColor := nil;
+    FCentrosControl.GetRowHint := nil;
     // NO pasar la lista de centros al panel izquierdo en modo GRUPO — asi
     // FindCentreIndexById siempre retorna -1 y PaintRowD2D cae al callback
     // GetCentreName (que ya resuelve la etiqueta del grupo).
+    FCentrosControl.SetCentres(nil);
+  end
+  else if FGanttControl is TGanttControlUtillajes then
+  begin
+    // En modo UTILLAJES el "CentreId" del row es el indice de fila (utillaje).
+    // El panel izquierdo muestra codigo+capacidad (1a linea), info de carga
+    // (2a linea) y pinta el fondo rojo si el utillaje esta en conflicto.
+    FCentrosControl.GetCentreName :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlUtillajes(FGanttControl).GetRowCaption(CentreId);
+      end;
+    FCentrosControl.GetRowSubtitle :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlUtillajes(FGanttControl).GetRowSubtitle(CentreId);
+      end;
+    FCentrosControl.GetRowSubtitle2 :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlUtillajes(FGanttControl).GetRowCarga(CentreId);
+      end;
+    FCentrosControl.GetRowBackColor :=
+      function(const CentreId: Integer): TColor
+      begin
+        Result := TGanttControlUtillajes(FGanttControl).GetRowPanelColor(CentreId);
+      end;
+    FCentrosControl.GetRowHint :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlUtillajes(FGanttControl).GetRowHint(CentreId);
+      end;
+    FCentrosControl.SetCentres(nil);
+  end
+  else if FGanttControl is TGanttControlOperarios then
+  begin
+    // En modo OPERARIOS el "CentreId" del row es el indice de fila (operario).
+    FCentrosControl.GetCentreName :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlOperarios(FGanttControl).GetRowCaption(CentreId);
+      end;
+    FCentrosControl.GetRowSubtitle :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlOperarios(FGanttControl).GetRowSubtitle(CentreId);
+      end;
+    FCentrosControl.GetRowSubtitle2 := nil;   // subtitulo ya trae la carga
+    FCentrosControl.GetRowBackColor :=
+      function(const CentreId: Integer): TColor
+      begin
+        Result := TGanttControlOperarios(FGanttControl).GetRowPanelColor(CentreId);
+      end;
+    FCentrosControl.GetRowHint := nil;
     FCentrosControl.SetCentres(nil);
   end
   else
@@ -2306,6 +2688,11 @@ begin
           if CentresLocal[J].Id = CentreId then
             Exit(CentresLocal[J].Titulo);
       end;
+    // Limpiar callbacks especificos de otros modos (si venimos de ellos).
+    FCentrosControl.GetRowSubtitle := nil;
+    FCentrosControl.GetRowSubtitle2 := nil;
+    FCentrosControl.GetRowBackColor := nil;
+    FCentrosControl.GetRowHint := nil;
     FCentrosControl.SetCentres(Centres);
   end;
   // Cargar nodos reales del proyecto activo desde BD.
@@ -2315,6 +2702,17 @@ begin
     Nodes := DMPlanner.NodesRepo.GetAll
   else
     SetLength(Nodes, 0);
+
+  // En modo UTILLAJES, inyectar los requisitos (que utillaje pide cada nodo) y
+  // las capacidades ANTES de SetData: RebuildLayout los necesita para construir
+  // las filas y detectar conflictos. El control no toca BD por si mismo.
+  if FGanttControl is TGanttControlUtillajes then
+    InyectarRequisitosUtillajes(TGanttControlUtillajes(FGanttControl));
+
+  // En modo OPERARIOS, inyectar las asignaciones (que operario tiene cada nodo)
+  // ANTES de SetData, por la misma razon.
+  if FGanttControl is TGanttControlOperarios then
+    InyectarAsignacionesOperarios(TGanttControlOperarios(FGanttControl));
 
   FGanttControl.SetData(Centres, Nodes, FTimelineControl.StartTime);
   // Aplicar la politica de tiempo de cambio (setup) guardada en preferencias al
@@ -5147,17 +5545,290 @@ begin
 end;
 
 procedure TfrmVistaGantt.btnConfigCentrosClick(Sender: TObject);
-var
-  Frm: TfrmGestionCentres;
 begin
-  Frm := TfrmGestionCentres.Create(Self);
-  try
-    Frm.ShowModal;
-  finally
-    Frm.Free;
-  end;
-  DMPlanner.LoadCentres;
+  // La icona del panell esquerre actua com a FILTRO por la entidad del RowMode
+  // activo (centro / orden / utillaje / cliente). Reutiliza el motor de filtro
+  // ya existente del Gantt (SetOperarioFilter, que filtra por DataIds y admite
+  // atenuar u ocultar), solo que la lista de entidades y la resolucion de
+  // DataIds dependen del modo.
+  AbrirFiltroPorModo;
+end;
 
+// Construye la lista de entidades filtrables del RowMode activo y, tras la
+// eleccion del usuario, aplica el filtro del Gantt (SetOperarioFilter) o lo
+// limpia. Clave -> conjunto de DataIds se resuelve recorriendo los NodeData.
+procedure TfrmVistaGantt.AbrirFiltroPorModo;
+var
+  Modo, Titulo: string;
+  Items: TRowFilterItems;
+  ClaveDeData: TFunc<TNodeData, string>;   // extrae la clave de agrupacion
+  CaptionDeClave: TFunc<string, string>;   // etiqueta visible de una clave
+  Datas: TArray<TNodeData>;
+  Cuenta: TDictionary<string, Integer>;
+  // DataId -> lista de claves (modos N:M: UTILLAJES por utillaje, OPERARIOS por
+  // operario). Si esta asignado, tiene prioridad sobre ClaveDeData.
+  ClavesUtilPorNodo: TDictionary<Integer, TList<string>>;
+  // Clave -> etiqueta visible (para modos N:M donde la clave es un id y el
+  // caption un nombre, p.ej. OperarioId -> Nombre).
+  CaptionPorClave: TDictionary<string, string>;
+  I: Integer;
+  Clave: string;
+  Pair: TPair<string, Integer>;
+  SelClaves: TArray<string>;
+  HideMode: Boolean;
+  SelSet: TDictionary<string, Byte>;
+  DataIds: TList<Integer>;
+  D: TNodeData;
+  L: TList<string>;
+  Repo: TUtillajesRepo;
+  Reqs: TArray<TUtillajeRequisitoNodo>;
+  Nodos: TArray<TNode>;
+  CentrePorData: TDictionary<Integer, Integer>;  // DataId -> CentreId (modo CENTROS)
+  Asigs: TArray<TAsignacionOperario>;
+  OpNom: TDictionary<Integer, string>;
+  Op: TOperario;
+  Nom: string;
+begin
+  if DMPlanner.NodeDataRepo = nil then Exit;
+  Modo := UpperCase(Trim(DMPlanner.CurrentProjectRowMode));
+  Datas := DMPlanner.NodeDataRepo.GetAllData;
+
+  // TNodeData no lleva el centro (esta en el TNode). Para el modo CENTROS
+  // montamos DataId -> CentreId a partir de los nodos del Gantt.
+  CentrePorData := TDictionary<Integer, Integer>.Create;
+  if DMPlanner.NodesRepo <> nil then
+  begin
+    Nodos := DMPlanner.NodesRepo.GetAll;
+    for I := 0 to High(Nodos) do
+      if Nodos[I].DataId > 0 then
+        CentrePorData.AddOrSetValue(Nodos[I].DataId, Nodos[I].CentreId);
+  end;
+
+  ClavesUtilPorNodo := nil;
+  CaptionPorClave := nil;
+  ClaveDeData := nil;
+  CaptionDeClave := nil;
+  try
+
+  // Segun el modo, definimos como se agrupan los nodos.
+  if Modo = 'CLIENTES' then
+  begin
+    Titulo := 'Filtrar por cliente';
+    ClaveDeData := function(AD: TNodeData): string
+      begin Result := Trim(AD.CodigoCliente); end;
+    CaptionDeClave := function(AC: string): string
+      begin if AC = '' then Result := '(sin cliente)' else Result := AC; end;
+  end
+  else if Modo = 'GRUPO' then
+  begin
+    Titulo := 'Filtrar por orden';
+    ClaveDeData := function(AD: TNodeData): string
+      begin
+        if AD.NumeroOrdenFabricacion > 0 then
+          Result := IntToStr(AD.NumeroOrdenFabricacion)
+        else
+          Result := '';
+      end;
+    CaptionDeClave := function(AC: string): string
+      begin if AC = '' then Result := '(sin orden)' else Result := 'OF ' + AC; end;
+  end
+  else if Modo = 'UTILLAJES' then
+  begin
+    Titulo := 'Filtrar por utillaje';
+    // En utillajes la relacion es N:M: un nodo puede tener varias claves. Se
+    // precalcula NodeId(DataId) -> lista de codigos de utillaje.
+    ClavesUtilPorNodo := TDictionary<Integer, TList<string>>.Create;
+    Repo := TUtillajesRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    try
+      Reqs := Repo.LoadRequisitosPorNodo(DMPlanner.CurrentProjectId);
+    finally
+      Repo.Free;
+    end;
+    for I := 0 to High(Reqs) do
+    begin
+      if not ClavesUtilPorNodo.TryGetValue(Reqs[I].NodeId, L) then
+      begin
+        L := TList<string>.Create;
+        ClavesUtilPorNodo.Add(Reqs[I].NodeId, L);
+      end;
+      L.Add(Reqs[I].Req.Codigo);
+    end;
+  end
+  else if Modo = 'OPERARIOS' then
+  begin
+    Titulo := 'Filtrar por operario';
+    // N:M como utillajes: DataId -> lista de OperarioId (como string). El
+    // caption (nombre) va por CaptionPorClave, ya que la clave es el id.
+    ClavesUtilPorNodo := TDictionary<Integer, TList<string>>.Create;
+    CaptionPorClave := TDictionary<string, string>.Create;
+    OpNom := TDictionary<Integer, string>.Create;
+    try
+      if Assigned(FOperariosRepo) then
+        Asigs := FOperariosRepo.GetAllAsignacions
+      else
+        SetLength(Asigs, 0);
+      for I := 0 to High(Asigs) do
+      begin
+        Clave := IntToStr(Asigs[I].OperarioId);
+        if not ClavesUtilPorNodo.TryGetValue(Asigs[I].DataId, L) then
+        begin
+          L := TList<string>.Create;
+          ClavesUtilPorNodo.Add(Asigs[I].DataId, L);
+        end;
+        L.Add(Clave);
+        // Nombre (cacheado).
+        if not OpNom.TryGetValue(Asigs[I].OperarioId, Nom) then
+        begin
+          if FOperariosRepo.GetOperarioById(Asigs[I].OperarioId, Op) then
+            Nom := Op.Nombre
+          else
+            Nom := 'Operario ' + Clave;
+          OpNom.Add(Asigs[I].OperarioId, Nom);
+        end;
+        CaptionPorClave.AddOrSetValue(Clave, Nom);
+      end;
+    finally
+      OpNom.Free;
+    end;
+  end
+  else
+  begin
+    // CENTROS (y cualquier otro): filtrar por centro. La clave es el CentreId,
+    // que sale del mapa DataId->CentreId (el centro no esta en el TNodeData).
+    Titulo := 'Filtrar por centro';
+    ClaveDeData := function(AD: TNodeData): string
+      var Cid: Integer;
+      begin
+        if CentrePorData.TryGetValue(AD.DataId, Cid) then
+          Result := IntToStr(Cid)
+        else
+          Result := '';
+      end;
+    CaptionDeClave := function(AC: string): string
+      var Cen: TCentreTreball; Id, J: Integer; Cens: TArray<TCentreTreball>;
+      begin
+        Result := AC;
+        if TryStrToInt(AC, Id) and (DMPlanner.CentresRepo <> nil) then
+        begin
+          Cens := DMPlanner.CentresRepo.GetAll;
+          for J := 0 to High(Cens) do
+            if Cens[J].Id = Id then Exit(Cens[J].Titulo);
+        end;
+      end;
+  end;
+
+  // --- Contar cuantos nodos hay por clave ---
+  Cuenta := TDictionary<string, Integer>.Create;
+  try
+    for I := 0 to High(Datas) do
+    begin
+      D := Datas[I];
+      if ClavesUtilPorNodo <> nil then
+      begin
+        if ClavesUtilPorNodo.TryGetValue(D.DataId, L) then
+          for Clave in L do
+            if Cuenta.ContainsKey(Clave) then
+              Cuenta[Clave] := Cuenta[Clave] + 1
+            else
+              Cuenta.Add(Clave, 1);
+      end
+      else
+      begin
+        Clave := ClaveDeData(D);
+        if Cuenta.ContainsKey(Clave) then
+          Cuenta[Clave] := Cuenta[Clave] + 1
+        else
+          Cuenta.Add(Clave, 1);
+      end;
+    end;
+
+    // --- Construir items para el dialogo ---
+    SetLength(Items, 0);
+    for Pair in Cuenta do
+    begin
+      SetLength(Items, Length(Items) + 1);
+      Items[High(Items)].Clave := Pair.Key;
+      // Prioridad de etiqueta: mapa clave->caption (modos N:M por id) > funcion
+      // CaptionDeClave > la propia clave.
+      if (CaptionPorClave <> nil) and CaptionPorClave.TryGetValue(Pair.Key, Nom) then
+        Items[High(Items)].Caption := Nom
+      else if Assigned(CaptionDeClave) then
+        Items[High(Items)].Caption := CaptionDeClave(Pair.Key)
+      else if Pair.Key = '' then
+        Items[High(Items)].Caption := '(sin asignar)'
+      else
+        Items[High(Items)].Caption := Pair.Key;
+      Items[High(Items)].Count := Pair.Value;
+    end;
+  finally
+    Cuenta.Free;
+  end;
+
+  if Length(Items) = 0 then
+  begin
+    ShowMessage('No hay datos que filtrar en este modo.');
+    Exit;
+  end;
+
+  // Ordenar items por etiqueta (mas comodo de leer).
+  TArray.Sort<TRowFilterItem>(Items,
+    TComparer<TRowFilterItem>.Construct(
+      function(const A, B: TRowFilterItem): Integer
+      begin Result := CompareText(A.Caption, B.Caption); end));
+
+  // --- Mostrar dialogo ---
+  if not TfrmRowFilterDialog.Execute(Titulo, Items, SelClaves, HideMode) then
+    Exit;
+
+  // --- Aplicar: resolver DataIds de las claves seleccionadas ---
+  if Length(SelClaves) = 0 then
+  begin
+    FGanttControl.ClearOperarioFilter;
+    FGanttControl.OpFilterLabel := '';
+  end
+  else
+  begin
+    SelSet := TDictionary<string, Byte>.Create;
+    DataIds := TList<Integer>.Create;
+    try
+      for I := 0 to High(SelClaves) do
+        SelSet.AddOrSetValue(SelClaves[I], 1);
+
+      for I := 0 to High(Datas) do
+      begin
+        D := Datas[I];
+        if ClavesUtilPorNodo <> nil then
+        begin
+          if ClavesUtilPorNodo.TryGetValue(D.DataId, L) then
+            for Clave in L do
+              if SelSet.ContainsKey(Clave) then
+              begin
+                DataIds.Add(D.DataId);
+                Break;
+              end;
+        end
+        else if SelSet.ContainsKey(ClaveDeData(D)) then
+          DataIds.Add(D.DataId);
+      end;
+
+      FGanttControl.SetOperarioFilter(DataIds.ToArray, HideMode);
+      FGanttControl.OpFilterLabel := Titulo + ': ' + IntToStr(Length(SelClaves)) +
+        ' sel.';
+    finally
+      DataIds.Free;
+      SelSet.Free;
+    end;
+  end;
+
+  finally
+    CentrePorData.Free;
+    CaptionPorClave.Free;
+    if ClavesUtilPorNodo <> nil then
+    begin
+      for L in ClavesUtilPorNodo.Values do L.Free;
+      ClavesUtilPorNodo.Free;
+    end;
+  end;
 end;
 
 procedure TfrmVistaGantt.btnKPIAllClick(Sender: TObject);

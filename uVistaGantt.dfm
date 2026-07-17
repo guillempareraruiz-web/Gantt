@@ -241,7 +241,7 @@ object frmVistaGantt: TfrmVistaGantt
           Top = 2
           Width = 20
           Height = 19
-          Hint = 'Configurar centros'
+          Hint = 'Filtrar por la entidad del modo activo'
           Anchors = [akTop, akRight]
           LookAndFeel.Kind = lfUltraFlat
           LookAndFeel.NativeStyle = False
@@ -2399,6 +2399,56 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = [fsBold]
         ParentFont = False
         OnClick = btnResaltarOFClick
+      end
+      object lblRowMode: TLabel
+        Left = 858
+        Top = 7
+        Width = 55
+        Height = 12
+        Anchors = [akTop, akRight]
+        Caption = 'Modo filas'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 4800824
+        Font.Height = -9
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = []
+        ParentFont = False
+      end
+      object cbRowMode: TcxComboBox
+        Left = 858
+        Top = 21
+        Anchors = [akTop, akRight]
+        ParentFont = False
+        Properties.DropDownListStyle = lsFixedList
+        Properties.DropDownRows = 6
+        Properties.Items.Strings = (
+          'Centros'
+          #211'rdenes'
+          'Utillajes'
+          'Clientes'
+          'Operarios')
+        Properties.OnChange = cbRowModePropertiesChange
+        Style.BorderColor = 3553567
+        Style.BorderStyle = ebsSingle
+        Style.Color = 8220514
+        Style.Font.Charset = DEFAULT_CHARSET
+        Style.Font.Color = clWindowText
+        Style.Font.Height = -11
+        Style.Font.Name = 'Segoe UI'
+        Style.Font.Style = []
+        Style.HotTrack = False
+        Style.LookAndFeel.NativeStyle = False
+        Style.TextColor = clWhite
+        Style.ButtonStyle = btsSimple
+        Style.ButtonTransparency = ebtAlways
+        Style.IsFontAssigned = True
+        StyleDisabled.LookAndFeel.NativeStyle = False
+        StyleFocused.LookAndFeel.NativeStyle = False
+        StyleHot.LookAndFeel.NativeStyle = False
+        StyleReadOnly.LookAndFeel.NativeStyle = False
+        TabOrder = 14
+        Text = 'Centros'
+        Width = 150
       end
       object btnAtajos: TcxButton
         Left = 1017

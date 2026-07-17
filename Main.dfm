@@ -146,6 +146,25 @@ object Form1: TForm1
       TabOrder = 5
       OnClick = MnGanttClick
     end
+    object btnTB_Proyectos: TcxButton
+      AlignWithMargins = True
+      Left = 447
+      Top = 5
+      Width = 75
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Align = alLeft
+      Caption = 'Proyectos'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2007Blue'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 8
+      OnClick = btnTB_ProyectosClick
+    end
     object btnTB_Help: TcxButton
       AlignWithMargins = True
       Left = 961

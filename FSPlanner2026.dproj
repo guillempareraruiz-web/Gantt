@@ -108,6 +108,16 @@
         <DCCReference Include="uGanttTypes.pas"/>
         <DCCReference Include="uGanttControl.pas"/>
         <DCCReference Include="uGanttControlGrupo.pas"/>
+        <DCCReference Include="uGanttControlUtillajes.pas"/>
+        <DCCReference Include="uGanttControlClientes.pas"/>
+        <DCCReference Include="uGanttControlOperarios.pas"/>
+        <DCCReference Include="uGanttControlTareas.pas"/>
+        <DCCReference Include="uRowFilterDialog.pas"/>
+        <DCCReference Include="uWbsTypes.pas"/>
+        <DCCReference Include="uWbsRepo.pas"/>
+        <DCCReference Include="uVistaProyectos.pas">
+          <Form>frmVistaProyectos</Form>
+        </DCCReference>
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>

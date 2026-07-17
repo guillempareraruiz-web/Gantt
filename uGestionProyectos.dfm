@@ -182,7 +182,10 @@ object frmGestionProyectos: TfrmGestionProyectos
         Properties.Items.Strings = (
           'CENTROS'
           'GRUPO'
-          'TREE')
+          'TREE'
+          'UTILLAJES'
+          'CLIENTES'
+          'OPERARIOS')
         Width = 95
       end
       object colProjNivelAgrupacion: TcxGridColumn

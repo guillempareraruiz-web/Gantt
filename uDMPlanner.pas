@@ -185,7 +185,12 @@ type
     property CurrentProjectIsMaster: Boolean read FCurrentProjectIsMaster;
     property CurrentProjectFechaBloqueo: TDateTime read FCurrentProjectFechaBloqueo;
     property CurrentProjectTieneBloqueo: Boolean read FCurrentProjectTieneBloqueo;
-    property CurrentProjectRowMode: string read FCurrentProjectRowMode;
+    // El setter permite conmutar el RowMode en caliente desde el propio Gantt
+    // (selector de "Modo filas"), sin pasar por Gestion de Proyectos. Solo
+    // cambia el estado en memoria; la persistencia (por usuario) la decide la
+    // pantalla que lo usa.
+    property CurrentProjectRowMode: string read FCurrentProjectRowMode
+      write FCurrentProjectRowMode;
     property CurrentProjectNivelAgrupacion: Integer read FCurrentProjectNivelAgrupacion;
     property CurrentEmpresaNombre: string read FCurrentEmpresaNombre;
     property CodigoEmpresa: SmallInt read FCodigoEmpresa write SetCodigoEmpresa;

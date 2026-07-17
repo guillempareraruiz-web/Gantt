@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages,
   System.Classes, System.SysUtils, System.Types, System.Math,
-  Vcl.Controls, Vcl.Graphics, uGanttTypes, Winapi.D2D1, Winapi.DxgiFormat;
+  Vcl.Controls, Vcl.Graphics, Vcl.Forms, uGanttTypes, Winapi.D2D1, Winapi.DxgiFormat;
 
 type
   TCentreNameFunc = reference to function(const CentreId: Integer): string;
@@ -45,6 +45,11 @@ type
   TCentreKPIFunc  = reference to function(const CentreId: Integer): TCentreKPI;
   TMaxScrollYFunc = reference to function: Single;
 
+  // Color de fondo de una fila resuelto por el consumidor (p.ej. rojo si el
+  // utillaje de la fila esta en conflicto). clNone = usar el color por defecto
+  // (alternado even/odd).
+  TRowBackColorFunc = reference to function(const CentreId: Integer): TColor;
+
   TGanttCentresControl = class(TCustomControl)
   private
     FRows: TArray<TRowLayout>;
@@ -52,6 +57,16 @@ type
     FScrollY: Single;
     FOnScrollYChanged: TScrollYChangedEvent;
     FGetCentreName: TCentreNameFunc;
+    // Segunda linea del panel (subtitulo). En modo utillajes: descripcion.
+    FGetRowSubtitle: TCentreNameFunc;
+    // Tercera linea (opcional). En modo utillajes: carga "N nodos - pico M / C".
+    FGetRowSubtitle2: TCentreNameFunc;
+    // Color de fondo de fila (clNone = por defecto). Modo utillajes: conflicto.
+    FGetRowBackColor: TRowBackColorFunc;
+    // Texto de tooltip por fila (modo utillajes: ficha del utillaje). Vacio =
+    // sin hint. Se resuelve al pasar el raton sobre una fila distinta.
+    FGetRowHint: TCentreNameFunc;
+    FHintRowIndex: Integer;   // fila cuya info se muestra ahora en el Hint (-1 = ninguna)
     // Si esta asignado, GetMaxScrollY delega en el Gantt (referencia comun) en
     // vez de calcularlo localmente, para que ambos clampen al MISMO maximo.
     FGetMaxScrollY: TMaxScrollYFunc;
@@ -155,6 +170,8 @@ type
 
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    // True si (X,Y) en coords de pantalla cae sobre el icono "i" de la fila.
+    function EstaSobreIconoInfo(const ARowIndex, X, Y: Integer): Boolean;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
 
     procedure WMMouseWheel(var Message: TWMMouseWheel); message WM_MOUSEWHEEL;
@@ -172,6 +189,12 @@ type
 
     // per resoldre el text sense acoblar-te al model
     property GetCentreName: TCentreNameFunc read FGetCentreName write FGetCentreName;
+    // Callbacks opcionales para filas "no-centro" (modo utillajes): subtitulo
+    // (2a linea) y color de fondo. Si no se asignan, comportamiento clasico.
+    property GetRowSubtitle: TCentreNameFunc read FGetRowSubtitle write FGetRowSubtitle;
+    property GetRowSubtitle2: TCentreNameFunc read FGetRowSubtitle2 write FGetRowSubtitle2;
+    property GetRowBackColor: TRowBackColorFunc read FGetRowBackColor write FGetRowBackColor;
+    property GetRowHint: TCentreNameFunc read FGetRowHint write FGetRowHint;
     property GetMaxScrollYFunc: TMaxScrollYFunc read FGetMaxScrollY write FGetMaxScrollY;
     property SelectedCentreId: Integer read FSelectedCentreId;
     property OnScrollYChanged: TScrollYChangedEvent read FOnScrollYChanged write FOnScrollYChanged;
@@ -200,6 +223,9 @@ const
 
 
 implementation
+
+const
+  INFO_ICON_SIZE = 14;   // diametro del icono "i" de info por fila (utillajes)
 
 //...HELPER
 procedure CheckHR(const Res: HRESULT; const Msg: string);
@@ -271,6 +297,7 @@ begin
 
   FScrollY := 0;
   FSelectedCentreId := -1;
+  FHintRowIndex := -1;
 
   FBaseWidth := 220;         // amplada normal
   FIndicadoresWidth := 225;  // extra per KPIs, ajustable
@@ -690,6 +717,10 @@ var
   NomCentre, NomMaquina: string;
   RValue1: TRectF;
   RValue2: TRectF;
+  RValue3: TRectF;
+  RInfo: TRectF;
+  InfoBrush: ID2D1SolidColorBrush;
+  InfoTextBrush: ID2D1SolidColorBrush;
   RCircle: TRectF;
   CircleBrush: ID2D1SolidColorBrush;
   CircleStroke: ID2D1SolidColorBrush;
@@ -701,6 +732,8 @@ var
   MaxLanes: Integer;
   CircleText: string;
   TextCircleBrush: ID2D1SolidColorBrush;
+  BackColorCustom: TColor;
+  BackBrushCustom: ID2D1SolidColorBrush;
 begin
   // Guarda de seguridad: fila fuera de rango -> no pintar (evita GPF cuando, en
   // modo compactar + panning, la lista de filas queda vacia o desincronizada).
@@ -712,9 +745,22 @@ begin
   y1 := Row.TopY - FScrollY;
   y2 := (Row.TopY + Row.Height) - FScrollY;
 
-  // Els centres de sistema (SIN CENTRO / CENTRO EXTERNO) es destaquen amb fons
-  // blau clar; la resta alternen even/odd.
-  if (iCentreIdx >= 0) and
+  // Color de fondo. Prioridad: (1) callback externo (modo utillajes: rojo si
+  // conflicto), (2) centro de sistema (azul), (3) alternado even/odd.
+  BackColorCustom := clNone;
+  if Assigned(FGetRowBackColor) then
+    BackColorCustom := FGetRowBackColor(iCentreId);
+
+  if BackColorCustom <> clNone then
+  begin
+    FHwndRT.CreateSolidColorBrush(
+      D2D1ColorF(GetRValue(ColorToRGB(BackColorCustom)) / 255,
+                 GetGValue(ColorToRGB(BackColorCustom)) / 255,
+                 GetBValue(ColorToRGB(BackColorCustom)) / 255, 1.0),
+      nil, BackBrushCustom);
+    FillRectD(RectF(0, y1, ClientWidth, y2), BackBrushCustom);
+  end
+  else if (iCentreIdx >= 0) and
      (SameText(Trim(FCentres[iCentreIdx].CodiCentre), CENTRO_SIN_CENTRO) or
       SameText(Trim(FCentres[iCentreIdx].CodiCentre), CENTRO_EXTERNO)) then
     FillRectD(RectF(0, y1, ClientWidth, y2), FBrushRowSistema)
@@ -759,7 +805,11 @@ begin
     else
       NomCentre := Format('Centre %d', [iCentreId]);
 
-    NomMaquina := '';
+    // 2a linea: en modo utillajes, info del utillaje (estado / situacion).
+    if Assigned(FGetRowSubtitle) then
+      NomMaquina := FGetRowSubtitle(iCentreId)
+    else
+      NomMaquina := '';
   end;
 
   if Trim(NomMaquina) = '' then
@@ -822,15 +872,42 @@ begin
   end;
 
   // Nombre de centro y maquina: alineados a la IZQUIERDA con elipsis si no caben.
-  // La 1a linea (centro) deja hueco para el circulo solo si existe (no secuencial).
-  if EsSeq then
+  // La 1a linea (centro) deja hueco a la derecha para el circulo (no secuencial)
+  // o para el icono "i" de info (modo utillajes), lo que aplique.
+  if EsSeq and not Assigned(FGetRowHint) then
     RValue1 := RectF(PadX, y1 + 3, LeftTextWidth - PadX, y1 + 18)
   else
     RValue1 := RectF(PadX, y1 + 3, LeftTextWidth - PadX - CircleSize - 6, y1 + 18);
-  RValue2 := RectF(PadX, y1 + 19, LeftTextWidth - PadX, y1 + 34);
+  RValue2 := RectF(PadX, y1 + 19, LeftTextWidth - PadX, y1 + 33);
 
   DrawTextD(NomCentre, RValue1, TextBrush, FTextFormatLeft);
   DrawTextD(NomMaquina, RValue2, TextBrush, FTextFormatLeft);
+
+  // Tercera linea (solo si hay callback, p.ej. modo utillajes): la carga, en
+  // gris mas tenue para diferenciarla de la descripcion.
+  if Assigned(FGetRowSubtitle2) then
+  begin
+    RValue3 := RectF(PadX, y1 + 33, LeftTextWidth - PadX, y1 + 46);
+    DrawTextD(FGetRowSubtitle2(iCentreId), RValue3, FBrushTextDisabled,
+      FTextFormatLeft);
+  end;
+
+  // Icono de info (i) en circulo, arriba a la derecha de la zona de texto, si
+  // esta fila tiene tooltip (modo utillajes). Al pasar el raton por encima se
+  // muestra la ficha completa.
+  if Assigned(FGetRowHint) then
+  begin
+    RInfo := RectF(LeftTextWidth - PadX - INFO_ICON_SIZE, y1 + PadY,
+      LeftTextWidth - PadX, y1 + PadY + INFO_ICON_SIZE);
+    FHwndRT.CreateSolidColorBrush(D2D1ColorF(0.20, 0.47, 0.90, 1.0), nil, InfoBrush);
+    FHwndRT.FillEllipse(
+      D2D1Ellipse(
+        D2D1PointF((RInfo.Left + RInfo.Right) * 0.5, (RInfo.Top + RInfo.Bottom) * 0.5),
+        (RInfo.Right - RInfo.Left) * 0.5, (RInfo.Bottom - RInfo.Top) * 0.5),
+      InfoBrush);
+    FHwndRT.CreateSolidColorBrush(D2D1ColorF(1.0, 1.0, 1.0, 1.0), nil, InfoTextBrush);
+    DrawTextD('i', RInfo, InfoTextBrush, FTextFormatCircle);
+  end;
 
   if FVerIndicadores then
     PaintIndicatorsD2D(RowIndex, Row, LeftTextWidth);
@@ -1008,6 +1085,32 @@ begin
     if (yWorld >= FRows[i].TopY) and (yWorld <= FRows[i].TopY + FRows[i].Height) then
       Exit(i);
   end;
+end;
+
+function TGanttCentresControl.EstaSobreIconoInfo(
+  const ARowIndex, X, Y: Integer): Boolean;
+const
+  PadX = 8;
+  PadY = 5;
+var
+  LeftTextWidth: Single;
+  rowTopScreen, iconLeft, iconTop: Single;
+begin
+  Result := False;
+  if (ARowIndex < 0) or (ARowIndex > High(FRows)) then Exit;
+
+  if FVerIndicadores then
+    LeftTextWidth := ClientWidth - FIndicadoresWidth
+  else
+    LeftTextWidth := ClientWidth;
+
+  // Mismo rect que en PaintRowD2D (coords de pantalla: TopY - FScrollY).
+  rowTopScreen := FRows[ARowIndex].TopY - FScrollY;
+  iconLeft := LeftTextWidth - PadX - INFO_ICON_SIZE;
+  iconTop := rowTopScreen + PadY;
+
+  Result := (X >= iconLeft) and (X <= iconLeft + INFO_ICON_SIZE) and
+            (Y >= iconTop) and (Y <= iconTop + INFO_ICON_SIZE);
 end;
 
 function TGanttCentresControl.CalcDropIndex(const Y: Integer): Integer;
@@ -1327,8 +1430,37 @@ procedure TGanttCentresControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   dx, dy: Integer;
   dropIdx: Integer;
+  rowIdx: Integer;
+  hintTxt: string;
 begin
   inherited;
+
+  // Tooltip de ficha (modo utillajes): solo cuando el raton esta sobre el icono
+  // "i" de la fila (esquina superior derecha de la zona de texto), no sobre toda
+  // la fila. Asi el resto de la fila queda libre para seleccionar/pan.
+  if Assigned(FGetRowHint) and not FDragging then
+  begin
+    rowIdx := HitTestRowIndex(Y);
+    if EstaSobreIconoInfo(rowIdx, X, Y) then
+    begin
+      if rowIdx <> FHintRowIndex then
+      begin
+        FHintRowIndex := rowIdx;
+        hintTxt := FGetRowHint(FRows[rowIdx].CentreId);
+        Application.CancelHint;
+        Hint := hintTxt;
+        ShowHint := hintTxt <> '';
+      end;
+    end
+    else if FHintRowIndex <> -1 then
+    begin
+      // El raton salio del icono: apagar el hint.
+      FHintRowIndex := -1;
+      Application.CancelHint;
+      ShowHint := False;
+      Hint := '';
+    end;
+  end;
 
   dx := Abs(X - FDragStartPt.X);
   dy := Abs(Y - FDragStartPt.Y);

@@ -23,7 +23,7 @@ uses
   uCardLayoutSetRepo, uCardLayoutSetManager,
   uNodeCardLayout, uNodeLayoutSetRepo, uNodeLayoutEditor,
   uGanttHintConfig, uGanttHintConfigRepo, uGanttHintConfigEditor,
-  uDashBoard, uVistaGantt, uFiniteCapacityPlanner,
+  uDashBoard, uVistaGantt, uVistaProyectos, uFiniteCapacityPlanner,
   uBacklog, uFiniteCapacityOperaris, uArticleDetail, dxGDIPlusClasses,
   dxSkinsCore, dxSkinBasic, dxSkinBlack, dxSkinBlue, dxSkinBlueprint,
   dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom, dxSkinDarkSide,
@@ -125,6 +125,7 @@ type
     btnTB_PlaniCentros: TcxButton;
     cxButton1: TcxButton;  btnTB_PlaniOperarios: TcxButton;
     btnTB_PlaniGantt: TcxButton;
+    btnTB_Proyectos: TcxButton;
     btnTB_Help: TcxButton;
     btnLinkERP: TcxButton;
     btnTB_Demo: TcxButton;
@@ -230,6 +231,7 @@ type
     procedure CuadroPlanificacionDia1Click(Sender: TObject);
     procedure Salir1Click(Sender: TObject);
     procedure MnGanttClick(Sender: TObject);
+    procedure btnTB_ProyectosClick(Sender: TObject);
     procedure Indicadoresdecentros1Click(Sender: TObject);
     procedure btnTB_HelpClick(Sender: TObject);
     procedure btnLinkERPClick(Sender: TObject);
@@ -301,6 +303,7 @@ var
   FArrancando: Boolean;   // durante FormCreate: MostrarDashboard no refresca (diferido)
   FDashboard: TfrmDashboard;
   FVistaGantt: TfrmVistaGantt;
+  FVistaProyectos: TfrmVistaProyectos;   // Modulo de Proyectos (paradigma TAREAS)
   FFiniteCapacity: TfrmFiniteCapacityPlanner;
   FBacklog: uBacklog.TfrmBacklog;
   FFiniteOps: uFiniteCapacityOperaris.TfrmFiniteCapacityOperaris;
@@ -875,6 +878,61 @@ begin
       //OcultarDashboard;
       MostrarVistaGantt;
     end);
+end;
+
+// Abre el Modulo de Proyectos (paradigma TAREAS, estilo MS Project). Fase 1:
+// abre el proyecto de paradigma TAREAS (el activo si lo es, si no el primero
+// que exista). Vista modal de solo lectura.
+procedure TForm1.btnTB_ProyectosClick(Sender: TObject);
+var
+  Q: TADOQuery;
+  Pid: Integer;
+begin
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+
+  Pid := 0;
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    // Preferir el proyecto activo si es TAREAS; si no, el primero TAREAS.
+    Q.SQL.Text :=
+      'SELECT TOP 1 ProjectId FROM FS_PL_Project ' +
+      'WHERE CodigoEmpresa = :CE AND PlanningParadigm = ''TAREAS'' ' +
+      'ORDER BY CASE WHEN ProjectId = :Act THEN 0 ELSE 1 END, ProjectId';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('Act').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    if not Q.Eof then Pid := Q.Fields[0].AsInteger;
+  finally
+    Q.Free;
+  end;
+
+  if Pid <= 0 then
+  begin
+    ShowMessage('No hay ning'#250'n proyecto en modo de planificaci'#243'n por '+
+      'TAREAS (estilo MS Project).'#13#10#13#10 +
+      'Crea uno o cambia el paradigma de un proyecto a TAREAS en Gesti'#243'n de '+
+      'Proyectos.');
+    Exit;
+  end;
+
+  // Vista embebida en el Main (como uVistaGantt), no modal.
+  if FVistaProyectos = nil then
+  begin
+    FVistaProyectos := TfrmVistaProyectos.Create(Self);
+    FVistaProyectos.Parent := Self;
+    FVistaProyectos.Align := alClient;
+  end;
+  FVistaProyectos.Inicializar(Pid);
+
+  // Ocultar las demas vistas embebidas.
+  if Assigned(FVistaGantt) then     FVistaGantt.Visible := False;
+  if Assigned(FFiniteCapacity) then FFiniteCapacity.Visible := False;
+  if Assigned(FDashboard) then      FDashboard.Visible := False;
+  if Assigned(FBacklog) then        FBacklog.Visible := False;
+  if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
+  FVistaProyectos.Visible := True;
+  FVistaProyectos.BringToFront;
 end;
 
 procedure TForm1.Moldes1Click(Sender: TObject);
@@ -1471,6 +1529,7 @@ begin
   if Assigned(FVistaGantt) then    FVistaGantt.Visible := False;
   if Assigned(FBacklog) then       FBacklog.Visible := False;
   if Assigned(FFiniteOps) then     FFiniteOps.Visible := False;
+  if Assigned(FVistaProyectos) then FVistaProyectos.Visible := False;
   FDashboard.Visible := True;
   FDashboard.BringToFront;
   // Durante el arranque NO refrescamos aqui: lo hace RefrescoArranqueDiferido
@@ -1588,6 +1647,7 @@ begin
   if Assigned(FDashboard) then      FDashboard.Visible := False;
   if Assigned(FBacklog) then        FBacklog.Visible := False;
   if Assigned(FFiniteOps) then      FFiniteOps.Visible := False;
+  if Assigned(FVistaProyectos) then FVistaProyectos.Visible := False;
   FVistaGantt.Visible := True;
   FVistaGantt.BringToFront;
 end;

@@ -125,6 +125,7 @@ type
     FKPICuelloBotella: TObject;// saturacion del centro mas cargado
     FKPIStockOk: TObject;      // % de OFs con material suficiente (cobertura)
     FKPIRotura: TObject;       // % de OFs con rotura de stock a su fecha
+    FKPIUtilConflicto: TObject;// nº de utillajes con solapes > Cantidad (R02)
     // Periodo mostrado en las sparklines. Valores especiales: RANGO_SEMANA para
     // "esta semana" (desde el lunes); >0 = numero de dias (7/30/90).
     FRangoDias: Integer;
@@ -247,6 +248,8 @@ type
     procedure RefrescarSalud;
     // KPIs avanzados: OTIF, saturacion operarios, centro cuello de botella.
     procedure RefrescarKPIsAvanzados;
+    // Nº de utillajes con solapes por encima de su Cantidad (conflicto R02).
+    function ContarUtillajesEnConflicto: Integer;
     // KPIs de cobertura de material: % OFs con stock suficiente / con rotura.
     // De momento solo con datos DEMO; en real muestra N/D (calculo real PENDIENTE).
     procedure RefrescarKPIsStock;
@@ -311,6 +314,16 @@ const
   CARD_MARGIN = 14;
   CARD_MIN_W = 190;   // ancho minimo de una card antes de reducir columnas
   CARD_MAX_W = 300;   // ancho maximo (evita cards gigantes en pantallas anchas)
+
+type
+  // Intervalo de uso de un utillaje (para ContarUtillajesEnConflicto). A nivel
+  // de unidad y no local a la funcion: TList<T> con un tipo local complica la
+  // RTTI de genericos en Delphi 11.
+  TIntervaloUtil = record
+    StartDT: TDateTime;
+    EndDT: TDateTime;
+  end;
+
 procedure TfrmDashboard.FormCreate(Sender: TObject);
 begin
   FRangoDias := 14;   // periodo por defecto (se puede sobreescribir por pref)
@@ -791,6 +804,9 @@ begin
   FKPISatOperarios := NewCard('SatOperarios', 'Saturaci'#243'n operarios',
     'Ocupaci'#243'n media de los operarios respecto a su jornada.', 'Recursos',
     kctAmbar, '%', '%.0f');
+  FKPIUtilConflicto := NewCard('UtilConflicto', 'Utillajes en conflicto',
+    'Utillajes que dos o m'#225's nodos usan a la vez por encima de su capacidad.',
+    'Recursos', kctRojo);
 
   // -- Materiales (cobertura de stock) --
   FKPIStockOk    := NewCard('StockOk', 'OFs con stock suficiente',
@@ -944,6 +960,19 @@ begin
     'existencias, no por capacidad. Es la lista de trabajo de compras: prioriza '+
     'las reposiciones de los materiales que bloquean m'#225's '#243'rdenes y con fecha '+
     'm'#225's cercana.';
+
+  TKPICard(FKPIUtilConflicto).DescAmpliada :=
+    'N'#250'mero de utillajes que en alg'#250'n momento del plan est'#225'n asignados a m'#225's '+
+    'nodos simult'#225'neos de los ejemplares que existen (su Cantidad). Un utillaje '+
+    'con una sola unidad no puede usarse en dos operaciones que se solapan en el '+
+    'tiempo; si el plan lo hace, es un conflicto real de recurso.'#13#10#13#10+
+    'Cuando la planificaci'#243'n se hace desde el Backlog, el motor respeta esta '+
+    'restricci'#243'n y este indicador deber'#237'a ser 0. Si aparece un valor mayor, '+
+    'significa que algo ha colocado nodos saltando la restricci'#243'n (el '+
+    'optimizador o una carga de demostraci'#243'n): hay que revisar esos utillajes '+
+    'antes de dar el plan por bueno. Para VERLO en detalle, abre el Gantt en modo '+
+    'de vista UTILLAJES (una fila por utillaje): las filas en conflicto se marcan '+
+    'y las barras solapadas quedan a la vista.';
 end;
 
 procedure TfrmDashboard.pnlMetricasResize(Sender: TObject);
@@ -3117,6 +3146,7 @@ begin
     SetKPI(FKPIOtif, 0, SerieKPI('Otif', 0), '%');
     SetKPI(FKPICuelloBotella, 0, SerieKPI('CuelloBotella', 0), '%');
     SetKPI(FKPISatOperarios, 0, SerieKPI('SatOperarios', 0), '%');
+    SetKPI(FKPIUtilConflicto, 0, SerieKPI('UtilConflicto', 0), '');
     Exit;
   end;
 
@@ -3130,6 +3160,11 @@ begin
     SetKPI(FKPIOtif,          Otif,   SerieKPI('Otif', Otif), '%');
     SetKPI(FKPICuelloBotella, Cuello, SerieKPI('CuelloBotella', Cuello), '%');
     SetKPI(FKPISatOperarios,  SatOp,  SerieKPI('SatOperarios', SatOp), '%');
+    // En Demo el plan demo genera conflictos a proposito (uDemoPlanEngine no
+    // pasa por la restriccion): mostramos un valor > 0 para que el KPI se vea
+    // "vivo" y coherente con la alerta R02.
+    TKPICard(FKPIUtilConflicto).ColorTone := kctRojo;
+    SetKPI(FKPIUtilConflicto, 3, SerieKPI('UtilConflicto', 3), '');
     Exit;
   end;
 
@@ -3244,12 +3279,125 @@ begin
   else if Otif >= 80 then TKPICard(FKPIOtif).ColorTone := kctAmbar
   else TKPICard(FKPIOtif).ColorTone := kctRojo;
 
+  // ---- Utillajes en conflicto: cuantos utillajes tienen, en algun instante,
+  // mas nodos solapados que su Cantidad. Deberia ser 0 si todo se planifico
+  // desde el Backlog; > 0 avisa de que alguien se salto la restriccion R02. ----
+  var UtilConf: Integer := ContarUtillajesEnConflicto;
+  if UtilConf > 0 then TKPICard(FKPIUtilConflicto).ColorTone := kctRojo
+  else TKPICard(FKPIUtilConflicto).ColorTone := kctVerde;
+
   // Registrar en el historico y pintar.
-  UpsertMetricDia(['Otif', 'CuelloBotella', 'SatOperarios'],
-    [Otif, Cuello, SatOp]);
+  UpsertMetricDia(['Otif', 'CuelloBotella', 'SatOperarios', 'UtilConflicto'],
+    [Otif, Cuello, SatOp, UtilConf]);
   SetKPI(FKPIOtif,          Otif,   SerieKPI('Otif', Otif), '%');
   SetKPI(FKPICuelloBotella, Cuello, SerieKPI('CuelloBotella', Cuello), '%');
   SetKPI(FKPISatOperarios,  SatOp,  SerieKPI('SatOperarios', SatOp), '%');
+  SetKPI(FKPIUtilConflicto, UtilConf, SerieKPI('UtilConflicto', UtilConf), '');
+end;
+
+// Cuenta los utillajes que en algun instante del plan estan asignados a mas
+// nodos simultaneos que ejemplares tiene (Cantidad). Mismo criterio que la
+// restriccion dura del motor y la alerta R02, calculado en memoria: se traen
+// los intervalos (utillaje, inicio, fin) del proyecto y, por utillaje, un
+// barrido por eventos detecta si el maximo de solapes supera la capacidad.
+function TfrmDashboard.ContarUtillajesEnConflicto: Integer;
+var
+  Q: TADOQuery;
+  CE, PID: string;
+  Intervalos: TDictionary<Integer, TList<TIntervaloUtil>>;
+  Cantidades: TDictionary<Integer, Integer>;
+  UtilId, Cap, I, J, Simult: Integer;
+  L: TList<TIntervaloUtil>;
+  Iv: TIntervaloUtil;
+  Conflicto: Boolean;
+  Pair: TPair<Integer, TList<TIntervaloUtil>>;
+begin
+  Result := 0;
+  if (not DMPlanner.IsConnected) or (DMPlanner.CurrentProjectId <= 0) then Exit;
+  CE := IntToStr(DMPlanner.CodigoEmpresa);
+  PID := IntToStr(DMPlanner.CurrentProjectId);
+
+  Intervalos := TDictionary<Integer, TList<TIntervaloUtil>>.Create;
+  Cantidades := TDictionary<Integer, Integer>.Create;
+  try
+    // Capacidad de cada utillaje.
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT UtillajeId, Cantidad FROM FS_PL_Utillaje ' +
+        'WHERE CodigoEmpresa=' + CE;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Cantidades.AddOrSetValue(Q.FieldByName('UtillajeId').AsInteger,
+          Max(1, Q.FieldByName('Cantidad').AsInteger));
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    // Intervalos (utillaje, inicio, fin) de los nodos que lo requieren. Solo
+    // requisitos obligatorios: los mismos que respeta el motor.
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := DMPlanner.ADOConnection;
+      Q.SQL.Text :=
+        'SELECT v.UtillajeId, n.FechaInicio, n.FechaFin ' +
+        'FROM FS_PL_V_NodeUtillaje v ' +
+        'JOIN FS_PL_Node n ON n.CodigoEmpresa=v.CodigoEmpresa AND n.NodeId=v.NodeId ' +
+        'WHERE v.CodigoEmpresa=' + CE + ' AND v.ProjectId=' + PID +
+        '  AND v.Obligatorio=1 ' +
+        '  AND n.FechaInicio IS NOT NULL AND n.FechaFin > n.FechaInicio';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        UtilId := Q.FieldByName('UtillajeId').AsInteger;
+        Iv.StartDT := Q.FieldByName('FechaInicio').AsDateTime;
+        Iv.EndDT := Q.FieldByName('FechaFin').AsDateTime;
+        if not Intervalos.TryGetValue(UtilId, L) then
+        begin
+          L := TList<TIntervaloUtil>.Create;
+          Intervalos.Add(UtilId, L);
+        end;
+        L.Add(Iv);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    // Por utillaje: si algun instante tiene mas solapes que Cantidad, cuenta.
+    for Pair in Intervalos do
+    begin
+      UtilId := Pair.Key;
+      L := Pair.Value;
+      if not Cantidades.TryGetValue(UtilId, Cap) then Cap := 1;
+
+      Conflicto := False;
+      // O(k^2) por utillaje: para cada intervalo, cuenta cuantos otros lo
+      // solapan. k = nodos que usan ese utillaje (pequeno en la practica).
+      for I := 0 to L.Count - 1 do
+      begin
+        Simult := 1;
+        for J := 0 to L.Count - 1 do
+          if (J <> I) and (L[J].StartDT < L[I].EndDT) and (L[J].EndDT > L[I].StartDT) then
+            Inc(Simult);
+        if Simult > Cap then
+        begin
+          Conflicto := True;
+          Break;
+        end;
+      end;
+      if Conflicto then Inc(Result);
+    end;
+  finally
+    for L in Intervalos.Values do
+      L.Free;
+    Intervalos.Free;
+    Cantidades.Free;
+  end;
 end;
 
 procedure TfrmDashboard.RefrescarKPIsStock;

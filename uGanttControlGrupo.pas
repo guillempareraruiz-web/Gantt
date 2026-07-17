@@ -35,8 +35,9 @@ type
 
     // Resuelve clave y caption del grupo al que pertenece un nodo segun
     // FNivelAgrupacion. Devuelve False si no se pudo resolver.
+    // Virtual: subclases (p.ej. TGanttControlClientes) agrupan por otra clave.
     function ResolveNodeGroup(const ANodeIndex: Integer;
-      out AClave, ACaption: string): Boolean;
+      out AClave, ACaption: string): Boolean; virtual;
 
     // Reordena un rango de FNodeLayouts por Rect.Left ascendente. Necesario
     // en modo GRUPO porque el packing con lanes dinamicas puede dejar Left
@@ -54,6 +55,13 @@ type
     // y no se pintaria ninguna fila. Aqui lo forzamos a True si el indice
     // de fila es valido.
     function IsRowVisible(const ARowIndex: Integer): Boolean; override;
+
+    // Vista de agrupacion SOLO LECTURA. Decision de producto (2026-07-17):
+    // editar aqui implicaria un motor de planificacion distinto (project-based,
+    // por fechas y dependencias, estilo MS Project), no el de recursos/centros
+    // con secuencialidad. Mientras eso sea un paradigma aparte, esta vista es de
+    // consulta. Ver memoria project_gantt_planning_paradigm.
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
 
     function GetGroupClave(const ARowIndex: Integer): string;
     function GetGroupCaption(const ARowIndex: Integer): string;
@@ -106,7 +114,35 @@ begin
     ACaption := D.Nivel1Caption;
   end;
 
-  if AClave = '' then
+  // Fallback cuando los campos de nivel ERP no estan poblados (p.ej. el modo
+  // Demo, cuyos nodos no rellenan Nivel1/Nivel2ClaveERP): agrupar por la OF o
+  // por la operacion, que si estan. Asi la vista GRUPO no cae toda a "(sin
+  // agrupar)" y sigue teniendo sentido.
+  if Trim(AClave) = '' then
+  begin
+    if FNivelAgrupacion = 2 then
+    begin
+      // Nivel 2: por operacion (OT/tarea). Usamos el nombre de la operacion.
+      if Trim(D.Operacion) <> '' then
+      begin
+        AClave := 'OP:' + Trim(D.Operacion);
+        ACaption := D.Operacion;
+      end;
+    end
+    else
+    begin
+      // Nivel 1: por orden de fabricacion.
+      if D.NumeroOrdenFabricacion > 0 then
+      begin
+        AClave := 'OF:' + IntToStr(D.NumeroOrdenFabricacion);
+        ACaption := 'OF ' + IntToStr(D.NumeroOrdenFabricacion);
+        if Trim(D.SerieFabricacion) <> '' then
+          ACaption := ACaption + '/' + D.SerieFabricacion;
+      end;
+    end;
+  end;
+
+  if Trim(AClave) = '' then
   begin
     AClave := '__NOGROUP__';
     ACaption := '(sin agrupar)';
@@ -125,6 +161,18 @@ end;
 function TGanttControlGrupo.IsRowVisible(const ARowIndex: Integer): Boolean;
 begin
   Result := (ARowIndex >= 0) and (ARowIndex <= High(FRows));
+end;
+
+procedure TGanttControlGrupo.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  // Solo lectura (ver comentario en la declaracion): cortamos el arranque de
+  // drag anulando el nodo pulsado. El resto (hover, panning, seleccion) sigue.
+  if ssLeft in Shift then
+  begin
+    FMouseDownNodeIndex := -1;
+    FMouseDownOnHandle := nhNone;
+  end;
+  inherited MouseMove(Shift, X, Y);
 end;
 
 procedure TGanttControlGrupo.SortRowNodeLayoutsByLeft(AFirst, ALast: Integer);
