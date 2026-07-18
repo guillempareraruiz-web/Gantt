@@ -160,7 +160,8 @@ uses
   uSnapshotRepo in 'uSnapshotRepo.pas',
   uRestorePoints in 'uRestorePoints.pas' {frmRestorePoints},
   uAlertasViewer in 'uAlertasViewer.pas' {frmAlertasViewer},
-  uAlertConfig in 'uAlertConfig.pas' {frmAlertConfig};
+  uAlertConfig in 'uAlertConfig.pas' {frmAlertConfig},
+  uVistaProyectos in 'uVistaProyectos.pas' {frmVistaProyectos};
 
 {$R *.res}
 

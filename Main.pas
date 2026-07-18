@@ -909,10 +909,10 @@ begin
 
   if Pid <= 0 then
   begin
-    ShowMessage('No hay ning'#250'n proyecto en modo de planificaci'#243'n por '+
-      'TAREAS (estilo MS Project).'#13#10#13#10 +
-      'Crea uno o cambia el paradigma de un proyecto a TAREAS en Gesti'#243'n de '+
-      'Proyectos.');
+    ShowMessage('No hay ning'#250'n plan con planificaci'#243'n por TAREAS, que es la '+
+      'que usa el m'#243'dulo de Ingenier'#237'a.'#13#10#13#10 +
+      'Crea uno nuevo o cambia el tipo de planificaci'#243'n de un plan existente '+
+      'a TAREAS desde Archivo > Planes.');
     Exit;
   end;
 

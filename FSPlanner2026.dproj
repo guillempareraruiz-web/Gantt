@@ -108,16 +108,6 @@
         <DCCReference Include="uGanttTypes.pas"/>
         <DCCReference Include="uGanttControl.pas"/>
         <DCCReference Include="uGanttControlGrupo.pas"/>
-        <DCCReference Include="uGanttControlUtillajes.pas"/>
-        <DCCReference Include="uGanttControlClientes.pas"/>
-        <DCCReference Include="uGanttControlOperarios.pas"/>
-        <DCCReference Include="uGanttControlTareas.pas"/>
-        <DCCReference Include="uRowFilterDialog.pas"/>
-        <DCCReference Include="uWbsTypes.pas"/>
-        <DCCReference Include="uWbsRepo.pas"/>
-        <DCCReference Include="uVistaProyectos.pas">
-          <Form>frmVistaProyectos</Form>
-        </DCCReference>
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>
@@ -200,14 +190,9 @@
             <Form>frmGestionMoldes</Form>
         </DCCReference>
         <DCCReference Include="uMoldeRepoSQL.pas"/>
-        <DCCReference Include="uUtillajeTypes.pas"/>
         <DCCReference Include="uUtillajesRepo.pas"/>
-        <DCCReference Include="uDemoUtillajes.pas"/>
         <DCCReference Include="uGestionUtillajes.pas">
             <Form>frmGestionUtillajes</Form>
-        </DCCReference>
-        <DCCReference Include="uUtillajeFicha.pas">
-            <Form>frmUtillajeFicha</Form>
         </DCCReference>
         <DCCReference Include="uUtillajePicker.pas">
             <Form>frmUtillajePicker</Form>
@@ -488,27 +473,11 @@
             <Form>frmNodeLayoutEditor</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="Nesting2D\uNesting2DTypes.pas"/>
-        <DCCReference Include="Nesting2D\uNesting2DEngine.pas"/>
-        <DCCReference Include="Nesting2D\uNesting2DDxf.pas"/>
-        <DCCReference Include="Nesting2D\uNesting2DPoligonoEditor.pas">
-            <Form>frmPoligonoEditor</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="Nesting2D\uNesting2D.pas">
-            <Form>frmNesting2D</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
-        <DCCReference Include="Nesting2D\uOptimizacionHub.pas">
-            <Form>frmOptimizacionHub</Form>
-            <FormType>dfm</FormType>
-        </DCCReference>
         <DCCReference Include="uNodeLayoutSetRepo.pas"/>
         <DCCReference Include="uGanttAlertas.pas"/>
         <DCCReference Include="uAlertRulesRepo.pas"/>
         <DCCReference Include="uPlanSnapshot.pas"/>
         <DCCReference Include="uSnapshotRepo.pas"/>
-        <DCCReference Include="uSetupRules.pas"/>
         <DCCReference Include="uRestorePoints.pas">
             <Form>frmRestorePoints</Form>
             <FormType>dfm</FormType>
@@ -521,6 +490,15 @@
             <Form>frmAlertConfig</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="uVistaProyectos.pas">
+            <Form>frmVistaProyectos</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uWbsTypes.pas"/>
+        <DCCReference Include="uWbsRepo.pas"/>
+        <DCCReference Include="uWbsScheduler.pas"/>
+        <DCCReference Include="uWbsTareaEdit.pas"/>
+        <DCCReference Include="uWbsCargaBand.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -543,13 +521,13 @@
                 </Source>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="Win32\Release\FSPlanner2026.exe" Configuration="Release" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\FSPlanner2026.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>FSPlanner2026.exe</RemoteName>
                         <Overwrite>true</Overwrite>

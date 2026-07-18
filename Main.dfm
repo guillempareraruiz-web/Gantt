@@ -85,11 +85,10 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 2
       OnClick = FiniteCapacity1Click
-      ExplicitLeft = 249
     end
     object cxButton1: TcxButton
       AlignWithMargins = True
-      Left = 586
+      Left = 683
       Top = 5
       Width = 75
       Height = 23
@@ -105,7 +104,7 @@ object Form1: TForm1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
       TabOrder = 3
-      ExplicitLeft = 631
+      ExplicitLeft = 667
     end
     object btnTB_PlaniOperarios: TcxButton
       AlignWithMargins = True
@@ -125,18 +124,17 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 4
       OnClick = FiniteCapacityOperaris1Click
-      ExplicitLeft = 330
     end
     object btnTB_PlaniGantt: TcxButton
       AlignWithMargins = True
       Left = 381
       Top = 5
-      Width = 60
+      Width = 76
       Height = 23
       Margins.Top = 5
       Margins.Bottom = 5
       Align = alLeft
-      Caption = 'Gantt'
+      Caption = 'Producci'#243'n'
       LookAndFeel.Kind = lfOffice11
       LookAndFeel.NativeStyle = False
       LookAndFeel.SkinName = 'Office2007Blue'
@@ -148,22 +146,23 @@ object Form1: TForm1
     end
     object btnTB_Proyectos: TcxButton
       AlignWithMargins = True
-      Left = 447
+      Left = 463
       Top = 5
       Width = 75
       Height = 23
       Margins.Top = 5
       Margins.Bottom = 5
       Align = alLeft
-      Caption = 'Proyectos'
+      Caption = 'Ingenier'#237'a'
       LookAndFeel.Kind = lfOffice11
       LookAndFeel.NativeStyle = False
       LookAndFeel.SkinName = 'Office2007Blue'
       SpeedButtonOptions.GroupIndex = 1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
-      TabOrder = 8
+      TabOrder = 11
       OnClick = btnTB_ProyectosClick
+      ExplicitLeft = 447
     end
     object btnTB_Help: TcxButton
       AlignWithMargins = True
@@ -254,7 +253,7 @@ object Form1: TForm1
     end
     object btnTB_PlaniAlertas: TcxButton
       AlignWithMargins = True
-      Left = 447
+      Left = 544
       Top = 5
       Width = 133
       Height = 23
@@ -272,7 +271,7 @@ object Form1: TForm1
       SpeedButtonOptions.Flat = True
       TabOrder = 9
       OnClick = btnTB_PlaniAlertasClick
-      ExplicitLeft = 492
+      ExplicitLeft = 528
     end
   end
   object tmr1Sec: TTimer
@@ -289,7 +288,7 @@ object Form1: TForm1
         Caption = '-'
       end
       object Proyectos1: TMenuItem
-        Caption = 'Proyectos...'
+        Caption = 'Planes...'
         OnClick = Proyectos1Click
       end
       object PuntosRestauracion1: TMenuItem
@@ -378,7 +377,7 @@ object Form1: TForm1
         OnClick = Dashboard1Click
       end
       object MnGantt: TMenuItem
-        Caption = 'Gantt'
+        Caption = 'Producci'#243'n'
         OnClick = MnGanttClick
       end
       object Kanban1: TMenuItem

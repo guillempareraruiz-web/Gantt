@@ -50,24 +50,31 @@ DECLARE @PID INT = SCOPE_IDENTITY();
 
 -- ---- 2. Definicion logica de la WBS ----------------------------------------
 -- n = numero logico ; parent = numero logico del padre (NULL raiz)
+-- avanceP = fraccion de la duracion ya invertida (V079). Solo en las HOJAS:
+-- el avance de los resumenes lo agrega el motor ponderando por duracion.
+-- El demo simula un proyecto a medio ejecutar: ingenieria acabada, calculo
+-- estructural con una desviacion (1.15 = 15% mas de lo estimado), fabricacion
+-- empezada y montaje/entrega aun sin tocar.
 DECLARE @T TABLE (
   n INT PRIMARY KEY, parent INT, kind TINYINT, orden INT, cap NVARCHAR(120),
-  diaIni INT, durDias DECIMAL(6,2), NodeId INT NULL
+  diaIni INT, durDias DECIMAL(6,2), avanceP DECIMAL(5,3), NodeId INT NULL
 );
-INSERT INTO @T (n, parent, kind, orden, cap, diaIni, durDias) VALUES
- (1,  NULL, 1, 1, N'1'+NCHAR(183)+N' Ingenier'+NCHAR(237)+N'a de detalle',    0,  18),
- (2,  1,    1, 1, N'1.1'+NCHAR(183)+N' C'+NCHAR(225)+N'lculo estructural',    0,   6),
- (3,  2,    0, 1, N'1.1.1'+NCHAR(183)+N' Modelo FEM',                          0,   4),
- (4,  2,    0, 2, N'1.1.2'+NCHAR(183)+N' Validaci'+NCHAR(243)+N'n de cargas',  4,   2),
- (5,  1,    0, 2, N'1.2'+NCHAR(183)+N' Dise'+NCHAR(241)+N'o mec'+NCHAR(225)+N'nico', 0, 8),
- (6,  1,    2, 3, N'Dise'+NCHAR(241)+N'o congelado',              8,   0),
- (7,  NULL, 1, 2, N'2'+NCHAR(183)+N' Aprovisionamiento',                       8,  12),
- (8,  7,    0, 1, N'2.1'+NCHAR(183)+N' Pedido material largo plazo',           8,   2),
- (9,  7,    0, 2, N'2.2'+NCHAR(183)+N' Recepci'+NCHAR(243)+N'n de material',  18,   1),
- (10, NULL, 1, 3, N'3'+NCHAR(183)+N' Fabricaci'+NCHAR(243)+N'n (genera OFs)',  19,  22),
- (11, 10,   0, 1, N'3.1'+NCHAR(183)+N' Mecanizado',                           19,  12),
- (12, 10,   0, 2, N'3.2'+NCHAR(183)+N' Montaje',                              31,  10),
- (13, NULL, 2, 4, N'Entrega',                                    41,   0);
+INSERT INTO @T (n, parent, kind, orden, cap, diaIni, durDias, avanceP) VALUES
+ (1,  NULL, 1, 1, N'1'+NCHAR(183)+N' Ingenier'+NCHAR(237)+N'a de detalle',    0,  18, 0),
+ (2,  1,    1, 1, N'1.1'+NCHAR(183)+N' C'+NCHAR(225)+N'lculo estructural',    0,   6, 0),
+ (3,  2,    0, 1, N'1.1.1'+NCHAR(183)+N' Modelo FEM',                          0,   4, 1.000),
+ (4,  2,    0, 2, N'1.1.2'+NCHAR(183)+N' Validaci'+NCHAR(243)+N'n de cargas',  4,   2, 1.150),
+ (5,  1,    0, 2, N'1.2'+NCHAR(183)+N' Dise'+NCHAR(241)+N'o mec'+NCHAR(225)+N'nico', 0, 8, 1.000),
+ -- Los hitos no consumen tiempo: su avance se queda en 0 (se alcanzan o no,
+ -- y eso lo dice la fecha, no las horas invertidas).
+ (6,  1,    2, 3, N'Dise'+NCHAR(241)+N'o congelado',              8,   0, 0),
+ (7,  NULL, 1, 2, N'2'+NCHAR(183)+N' Aprovisionamiento',                       8,  12, 0),
+ (8,  7,    0, 1, N'2.1'+NCHAR(183)+N' Pedido material largo plazo',           8,   2, 1.000),
+ (9,  7,    0, 2, N'2.2'+NCHAR(183)+N' Recepci'+NCHAR(243)+N'n de material',  18,   1, 1.000),
+ (10, NULL, 1, 3, N'3'+NCHAR(183)+N' Fabricaci'+NCHAR(243)+N'n (genera OFs)',  19,  22, 0),
+ (11, 10,   0, 1, N'3.1'+NCHAR(183)+N' Mecanizado',                           19,  12, 0.600),
+ (12, 10,   0, 2, N'3.2'+NCHAR(183)+N' Montaje',                              31,  10, 0),
+ (13, NULL, 2, 4, N'Entrega',                                    41,   0, 0);
 
 -- ---- 3. Insertar nodos capturando el NodeId real de cada uno ---------------
 -- Se insertan de uno en uno (WHILE) para poder mapear n -> NodeId con
@@ -76,19 +83,25 @@ DECLARE @n INT = 1, @maxN INT = (SELECT MAX(n) FROM @T);
 WHILE @n <= @maxN
 BEGIN
     DECLARE @kind TINYINT, @orden INT, @cap NVARCHAR(120), @diaIni INT,
-            @durDias DECIMAL(6,2);
-    SELECT @kind=kind, @orden=orden, @cap=cap, @diaIni=diaIni, @durDias=durDias
+            @durDias DECIMAL(6,2), @avanceP DECIMAL(5,3);
+    SELECT @kind=kind, @orden=orden, @cap=cap, @diaIni=diaIni, @durDias=durDias,
+           @avanceP=avanceP
       FROM @T WHERE n=@n;
 
     INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId,
         FechaInicio, FechaFin, DuracionMin, Caption, Visible, Habilitado,
-        Source, ParentTaskId, TaskKind, Collapsed, ConstraintKind, OrdenWBS)
+        Source, ParentTaskId, TaskKind, Collapsed, ConstraintKind, OrdenWBS,
+        MinutosInvertidos)
     VALUES (@CE, @PID, NULL,
         DATEADD(MINUTE, @diaIni * @Jornada, @Ini),
         DATEADD(MINUTE, CAST((@diaIni + @durDias) * @Jornada AS INT), @Ini),
         @durDias * @Jornada, @cap, 1, 1, 'MAN',
         NULL,               -- ParentTaskId se rellena en el paso 4 (ya con ids)
-        @kind, 0, 0, @orden);
+        @kind, 0, 0, @orden,
+        -- Tiempo invertido = fraccion de avance sobre la duracion estimada.
+        -- Un hito (durDias=0) con avance 1 se queda en 0 minutos, que es
+        -- correcto: un hito se alcanza, no se trabaja.
+        @durDias * @Jornada * @avanceP);
 
     UPDATE @T SET NodeId = SCOPE_IDENTITY() WHERE n=@n;
     SET @n += 1;

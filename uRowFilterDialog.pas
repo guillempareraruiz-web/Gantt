@@ -37,6 +37,11 @@ type
     Clave: string;
     Caption: string;
     Count: Integer;
+    // Estado inicial de la casilla. Por defecto (False) el dialogo arranca con
+    // TODO marcado, que es lo que quiere un filtro ("no filtrar nada"); si el
+    // llamante pone PreseleccionValida = True en alguno, entonces manda este
+    // campo y solo se marcan los que lo traigan a True.
+    Marcado: Boolean;
   end;
   TRowFilterItems = TArray<TRowFilterItem>;
 
@@ -257,6 +262,22 @@ begin
     Dlg.BuildUI;
     Dlg.Caption := ATitulo;
     Dlg.FItems := AItems;
+
+    // Preseleccion: si ALGUN item viene con Marcado = True, el llamante esta
+    // diciendo cual es el estado inicial y se respeta tal cual. Si no viene
+    // ninguno (el caso de los filtros de RowMode), se arranca con todo marcado,
+    // que es el comportamiento de siempre: "no filtrar nada".
+    Chk := False;
+    for I := 0 to High(AItems) do
+      if AItems[I].Marcado then
+      begin
+        Chk := True;
+        Break;
+      end;
+    for I := 0 to High(AItems) do
+      Dlg.FChecked.AddOrSetValue(AItems[I].Clave,
+        (not Chk) or AItems[I].Marcado);
+
     Dlg.RepoblarLista;   // primer pintado (sin filtro)
 
     Result := Dlg.ShowModal = mrOk;
