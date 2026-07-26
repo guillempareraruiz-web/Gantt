@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FS Planner v2 — Situació competitiva</title>
+
+<style>
+  :root {
+    color-scheme: light dark;
+
+    /* Neutres amb biaix fred: el món dels diagrames de planta i les eines
+       industrials. Un gris pur hauria semblat no triat. */
+    --ink:        #12161C;
+    --ink-2:      #39424F;
+    --ink-3:      #6B7684;
+    --rule:       #DDE2E9;
+    --rule-soft:  #EBEEF3;
+    --bg:         #F4F6F9;
+    --surface:    #FFFFFF;
+    --surface-2:  #FAFBFC;
+
+    --accent:     #1F5FA8;
+    --accent-ink: #17497F;
+    --accent-wash:#E7EFF8;
+
+    /* Semàntica separada de l'accent. */
+    --lead:       #1F6B48;
+    --lead-wash:  #E4F0EA;
+    --par:        #8A6100;
+    --par-wash:   #F7EFDD;
+    --gap:        #9C3535;
+    --gap-wash:   #F7E6E6;
+
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --cond: "Oswald", "Archivo Narrow", "Segoe UI Semibold", Impact, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:        #E6EAF0;
+      --ink-2:      #B3BCCA;
+      --ink-3:      #7D8899;
+      --rule:       #2B3340;
+      --rule-soft:  #212836;
+      --bg:         #0E1218;
+      --surface:    #161C25;
+      --surface-2:  #1A212B;
+
+      --accent:     #6BA5E7;
+      --accent-ink: #9CC4F0;
+      --accent-wash:#1A2A3D;
+
+      --lead:       #6FC79A;
+      --lead-wash:  #162C22;
+      --par:        #D7A93F;
+      --par-wash:   #2E2617;
+      --gap:        #E38080;
+      --gap-wash:   #331E1E;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink:#E6EAF0; --ink-2:#B3BCCA; --ink-3:#7D8899;
+    --rule:#2B3340; --rule-soft:#212836;
+    --bg:#0E1218; --surface:#161C25; --surface-2:#1A212B;
+    --accent:#6BA5E7; --accent-ink:#9CC4F0; --accent-wash:#1A2A3D;
+    --lead:#6FC79A; --lead-wash:#162C22;
+    --par:#D7A93F;  --par-wash:#2E2617;
+    --gap:#E38080;  --gap-wash:#331E1E;
+  }
+  :root[data-theme="light"] {
+    --ink:#12161C; --ink-2:#39424F; --ink-3:#6B7684;
+    --rule:#DDE2E9; --rule-soft:#EBEEF3;
+    --bg:#F4F6F9; --surface:#FFFFFF; --surface-2:#FAFBFC;
+    --accent:#1F5FA8; --accent-ink:#17497F; --accent-wash:#E7EFF8;
+    --lead:#1F6B48; --lead-wash:#E4F0EA;
+    --par:#8A6100;  --par-wash:#F7EFDD;
+    --gap:#9C3535;  --gap-wash:#F7E6E6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 100px; }
+
+  /* ── Capçalera ─────────────────────────────────────────────── */
+  header {
+    border-bottom: 2px solid var(--ink);
+    padding: 52px 0 26px;
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: var(--cond);
+    font-size: clamp(34px, 5.2vw, 56px);
+    line-height: 1.02;
+    letter-spacing: -.015em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+    font-weight: 600;
+  }
+  .standfirst {
+    font-size: 18px;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .meta {
+    margin-top: 26px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 30px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+
+  /* ── Seccions ──────────────────────────────────────────────── */
+  section { margin-bottom: 60px; }
+  h2 {
+    font-family: var(--cond);
+    font-size: 13px;
+    letter-spacing: .17em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  .sec-lede {
+    color: var(--ink-2);
+    max-width: 68ch;
+    margin: 0 0 26px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-family: var(--cond);
+    font-size: 21px;
+    font-weight: 600;
+    margin: 34px 0 10px;
+    letter-spacing: -.005em;
+  }
+
+  /* ── La tesi ───────────────────────────────────────────────── */
+  .thesis {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 26px 30px;
+    margin-bottom: 46px;
+  }
+  .thesis p { margin: 0 0 12px; max-width: 70ch; }
+  .thesis p:last-child { margin-bottom: 0; }
+  .thesis strong { color: var(--accent-ink); }
+
+  /* ── Verdict cards ─────────────────────────────────────────── */
+  .verdicts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 20px;
+  }
+  .vc { background: var(--surface); padding: 20px 22px; }
+  .vc-n {
+    font-family: var(--cond);
+    font-size: 40px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 4px;
+  }
+  .vc-n.lead { color: var(--lead); }
+  .vc-n.par  { color: var(--par); }
+  .vc-n.gap  { color: var(--gap); }
+  .vc-l {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .vc-d { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+
+  /* ── Taules ────────────────────────────────────────────────── */
+  .scroller { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 800px; font-size: 13.5px; }
+  thead th {
+    background: var(--surface-2);
+    border-bottom: 2px solid var(--rule);
+    padding: 11px 14px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+  thead th.us { color: var(--accent-ink); background: var(--accent-wash); }
+  tbody td {
+    border-bottom: 1px solid var(--rule-soft);
+    padding: 10px 14px;
+    vertical-align: top;
+  }
+  tbody td.us { background: var(--accent-wash); }
+  tbody tr:last-child td { border-bottom: none; }
+  th.dim, td.dim { min-width: 190px; font-weight: 500; }
+  td.note { color: var(--ink-3); font-size: 12.5px; }
+
+  /* Pastilles d'estat */
+  .p {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .04em;
+    padding: 2px 7px;
+    border-radius: 2px;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .p.y { background: var(--lead-wash); color: var(--lead); }
+  .p.m { background: var(--par-wash);  color: var(--par); }
+  .p.n { background: var(--gap-wash);  color: var(--gap); }
+  .p.u { background: var(--rule-soft); color: var(--ink-3); }
+
+  /* ── Barres de puntuació ───────────────────────────────────── */
+  .scores { display: flex; flex-direction: column; gap: 1px; background: var(--rule);
+            border: 1px solid var(--rule); }
+  .srow {
+    display: grid;
+    grid-template-columns: minmax(150px, 210px) 1fr 46px;
+    gap: 16px;
+    align-items: center;
+    background: var(--surface);
+    padding: 11px 18px;
+  }
+  .srow .nm { font-size: 13.5px; font-weight: 500; }
+  .srow .nm small { display: block; color: var(--ink-3); font-weight: 400; font-size: 11.5px; }
+  .track { height: 9px; background: var(--rule-soft); position: relative; }
+  .fill { height: 100%; }
+  .fill.lead { background: var(--lead); }
+  .fill.par  { background: var(--par); }
+  .fill.gap  { background: var(--gap); }
+  .sv {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    font-weight: 500;
+  }
+
+  /* ── Blocs de bretxa ───────────────────────────────────────── */
+  .gaps { display: flex; flex-direction: column; gap: 14px; }
+  .gapcard {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--gap);
+    padding: 18px 22px;
+  }
+  .gapcard.warn { border-left-color: var(--par); }
+  .gapcard h4 {
+    margin: 0 0 6px;
+    font-size: 15.5px;
+    font-family: var(--cond);
+    font-weight: 600;
+    letter-spacing: .005em;
+  }
+  .gapcard p { margin: 0 0 8px; color: var(--ink-2); max-width: 76ch; font-size: 13.5px; }
+  .gapcard p:last-child { margin-bottom: 0; }
+  .gapcard code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--rule-soft);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--ink-2);
+  }
+  .impact {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--gap);
+    margin-bottom: 4px;
+  }
+  .gapcard.warn .impact { color: var(--par); }
+
+  /* ── Punts forts ───────────────────────────────────────────── */
+  .wins { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px;
+          background: var(--rule); border: 1px solid var(--rule); }
+  .win { background: var(--surface); padding: 18px 22px; }
+  .win h4 { margin: 0 0 6px; font-size: 15px; font-family: var(--cond); font-weight: 600; }
+  .win p { margin: 0; font-size: 13px; color: var(--ink-2); }
+
+  /* ── Roadmap ───────────────────────────────────────────────── */
+  ol.road { list-style: none; counter-reset: r; padding: 0; margin: 0;
+            display: flex; flex-direction: column; gap: 1px;
+            background: var(--rule); border: 1px solid var(--rule); }
+  ol.road li {
+    counter-increment: r;
+    background: var(--surface);
+    padding: 16px 22px 16px 60px;
+    position: relative;
+  }
+  ol.road li::before {
+    content: counter(r);
+    position: absolute;
+    left: 22px; top: 16px;
+    font-family: var(--cond);
+    font-size: 20px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  ol.road h4 { margin: 0 0 4px; font-size: 15px; font-family: var(--cond); font-weight: 600; }
+  ol.road p { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 74ch; }
+  .effort {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  /* ── Notes al peu ──────────────────────────────────────────── */
+  .foot {
+    margin-top: 60px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .foot h3 { font-size: 13px; margin: 0 0 10px; font-family: var(--mono);
+             letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+  .foot ul { margin: 0; padding-left: 18px; }
+  .foot li { margin-bottom: 6px; max-width: 82ch; }
+  .foot a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .foot a:hover, .foot a:focus-visible { border-bottom-color: var(--accent); }
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px 18px;
+    margin: 14px 0 0; font-size: 12px; color: var(--ink-3);
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Anàlisi interna · 26 juliol 2026</div>
+  <h1>On és FS&nbsp;Planner v2 respecte del mercat APS</h1>
+  <p class="standfirst">
+    Comparativa amb cinc referents del sector, feta contra el codi real i contra
+    fonts públiques dels competidors. Document de treball intern: prioritza saber
+    on som per sobre de com quedem.
+  </p>
+  <div class="meta">
+    <span>236 units · ~179.000 línies · 82 migracions</span>
+    <span>Delphi 11 · SQL Server · DevExpress</span>
+  </div>
+</header>
+
+<div class="thesis">
+  <p>
+    <strong>La conclusió en una frase:</strong> teniu la capa visual i el model de dades
+    d'un APS de gamma alta, i el motor d'un planificador de gamma mitjana. La distància
+    amb Preactor o Asprova no és d'amplitud funcional — en tenim més que molts — sinó
+    d'<strong>una sola propietat del motor</strong>: les precedències de ruta.
+  </p>
+  <p>
+    El competidor real d'avui, però, no és cap dels cinc d'aquest document. És el
+    <strong>full de càlcul</strong>. El guió de demo comercial ho diu explícitament
+    («cliente sale de Excel/papel, sin competencia»), i contra aquest rival guanyeu
+    de carrer en totes les dimensions.
+  </p>
+</div>
+
+<section>
+  <h2>Veredicte</h2>
+  <p class="sec-lede">
+    Puntuació de 0 a 10 per eix, mesurada contra el que és estàndard en un APS comercial
+    del segment mitjà-alt, no contra un ideal teòric.
+  </p>
+
+  <div class="verdicts">
+    <div class="vc">
+      <div class="vc-n lead">8,4</div>
+      <div class="vc-l">Interfície i visualització</div>
+      <div class="vc-d">Gantt propi de 15.000 línies amb 7 modes de fila i undo de 200 passos. Competitiu amb qualsevol.</div>
+    </div>
+    <div class="vc">
+      <div class="vc-n lead">7,8</div>
+      <div class="vc-l">Model de dades</div>
+      <div class="vc-d">Utillatges, operaris amb polivalència, calendaris, setup per atributs, multi-empresa nadiu.</div>
+    </div>
+    <div class="vc">
+      <div class="vc-n par">5,2</div>
+      <div class="vc-l">Motor de planificació</div>
+      <div class="vc-d">FCS real amb 7 regles i metaheurística, però sense precedències dures.</div>
+    </div>
+    <div class="vc">
+      <div class="vc-n gap">2,5</div>
+      <div class="vc-l">Plataforma i escala</div>
+      <div class="vc-d">Desktop Windows, monousuari de facto, un sol ERP i només lectura.</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="p y">FET</span> implementat i funcional</span>
+    <span><span class="p m">PARCIAL</span> existeix amb forats</span>
+    <span><span class="p n">NO</span> no existeix</span>
+    <span><span class="p u">n/d</span> no publicat / no verificat</span>
+  </div>
+</section>
+
+<section>
+  <h2>Els competidors</h2>
+  <p class="sec-lede">
+    Dada rellevant del mercat: <strong>tres dels cinc han canviat de propietari</strong>.
+    PlanetTogether fa un mes escàs. Els independents que queden són essencialment
+    Asprova i Frepple.
+  </p>
+
+  <div class="scroller">
+  <table>
+    <thead>
+      <tr>
+        <th class="dim">Producte</th>
+        <th>Propietari</th>
+        <th>Desplegament</th>
+        <th>Preu públic</th>
+        <th>Segment</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="dim">Siemens Opcenter APS<br><span class="p u">ex-Preactor</span></td>
+        <td>Siemens<br><span class="note">des de 2013</span></td>
+        <td>On-prem + SaaS via Opcenter&nbsp;X</td>
+        <td><span class="p u">no publicat</span></td>
+        <td>Enterprise<br><span class="note">PIME via Express</span></td>
+      </tr>
+      <tr>
+        <td class="dim">DELMIA Ortems</td>
+        <td>Dassault Systèmes<br><span class="note">des de 2016</span></td>
+        <td>On-prem, híbrid, SaaS</td>
+        <td><span class="p u">no publicat</span></td>
+        <td>Mitjana-gran</td>
+      </tr>
+      <tr>
+        <td class="dim">CAI PlanetTogether<br><span class="p u">ex-Galaxy APS</span></td>
+        <td>CAI Software<br><span class="note">des del 24/06/2026</span></td>
+        <td>Principalment on-prem</td>
+        <td><span class="p u">no publicat</span></td>
+        <td>Mid-market a gran</td>
+      </tr>
+      <tr>
+        <td class="dim">Asprova APS</td>
+        <td>Independent (Tòquio)<br><span class="note">des de 1994</span></td>
+        <td><strong>Desktop Windows</strong></td>
+        <td><span class="p u">~300 $/usuari/mes*</span></td>
+        <td>Mitjana-gran<br><span class="note">feble a Europa</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Microsoft Project</td>
+        <td>Microsoft</td>
+        <td>Web + desktop</td>
+        <td>10–55 $/usuari/mes</td>
+        <td>Projectes,<br>no fabricació</td>
+      </tr>
+      <tr>
+        <td class="dim us">FS Planner v2</td>
+        <td class="us">FactoryStart</td>
+        <td class="us">Desktop Windows</td>
+        <td class="us">—</td>
+        <td class="us">PIME industrial</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:10px">
+    * Xifra d'agregador tercer, no verificada amb el venedor. Només Microsoft publica
+    preus oficials; els altres quatre no en publiquen cap.
+  </p>
+</section>
+
+<section>
+  <h2>Matriu funcional</h2>
+  <p class="sec-lede">
+    Cada cel·la reflecteix el que està documentat públicament pel venedor o verificat
+    al nostre codi. Quan el venedor no ho documenta, ho marco com a no disponible en
+    lloc d'assumir-ho.
+  </p>
+
+  <h3>Motor de planificació</h3>
+  <div class="scroller">
+  <table>
+    <thead>
+      <tr>
+        <th class="dim">Capacitat</th>
+        <th class="us">FS Planner</th>
+        <th>Opcenter</th>
+        <th>Ortems</th>
+        <th>PlanetTogether</th>
+        <th>Asprova</th>
+        <th>MS Project</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="dim">Capacitat finita</td>
+        <td class="us"><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim"><strong>Precedències de ruta<br>com a restricció dura</strong></td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">només alerta D01</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span><br><span class="note">CPM</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Regles de despatx</td>
+        <td class="us"><span class="p y">7 canòniques</span><br><span class="note">EDD, SPT, LPT, FIFO,<br>CR, Slack, prioritat ERP</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Optimització metaheurística</td>
+        <td class="us"><span class="p y">SA multi-start</span><br><span class="note">paral·lel, reproduïble</span></td>
+        <td><span class="p y">Genètics, MCTS</span></td>
+        <td><span class="p m">"IA", sense detallar</span></td>
+        <td><span class="p u">no detallat</span></td>
+        <td><span class="p y">Solver S8 v3</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Selecció de recurs alternatiu</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">sempre centre preferent</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Granularitat</td>
+        <td class="us"><span class="p m">Centre</span><br><span class="note">no màquina</span></td>
+        <td><span class="p y">Màquina</span></td>
+        <td><span class="p y">Màquina</span></td>
+        <td><span class="p y">Màquina</span></td>
+        <td><span class="p y">Màquina</span></td>
+        <td><span class="p u">n/a</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Backward scheduling</td>
+        <td class="us"><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+      </tr>
+      <tr>
+        <td class="dim">DBR / Kanban-pull / CONWIP</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">enums declarats</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p m">coll d'ampolla</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Restriccions i model</h3>
+  <div class="scroller">
+  <table>
+    <thead>
+      <tr>
+        <th class="dim">Capacitat</th>
+        <th class="us">FS Planner</th>
+        <th>Opcenter</th>
+        <th>Ortems</th>
+        <th>PlanetTogether</th>
+        <th>Asprova</th>
+        <th>MS Project</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="dim">Utillatges com a recurs<br>amb capacitat pròpia</td>
+        <td class="us"><span class="p y">FET</span><br><span class="note">restricció dura,<br>cross-centre, vida útil</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p n">no documentat</span></td>
+        <td><span class="p m">via Resource Lock</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Operaris amb polivalència,<br>nivells i absències</td>
+        <td class="us"><span class="p y">FET</span><br><span class="note">mòdul dedicat</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p m">crews i torns</span></td>
+        <td><span class="p m">màquina-cèntric</span></td>
+        <td><span class="p m">només treball</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Habilitats com a restricció<br>del motor</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">modelades, alerta O04</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p m">parcial</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Materials com a restricció</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">alertes M01-M03</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span><br><span class="note">mòdul SRP</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Setup seqüència-dependent</td>
+        <td class="us"><span class="p m">per atributs</span><br><span class="note">no matriu asimètrica</span></td>
+        <td><span class="p y">matriu</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">changeovers</span></td>
+        <td><span class="p y">setup + teardown</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Calendaris, torns, festius</td>
+        <td class="us"><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Plataforma, integració i ús</h3>
+  <div class="scroller">
+  <table>
+    <thead>
+      <tr>
+        <th class="dim">Capacitat</th>
+        <th class="us">FS Planner</th>
+        <th>Opcenter</th>
+        <th>Ortems</th>
+        <th>PlanetTogether</th>
+        <th>Asprova</th>
+        <th>MS Project</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="dim">Multiusuari concurrent</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">últim que desa guanya</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">client-servidor</span></td>
+        <td><span class="p y">FET</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Web / API REST</td>
+        <td class="us"><span class="p n">NO</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p m">en inversió</span></td>
+        <td><span class="p n">desktop</span></td>
+        <td><span class="p y">FET</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Integració ERP</td>
+        <td class="us"><span class="p m">Sage 200</span><br><span class="note">arquitectura multi-ERP<br>llesta, 1 implementat</span></td>
+        <td><span class="p y">SAP i altres</span></td>
+        <td><span class="p y">via VIC</span></td>
+        <td><span class="p y">SAP, Dynamics,<br>NetSuite, Oracle</span></td>
+        <td><span class="p u">no detallat</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Write-back a l'ERP</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">només lectura</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">bidireccional</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Escenaris what-if</td>
+        <td class="us"><span class="p m">escenaris + regles</span><br><span class="note">sense comparativa A/B</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p m">baselines</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Gestió de projectes CPM<br>dins el mateix producte</td>
+        <td class="us"><span class="p y">FET</span><br><span class="note">4 links, lag, 8 restriccions,<br>11 línies base</span></td>
+        <td><span class="p n">NO</span></td>
+        <td><span class="p n">NO</span></td>
+        <td><span class="p n">NO</span></td>
+        <td><span class="p n">NO</span></td>
+        <td><span class="p y">és el referent</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Stock projectat i MRP</td>
+        <td class="us"><span class="p m">projecció + recomanador</span><br><span class="note">sense BOM multinivell</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">mòdul SRP</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">mòdul MRP</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Multi-idioma</td>
+        <td class="us"><span class="p n">NO</span><br><span class="note">castellà hardcodejat</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">FET</span></td>
+        <td><span class="p y">7 idiomes</span></td>
+        <td><span class="p y">FET</span></td>
+      </tr>
+      <tr>
+        <td class="dim">Multi-empresa nadiu</td>
+        <td class="us"><span class="p y">FET</span><br><span class="note">a totes les taules</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p u">n/d</span></td>
+        <td><span class="p n">NO</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Puntuació per eix</h2>
+  <p class="sec-lede">
+    Comparació contra la mitjana dels quatre APS (Opcenter, Ortems, PlanetTogether,
+    Asprova). MS Project queda fora d'aquest càlcul: no és un APS i no competeix al
+    mateix terreny.
+  </p>
+
+  <div class="scores">
+    <div class="srow">
+      <div class="nm">Gantt i interacció<small>drag&amp;drop, undo, modes de fila</small></div>
+      <div class="track"><div class="fill lead" style="width:92%"></div></div>
+      <div class="sv">9,2</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Recursos secundaris<small>utillatges, motlles, operaris</small></div>
+      <div class="track"><div class="fill lead" style="width:85%"></div></div>
+      <div class="sv">8,5</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Gestió de projectes<small>CPM, línia base, esforç</small></div>
+      <div class="track"><div class="fill lead" style="width:84%"></div></div>
+      <div class="sv">8,4</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Model de dades i calendaris<small>torns, festius, multi-empresa</small></div>
+      <div class="track"><div class="fill lead" style="width:82%"></div></div>
+      <div class="sv">8,2</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Alertes i diagnòstic<small>31 regles configurables</small></div>
+      <div class="track"><div class="fill lead" style="width:80%"></div></div>
+      <div class="sv">8,0</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Regles de despatx<small>7 canòniques + comparativa</small></div>
+      <div class="track"><div class="fill lead" style="width:78%"></div></div>
+      <div class="sv">7,8</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Optimització<small>SA multi-start reproduïble</small></div>
+      <div class="track"><div class="fill par" style="width:65%"></div></div>
+      <div class="sv">6,5</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Setup i canvis de sèrie<small>per atributs, no matriu</small></div>
+      <div class="track"><div class="fill par" style="width:62%"></div></div>
+      <div class="sv">6,2</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Materials i MRP<small>projecció sense BOM multinivell</small></div>
+      <div class="track"><div class="fill par" style="width:55%"></div></div>
+      <div class="sv">5,5</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Integració ERP<small>1 connector, només lectura</small></div>
+      <div class="track"><div class="fill par" style="width:50%"></div></div>
+      <div class="sv">5,0</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Restriccions del motor<small>sense precedències dures</small></div>
+      <div class="track"><div class="fill gap" style="width:35%"></div></div>
+      <div class="sv">3,5</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Concurrència multiusuari<small>últim que desa guanya</small></div>
+      <div class="track"><div class="fill gap" style="width:20%"></div></div>
+      <div class="sv">2,0</div>
+    </div>
+    <div class="srow">
+      <div class="nm">Plataforma<small>desktop, sense web ni API</small></div>
+      <div class="track"><div class="fill gap" style="width:20%"></div></div>
+      <div class="sv">2,0</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Les quatre bretxes que compten</h2>
+  <p class="sec-lede">
+    Ordenades per impacte comercial real, no per dificultat tècnica. Les tres primeres
+    surten a qualsevol demo tècnica amb un client exigent.
+  </p>
+
+  <div class="gaps">
+    <div class="gapcard">
+      <div class="impact">Bloquejant · surt a la primera demo tècnica</div>
+      <h4>Les precedències de ruta no són una restricció del motor</h4>
+      <p>
+        <code>RunAutoScheduling</code> col·loca cada operació independentment al seu centre
+        segons calendari i capacitat. Amb una OF d'operacions OP1→OP2→OP3, res no garanteix
+        que OP2 comenci després d'acabar OP1: la coherència depèn de l'ordre de la cua,
+        d'una alerta posterior (D01) i de l'operador.
+      </p>
+      <p>
+        Als quatre APS comparats això és una restricció dura. És l'única diferència
+        <em>estructural</em> del motor, i arrossega una conseqüència: l'optimitzador SA
+        cerca permutacions d'una cua sense precedències, així que no és un solver JSSP
+        sinó una cerca sobre l'ordre de despatx.
+      </p>
+    </div>
+
+    <div class="gapcard">
+      <div class="impact">Bloquejant per a venda a empresa mitjana</div>
+      <h4>No hi ha concurrència multiusuari</h4>
+      <p>
+        Cap lock ni versionat sobre nodes o pla: sense <code>rowversion</code>, sense
+        comprovació en desar. Dos planificadors sobre el mateix projecte i l'últim que desa
+        guanya, en silenci. Hi ha login, rols i auditoria — multiusuari en el sentit
+        administratiu, no en el de concurrència segura.
+      </p>
+    </div>
+
+    <div class="gapcard">
+      <div class="impact">Limita el valor del motor</div>
+      <h4>Sense selecció de recurs alternatiu ni granularitat de màquina</h4>
+      <p>
+        El motor sempre usa el centre preferent; si no n'hi ha, la fila queda sense planificar.
+        No hi ha grups de recursos elegibles amb tria per càrrega, eficiència o cost —
+        tot i que l'esquema ja té <code>FS_PL_NodeCenterAllowed</code>. I es planifica a
+        centre, no a màquina: el mestre de màquines existeix però el motor no el consulta.
+      </p>
+    </div>
+
+    <div class="gapcard warn">
+      <div class="impact">Sostre comercial</div>
+      <h4>Un sol ERP, només lectura, i sense web</h4>
+      <p>
+        Sage 200 és l'únic connector implementat (SAP B1 i Dynamics són línies comentades),
+        i el sistema no escriu mai a l'ERP. Els competidors tenen integració bidireccional.
+        Sumat a l'absència de web, API i multi-idioma, això marca el sostre de creixement
+        més que cap limitació del motor.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>On guanyeu de debò</h2>
+  <p class="sec-lede">
+    No són consolacions: són coses que als competidors els costa igualar, i dues d'elles
+    cap dels quatre APS les porta a dins.
+  </p>
+
+  <div class="wins">
+    <div class="win">
+      <h4>Gantt interactiu propi</h4>
+      <p>15.000 línies, 7 modes de fila, undo de 200 passos amb línia de temps navegable, compactació i backward per OF/OT. Anys-persona d'actiu real, no un component comprat.</p>
+    </div>
+    <div class="win">
+      <h4>Utillatges com a recurs de primer nivell</h4>
+      <p>Capacitat pròpia, restricció dura cross-centre, exemplars intercanviables, vida útil i manteniment. Només Ortems i Opcenter ho documenten; PlanetTogether i Asprova, no.</p>
+    </div>
+    <div class="win">
+      <h4>Capacitat finita per operari</h4>
+      <p>Polivalència amb nivells, absències, paral·lelisme configurable. Asprova és màquina-cèntric i això li costa. És el diferencial que ja identificàveu al maig.</p>
+    </div>
+    <div class="win">
+      <h4>Projectes CPM dins l'APS</h4>
+      <p>4 tipus d'enllaç amb lag, 8 restriccions de data, 11 línies base, tríada d'esforç i detecció de sobreassignació. Cap dels quatre APS porta això; MS Project sí, però no sap de fabricació.</p>
+    </div>
+    <div class="win">
+      <h4>Setup per atributs personalitzats</h4>
+      <p>Regles additives sobre camps propis del client (substrat, amplada, motlle), no una matriu tancada. Més fàcil de configurar, encara que no expressi asimetries.</p>
+    </div>
+    <div class="win">
+      <h4>Arquitectura multi-ERP neta</h4>
+      <p>~50 lectures amb tipus neutres, mapeig de camps configurable per l'usuari i sincronització amb detecció de conflictes per hash. El segon connector serà molt més barat que el primer.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Ordre recomanat</h2>
+  <p class="sec-lede">
+    Aquesta seqüència no és arbitrària: cada pas fa el següent més barat, i els dos
+    primers són els que canvien la resposta a un plec de condicions.
+  </p>
+
+  <ol class="road">
+    <li>
+      <h4>Precedències dures al motor</h4>
+      <p>
+        Afegir predecessors a <code>TSchedInput</code> i respectar-los a la col·locació.
+        Converteix l'alerta D01 en una restricció, i converteix el SA en un optimitzador
+        de debò. És el canvi de més impacte per unitat d'esforç de tot el producte.
+      </p>
+      <div class="effort">Impacte molt alt · toca el nucli del motor</div>
+    </li>
+    <li>
+      <h4>Selecció de recurs alternatiu</h4>
+      <p>
+        Fer servir <code>FS_PL_NodeCenterAllowed</code>, que ja existeix a l'esquema, per
+        triar entre centres elegibles per càrrega o eficiència. Desbloqueja també la
+        planificació a nivell de màquina.
+      </p>
+      <div class="effort">Impacte alt · l'esquema ja hi és</div>
+    </li>
+    <li>
+      <h4>Concurrència</h4>
+      <p>
+        <code>rowversion</code> a <code>FS_PL_Node</code> i comprovació en desar, o
+        check-out de pla per projecte. Sense això no es pot vendre a una empresa amb
+        dos planificadors.
+      </p>
+      <div class="effort">Impacte alt · condició per a empresa mitjana</div>
+    </li>
+    <li>
+      <h4>Write-back a l'ERP</h4>
+      <p>
+        Un <code>IErpWriter</code> mínim: confirmar dates planificades sobre l'OF de Sage.
+        Tanca el llaç i és el que converteix el planificador en part del procés, no en
+        una eina de consulta.
+      </p>
+      <div class="effort">Impacte mitjà-alt · risc controlat si és mínim</div>
+    </li>
+    <li>
+      <h4>Deute tècnic acumulat</h4>
+      <p>
+        Zero tests automatitzats en 179.000 línies, i dos bugs coneguts anotats al codi:
+        l'optimitzador SA viola utillatges (no és thread-safe) i els moviments vençuts
+        embruten la projecció MRP.
+      </p>
+      <div class="effort">Impacte intern · creix amb cada funcionalitat nova</div>
+    </li>
+  </ol>
+</section>
+
+<div class="foot">
+  <h3>Notes de mètode</h3>
+  <ul>
+    <li>
+      Les capacitats d'FS Planner s'han verificat contra el codi font, no contra la
+      documentació interna: dos documents d'auto-anàlisi del repositori estaven
+      desactualitzats (deien que <code>IPlanningEngine</code> no existia, i avui sí).
+    </li>
+    <li>
+      Les dades dels competidors provenen de les seves webs i comunicats oficials
+      (consulta del 26/07/2026). Quan una capacitat no està documentada públicament es
+      marca com a no disponible, no com a absent: pot existir sense estar publicada.
+    </li>
+    <li>
+      Cap dels quatre APS publica preus oficials ni quota de mercat. L'única referència
+      d'analista independent trobada és l'IDC MarketScape APS 2025, on Siemens i Dassault
+      figuren tots dos com a Leaders.
+    </li>
+    <li>
+      Les puntuacions són un judici informat sobre l'evidència recollida, no una
+      metodologia formal. Serveixen per ordenar prioritats internament; no s'haurien
+      de fer servir com a argument comercial.
+    </li>
+    <li>
+      Dada de context: Asprova, amb desenvolupament actiu (v18.1, maig 2026) i quota
+      històrica dominant al Japó, segueix sent client Windows d'escriptori. El vostre
+      stack no és un anacronisme en aquest mercat.
+    </li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

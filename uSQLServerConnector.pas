@@ -32,6 +32,26 @@ type
     function ExecSQL(const ASQL: string): Integer;
     function OpenQuery(const ASQL: string): TADOQuery;
 
+    // --- Transacciones seguras -----------------------------------------------
+    // Envolver BeginTrans/CommitTrans/RollbackTrans en estos tres metodos, NUNCA
+    // llamarlos directamente. Motivo: una transaccion que se queda abierta
+    // retiene los locks de FS_PL_Node indefinidamente, y el siguiente guardado
+    // (o cualquier SELECT de la UI sobre esa tabla) espera para siempre. Es
+    // decir: la aplicacion se cuelga y no vuelve.
+    //
+    // Devuelve False si la transaccion NO se ha abierto porque ya habia una en
+    // curso: en ese caso el llamante NO debe hacer commit ni rollback, o
+    // cerraria una transaccion que no es suya (ADO anida, y el commit interno
+    // dejaria la externa abierta para siempre).
+    function TransStart: Boolean;
+    procedure TransCommit(AIniciada: Boolean);
+    // Nunca lanza: se llama desde bloques except, donde una excepcion aqui
+    // sustituiria al error real y ademas dejaria la transaccion abierta.
+    procedure TransRollback(AIniciada: Boolean);
+    // Timeout efectivo para comandos, en segundos. Sin el, un lock deja la
+    // aplicacion esperando sin limite util en vez de dar un error recuperable.
+    function TimeoutComando: Integer;
+
     // --- Helpers de carga ---
     function LoadCentres: TArray<TCentreTreball>;
     function LoadNodes(AProjectId: Integer): TArray<TNode>;
@@ -81,7 +101,16 @@ type
 
   public
     constructor Create(const AConfig: TSQLServerConnectorConfig); overload;
+    // OJO: este constructor NO toma posesion de la conexion, la COMPARTE. Solo
+    // vale para uso desde el hilo principal. Para guardar en segundo plano hay
+    // que usar CreateParaHilo, que abre una conexion propia: una TADOConnection
+    // compartida entre hilos cuelga la aplicacion (ver DMPlanner.ConnectorParaHilo).
     constructor Create(AConnection: TADOConnection); overload;
+    // Conector con conexion PROPIA a partir de una cadena de conexion ya
+    // construida (la del DMPlanner, que incluye el password). Pensado para
+    // hilos secundarios. Lanza si no puede conectar.
+    constructor CreateParaHilo(const AConnectionString: string;
+      ACommandTimeout: Integer = 60);
     destructor Destroy; override;
 
     // CodigoEmpresa de la sesi'on actual; usado por los INSERT/UPDATE
@@ -173,6 +202,22 @@ begin
   inherited Create;
   FConnection := AConnection;
   FOwnsConnection := False;
+end;
+
+constructor TSQLServerConnector.CreateParaHilo(const AConnectionString: string;
+  ACommandTimeout: Integer);
+begin
+  inherited Create;
+  FConnection := TADOConnection.Create(nil);
+  FOwnsConnection := True;
+  FConnection.LoginPrompt := False;
+  if ACommandTimeout <= 0 then ACommandTimeout := 60;
+  FConnection.CommandTimeout := ACommandTimeout;
+  FConfig.CommandTimeout := ACommandTimeout;
+  FConnection.ConnectionString := AConnectionString;
+  // Conectar aqui y no a la primera consulta: si las credenciales no valen es
+  // mejor saberlo al crear el conector que a mitad de un guardado en un hilo.
+  FConnection.Connected := True;
 end;
 
 destructor TSQLServerConnector.Destroy;
@@ -284,6 +329,67 @@ begin
     Result := V;
 end;
 
+function TSQLServerConnector.TimeoutComando: Integer;
+begin
+  // TADOCommand y TADOQuery NO heredan CommandTimeout de la conexion: tienen el
+  // suyo propio. Si no se asigna, un lock de tabla deja la llamada esperando y
+  // la aplicacion parece colgada. Se toma el de la conexion (o el configurado),
+  // con un minimo razonable.
+  Result := 0;
+  if FConfig.CommandTimeout > 0 then
+    Result := FConfig.CommandTimeout
+  else if (FConnection <> nil) and (FConnection.CommandTimeout > 0) then
+    Result := FConnection.CommandTimeout;
+  if Result <= 0 then Result := 60;
+end;
+
+function TSQLServerConnector.TransStart: Boolean;
+begin
+  // Si ya hay una transaccion en curso NO se abre otra: ADO las anidaria y el
+  // CommitTrans de esta cerraria solo la interna, dejando la externa abierta
+  // para siempre (con sus locks). Se devuelve False y el llamante no cierra
+  // nada: manda quien la abrio.
+  Result := False;
+  if FConnection = nil then Exit;
+  if FConnection.InTransaction then Exit;
+  FConnection.BeginTrans;
+  Result := True;
+end;
+
+procedure TSQLServerConnector.TransCommit(AIniciada: Boolean);
+begin
+  if not AIniciada then Exit;   // no es nuestra: no la cerramos
+  if (FConnection <> nil) and FConnection.InTransaction then
+    FConnection.CommitTrans;
+end;
+
+procedure TSQLServerConnector.TransRollback(AIniciada: Boolean);
+begin
+  // La transaccion NO es nuestra (habia una abierta al entrar): no se toca,
+  // manda quien la abrio. Se deja constancia porque es una situacion que hoy
+  // no deberia darse -- ningun camino abre una transaccion y luego llama a un
+  // Save* publico -- y si aparece conviene saberlo: significa que el error se
+  // devuelve por Result y el duenyo de la transaccion podria hacer commit de
+  // un trabajo incompleto.
+  if not AIniciada then
+  begin
+    PlanLog.Linea('AVISO: fallo dentro de una transaccion ajena; ' +
+      'el rollback lo decide quien la abrio.');
+    Exit;
+  end;
+  // Blindado a proposito: se llama desde bloques except. Si RollbackTrans
+  // lanzara (conexion caida, transaccion ya abortada por el servidor), esa
+  // excepcion sustituiria al error real y ademas se saltaria el raise que
+  // viene detras. Tragarla aqui es lo correcto.
+  try
+    if (FConnection <> nil) and FConnection.InTransaction then
+      FConnection.RollbackTrans;
+  except
+    // Sin transaccion que deshacer, o conexion perdida: no hay nada que hacer
+    // y el error que importa es el que se esta propagando.
+  end;
+end;
+
 function TSQLServerConnector.ExecSQL(const ASQL: string): Integer;
 var
   Cmd: TADOCommand;
@@ -291,6 +397,7 @@ begin
   Cmd := TADOCommand.Create(nil);
   try
     Cmd.Connection := FConnection;
+    Cmd.CommandTimeout := TimeoutComando;
     Cmd.CommandText := ASQL;
     Cmd.CommandType := cmdText;
     Cmd.Execute(Result, EmptyParam);
@@ -303,6 +410,7 @@ function TSQLServerConnector.OpenQuery(const ASQL: string): TADOQuery;
 begin
   Result := TADOQuery.Create(nil);
   Result.Connection := FConnection;
+  Result.CommandTimeout := TimeoutComando;
   Result.SQL.Text := ASQL;
   Result.Open;
 end;
@@ -549,6 +657,12 @@ begin
       FillChar(N, SizeOf(N), 0);
       N.Id := Q.FieldByName('NodeId').AsInteger;
       N.CentreId := SQLToInt(Q.FieldByName('CenterId').Value, -1);
+      // Maquina dentro del centro (V083). FindField por robustez: una BD sin
+      // migrar no tiene la columna y el nodo sigue siendo valido sin ella.
+      if Q.FindField('MaquinaId') <> nil then
+        N.MaquinaId := SQLToInt(Q.FieldByName('MaquinaId').Value, 0)
+      else
+        N.MaquinaId := 0;
       N.StartTime := SQLToDateTime(Q.FieldByName('FechaInicio').Value);
       N.EndTime := SQLToDateTime(Q.FieldByName('FechaFin').Value);
       N.DurationMin := SQLToFloat(Q.FieldByName('DuracionMin').Value);
@@ -1179,9 +1293,11 @@ end;
 // ════════════════════════════════════════════════════════════════════
 
 function TSQLServerConnector.SavePlanning(const AData: TPlanningData): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       DoProgress('Guardando centros...', 5);
       InternalSaveCentres(AData.Centres);
@@ -1215,11 +1331,11 @@ begin
       ExecSQL('UPDATE FS_PL_Project SET FechaModificacion = GETDATE() WHERE ProjectId = ' +
         IntToStr(AData.Project.ProjectId));
 
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       DoProgress('Guardado completado', 100);
       Result := TConnectorResult.OK;
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1235,6 +1351,7 @@ end;
 function TSQLServerConnector.SaveNodes(AProjectId: Integer;
   const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>): TConnectorResult;
 var
+  Trans: Boolean;
   T0: TDateTime;
 begin
   // Instrumentacion: medir cuantos nodos y cuanto tarda cada SaveNodes. El
@@ -1243,13 +1360,13 @@ begin
   // dispara el patron lento (round-trip por nodo) y justifica una ruta bulk.
   T0 := Now;
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveNodes(AProjectId, ANodes, ANodeData);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(ANodes));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
     // Solo se registra un save COMPLETO lento (>500ms): sirve de aviso si algun
@@ -1267,11 +1384,13 @@ end;
 function TSQLServerConnector.SaveNodePositions(AProjectId: Integer;
   const ANodes: TArray<TNode>): TConnectorResult;
 var
+  Trans: Boolean;
   T0: TDateTime;
   Sb: TStringBuilder;
   I, EnLote: Integer;
   N: TNode;
   CentreSQL: string;
+  MaquinaSQL: string;   // fragmento ', MaquinaId = N' (vacio = no tocarla)
 
   procedure Flush;
   begin
@@ -1290,7 +1409,7 @@ begin
   Sb := TStringBuilder.Create;
   try
     try
-      FConnection.BeginTrans;
+      Trans := TransStart;
       try
         EnLote := 0;
         for I := 0 to High(ANodes) do
@@ -1300,22 +1419,31 @@ begin
           if N.CentreId <= 0 then CentreSQL := 'NULL'
           else CentreSQL := IntToStr(N.CentreId);
 
+          // La maquina viaja con las fechas: en el modo MAQUINAS arrastrar un
+          // nodo a otra fila ES cambiarlo de maquina, y si no se guardara aqui
+          // el cambio se perderia al recargar. 0 = no tocar (el nodo conserva
+          // la que tuviera).
+          if N.MaquinaId > 0 then
+            MaquinaSQL := ', MaquinaId = ' + IntToStr(N.MaquinaId)
+          else
+            MaquinaSQL := '';
+
           Sb.Append(
             'UPDATE FS_PL_Node SET ' +
             'FechaInicio = ' + DateTimeToSQL(N.StartTime) + ', ' +
             'FechaFin = ' + DateTimeToSQL(N.EndTime) + ', ' +
             'CenterId = ' + CentreSQL + ', ' +
-            'DuracionMin = ' + FloatToSQL(N.DurationMin) +
+            'DuracionMin = ' + FloatToSQL(N.DurationMin) + MaquinaSQL +
             ' WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
             '   AND NodeId = ' + IntToStr(N.Id) + ';');
           Inc(EnLote);
           if EnLote >= 200 then Flush;
         end;
         Flush;   // resto
-        FConnection.CommitTrans;
+        TransCommit(Trans);
         Result := TConnectorResult.OK(Length(ANodes));
       except
-        FConnection.RollbackTrans;
+        TransRollback(Trans);
         raise;
       end;
       // Solo se registra si es anormalmente lento (>500ms): el caso normal
@@ -1333,15 +1461,17 @@ begin
 end;
 
 function TSQLServerConnector.SaveCentres(const ACentres: TArray<TCentreTreball>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveCentres(ACentres);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(ACentres));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1352,15 +1482,17 @@ end;
 
 function TSQLServerConnector.SaveLinks(AProjectId: Integer;
   const ALinks: TArray<TErpLink>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveLinks(AProjectId, ALinks);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(ALinks));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1371,15 +1503,17 @@ end;
 
 function TSQLServerConnector.SaveMarkers(AProjectId: Integer;
   const AMarkers: TArray<TGanttMarker>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveMarkers(AProjectId, AMarkers);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(AMarkers));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1393,15 +1527,17 @@ function TSQLServerConnector.SaveOperarios(const AOperarios: TArray<TOperario>;
   const ARelaciones: TArray<TOperarioDepartamento>;
   const ACapacitaciones: TArray<TCapacitacion>;
   const AAsignaciones: TArray<TAsignacionOperario>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveOperarios(AOperarios, ADepts, ARelaciones, ACapacitaciones, AAsignaciones);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK;
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1411,15 +1547,17 @@ begin
 end;
 
 function TSQLServerConnector.SaveShifts(const AShifts: TArray<TTurno>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveShifts(AShifts);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(AShifts));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1429,15 +1567,17 @@ begin
 end;
 
 function TSQLServerConnector.SaveMoldes(const AMoldes: TArray<TMolde>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveMoldes(AMoldes);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(AMoldes));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1447,15 +1587,17 @@ begin
 end;
 
 function TSQLServerConnector.SaveCustomFieldDefs(const ADefs: TArray<TCustomFieldDef>): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSaveCustomFieldDefs(ADefs);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(ADefs));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except
@@ -1466,15 +1608,17 @@ end;
 
 function TSQLServerConnector.SavePlanningProfiles(const AProfiles: TArray<TPlanningProfile>;
   AActiveIndex: Integer): TConnectorResult;
+var
+  Trans: Boolean;
 begin
   try
-    FConnection.BeginTrans;
+    Trans := TransStart;
     try
       InternalSavePlanningProfiles(AProfiles, AActiveIndex);
-      FConnection.CommitTrans;
+      TransCommit(Trans);
       Result := TConnectorResult.OK(Length(AProfiles));
     except
-      FConnection.RollbackTrans;
+      TransRollback(Trans);
       raise;
     end;
   except

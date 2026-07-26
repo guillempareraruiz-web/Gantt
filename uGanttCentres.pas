@@ -63,6 +63,8 @@ type
     FGetRowSubtitle2: TCentreNameFunc;
     // Color de fondo de fila (clNone = por defecto). Modo utillajes: conflicto.
     FGetRowBackColor: TRowBackColorFunc;
+    // Capacidad de una fila no-centro (modo MAQUINAS). Ver la propiedad.
+    FGetRowCapacidad: TRowBackColorFunc;
     // Texto de tooltip por fila (modo utillajes: ficha del utillaje). Vacio =
     // sin hint. Se resuelve al pasar el raton sobre una fila distinta.
     FGetRowHint: TCentreNameFunc;
@@ -195,6 +197,12 @@ type
     property GetRowSubtitle2: TCentreNameFunc read FGetRowSubtitle2 write FGetRowSubtitle2;
     property GetRowBackColor: TRowBackColorFunc read FGetRowBackColor write FGetRowBackColor;
     property GetRowHint: TCentreNameFunc read FGetRowHint write FGetRowHint;
+    // Capacidad (carriles simultaneos) de una fila que NO es un centre, para
+    // poder pintarle el circulo indicador igual que a los centros paralelos.
+    // Devuelve: 1 = secuencial (sin circulo), >1 = N carriles, 0 = sin limite.
+    // Sin asignar, las filas no-centro no llevan circulo (comportamiento previo).
+    property GetRowCapacidad: TRowBackColorFunc
+      read FGetRowCapacidad write FGetRowCapacidad;
     property GetMaxScrollYFunc: TMaxScrollYFunc read FGetMaxScrollY write FGetMaxScrollY;
     property SelectedCentreId: Integer read FSelectedCentreId;
     property OnScrollYChanged: TScrollYChangedEvent read FOnScrollYChanged write FOnScrollYChanged;
@@ -226,6 +234,10 @@ implementation
 
 const
   INFO_ICON_SIZE = 14;   // diametro del icono "i" de info por fila (utillajes)
+  // Diametro del circulo indicador de capacidad (carriles / trabajos
+  // simultaneos). Constante y no local del pintado porque el hit-test del
+  // icono "i" tambien la necesita: los dos comparten esquina.
+  CIRCLE_SIZE = 13;
 
 //...HELPER
 procedure CheckHR(const Res: HRESULT; const Msg: string);
@@ -734,6 +746,7 @@ var
   TextCircleBrush: ID2D1SolidColorBrush;
   BackColorCustom: TColor;
   BackBrushCustom: ID2D1SolidColorBrush;
+  Subtitle2Brush: ID2D1SolidColorBrush;   // 3a linea (carga en modo utillajes)
 begin
   // Guarda de seguridad: fila fuera de rango -> no pintar (evita GPF cuando, en
   // modo compactar + panning, la lista de filas queda vacia o desincronizada).
@@ -810,6 +823,15 @@ begin
       NomMaquina := FGetRowSubtitle(iCentreId)
     else
       NomMaquina := '';
+
+    // Capacidad de la fila cuando NO es un centre (modo MAQUINAS): una maquina
+    // que admite varios trabajos a la vez merece el mismo circulo indicador que
+    // un centre paralelo. Sin callback, se queda como secuencial (sin circulo).
+    if Assigned(FGetRowCapacidad) then
+    begin
+      MaxLanes := FGetRowCapacidad(iCentreId);
+      EsSeq := MaxLanes = 1;
+    end;
   end;
 
   if Trim(NomMaquina) = '' then
@@ -817,7 +839,7 @@ begin
 
   PadX := 8;
   PadY := 5;
-  CircleSize := 13;   // 1 solo digito: circulo pequeno
+  CircleSize := CIRCLE_SIZE;   // 1 solo digito: circulo pequeno
 
   // Solo pintamos el circulo indicador en centros NO secuenciales (paralelos):
   // muestra el numero de carriles (o infinito si no hay limite). El secuencial
@@ -883,12 +905,28 @@ begin
   DrawTextD(NomCentre, RValue1, TextBrush, FTextFormatLeft);
   DrawTextD(NomMaquina, RValue2, TextBrush, FTextFormatLeft);
 
-  // Tercera linea (solo si hay callback, p.ej. modo utillajes): la carga, en
-  // gris mas tenue para diferenciarla de la descripcion.
+  // Tercera linea (solo si hay callback, p.ej. modo utillajes): la carga.
+  //
+  // NO va en gris tenue: sobre el fondo rojo de una fila en conflicto era justo
+  // el dato que no se leia, y es el que dice POR QUE hay conflicto (nodos,
+  // pico, ejemplares). Se pinta con el mismo peso que las otras dos lineas y
+  // en un color que contraste con el fondo que toque:
+  //   - fila normal  -> azul, para distinguirla de la descripcion (negra)
+  //   - fila con fondo custom (conflicto) -> rojo oscuro sobre el rosa
+  //
+  // A proposito NO se apaga cuando la fila esta deshabilitada (a diferencia de
+  // las dos primeras lineas): el conflicto y la carga hay que poder leerlos
+  // igual, que es justo para lo que sirve esta linea.
   if Assigned(FGetRowSubtitle2) then
   begin
     RValue3 := RectF(PadX, y1 + 33, LeftTextWidth - PadX, y1 + 46);
-    DrawTextD(FGetRowSubtitle2(iCentreId), RValue3, FBrushTextDisabled,
+    if BackColorCustom <> clNone then
+      FHwndRT.CreateSolidColorBrush(
+        D2D1ColorF(0.60, 0.00, 0.00, 1.0), nil, Subtitle2Brush)   // rojo oscuro
+    else
+      FHwndRT.CreateSolidColorBrush(
+        D2D1ColorF(0.13, 0.35, 0.67, 1.0), nil, Subtitle2Brush);  // azul
+    DrawTextD(FGetRowSubtitle2(iCentreId), RValue3, Subtitle2Brush,
       FTextFormatLeft);
   end;
 
@@ -897,8 +935,17 @@ begin
   // muestra la ficha completa.
   if Assigned(FGetRowHint) then
   begin
-    RInfo := RectF(LeftTextWidth - PadX - INFO_ICON_SIZE, y1 + PadY,
-      LeftTextWidth - PadX, y1 + PadY + INFO_ICON_SIZE);
+    // El icono "i" comparte esquina con el circulo de capacidad (mismo PadX y
+    // misma Y). Cuando los dos estan visibles -- pasa en modo MAQUINAS -- se
+    // pintaban uno encima del otro y el de capacidad, que va antes, quedaba
+    // tapado. Si hay circulo, la "i" se corre a su izquierda.
+    if not EsSeq then
+      RInfo := RectF(LeftTextWidth - PadX - CircleSize - 6 - INFO_ICON_SIZE,
+        y1 + PadY,
+        LeftTextWidth - PadX - CircleSize - 6, y1 + PadY + INFO_ICON_SIZE)
+    else
+      RInfo := RectF(LeftTextWidth - PadX - INFO_ICON_SIZE, y1 + PadY,
+        LeftTextWidth - PadX, y1 + PadY + INFO_ICON_SIZE);
     FHwndRT.CreateSolidColorBrush(D2D1ColorF(0.20, 0.47, 0.90, 1.0), nil, InfoBrush);
     FHwndRT.FillEllipse(
       D2D1Ellipse(
@@ -1095,6 +1142,7 @@ const
 var
   LeftTextWidth: Single;
   rowTopScreen, iconLeft, iconTop: Single;
+  Capacidad: Integer;
 begin
   Result := False;
   if (ARowIndex < 0) or (ARowIndex > High(FRows)) then Exit;
@@ -1108,6 +1156,16 @@ begin
   rowTopScreen := FRows[ARowIndex].TopY - FScrollY;
   iconLeft := LeftTextWidth - PadX - INFO_ICON_SIZE;
   iconTop := rowTopScreen + PadY;
+
+  // Si la fila lleva circulo de capacidad, el icono se corre a su izquierda
+  // (ver PaintRowD2D). Hay que replicarlo aqui o el tooltip respondria en un
+  // sitio distinto del que se ve.
+  if Assigned(FGetRowCapacidad) then
+  begin
+    Capacidad := FGetRowCapacidad(FRows[ARowIndex].CentreId);
+    if Capacidad <> 1 then
+      iconLeft := iconLeft - CIRCLE_SIZE - 6;
+  end;
 
   Result := (X >= iconLeft) and (X <= iconLeft + INFO_ICON_SIZE) and
             (Y >= iconTop) and (Y <= iconTop + INFO_ICON_SIZE);

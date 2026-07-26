@@ -251,14 +251,12 @@ object frmVistaProyectos: TfrmVistaProyectos
       LookAndFeel.SkinName = 'Office2019Colorful'
       Navigator.Buttons.CustomButtons = <>
       OptionsBehavior.CellHints = True
-      OptionsData.Editing = False
       OptionsSelection.CellSelect = False
       ScrollbarAnnotations.CustomAnnotations = <>
       TabOrder = 0
       object colNombre: TcxTreeListColumn
         Caption.Text = 'Nombre'
         MinWidth = 220
-        Options.Editing = False
         Width = 300
         Position.ColIndex = 0
         Position.RowIndex = 0
@@ -269,7 +267,6 @@ object frmVistaProyectos: TfrmVistaProyectos
       object colDuracion: TcxTreeListColumn
         Caption.Text = 'Duraci'#243'n'
         MinWidth = 70
-        Options.Editing = False
         Width = 80
         Position.ColIndex = 1
         Position.RowIndex = 0
@@ -280,7 +277,6 @@ object frmVistaProyectos: TfrmVistaProyectos
       object colInicio: TcxTreeListColumn
         Caption.Text = 'Inicio'
         MinWidth = 85
-        Options.Editing = False
         Width = 90
         Position.ColIndex = 2
         Position.RowIndex = 0

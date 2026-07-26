@@ -41,6 +41,17 @@ type
     FUserLogin: string;
     // Retencion AUTO (la decide el codigo): dias recientes a conservar TODOS.
     FRetencionDias: Integer;
+    // Memoria de sesion de "el AUTO de hoy ya esta hecho", para no consultar la
+    // BD en cada movimiento de nodo (ver CrearAutoDiarioSiHaceFalta). Es una
+    // cache de UN solo proyecto: en la practica se trabaja sobre uno cada vez, y
+    // al cambiar de proyecto la clave deja de coincidir y se comprueba de nuevo.
+    FAutoHechoProjectId: Integer;
+    FAutoHechoDia: TDate;
+    // Obliga a volver a preguntar a la BD. La llama todo lo que pueda hacer
+    // desaparecer el AUTO de hoy (borrar, purgar, restaurar): si la memoria se
+    // queda diciendo "ya esta hecho" cuando ya no existe, ese dia el plan se
+    // queda SIN punto de restauracion y no hay forma de notarlo.
+    procedure InvalidarCacheAuto;
     function SqlS(const S: string): string;
     function ExisteAutoHoy(AProjectId: Integer): Boolean;
     procedure InsertSnapshot(AProjectId: Integer; const ATipo, ANombre,
@@ -159,6 +170,12 @@ begin
   end;
 end;
 
+procedure TSnapshotRepo.InvalidarCacheAuto;
+begin
+  FAutoHechoProjectId := 0;
+  FAutoHechoDia := 0;
+end;
+
 function TSnapshotRepo.CrearAutoDiarioSiHaceFalta(AProjectId: Integer): Boolean;
 var
   Data: TPlanningData;
@@ -167,9 +184,26 @@ var
 begin
   Result := False;
   if (FConnection = nil) or (FConnector = nil) or (AProjectId <= 0) then Exit;
+
+  // Atajo EN MEMORIA: este metodo se llama en CADA modificacion del plan (cada
+  // nodo que se mueve), y sin esto cada movimiento pagaba un viaje a BD solo
+  // para responder "si, el de hoy ya esta hecho". Con el plan cargado y el
+  // usuario arrastrando nodos, eso son decenas de consultas sincronas en el
+  // hilo de la interfaz.
+  //
+  // Se recuerda por (proyecto, dia): si cambia el dia con la aplicacion abierta
+  // la clave deja de coincidir y se vuelve a comprobar de verdad.
+  if (FAutoHechoProjectId = AProjectId) and
+     (FAutoHechoDia = DateOf(Now)) then Exit;
+
   // La unicidad la garantiza ademas el indice UX_FS_PL_Snapshot_AutoDia; esta
   // comprobacion evita el coste de serializar si ya existe.
-  if ExisteAutoHoy(AProjectId) then Exit;
+  if ExisteAutoHoy(AProjectId) then
+  begin
+    FAutoHechoProjectId := AProjectId;
+    FAutoHechoDia := DateOf(Now);
+    Exit;
+  end;
 
   R := FConnector.LoadPlanning(AProjectId, Data);
   if not R.Success then Exit;
@@ -189,7 +223,13 @@ begin
   end;
 
   if Result then
+  begin
+    // Anotar que el de hoy ya esta: a partir de aqui los siguientes
+    // movimientos de nodo no vuelven a consultar la BD.
+    FAutoHechoProjectId := AProjectId;
+    FAutoHechoDia := DateOf(Now);
     PurgarAuto(AProjectId);
+  end;
 end;
 
 function TSnapshotRepo.CrearManual(AProjectId: Integer;
@@ -450,10 +490,20 @@ begin
     end;
 
     FConnection.CommitTrans;
+    // El plan es OTRO: lo que sabiamos del AUTO de hoy ya no describe este
+    // estado, asi que se vuelve a comprobar contra la BD.
+    InvalidarCacheAuto;
   except
     on E: Exception do
     begin
-      FConnection.RollbackTrans;
+      // Blindado: si RollbackTrans lanza (conexion caida, transaccion ya
+      // abortada), esa excepcion taparia el error real Y dejaria la
+      // transaccion abierta, bloqueando FS_PL_Node para todos.
+      try
+        if FConnection.InTransaction then FConnection.RollbackTrans;
+      except
+        // Nada que deshacer: el error que importa es el de fuera.
+      end;
       Exit('Error al restaurar (no se ha modificado el plan): ' + E.Message);
     end;
   end;
@@ -471,6 +521,7 @@ begin
     Cmd.CommandText := 'DELETE FROM FS_PL_Snapshot WHERE CodigoEmpresa = ' +
       IntToStr(FCodigoEmpresa) + ' AND SnapshotId = ' + IntToStr(ASnapshotId);
     Cmd.Execute;
+    InvalidarCacheAuto;   // puede haberse borrado justo el AUTO de hoy
   finally
     Cmd.Free;
   end;
@@ -504,6 +555,10 @@ begin
       '  SELECT SnapshotId FROM auto WHERE rnSemana > 1) ' +
       '  AND CodigoEmpresa = ' + IntToStr(FCodigoEmpresa);
     Cmd.Execute;
+    // La purga solo borra AUTOs mas viejos que la retencion, asi que hoy no
+    // deberia caer. Se invalida igualmente por si algun dia se baja la
+    // retencion a 0: es barato y evita quedarse sin punto del dia en silencio.
+    InvalidarCacheAuto;
   finally
     Cmd.Free;
   end;

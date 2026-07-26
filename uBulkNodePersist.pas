@@ -47,6 +47,15 @@ type
   TBulkNodeRow = record
     // --- FS_PL_Node ---
     CenterId: Integer;
+    // Maquina DENTRO del centro donde el motor ha colocado la operacion (V083).
+    // 0 = sin determinar (BD sin migrar): el nodo se crea solo con su centro.
+    //
+    // NO se escribe en el INSERT masivo: los cinco metodos de persistencia
+    // (M5 fichero, M4 ADO, M1 fila a fila) construyen SQL distinto y tocarlos
+    // todos por una columna es mucho riesgo para poco. Se asigna despues, con
+    // un UPDATE por lotes desde los NodeId que devuelve este mismo modulo
+    // (ver AsignarMaquinasANodos).
+    MaquinaId: Integer;
     FechaInicio: TDateTime;
     FechaFin: TDateTime;
     DuracionMin: Double;
@@ -97,12 +106,79 @@ function BulkInsertNodes(AConn: TADOConnection;
   var ARows: TArray<TBulkNodeRow>;
   APreferred: TBulkNodeMethod = bmBulkFile): TBulkNodeMethod;
 
+// Escribe FS_PL_Node.MaquinaId de los nodos recien creados (V083). Se llama
+// DESPUES de BulkInsertNodes, cuando cada Row ya tiene su NodeId, y dentro de
+// la misma transaccion.
+//
+// Agrupa por MaquinaId y lanza un UPDATE ... WHERE NodeId IN (...) por grupo:
+// con 500 nodos repartidos entre 6 maquinas son 6 sentencias, no 500. Las filas
+// con MaquinaId <= 0 se saltan (se quedan con NULL, que es valido).
+procedure AsignarMaquinasANodos(AConn: TADOConnection;
+  ACodigoEmpresa: SmallInt; const ARows: TArray<TBulkNodeRow>);
+
 function BulkNodeMethodName(AMethod: TBulkNodeMethod): string;
 
 implementation
 
 uses
+  System.Generics.Collections,   // TDictionary/TPair (AsignarMaquinasANodos)
   uPlanLog;
+
+procedure AsignarMaquinasANodos(AConn: TADOConnection;
+  ACodigoEmpresa: SmallInt; const ARows: TArray<TBulkNodeRow>);
+var
+  PorMaquina: TDictionary<Integer, TStringBuilder>;
+  Par: TPair<Integer, TStringBuilder>;
+  Sb: TStringBuilder;
+  Cmd: TADOCommand;
+  I: Integer;
+begin
+  if AConn = nil then Exit;
+  if Length(ARows) = 0 then Exit;
+
+  PorMaquina := TDictionary<Integer, TStringBuilder>.Create;
+  try
+    // Agrupar los NodeId por la maquina que les toca.
+    for I := 0 to High(ARows) do
+    begin
+      if ARows[I].MaquinaId <= 0 then Continue;   // sin maquina: se deja NULL
+      if ARows[I].NodeId <= 0 then Continue;      // no se llego a insertar
+
+      if not PorMaquina.TryGetValue(ARows[I].MaquinaId, Sb) then
+      begin
+        Sb := TStringBuilder.Create;
+        PorMaquina.Add(ARows[I].MaquinaId, Sb);
+      end;
+      if Sb.Length > 0 then Sb.Append(',');
+      Sb.Append(IntToStr(ARows[I].NodeId));
+    end;
+
+    if PorMaquina.Count = 0 then Exit;
+
+    Cmd := TADOCommand.Create(nil);
+    try
+      Cmd.Connection := AConn;
+      Cmd.ParamCheck := False;
+      for Par in PorMaquina do
+      begin
+        if Par.Value.Length = 0 then Continue;
+        // Ids generados por el propio INSERT: no vienen del usuario, asi que la
+        // lista en el IN no tiene riesgo de inyeccion.
+        Cmd.CommandText :=
+          'UPDATE FS_PL_Node SET MaquinaId = ' + IntToStr(Par.Key) +
+          ' WHERE CodigoEmpresa = ' + IntToStr(ACodigoEmpresa) +
+          '   AND NodeId IN (' + Par.Value.ToString + ')';
+        Cmd.Execute;
+      end;
+    finally
+      Cmd.Free;
+    end;
+  finally
+    for Par in PorMaquina do
+      Par.Value.Free;
+    PorMaquina.Free;
+  end;
+end;
 
 function BulkNodeMethodName(AMethod: TBulkNodeMethod): string;
 begin

@@ -34,7 +34,7 @@ uses
   cxDateUtils, cxCheckBox, Vcl.Menus, dxCoreGraphics, cxButtonEdit, cxScrollBox,
   cxButtons, cxDropDownEdit, cxCheckComboBox, Vcl.StdCtrls, Vcl.WinXCtrls,
   cxCalendar, cxTextEdit, cxMaskEdit, cxSpinEdit,
-  uGanttControl, uGanttControlGrupo, uGanttControlUtillajes, uGanttControlClientes, uGanttControlOperarios, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uGanttHistory, uErpTypes,
+  uGanttControl, uGanttControlGrupo, uGanttControlUtillajes, uGanttControlClientes, uGanttControlOperarios, uGanttControlMaquinas, uGanttTimeline, uGanttSummary, uGanttCentres, uGanttTypes, uGanttHistory, uErpTypes,
   System.Generics.Collections, System.Generics.Defaults,
   System.Threading, System.Math, uHelpGuide,
   uOperariosTypes, System.Variants, uColorPalette64LayeredPopup,
@@ -468,6 +468,16 @@ type
     function FechaReferenciaSeleccion: TDateTime;
   public
     FGanttControl: TGanttControl;
+    // Handlers del Main, conservados aqui para poder REAPLICARLOS cada vez que
+    // se recrea FGanttControl (cambio de RowMode).
+    //
+    // Estan en public por seguir la convencion del resto del form (FGanttControl
+    // tambien lo esta), pero NO se deben asignar directamente: hay que usar las
+    // propiedades OnPlanModified / OnLinksModified, que ademas los vuelcan sobre
+    // el control vivo. Asignarlos a pelo dejaria el control sin eventos.
+    FOnPlanModified: TGanttPlanModifiedEvent;
+    FOnLinksModified: TNotifyEvent;
+
     // Badge "SOLO LECTURA" sobre el Gantt, visible solo en modo UTILLAJES.
     FLblReadOnly: TLabel;
     FTimelineControl: TGanttTimelineControl;
@@ -514,6 +524,12 @@ type
     // al hacer click de nuevo en el mismo panel KPI.
     FKPIFilterCategoria: Integer;
 
+
+     procedure SetOnPlanModified(const AValue: TGanttPlanModifiedEvent);
+    procedure SetOnLinksModified(const AValue: TNotifyEvent);
+    // Vuelca los handlers guardados sobre el control vivo. Se llama al
+    // asignarlos y despues de cada recreacion del control.
+    procedure AplicarHandlersGantt;
 
     procedure SummaryDebounceTick(Sender: TObject);
     // AInvalidate=True cuando el recalculo viene de un cambio de datos (layout,
@@ -592,6 +608,15 @@ type
     destructor Destroy; override;
     procedure RebuildCentreKPIs_Parallel(const bCalcAll: Boolean);
     property GanttControl: TGanttControl read FGanttControl;
+
+    // Handlers del Main (auto-save). Se guardan AQUI y no se asignan solo una
+    // vez sobre GanttControl porque el control se RECREA al cambiar de RowMode
+    // (ver Inicializar): el control nuevo nacia sin eventos y el plan dejaba de
+    // guardarse en silencio hasta reabrir la pantalla.
+    property OnPlanModified: TGanttPlanModifiedEvent
+      read FOnPlanModified write SetOnPlanModified;
+    property OnLinksModified: TNotifyEvent
+      read FOnLinksModified write SetOnLinksModified;
     property TimelineControl: TGanttTimelineControl read FTimelineControl;
     property CentrosControl: TGanttCentresControl read FCentrosControl;
     // Abre el dialogo "Alertas de planificacion" sobre el Gantt actual. Lo usa
@@ -608,6 +633,9 @@ type
     // capacidades, y los inyecta en el control de filas=utillajes (RowMode
     // UTILLAJES). Solo se llama cuando FGanttControl es TGanttControlUtillajes.
     procedure InyectarRequisitosUtillajes(ACtrl: TGanttControlUtillajes);
+    // Modo MAQUINAS (V083): filas = maquinas, y a que maquina va cada nodo.
+    // Solo se llama cuando FGanttControl es TGanttControlMaquinas.
+    procedure InyectarMaquinas(ACtrl: TGanttControlMaquinas);
     // Carga las asignaciones operario<-nodo del proyecto y las inyecta en el
     // control de filas=operarios (RowMode OPERARIOS).
     procedure InyectarAsignacionesOperarios(ACtrl: TGanttControlOperarios);
@@ -779,6 +807,8 @@ begin
     FGanttControl := TGanttControlClientes.Create(Self)
   else if SameText(Trim(DMPlanner.CurrentProjectRowMode), 'OPERARIOS') then
     FGanttControl := TGanttControlOperarios.Create(Self)
+  else if SameText(Trim(DMPlanner.CurrentProjectRowMode), 'MAQUINAS') then
+    FGanttControl := TGanttControlMaquinas.Create(Self)
   else
     FGanttControl := TGanttControl.Create(Self);
   FGanttControl.Parent := pnlGanttContainer;
@@ -1569,6 +1599,7 @@ var
     else if AModo = 'UTILLAJES' then Result := 'UTILLAJES'
     else if AModo = 'CLIENTES' then Result := 'CLIENTES'
     else if AModo = 'OPERARIOS' then Result := 'OPERARIOS'
+    else if AModo = 'MAQUINAS' then Result := 'MAQUINAS'
     else Result := 'CENTROS';
   end;
 
@@ -1580,6 +1611,7 @@ var
     if FGanttControl is TGanttControlClientes then Result := 'CLIENTES'
     else if FGanttControl is TGanttControlUtillajes then Result := 'UTILLAJES'
     else if FGanttControl is TGanttControlOperarios then Result := 'OPERARIOS'
+    else if FGanttControl is TGanttControlMaquinas then Result := 'MAQUINAS'
     else if FGanttControl is TGanttControlGrupo then Result := 'GRUPO'
     else Result := 'CENTROS';
   end;
@@ -1625,6 +1657,8 @@ begin
       FGanttControl := TGanttControlClientes.Create(Self)
     else if TipoActual = 'OPERARIOS' then
       FGanttControl := TGanttControlOperarios.Create(Self)
+    else if TipoActual = 'MAQUINAS' then
+      FGanttControl := TGanttControlMaquinas.Create(Self)
     else
       FGanttControl := TGanttControl.Create(Self);
     FGanttControl.Parent := pnlGanttContainer;
@@ -1650,6 +1684,10 @@ begin
       end;
     FGanttControl.OnOpFilterClear := btnClearOperariosClick;
     AplicarNodeLayoutSet;   // control recreat -> reaplicar el set de layout
+    // Y los handlers del Main (auto-save): el control es NUEVO y nace sin
+    // eventos. Sin esto, cambiar de modo de filas dejaba de guardar el plan y
+    // no avisaba de nada.
+    AplicarHandlersGantt;
   end
   else if TipoActual = 'GRUPO' then
   begin
@@ -2398,6 +2436,71 @@ begin
   ACtrl.SetRequisitos(Reqs);
 end;
 
+procedure TfrmVistaGantt.InyectarMaquinas(ACtrl: TGanttControlMaquinas);
+var
+  Q: TADOQuery;
+  Maqs: TMaquinaFilaArray;
+  Mapa: TNodoMaquinaArray;
+  N: Integer;
+begin
+  if ACtrl = nil then Exit;
+  if DMPlanner.ADOConnection = nil then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+
+    // 1) Las filas: todas las maquinas planificables, AGRUPADAS POR CENTRO.
+    // El orden importa: es el que veran las filas del Gantt, y agrupar por
+    // centro hace que la vista se lea como esta organizado el taller.
+    Q.SQL.Text :=
+      'SELECT CenterId, CodigoCentro, MaquinaId, CodigoMaquina, ' +
+      '       NombreMaquina, EsSistema ' +
+      'FROM FS_PL_V_CentroMaquinaPlan ' +
+      'WHERE CodigoEmpresa = :CE ' +
+      'ORDER BY CodigoCentro, EsFallback, OrdenMaquina, CodigoMaquina';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Open;
+    SetLength(Maqs, 0);
+    while not Q.Eof do
+    begin
+      N := Length(Maqs);
+      SetLength(Maqs, N + 1);
+      Maqs[N].CentroId     := Q.FieldByName('CenterId').AsInteger;
+      Maqs[N].CentroCodigo := Q.FieldByName('CodigoCentro').AsString;
+      Maqs[N].MaquinaId    := Q.FieldByName('MaquinaId').AsInteger;
+      Maqs[N].Codigo       := Q.FieldByName('CodigoMaquina').AsString;
+      Maqs[N].Nombre       := Q.FieldByName('NombreMaquina').AsString;
+      Maqs[N].EsSistema    := Q.FieldByName('EsSistema').AsBoolean;
+      Q.Next;
+    end;
+    Q.Close;
+
+    // 2) A que maquina va cada nodo del plan.
+    Q.SQL.Text :=
+      'SELECT NodeId, MaquinaId FROM FS_PL_Node ' +
+      'WHERE CodigoEmpresa = :CE AND ProjectId = :PID ' +
+      '  AND MaquinaId IS NOT NULL';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Parameters.ParamByName('PID').Value := DMPlanner.CurrentProjectId;
+    Q.Open;
+    SetLength(Mapa, 0);
+    while not Q.Eof do
+    begin
+      N := Length(Mapa);
+      SetLength(Mapa, N + 1);
+      Mapa[N].DataId    := Q.FieldByName('NodeId').AsInteger;
+      Mapa[N].MaquinaId := Q.FieldByName('MaquinaId').AsInteger;
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+
+  ACtrl.SetMaquinas(Maqs);
+  ACtrl.SetNodoMaquina(Mapa);
+end;
+
 procedure TfrmVistaGantt.InyectarAsignacionesOperarios(
   ACtrl: TGanttControlOperarios);
 var
@@ -2438,14 +2541,18 @@ end;
 
 function TfrmVistaGantt.RowModeDelCombo: string;
 begin
-  // Indices: 0 Centros, 1 Ordenes(=GRUPO), 2 Utillajes, 3 Clientes, 4 Operarios.
+  // Indices (ver el combo del DFM, tienen que ir en el MISMO orden):
+  //   0 Maquinas, 1 Centros, 2 Ordenes(=GRUPO), 3 Utillajes, 4 Clientes,
+  //   5 Operarios.
+  // Maquinas va primero por ser el recurso finito real; Centros, su agrupador.
   case cbRowMode.ItemIndex of
-    1: Result := 'GRUPO';
-    2: Result := 'UTILLAJES';
-    3: Result := 'CLIENTES';
-    4: Result := 'OPERARIOS';
+    0: Result := 'MAQUINAS';
+    2: Result := 'GRUPO';
+    3: Result := 'UTILLAJES';
+    4: Result := 'CLIENTES';
+    5: Result := 'OPERARIOS';
   else
-    Result := 'CENTROS';
+    Result := 'CENTROS';   // indice 1, y cualquier valor inesperado
   end;
 end;
 
@@ -2455,11 +2562,13 @@ var
   Idx: Integer;
 begin
   Modo := UpperCase(Trim(DMPlanner.CurrentProjectRowMode));
-  if Modo = 'GRUPO' then Idx := 1
-  else if Modo = 'UTILLAJES' then Idx := 2
-  else if Modo = 'CLIENTES' then Idx := 3
-  else if Modo = 'OPERARIOS' then Idx := 4
-  else Idx := 0;   // CENTROS (y TREE, que aun cae a CENTROS)
+  // Mismos indices que RowModeDelCombo y que el combo del DFM.
+  if Modo = 'MAQUINAS' then Idx := 0
+  else if Modo = 'GRUPO' then Idx := 2
+  else if Modo = 'UTILLAJES' then Idx := 3
+  else if Modo = 'CLIENTES' then Idx := 4
+  else if Modo = 'OPERARIOS' then Idx := 5
+  else Idx := 1;   // CENTROS (y TREE, que aun cae a CENTROS)
 
   // Cambiar el ItemIndex sin disparar OnChange (evita recarga en bucle).
   cbRowMode.Properties.OnChange := nil;
@@ -2470,6 +2579,7 @@ begin
   if Modo = 'UTILLAJES' then Label12.Caption := 'Utillajes'
   else if Modo = 'CLIENTES' then Label12.Caption := 'Clientes'
   else if Modo = 'OPERARIOS' then Label12.Caption := 'Operarios'
+  else if Modo = 'MAQUINAS' then Label12.Caption := 'M'#225'quinas'
   else if Modo = 'GRUPO' then Label12.Caption := #211'rdenes'
   else Label12.Caption := 'Centros de trabajo';
 
@@ -2484,6 +2594,10 @@ begin
     // CLIENTES y GRUPO/Ordenes. La edicion solo tiene sentido en Centros, donde
     // el motor de secuencialidad de recursos es coherente. Ver memoria
     // project_gantt_planning_paradigm.
+    // MAQUINAS NO va aqui: es un modo EDITABLE, igual que CENTROS. Su fila es
+    // un recurso finito real y cada nodo esta en una sola fila, asi que
+    // arrastrar tiene un significado unico. Los de esta lista son modos de
+    // agrupacion (la fila no es un recurso) o N:M (un nodo en varias filas).
     FLblReadOnly.Visible := (Modo = 'UTILLAJES') or (Modo = 'CLIENTES')
       or (Modo = 'GRUPO') or (Modo = 'OPERARIOS');
     if FLblReadOnly.Visible then
@@ -2519,7 +2633,7 @@ begin
   if DMPlanner.UserPrefs = nil then Exit;
   S := UpperCase(Trim(DMPlanner.UserPrefs.Load(PrefKeyRowMode)));
   if (S = 'CENTROS') or (S = 'GRUPO') or (S = 'UTILLAJES') or (S = 'CLIENTES')
-     or (S = 'OPERARIOS') then
+     or (S = 'OPERARIOS') or (S = 'MAQUINAS') then
   begin
     ARowMode := S;
     Result := True;
@@ -2529,9 +2643,25 @@ end;
 procedure TfrmVistaGantt.cbRowModePropertiesChange(Sender: TObject);
 var
   NuevoModo: string;
+  VStart: TDateTime;
+  VPx, VScrollX: Single;
+  HayViewport: Boolean;
 begin
   NuevoModo := RowModeDelCombo;
   if SameText(NuevoModo, Trim(DMPlanner.CurrentProjectRowMode)) then Exit;
+
+  // Fotografiar el viewport ANTES de recrear el control. Inicializar termina
+  // con IrAFecha(Now), que es lo correcto al abrir la pantalla pero no al
+  // cambiar de modo: el usuario esta mirando una semana concreta y no espera
+  // que la vista salte a hoy solo por cambiar el eje de filas.
+  HayViewport := Assigned(FGanttControl) and (FGanttControl.PxPerMinute > 0);
+  VStart := 0; VPx := 0; VScrollX := 0;
+  if HayViewport then
+  begin
+    VStart := FGanttControl.StartTime;
+    VPx := FGanttControl.PxPerMinute;
+    VScrollX := FGanttControl.ScrollX;
+  end;
 
   // Conmutar el RowMode en memoria y recrear el control + recargar datos.
   // Inicializar detecta que el tipo de control ya no casa con el mode y lo
@@ -2583,8 +2713,42 @@ begin
       'asignado a dos cosas a la vez (sobrecarga).'#13#10#13#10 +
       'Para reasignar, usa el panel de asignaci'#243'n; para mover en el tiempo, '+
       'el modo Centros.');
+  // CENTROS y MAQUINAS no avisan: estos mensajes existen para advertir de que
+  // el modo NO deja editar, y los dos son editables. Un dialogo cada vez que se
+  // entra en un modo de trabajo normal solo estorba.
 
   Inicializar(dtFechaInicioGantt.Date, dtFechaFinGantt.Date);
+
+  // Devolver el viewport: cambiar el eje de filas no deberia mover la vista en
+  // el tiempo. Se aplica al Gantt Y al timeline, que van sincronizados.
+  if HayViewport and Assigned(FGanttControl) then
+  begin
+    FGanttControl.SetViewport(VStart, VPx, VScrollX);
+    if Assigned(FTimelineControl) then
+      FTimelineControl.SetViewport(VStart, VPx, VScrollX);
+    if Assigned(FSummaryControl) then
+      FSummaryControl.SetViewport(VStart, VPx, VScrollX);
+  end;
+end;
+
+procedure TfrmVistaGantt.SetOnPlanModified(
+  const AValue: TGanttPlanModifiedEvent);
+begin
+  FOnPlanModified := AValue;
+  AplicarHandlersGantt;
+end;
+
+procedure TfrmVistaGantt.SetOnLinksModified(const AValue: TNotifyEvent);
+begin
+  FOnLinksModified := AValue;
+  AplicarHandlersGantt;
+end;
+
+procedure TfrmVistaGantt.AplicarHandlersGantt;
+begin
+  if not Assigned(FGanttControl) then Exit;
+  FGanttControl.OnPlanModified := FOnPlanModified;
+  FGanttControl.OnLinksModified := FOnLinksModified;
 end;
 
 procedure TfrmVistaGantt.CargarCentros;
@@ -2617,6 +2781,7 @@ begin
     FCentrosControl.GetRowSubtitle2 := nil;
     FCentrosControl.GetRowBackColor := nil;
     FCentrosControl.GetRowHint := nil;
+    FCentrosControl.GetRowCapacidad := nil;   // solo lo usa MAQUINAS
     // NO pasar la lista de centros al panel izquierdo en modo GRUPO — asi
     // FindCentreIndexById siempre retorna -1 y PaintRowD2D cae al callback
     // GetCentreName (que ya resuelve la etiqueta del grupo).
@@ -2652,6 +2817,7 @@ begin
       begin
         Result := TGanttControlUtillajes(FGanttControl).GetRowHint(CentreId);
       end;
+    FCentrosControl.GetRowCapacidad := nil;   // solo lo usa MAQUINAS
     FCentrosControl.SetCentres(nil);
   end
   else if FGanttControl is TGanttControlOperarios then
@@ -2674,6 +2840,49 @@ begin
         Result := TGanttControlOperarios(FGanttControl).GetRowPanelColor(CentreId);
       end;
     FCentrosControl.GetRowHint := nil;
+    FCentrosControl.GetRowCapacidad := nil;   // solo lo usa MAQUINAS
+    FCentrosControl.SetCentres(nil);
+  end
+  else if FGanttControl is TGanttControlMaquinas then
+  begin
+    // En modo MAQUINAS el "CentreId" del row es el indice de fila (maquina).
+    // Panel de 3 lineas: codigo, centro+nombre, y carga planificada.
+    FCentrosControl.GetCentreName :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlMaquinas(FGanttControl).GetRowCaption(CentreId);
+      end;
+    FCentrosControl.GetRowSubtitle :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlMaquinas(FGanttControl).GetRowSubtitle(CentreId);
+      end;
+    // Sin 3a linea de carga: el panel se lee mejor con codigo y nombre, y quien
+    // quiera numeros tiene el boton de estadisticas, que ensancha el panel y
+    // muestra los KPIs.
+    FCentrosControl.GetRowSubtitle2 := nil;
+    // Sin color especial: aqui no hay "conflicto" que marcar (una maquina no
+    // se puede sobrecargar por definicion; si pasa, lo canta el pico de la
+    // 3a linea). El fondo gris de las maquinas de sistema lo pone el propio
+    // control via row.bkColor.
+    FCentrosControl.GetRowBackColor := nil;
+    FCentrosControl.GetRowHint :=
+      function(const CentreId: Integer): string
+      begin
+        Result := TGanttControlMaquinas(FGanttControl).GetRowHint(CentreId);
+      end;
+    // Circulo indicador de capacidad, igual que en los centros paralelos: una
+    // maquina que admite N trabajos a la vez lo lleva marcado.
+    FCentrosControl.GetRowCapacidad :=
+      function(const CentreId: Integer): TColor
+      begin
+        // Guarda de tipo: el closure sobrevive al control que lo creo. Si al
+        // cambiar de modo alguien olvida ponerlo a nil, sin esta comprobacion
+        // se haria un cast duro sobre otra clase y se leerian campos ajenos.
+        Result := 1;
+        if FGanttControl is TGanttControlMaquinas then
+          Result := TGanttControlMaquinas(FGanttControl).GetRowCapacidad(CentreId);
+      end;
     FCentrosControl.SetCentres(nil);
   end
   else
@@ -2693,6 +2902,7 @@ begin
     FCentrosControl.GetRowSubtitle2 := nil;
     FCentrosControl.GetRowBackColor := nil;
     FCentrosControl.GetRowHint := nil;
+    FCentrosControl.GetRowCapacidad := nil;   // solo lo usa MAQUINAS
     FCentrosControl.SetCentres(Centres);
   end;
   // Cargar nodos reales del proyecto activo desde BD.
@@ -2713,6 +2923,11 @@ begin
   // ANTES de SetData, por la misma razon.
   if FGanttControl is TGanttControlOperarios then
     InyectarAsignacionesOperarios(TGanttControlOperarios(FGanttControl));
+
+  // En modo MAQUINAS, las filas (maquinas) y el reparto de nodos, tambien
+  // ANTES de SetData (V083).
+  if FGanttControl is TGanttControlMaquinas then
+    InyectarMaquinas(TGanttControlMaquinas(FGanttControl));
 
   FGanttControl.SetData(Centres, Nodes, FTimelineControl.StartTime);
   // Aplicar la politica de tiempo de cambio (setup) guardada en preferencias al

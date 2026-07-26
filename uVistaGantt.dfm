@@ -1938,6 +1938,20 @@ object frmVistaGantt: TfrmVistaGantt
         Font.Style = []
         ParentFont = False
       end
+      object lblRowMode: TLabel
+        Left = 858
+        Top = 7
+        Width = 41
+        Height = 12
+        Anchors = [akTop, akRight]
+        Caption = 'Modo filas'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 4800824
+        Font.Height = -9
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = []
+        ParentFont = False
+      end
       object Button27: TButton
         Tag = 1
         Left = 481
@@ -2391,7 +2405,7 @@ object frmVistaGantt: TfrmVistaGantt
         SpeedButtonOptions.GroupIndex = 66
         SpeedButtonOptions.CanBeFocused = False
         SpeedButtonOptions.AllowAllUp = True
-        TabOrder = 14
+        TabOrder = 17
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -9
@@ -2400,28 +2414,15 @@ object frmVistaGantt: TfrmVistaGantt
         ParentFont = False
         OnClick = btnResaltarOFClick
       end
-      object lblRowMode: TLabel
-        Left = 858
-        Top = 7
-        Width = 55
-        Height = 12
-        Anchors = [akTop, akRight]
-        Caption = 'Modo filas'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = 4800824
-        Font.Height = -9
-        Font.Name = 'Segoe UI Semibold'
-        Font.Style = []
-        ParentFont = False
-      end
       object cbRowMode: TcxComboBox
         Left = 858
         Top = 21
         Anchors = [akTop, akRight]
         ParentFont = False
         Properties.DropDownListStyle = lsFixedList
-        Properties.DropDownRows = 6
+        Properties.DropDownRows = 7
         Properties.Items.Strings = (
+          'M'#225'quinas'
           'Centros'
           #211'rdenes'
           'Utillajes'

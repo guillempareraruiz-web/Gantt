@@ -92,6 +92,34 @@ type
     // (operacion, articulo): aqui dentro no se puede tocar BD porque el
     // optimizador corre esto en varios hilos. Vacio = sin restriccion.
     UtillajeReqs: TArray<TUtillajeRequisito>;
+
+    // --- Precedencias de ruta -----------------------------------------------
+    // Secuencia de la operacion dentro de su OT (1, 2, 3...), tal como la trae
+    // el ERP. Es lo que define la RUTA, y por tanto la unica base fiable para
+    // encadenar precedencias.
+    //
+    // OJO: NO se puede usar el orden del array para esto. Cuando llega aqui, la
+    // cola ya ha pasado por SortInputsByRuleSet (EDD, SPT, CriticalRatio...),
+    // que la ha reordenado por criterios de prioridad y ha destruido el orden de
+    // ruta. Encadenar por posicion daria OP30 -> OP20 -> OP10 en cuanto los
+    // RawId no fueran monotonos con la ruta.
+    Orden: Integer;
+    // RawIds de las operaciones que tienen que estar TERMINADAS antes de que
+    // esta pueda empezar. Normalmente es la operacion anterior de la misma OT
+    // (OP10 -> OP20 -> OP30), pero el modelo admite varias.
+    //
+    // Lo rellena el caller (ver BuildPrecedencesFromInputs): aqui dentro no se
+    // puede tocar BD porque el optimizador ejecuta esto en varios hilos.
+    // Vacio = la operacion no espera a nadie.
+    PredecesorasRawIds: TArray<Int64>;
+    // % de la predecesora que tiene que estar hecho para poder empezar (0..100).
+    // MISMO criterio que FS_PL_Dependency.PorcentajeDependencia en el Gantt:
+    //   100 = FS estricto, empieza cuando la anterior acaba (el caso normal)
+    //    60 = puede empezar cuando la anterior lleva un 60% hecho
+    //     0 = puede empezar a la vez que la anterior (equivale a SS)
+    // 0 tambien es el valor "sin definir" del record: se trata como 100 (ver
+    // MinInicioPorPrecedencia), que es el comportamiento seguro.
+    PorcentajeSolape: Double;
   end;
 
   TSchedStatus = (ssOK, ssSaturado, ssFueraPlazo, ssSinCentro, ssSinCalendario,
@@ -101,6 +129,11 @@ type
     Input: TSchedInput;
     CenterId: Integer;
     CenterCode: string;
+    // Maquina DENTRO del centro donde se ha colocado (V083). 0 = no se ha
+    // podido determinar (BD sin migrar): el nodo se guarda solo con su centro,
+    // igual que antes.
+    MaquinaId: Integer;
+    MaquinaCodigo: string;
     FechaInicio: TDateTime;
     FechaFin: TDateTime;
     DuracionMin: Double;
@@ -172,6 +205,20 @@ type
     // utillajes y la alerta R02 lo cantara. Pendiente: dar a cada hilo su
     // propia copia.
     UtillajeOcc: TUtillajeOccupancy;
+
+    // --- Precedencias de ruta como RESTRICCION DURA -------------------------
+    // True = una operacion no se coloca antes de que acaben sus predecesoras
+    // (TSchedInput.PredecesorasRawIds); si el hueco encontrado es demasiado
+    // pronto, se retrasa hasta que la ruta lo permita.
+    //
+    // False = comportamiento clasico: cada operacion se coloca donde quepa y la
+    // violacion de la ruta solo se detecta DESPUES, con la alerta D01. Se
+    // mantiene como opcion porque hay planes existentes hechos asi, pero para
+    // una OF multi-operacion lo correcto es True.
+    //
+    // Requiere que la cola llegue en orden topologico (las predecesoras antes
+    // que sus sucesoras). SortInputsByRuleSet lo garantiza cuando esto es True.
+    RespetarPrecedencias: Boolean;
   end;
 
   TSchedResult = record
@@ -238,6 +285,19 @@ type
   //      no es thread-safe) -> multi-start SA paralelo.
   TOccupancyCache = TDictionary<Integer, TArray<TLaneSlotPub>>;
 
+  // Una maquina planificable de un centro (V083). Publico para poder precargar
+  // el mapa centro -> maquinas y no tocar BD dentro del motor.
+  TMaquinaPub = record
+    MaquinaId: Integer;
+    Codigo: string;
+    EsSistema: Boolean;
+  end;
+
+  // Maquinas por CenterId, ya ordenadas como el motor las prueba (las reales
+  // primero, la de sistema al final). Misma razon de existir que
+  // TOccupancyCache: leer BD una vez y poder correr en threads.
+  TMaquinasCache = TDictionary<Integer, TArray<TMaquinaPub>>;
+
 function PriorityRuleToStr(R: TPriorityRule): string;
 function DefaultRuleSet: TPriorityRuleSet;
 function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
@@ -250,10 +310,44 @@ function CalcDuracionOpMin(const AInput: TSchedInput): Double;
 // principal). El llamante es dueno del diccionario y debe liberarlo.
 function BuildOccupancyCache(const AFechaBloqueo: TDateTime): TOccupancyCache;
 
+// Maquinas planificables de cada centro, leidas UNA vez desde BD (llamar en el
+// hilo principal). Sale de la vista FS_PL_V_CentroMaquinaPlan (V083), con las
+// maquinas reales primero y la de sistema al final. El llamante es dueno del
+// diccionario y debe liberarlo.
+function BuildMaquinasCache: TMaquinasCache;
+
+// --- Precedencias de ruta ---------------------------------------------------
+
+// Rellena PredecesorasRawIds de cada input encadenando las operaciones de una
+// misma OT: cada OP espera a la anterior. El criterio de "anterior" es el orden
+// de la operacion dentro de su OT, que es como viene la ruta del ERP.
+//
+// Agrupa por (NumeroOF, SerieOF, NumeroTrabajo): NumeroTrabajo identifica la OT
+// dentro de la OF. Las operaciones sueltas (sin OT) no se encadenan entre si.
+//
+// ASolapePct se aplica a todas las cadenas por igual, con el criterio del Gantt:
+// 100 = FS estricto (default), 60 = empieza con la anterior al 60%. Si en el
+// futuro el solape viene por operacion desde el ERP, este parametro sobra.
+//
+// NO toca BD: trabaja sobre lo que ya hay en los inputs.
+procedure BuildPrecedencesFromInputs(var AInputs: TArray<TSchedInput>;
+  const ASolapePct: Double = 100);
+
+// Reordena la cola en orden TOPOLOGICO respetando el orden previo dentro de lo
+// posible: una operacion nunca aparece antes que sus predecesoras. Necesario
+// porque el motor coloca en una sola pasada y consulta el fin de las
+// predecesoras ya colocadas.
+//
+// Si hay un ciclo (ruta mal definida en el ERP), las operaciones implicadas se
+// devuelven al final SIN encadenar, para no perderlas ni colgar el motor.
+// Devuelve False si ha detectado algun ciclo.
+function TopologicalSortInputs(var AInputs: TArray<TSchedInput>): Boolean;
+
 // AOccCache opcional: si <> nil, la ocupacion existente se toma de la cache (sin
 // BD, thread-safe). Si nil, comportamiento clasico (lee BD via LoadExistingOccupancy).
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
-  const AParams: TSchedParams; AOccCache: TOccupancyCache = nil): TSchedResult;
+  const AParams: TSchedParams; AOccCache: TOccupancyCache = nil;
+  AMaqCache: TMaquinasCache = nil): TSchedResult;
 
 function StatusToStr(AStatus: TSchedStatus): string;
 function PlacementToStr(P: TPlacementPolicy): string;
@@ -417,16 +511,45 @@ type
 
   TLaneOcc = TList<TLaneSlot>;  // ordenada por StartDT ascendente
 
+  // Una maquina del centro, con su capacidad propia.
+  //
+  // El recurso finito real es la MAQUINA, no el centro (V083). Cada maquina
+  // aporta MaxLanes carriles: normalmente 1 (una maquina hace un trabajo a la
+  // vez), pero un horno o un bano pueden procesar varias piezas simultaneas y
+  // eso es justo lo que expresa MaxLanes DENTRO de la maquina.
+  //
+  // Un centro sin maquinas reales tiene igualmente la suya de sistema
+  // (__SINMAQUINA__<centro>, V083), asi que el motor nunca se queda sin recurso
+  // y no hace falta un caso especial.
+  TMaquinaCursor = record
+    MaquinaId: Integer;
+    Codigo: string;
+    EsSistema: Boolean;     // maquina por defecto del centro (fallback)
+    // Ocupacion por carril DE ESTA MAQUINA. Length = capacidad simultanea.
+    LaneOcc: TArray<TLaneOcc>;
+  end;
+
   TCenterCursor = record
     CenterId: Integer;
     Code: string;
     Cal: TCentreCalendar;
     IsSequencial: Boolean;
-    Lanes: Integer;
-    // Ocupacion real por lane: intervalos ya ocupados (existentes + planificados).
-    LaneOcc: TArray<TLaneOcc>;
+    Lanes: Integer;         // capacidad POR MAQUINA (MaxLanes del centro)
+    // Maquinas del centro, en el orden en que el motor las prueba: primero las
+    // reales (por Orden y codigo), la de sistema SIEMPRE la ultima.
+    Maquinas: TArray<TMaquinaCursor>;
   end;
 
+// Carriles POR MAQUINA (V083): cuantos trabajos simultaneos admite CADA maquina
+// del centro, no cuantos admite el centro entero.
+//
+// Antes de V083 los carriles eran del centro y MaxLanes decia "cuantas cosas a
+// la vez caben aqui". Ahora el recurso es la maquina, y MaxLanes pasa a
+// describir la capacidad interna de cada una: normalmente 1, pero un horno o un
+// bano procesan varias piezas a la vez y eso es lo que expresa.
+//
+// Consecuencia: un centro con 3 maquinas y MaxLanes=2 tiene 6 huecos
+// simultaneos (3 x 2), no 2.
 function GetLanes(const C: TCentreTreball): Integer;
 begin
   if C.IsSequencial then Exit(1);
@@ -586,28 +709,52 @@ end;
 
 // Busca el lane con la cola mas temprana (Forward) o el inicio mas tardio
 // (Backward), para repartir la carga entre lanes paralelos.
-function PickLane(const Cursor: TCenterCursor; Forward: Boolean): Integer;
-var
-  I: Integer;
-  Best, V: TDateTime;
+// Ocupacion del carril ALane de la maquina AMaq. Centraliza el doble indice
+// para que el resto del motor no tenga que recordar el orden.
+function OccDe(const Cursor: TCenterCursor; AMaq, ALane: Integer): TLaneOcc;
 begin
-  Result := 0;
-  if Length(Cursor.LaneOcc) = 0 then Exit;
-  if Forward then Best := LaneEnd(Cursor.LaneOcc[0])
-  else Best := LaneStart(Cursor.LaneOcc[0]);
-  for I := 1 to High(Cursor.LaneOcc) do
-  begin
-    if Forward then
+  Result := nil;
+  if (AMaq < 0) or (AMaq > High(Cursor.Maquinas)) then Exit;
+  if (ALane < 0) or (ALane > High(Cursor.Maquinas[AMaq].LaneOcc)) then Exit;
+  Result := Cursor.Maquinas[AMaq].LaneOcc[ALane];
+end;
+
+// Elige MAQUINA y carril dentro del centro: el que queda libre antes (forward)
+// o el que empieza mas tarde (backward).
+//
+// Recorre las maquinas en su orden, que ya viene con las reales primero y la de
+// sistema al final (ver LoadMaquinasDeCentro). Como el criterio es "el que
+// acaba antes", una maquina real vacia siempre gana a la de sistema, que es lo
+// que se quiere: la de por defecto solo recoge lo que no cabe en las otras.
+procedure PickMaquinaLane(const Cursor: TCenterCursor; Forward: Boolean;
+  out AMaq, ALane: Integer);
+var
+  M, L: Integer;
+  Best, V: TDateTime;
+  Primero: Boolean;
+begin
+  AMaq := 0;
+  ALane := 0;
+  Best := 0;
+  Primero := True;
+
+  for M := 0 to High(Cursor.Maquinas) do
+    for L := 0 to High(Cursor.Maquinas[M].LaneOcc) do
     begin
-      V := LaneEnd(Cursor.LaneOcc[I]);
-      if V < Best then begin Best := V; Result := I; end;
-    end
-    else
-    begin
-      V := LaneStart(Cursor.LaneOcc[I]);
-      if V > Best then begin Best := V; Result := I; end;
+      if Forward then
+        V := LaneEnd(Cursor.Maquinas[M].LaneOcc[L])
+      else
+        V := LaneStart(Cursor.Maquinas[M].LaneOcc[L]);
+
+      if Primero then
+      begin
+        Best := V; AMaq := M; ALane := L; Primero := False;
+      end
+      else if (Forward and (V < Best)) or ((not Forward) and (V > Best)) then
+      begin
+        Best := V; AMaq := M; ALane := L;
+      end;
     end;
-  end;
 end;
 
 // Gap (minutos) que hay que dejar ANTES de colocar el nodo ACurr en este lane:
@@ -834,17 +981,43 @@ end;
 // Coloca un slot ocupado en el cursor por first-fit (primer lane sin colision).
 procedure PlaceExistingSlot(var ACursor: TCenterCursor; const ASlot: TLaneSlot);
 var
-  L, Placed: Integer;
+  M, L: Integer;
+  MaqPuesto, LanePuesto: Integer;
 begin
-  Placed := -1;
-  for L := 0 to High(ACursor.LaneOcc) do
-    if not LaneCollides(ACursor.LaneOcc[L], ASlot.StartDT, ASlot.EndDT) then
-    begin
-      Placed := L;
-      Break;
-    end;
-  if Placed < 0 then Placed := 0;  // todos chocan: apilar en lane 0
-  InsertSlotOrdered(ACursor.LaneOcc[Placed], ASlot);
+  MaqPuesto := -1;
+  LanePuesto := 0;
+
+  // First-fit sobre (maquina, carril). Es carga YA planificada: aqui solo se
+  // reconstruye donde estaba para no pisarla, no se decide nada.
+  //
+  // Nota: esto reparte por hueco, no por la maquina real del nodo. Se podria
+  // afinar leyendo Node.MaquinaId (V083), pero para el motor lo unico que
+  // importa es que el sitio quede ocupado; quien mande el reparto fino es el
+  // Gantt en modo MAQUINAS, que si lee MaquinaId.
+  for M := 0 to High(ACursor.Maquinas) do
+  begin
+    for L := 0 to High(ACursor.Maquinas[M].LaneOcc) do
+      if not LaneCollides(ACursor.Maquinas[M].LaneOcc[L],
+                          ASlot.StartDT, ASlot.EndDT) then
+      begin
+        MaqPuesto := M;
+        LanePuesto := L;
+        Break;
+      end;
+    if MaqPuesto >= 0 then Break;
+  end;
+
+  // Todos chocan: apilar en el primer carril de la primera maquina. Se pierde
+  // precision pero no se pierde la ocupacion, que es lo que importa.
+  if MaqPuesto < 0 then
+  begin
+    if Length(ACursor.Maquinas) = 0 then Exit;
+    if Length(ACursor.Maquinas[0].LaneOcc) = 0 then Exit;
+    MaqPuesto := 0;
+    LanePuesto := 0;
+  end;
+
+  InsertSlotOrdered(ACursor.Maquinas[MaqPuesto].LaneOcc[LanePuesto], ASlot);
 end;
 
 // Carga la ocupacion existente de un centro en el cursor. Si AOccCache <> nil,
@@ -900,6 +1073,236 @@ end;
 
 // Lee TODA la ocupacion existente del proyecto (una query) y la agrupa por
 // CenterId. El llamante es dueno del diccionario resultante.
+procedure BuildPrecedencesFromInputs(var AInputs: TArray<TSchedInput>;
+  const ASolapePct: Double);
+var
+  PorOT: TDictionary<string, TList<Integer>>;
+  Clave: string;
+  Lst: TList<Integer>;
+  I, J: Integer;
+  Par: TPair<string, TList<Integer>>;
+  // Encadenado por grupos de secuencia (operaciones paralelas).
+  GrupoPrev, GrupoAct: TList<Int64>;
+  OrdenGrupo: Integer;
+  // Claves de ordenacion (Orden, RawId) por indice. Existe porque una closure
+  // NO puede capturar un parametro 'var' (E2555: Cannot capture symbol), y el
+  // comparador del Sort necesita leer los datos de cada elemento. Copiar solo
+  // los dos campos que hacen falta es ademas mas barato que copiar el array de
+  // records entero.
+  ClaveOrden: TArray<Integer>;
+  ClaveRawId: TArray<Int64>;
+begin
+  if Length(AInputs) < 2 then Exit;
+
+  SetLength(ClaveOrden, Length(AInputs));
+  SetLength(ClaveRawId, Length(AInputs));
+  for I := 0 to High(AInputs) do
+  begin
+    ClaveOrden[I] := AInputs[I].Orden;
+    ClaveRawId[I] := AInputs[I].RawId;
+  end;
+
+  PorOT := TDictionary<string, TList<Integer>>.Create;
+  try
+    // Agrupar por OT. NumeroTrabajo identifica la OT dentro de la OF; sin el no
+    // hay ruta que encadenar (son operaciones sueltas), asi que se saltan.
+    for I := 0 to High(AInputs) do
+    begin
+      SetLength(AInputs[I].PredecesorasRawIds, 0);
+      AInputs[I].PorcentajeSolape := ASolapePct;
+
+      if Trim(AInputs[I].NumeroTrabajo) = '' then Continue;
+      Clave := IntToStr(AInputs[I].NumeroOF) + '|' + AInputs[I].SerieOF + '|' +
+               AInputs[I].NumeroTrabajo;
+      if not PorOT.TryGetValue(Clave, Lst) then
+      begin
+        Lst := TList<Integer>.Create;
+        PorOT.Add(Clave, Lst);
+      end;
+      Lst.Add(I);
+    end;
+
+    // Encadenar cada OT por SECUENCIA DE RUTA (campo Orden), no por la posicion
+    // en el array: cuando esto se ejecuta, la cola ya viene reordenada por la
+    // regla de prioridad (EDD, SPT...) y su orden no tiene nada que ver con la
+    // ruta. Ordenar aqui es imprescindible; sin ello se encadenaria al reves.
+    for Par in PorOT do
+    begin
+      Lst := Par.Value;
+
+      // Se ordena sobre ClaveOrden/ClaveRawId, no sobre AInputs: la closure no
+      // puede capturar un parametro 'var' (ver declaracion de las claves).
+      Lst.Sort(TComparer<Integer>.Construct(
+        function(const A, B: Integer): Integer
+        begin
+          Result := CompareValue(ClaveOrden[A], ClaveOrden[B]);
+          // Sin Orden del ERP (vistas antiguas: vale 0 para todas) el desempate
+          // por RawId es lo unico estable que queda. Es una aproximacion, pero
+          // determinista: dos ejecuciones dan la misma cadena.
+          if Result = 0 then
+            Result := CompareValue(ClaveRawId[A], ClaveRawId[B]);
+        end));
+
+      // Encadenar por GRUPOS de secuencia, no de uno en uno. Las operaciones
+      // con el mismo Orden van en PARALELO: no se encadenan entre si, pero el
+      // grupo siguiente tiene que esperarlas a TODAS.
+      //
+      // Encadenar solo a la ultima del grupo seria un error sutil: como las
+      // paralelas no dependen entre ellas, pueden acabar en cualquier orden
+      // (tipicamente estan en centros distintos), asi que la sucesora podria
+      // empezar antes de que acabase alguna de las otras.
+      GrupoPrev := TList<Int64>.Create;
+      GrupoAct := TList<Int64>.Create;
+      try
+        J := 0;
+        while J < Lst.Count do
+        begin
+          // Recoger el grupo completo con el mismo Orden.
+          GrupoAct.Clear;
+          OrdenGrupo := AInputs[Lst[J]].Orden;
+          while (J < Lst.Count) and (AInputs[Lst[J]].Orden = OrdenGrupo) do
+          begin
+            // Todo el grupo espera al grupo ANTERIOR completo.
+            if GrupoPrev.Count > 0 then
+              AInputs[Lst[J]].PredecesorasRawIds := GrupoPrev.ToArray;
+            GrupoAct.Add(AInputs[Lst[J]].RawId);
+            Inc(J);
+          end;
+
+          GrupoPrev.Clear;
+          GrupoPrev.AddRange(GrupoAct);
+        end;
+      finally
+        GrupoAct.Free;
+        GrupoPrev.Free;
+      end;
+    end;
+  finally
+    for Par in PorOT do
+      Par.Value.Free;
+    PorOT.Free;
+  end;
+end;
+
+function TopologicalSortInputs(var AInputs: TArray<TSchedInput>): Boolean;
+var
+  IdxPorRaw: TDictionary<Int64, Integer>;
+  Colocado: TArray<Boolean>;
+  Salida: TList<TSchedInput>;
+  I, K, PredIdx, Restantes, ColocadosVuelta: Integer;
+  Listo: Boolean;
+begin
+  Result := True;
+  if Length(AInputs) < 2 then Exit;
+
+  IdxPorRaw := TDictionary<Int64, Integer>.Create;
+  Salida := TList<TSchedInput>.Create;
+  try
+    for I := 0 to High(AInputs) do
+      IdxPorRaw.AddOrSetValue(AInputs[I].RawId, I);
+
+    SetLength(Colocado, Length(AInputs));
+    Restantes := Length(AInputs);
+
+    // Pasadas sucesivas: en cada una se coloca todo lo que ya tiene sus
+    // predecesoras colocadas. Se conserva el orden de entrada dentro de cada
+    // pasada, asi la regla de prioridad elegida por el usuario sigue mandando
+    // entre operaciones que no dependen una de otra.
+    while Restantes > 0 do
+    begin
+      ColocadosVuelta := 0;
+
+      for I := 0 to High(AInputs) do
+      begin
+        if Colocado[I] then Continue;
+
+        Listo := True;
+        for K := 0 to High(AInputs[I].PredecesorasRawIds) do
+          if IdxPorRaw.TryGetValue(AInputs[I].PredecesorasRawIds[K], PredIdx) then
+            if not Colocado[PredIdx] then
+            begin
+              Listo := False;
+              Break;
+            end;
+        // Una predecesora que NO esta en esta tanda no bloquea: puede estar ya
+        // planificada de antes, y en ese caso su fecha la aporta el caller.
+
+        if Listo then
+        begin
+          Salida.Add(AInputs[I]);
+          Colocado[I] := True;
+          Dec(Restantes);
+          Inc(ColocadosVuelta);
+        end;
+      end;
+
+      // Nadie ha podido colocarse: lo que queda esta en un ciclo. Se vuelca al
+      // final sin encadenar, para no perder operaciones ni dejar el bucle
+      // girando. La ruta del ERP esta mal definida y hay que avisar.
+      if ColocadosVuelta = 0 then
+      begin
+        Result := False;
+        for I := 0 to High(AInputs) do
+          if not Colocado[I] then
+          begin
+            SetLength(AInputs[I].PredecesorasRawIds, 0);
+            Salida.Add(AInputs[I]);
+            Colocado[I] := True;
+          end;
+        Restantes := 0;
+      end;
+    end;
+
+    AInputs := Salida.ToArray;
+  finally
+    Salida.Free;
+    IdxPorRaw.Free;
+  end;
+end;
+
+function BuildMaquinasCache: TMaquinasCache;
+var
+  Q: TADOQuery;
+  CenterId, N: Integer;
+  M: TMaquinaPub;
+  Arr: TArray<TMaquinaPub>;
+begin
+  Result := TMaquinasCache.Create;
+  if DMPlanner.ADOConnection = nil then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := DMPlanner.ADOConnection;
+    // El ORDER BY define en que orden el motor prueba las maquinas: primero las
+    // reales (EsFallback=0), la de sistema al final. Dentro de cada grupo, por
+    // el Orden del maestro y luego por codigo, para que el reparto sea
+    // determinista entre ejecuciones.
+    Q.SQL.Text :=
+      'SELECT CenterId, MaquinaId, CodigoMaquina, EsSistema ' +
+      'FROM FS_PL_V_CentroMaquinaPlan ' +
+      'WHERE CodigoEmpresa = :CE ' +
+      'ORDER BY CenterId, EsFallback, OrdenMaquina, CodigoMaquina';
+    Q.Parameters.ParamByName('CE').Value := DMPlanner.CodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      CenterId := Q.FieldByName('CenterId').AsInteger;
+      M.MaquinaId := Q.FieldByName('MaquinaId').AsInteger;
+      M.Codigo := Q.FieldByName('CodigoMaquina').AsString;
+      M.EsSistema := Q.FieldByName('EsSistema').AsBoolean;
+
+      if not Result.TryGetValue(CenterId, Arr) then Arr := nil;
+      N := Length(Arr);
+      SetLength(Arr, N + 1);
+      Arr[N] := M;
+      Result.AddOrSetValue(CenterId, Arr);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
 function BuildOccupancyCache(const AFechaBloqueo: TDateTime): TOccupancyCache;
 var
   Q: TADOQuery;
@@ -939,7 +1342,8 @@ begin
 end;
 
 function RunAutoScheduling(const AInputs: TArray<TSchedInput>;
-  const AParams: TSchedParams; AOccCache: TOccupancyCache = nil): TSchedResult;
+  const AParams: TSchedParams; AOccCache: TOccupancyCache;
+  AMaqCache: TMaquinasCache): TSchedResult;
 var
   Inputs: TArray<TSchedInput>;
   Params: TSchedParams;
@@ -949,6 +1353,8 @@ var
   C: TCentreTreball;
   Cursor: TCenterCursor;
   I, Lane: Integer;
+  Maq, K: Integer;                  // maquina elegida y su carril (V083)
+  MaqsCentro: TArray<TMaquinaPub>;  // maquinas del centro, de la cache
   Input: TSchedInput;
   Output: TSchedOutput;
   DurMin: Integer;
@@ -967,11 +1373,67 @@ var
   UtilOK: Boolean;
   UtilBase, UtilLibre: TDateTime;
   UtilIter: Integer;
+  // Precedencias de ruta (restriccion dura).
+  FinPredecesoras: TDictionary<Int64, TDateTime>;   // RawId -> fin planificado
+  IniPredecesoras: TDictionary<Int64, TDateTime>;   // RawId -> inicio (para el solape)
+  MinPorPrecedencia: TDateTime;
+  FinPred: TDateTime;
+
+  // Instante mas temprano en que puede empezar AInput segun sus predecesoras ya
+  // colocadas en esta tanda. 0 = sin restriccion.
+  //
+  // SEMANTICA DEL SOLAPE: identica a GetDependencyMinStart del Gantt, para que
+  // autoplanificar y mover a mano den el MISMO resultado. El porcentaje se
+  // aplica sobre la duracion de la PREDECESORA y se cuenta desde su INICIO:
+  //
+  //     inicio_minimo = inicio(pred) + duracion(pred) * Pct/100
+  //
+  //   Pct = 100 -> FS estricto: empieza cuando la anterior acaba (caso normal).
+  //   Pct =  60 -> puede empezar cuando la anterior lleva un 60% hecho.
+  //   Pct =   0 -> puede empezar a la vez que la anterior (equivale a SS).
+  //
+  // OJO al sentido: aqui 100 es "esperar a que acabe", no 0. Es al reves de lo
+  // que sugiere la palabra "solape", pero es como lo guarda el Gantt en
+  // FS_PL_Dependency.PorcentajeDependencia y no conviene tener dos criterios.
+  function MinInicioPorPrecedencia(const AInput: TSchedInput): TDateTime;
+  var
+    Idx: Integer;
+    Ini, Fin, Cand: TDateTime;
+    Pct: Double;
+  begin
+    Result := 0;
+    for Idx := 0 to High(AInput.PredecesorasRawIds) do
+      if FinPredecesoras.TryGetValue(AInput.PredecesorasRawIds[Idx], Fin) then
+      begin
+        Pct := AInput.PorcentajeSolape;
+        if Pct <= 0 then Pct := 100;   // sin valor explicito: FS estricto
+
+        if (Pct >= 100) or
+           (not IniPredecesoras.TryGetValue(AInput.PredecesorasRawIds[Idx], Ini)) then
+          // FS estricto, o no sabemos cuando empezo: el fin es la referencia.
+          Cand := Fin
+        else
+          Cand := Ini + (Fin - Ini) * (Pct / 100);
+
+        if Cand > Result then Result := Cand;
+      end;
+  end;
 
 begin
   Result := Default(TSchedResult);
   Inputs := Copy(AInputs);
   SortInputs(Inputs, AParams.Order);
+
+  // Con precedencias activas la cola tiene que llegar en orden topologico: el
+  // motor coloca en UNA pasada y consulta el fin de las predecesoras ya
+  // colocadas, asi que una sucesora que llegue antes que su predecesora no
+  // encontraria fecha y se colocaria demasiado pronto.
+  //
+  // Va DESPUES de SortInputs a proposito: la regla de prioridad elegida por el
+  // usuario sigue mandando entre operaciones independientes, y el orden
+  // topologico solo corrige lo que la ruta obliga.
+  if AParams.RespetarPrecedencias then
+    TopologicalSortInputs(Inputs);
 
   // Normalizar FechaBase: si es hoy (o anterior) usar Now(), para no planificar
   // en horas ya pasadas. Si es una fecha futura, se respeta tal cual (el usuario
@@ -997,6 +1459,11 @@ begin
   CentresMap := TDictionary<string, TCentreTreball>.Create;
   Cursors := TDictionary<Integer, TCenterCursor>.Create;
   OutList := TList<TSchedOutput>.Create;
+  // Fin planificado de cada operacion de esta tanda, para que sus sucesoras de
+  // ruta sepan cuando pueden empezar. Se crea siempre (es barato) aunque las
+  // precedencias esten desactivadas, para no llenar el codigo de guardas.
+  FinPredecesoras := TDictionary<Int64, TDateTime>.Create;
+  IniPredecesoras := TDictionary<Int64, TDateTime>.Create;
   try
     if DMPlanner.CentresRepo <> nil then
     begin
@@ -1026,6 +1493,10 @@ begin
         if not CentresMap.TryGetValue(UpperCase(CENTRO_SIN_CENTRO), C) then
         begin
           // Ni siquiera existe SIN CENTRO (BD sin V065): no se puede planificar.
+          // No queda fecha de fin, asi que esta operacion NO entra en
+          // FinPredecesoras: sus sucesoras de ruta no la esperaran. Es lo unico
+          // que se puede hacer (no hay fecha que propagar) y no se disimula:
+          // la operacion sale como no planificada y se ve en el resultado.
           Output.Status := ssSinCentro;
           Output.Observaciones := 'Sin centro (falta centro de sistema SIN CENTRO)';
           OutList.Add(Output);
@@ -1046,10 +1517,41 @@ begin
         Cursor.Code := C.CodiCentre;
         Cursor.Cal := DMPlanner.CentresRepo.GetCalendarFor(C.Id);
         Cursor.IsSequencial := C.IsSequencial;
+        // Capacidad POR MAQUINA: MaxLanes deja de ser "carriles del centro" y
+        // pasa a ser "trabajos simultaneos que admite cada maquina". Lo normal
+        // es 1 (una maquina, un trabajo); >1 es para hornos o banos que
+        // procesan varias piezas a la vez.
         Cursor.Lanes := GetLanes(C);
-        SetLength(Cursor.LaneOcc, Cursor.Lanes);
-        for J := 0 to Cursor.Lanes - 1 do
-          Cursor.LaneOcc[J] := TLaneOcc.Create;
+
+        // Maquinas del centro (V083). Si el centro no tiene ninguna en la cache
+        // (BD sin migrar, o cache no precargada) se usa UNA maquina ficticia
+        // con MaquinaId 0: el motor se comporta entonces igual que antes de
+        // V083, planificando a centro. Nunca se queda sin recurso.
+        if (AMaqCache <> nil) and AMaqCache.TryGetValue(C.Id, MaqsCentro) and
+           (Length(MaqsCentro) > 0) then
+        begin
+          SetLength(Cursor.Maquinas, Length(MaqsCentro));
+          for J := 0 to High(MaqsCentro) do
+          begin
+            Cursor.Maquinas[J].MaquinaId := MaqsCentro[J].MaquinaId;
+            Cursor.Maquinas[J].Codigo := MaqsCentro[J].Codigo;
+            Cursor.Maquinas[J].EsSistema := MaqsCentro[J].EsSistema;
+            SetLength(Cursor.Maquinas[J].LaneOcc, Cursor.Lanes);
+            for K := 0 to Cursor.Lanes - 1 do
+              Cursor.Maquinas[J].LaneOcc[K] := TLaneOcc.Create;
+          end;
+        end
+        else
+        begin
+          SetLength(Cursor.Maquinas, 1);
+          Cursor.Maquinas[0].MaquinaId := 0;   // 0 = sin maquina conocida
+          Cursor.Maquinas[0].Codigo := '';
+          Cursor.Maquinas[0].EsSistema := True;
+          SetLength(Cursor.Maquinas[0].LaneOcc, Cursor.Lanes);
+          for K := 0 to Cursor.Lanes - 1 do
+            Cursor.Maquinas[0].LaneOcc[K] := TLaneOcc.Create;
+        end;
+
         // Registrar ANTES de cargar (las listas son por referencia): asi, si
         // LoadExistingOccupancy lanza, el finally igualmente liberara las listas.
         Cursors.Add(C.Id, Cursor);
@@ -1071,10 +1573,13 @@ begin
       Output.DuracionMin := DurMin;
 
       NeedsShift := False;
-      // Lane se asigna dentro del case, pero el registro de ocupacion de mas
-      // abajo lo comprueba SIEMPRE: sin resetear aqui, un camino que no pase
-      // por PickLane arrastraria el lane de la fila anterior, que ademas puede
-      // ser de OTRO centro (Cursor tambien cambia por fila).
+      // Maquina y carril se asignan dentro del case, pero el registro de
+      // ocupacion de mas abajo los comprueba SIEMPRE: sin resetear aqui, un
+      // camino que no pase por PickMaquinaLane arrastraria los de la fila
+      // anterior, que ademas pueden ser de OTRO centro (Cursor tambien cambia
+      // por fila). Los dos a -1 para que OccDe devuelva nil y no se escriba
+      // ocupacion en un sitio que nadie ha elegido.
+      Maq := -1;
       Lane := -1;
       case Params.Mode of
         smBackward:
@@ -1082,10 +1587,10 @@ begin
             if Input.FechaCompromiso = 0 then
             begin
               // Fallback a Forward desde FechaBase, con la politica elegida.
-              Lane := PickLane(Cursor, True);
-              EffDist := EffectiveGapMin(Cursor.LaneOcc[Lane], Input, Cursor.Code,
+              PickMaquinaLane(Cursor, True, Maq, Lane);
+              EffDist := EffectiveGapMin(OccDe(Cursor, Maq, Lane), Input, Cursor.Code,
                 Params.DistanciaMinNodos, Params.SetupEngine);
-              StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
+              StartDT := PlaceForward(OccDe(Cursor, Maq, Lane), Cursor.Cal,
                 Params.FechaBase, DurMin, Params.Placement,
                 Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
                 EffDist, NeedsShift);
@@ -1101,15 +1606,15 @@ begin
               // Backward: terminar lo mas tarde posible <= FechaCompromiso, sin
               // pisar lo ya ocupado. Partimos del compromiso y retrocedemos
               // mientras choque con algun slot del lane.
-              Lane := PickLane(Cursor, False);
+              PickMaquinaLane(Cursor, False, Maq, Lane);
               EndDT := CalPrev(Cursor.Cal, Input.FechaCompromiso);
               StartDT := CalSub(Cursor.Cal, EndDT, DurMin);
-              while LaneCollides(Cursor.LaneOcc[Lane], StartDT, EndDT) do
+              while LaneCollides(OccDe(Cursor, Maq, Lane), StartDT, EndDT) do
               begin
                 // retroceder detras del slot que choca (el de inicio mas
                 // temprano que aun solapa): situamos el fin en su inicio.
                 EndDT := CalPrev(Cursor.Cal,
-                  EarliestCollidingStart(Cursor.LaneOcc[Lane], StartDT, EndDT));
+                  EarliestCollidingStart(OccDe(Cursor, Maq, Lane), StartDT, EndDT));
                 StartDT := CalSub(Cursor.Cal, EndDT, DurMin);
                 if StartDT < Params.FechaBase then Break;
               end;
@@ -1132,13 +1637,28 @@ begin
 
         smForward:
           begin
-            Lane := PickLane(Cursor, True);
+            PickMaquinaLane(Cursor, True, Maq, Lane);
             // Gap efectivo = max(distancia fija, tiempo de cambio secuencia-
             // dependiente respecto al ultimo nodo del lane).
-            EffDist := EffectiveGapMin(Cursor.LaneOcc[Lane], Input, Cursor.Code,
+            EffDist := EffectiveGapMin(OccDe(Cursor, Maq, Lane), Input, Cursor.Code,
               Params.DistanciaMinNodos, Params.SetupEngine);
-            StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
-              Params.FechaBase, DurMin, Params.Placement,
+
+            // --- Precedencias de ruta: restriccion dura ---------------------
+            // La operacion no puede empezar antes de que acaben las suyas. Se
+            // traduce a un suelo para la busqueda de hueco: en lugar de partir
+            // de FechaBase, se parte del fin de la predecesora. Como la cola
+            // viene en orden topologico, esas fechas ya estan calculadas.
+            MinPorPrecedencia := Params.FechaBase;
+            if Params.RespetarPrecedencias and
+               (Length(Input.PredecesorasRawIds) > 0) then
+            begin
+              FinPred := MinInicioPorPrecedencia(Input);
+              if FinPred > MinPorPrecedencia then
+                MinPorPrecedencia := CalNext(Cursor.Cal, FinPred);
+            end;
+
+            StartDT := PlaceForward(OccDe(Cursor, Maq, Lane), Cursor.Cal,
+              MinPorPrecedencia, DurMin, Params.Placement,
               Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
               EffDist, NeedsShift);
             EndDT := CalAdd(Cursor.Cal, StartDT, DurMin);
@@ -1151,7 +1671,10 @@ begin
             UtilOK := True;
             if (Params.UtillajeOcc <> nil) and (Length(Input.UtillajeReqs) > 0) then
             begin
-              UtilBase := Params.FechaBase;
+              // Se arranca del suelo de la precedencia, no de FechaBase: si no,
+              // recolocar por utillaje podria devolver el nodo a antes de que
+              // acabe su predecesora y se perderia la restriccion de ruta.
+              UtilBase := MinPorPrecedencia;
               UtilIter := 0;
               while not Params.UtillajeOcc.CabenTodos(Input.UtillajeReqs,
                       StartDT, EndDT) do
@@ -1178,7 +1701,7 @@ begin
                 // a pasar por PlaceForward para no pisar el centro ni salirse
                 // del calendario.
                 UtilBase := UtilLibre;
-                StartDT := PlaceForward(Cursor.LaneOcc[Lane], Cursor.Cal,
+                StartDT := PlaceForward(OccDe(Cursor, Maq, Lane), Cursor.Cal,
                   UtilBase, DurMin, Params.Placement,
                   Params.HuecoMinimoMin, Params.PorcentajeMinNodo,
                   EffDist, NeedsShift);
@@ -1210,10 +1733,22 @@ begin
           end;
       end;
 
+      // Fin de esta operacion para sus SUCESORAS de ruta. Se anota SIEMPRE que
+      // haya una fecha calculada, aunque el estado sea malo (saturada, fuera de
+      // plazo o sin utillaje): si no, la sucesora no encontraria referencia y
+      // caeria en FechaBase, es decir, se planificaria ANTES que su propia
+      // predecesora y sin que nada avisara. Mas vale encadenar sobre una fecha
+      // imperfecta que romper la ruta en silencio.
+      if Params.RespetarPrecedencias and (EndDT > 0) then
+      begin
+        FinPredecesoras.AddOrSetValue(Input.RawId, EndDT);
+        IniPredecesoras.AddOrSetValue(Input.RawId, StartDT);
+      end;
+
       // Registrar el nuevo nodo como ocupacion para que los siguientes de esta
       // tanda no lo pisen.
       if (Output.Status <> ssSaturado) and (Output.Status <> ssSinUtillaje) and
-         (Lane >= 0) and (Lane <= High(Cursor.LaneOcc)) then
+         (OccDe(Cursor, Maq, Lane) <> nil) then
       begin
         NewSlot.StartDT := StartDT;
         NewSlot.EndDT := EndDT;
@@ -1221,12 +1756,20 @@ begin
         // Arrastrar los atributos del nodo para que el SIGUIENTE que caiga tras
         // el en este lane pueda calcular su tiempo de cambio (uSetupRules).
         NewSlot.SetupAttrs := Input.SetupAttrs;
-        InsertSlotOrdered(Cursor.LaneOcc[Lane], NewSlot);
+        InsertSlotOrdered(OccDe(Cursor, Maq, Lane), NewSlot);
+
+        // Dejar constancia de EN QUE MAQUINA ha caido, para persistirla.
+        if (Maq >= 0) and (Maq <= High(Cursor.Maquinas)) then
+        begin
+          Output.MaquinaId := Cursor.Maquinas[Maq].MaquinaId;
+          Output.MaquinaCodigo := Cursor.Maquinas[Maq].Codigo;
+        end;
 
         // Y ocupar sus utillajes, para que los siguientes nodos de esta tanda
         // (de este centro o de cualquier otro) los vean cogidos.
         if (Params.UtillajeOcc <> nil) and (Length(Input.UtillajeReqs) > 0) then
           Params.UtillajeOcc.OcuparTodos(Input.UtillajeReqs, StartDT, EndDT);
+
 
         // Shift (solo politica ppHuecoShift): tras insertar el nuevo nodo,
         // empujar en cascada los slots posteriores que solapen, en orden por
@@ -1236,9 +1779,9 @@ begin
         if NeedsShift then
         begin
           ShiftTo := EndDT;
-          for J := 0 to Cursor.LaneOcc[Lane].Count - 1 do
+          for J := 0 to OccDe(Cursor, Maq, Lane).Count - 1 do
           begin
-            NewSlot := Cursor.LaneOcc[Lane][J];
+            NewSlot := OccDe(Cursor, Maq, Lane)[J];
             // Saltar los slots que terminan antes del cursor de shift (no
             // solapan) y el propio nodo recien insertado.
             if NewSlot.EndDT <= ShiftTo then Continue;
@@ -1268,12 +1811,12 @@ begin
             else
               NewSlot.StartDT := CalNext(Cursor.Cal, ShiftTo);
             NewSlot.EndDT := CalAdd(Cursor.Cal, NewSlot.StartDT, DurSlotMin);
-            Cursor.LaneOcc[Lane][J] := NewSlot;
+            OccDe(Cursor, Maq, Lane)[J] := NewSlot;
             ShiftTo := NewSlot.EndDT;
           end;
 
           // Tras los empujes la lista puede haber quedado desordenada: re-ordenar.
-          Cursor.LaneOcc[Lane].Sort(TComparer<TLaneSlot>.Construct(
+          OccDe(Cursor, Maq, Lane).Sort(TComparer<TLaneSlot>.Construct(
             function(const A, B: TLaneSlot): Integer
             begin
               Result := CompareDateTime(A.StartDT, B.StartDT);
@@ -1300,11 +1843,14 @@ begin
   finally
     // Liberar las listas de ocupacion de cada cursor.
     for Cursor in Cursors.Values do
-      for J := 0 to High(Cursor.LaneOcc) do
-        Cursor.LaneOcc[J].Free;
+      for J := 0 to High(Cursor.Maquinas) do
+        for K := 0 to High(Cursor.Maquinas[J].LaneOcc) do
+          Cursor.Maquinas[J].LaneOcc[K].Free;
     CentresMap.Free;
     Cursors.Free;
     OutList.Free;
+    FinPredecesoras.Free;
+    IniPredecesoras.Free;
   end;
 end;
 

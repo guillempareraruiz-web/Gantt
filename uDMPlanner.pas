@@ -48,6 +48,11 @@ type
   private
     FConnector: IGanttDataConnector;
     FConnectorObj: TObject;   // referencia paralela al objeto concreto
+    // Conector del hilo de guardado, con conexion propia (ver ConnectorParaHilo).
+    // El candado de su creacion perezosa es el propio DataModule (TMonitor
+    // funciona sobre cualquier TObject), asi no hace falta crear ni liberar
+    // nada: este DataModule no tiene constructor propio donde hacerlo.
+    FConnectorHilo: IGanttDataConnector;
     FServer: string;
     FDatabase: string;
     FUserName: string;
@@ -179,6 +184,20 @@ type
 
     // Acceso al conector
     property Connector: IGanttDataConnector read FConnector;
+
+    // Conector para el GUARDADO EN SEGUNDO PLANO. Tiene su PROPIA
+    // TADOConnection: NO se puede usar el de arriba desde un hilo secundario.
+    //
+    // Una TADOConnection es un objeto COM en apartamento monohilo: si el hilo
+    // de guardado la ocupa (mas aun dentro de una transaccion) y el hilo
+    // principal lanza cualquier consulta sobre ella, la llamada se serializa
+    // contra un apartamento bloqueado y la aplicacion se CUELGA entera, sin
+    // excepcion ni timeout. Era la causa de los cuelgues al mover nodos en el
+    // Gantt.
+    //
+    // Se crea perezosamente en la primera llamada y se libera en Disconnect.
+    // Devuelve nil si todavia no hay conexion configurada.
+    function ConnectorParaHilo: IGanttDataConnector;
     property CurrentProjectId: Integer read FCurrentProjectId write FCurrentProjectId;
     property CurrentProjectName: string read FCurrentProjectName;
     property EnModoDemo: Boolean read FEnModoDemo;
@@ -1095,10 +1114,67 @@ begin
   Result := Connect;
 end;
 
+function TDMPlanner.ConnectorParaHilo: IGanttDataConnector;
+var
+  Conn: TSQLServerConnector;
+begin
+  Result := nil;
+  if not ADOConnection.Connected then Exit;
+
+  // Creacion perezosa protegida: el primer guardado en segundo plano puede
+  // coincidir con otro, y no queremos abrir dos conexiones ni devolver una a
+  // medio construir.
+  TMonitor.Enter(Self);
+  try
+    if FConnectorHilo = nil then
+    begin
+      try
+        Conn := TSQLServerConnector.CreateParaHilo(ConnectionStringForThreads,
+          ADOConnection.CommandTimeout);
+        Conn.CodigoEmpresa := FCodigoEmpresa;
+        FConnectorHilo := Conn;
+      except
+        on E: Exception do
+        begin
+          // Sin conexion propia NO se devuelve la compartida como apano: eso es
+          // justo lo que colgaba la aplicacion. Mejor que el guardado falle y
+          // se reintente (los nodos siguen marcados como sucios).
+          PlanLog.Linea('AUTOSAVE: no se pudo abrir conexion propia: %s',
+            [E.Message]);
+          FConnectorHilo := nil;
+        end;
+      end;
+    end;
+    Result := FConnectorHilo;
+  finally
+    TMonitor.Exit(Self);
+  end;
+end;
+
 procedure TDMPlanner.Disconnect;
 begin
   FConnector := nil;
   FConnectorObj := nil;
+
+  // Soltar el conector del hilo de guardado. OJO con lo que esto NO hace:
+  // es una INTERFAZ con recuento de referencias, asi que si en este momento
+  // hay un guardado en marcha, el hilo conserva su propia referencia y el
+  // objeto (y su conexion) siguen vivos hasta que ese hilo termine. Es
+  // deliberado: cortarle la conexion a media transaccion seria peor.
+  //
+  // La consecuencia es que el conector puede acabar destruyendose EN EL HILO
+  // de guardado. No pasa nada porque su conexion se creo con COM en modo
+  // multithreaded (ver uPlanAutoSaver), que no ata el objeto a un apartamento
+  // concreto.
+  //
+  // Aun asi, lo ordenado antes de desconectar es dejar que el auto-save acabe
+  // (TPlanAutoSaver.Flush), como ya hace el cierre de la aplicacion.
+  TMonitor.Enter(Self);
+  try
+    FConnectorHilo := nil;
+  finally
+    TMonitor.Exit(Self);
+  end;
   if ADOConnection.Connected then
     ADOConnection.Connected := False;
 end;

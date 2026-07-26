@@ -486,7 +486,11 @@ type
 
     function TryGetNodeLayoutRectWorld(const NodeIndex: Integer; out R: TRectF): Boolean;
 
-    function RowTopYByCentreId(const CentreId: Integer): Single;
+    // Y de la fila de un centre. VIRTUAL por el mismo motivo que
+    // CentreIdFromScreenY: hay RowMode donde FRows[].CentreId NO es un centre
+    // (MAQUINAS guarda ahi el indice de fila), y sin traducir, el fantasma del
+    // drag no encuentra fila y se pinta en Y=0 (fuera de la vista).
+    function RowTopYByCentreId(const CentreId: Integer): Single; virtual;
 
     function LaneCollidesX(
                 const CentreId: Integer; const LaneIdx: Integer;
@@ -555,7 +559,27 @@ type
 
     procedure StartMoveNode(const NodeIndex: Integer; const MouseX, MouseY: Integer);
     procedure UpdateMovePreview(const MouseX, MouseY: Integer);
-    function CentreIdFromScreenY(const ScreenY: Integer): Integer;
+    // Centre real de la fila que hay bajo ScreenY. VIRTUAL porque no en todos
+    // los RowMode el TRowLayout.CentreId es un centre: en los modos donde la
+    // fila es otra cosa (p.ej. MAQUINAS, donde es el indice de fila) hay que
+    // traducirlo, o al arrastrar se escribiria un CentreId inexistente.
+    function CentreIdFromScreenY(const ScreenY: Integer): Integer; virtual;
+
+    // Se llama tras mover un nodo, con el centre y las fechas ya escritos y con
+    // la Y donde se ha soltado. El control base no hace nada; los RowMode donde
+    // la fila aporta algo mas que el centre lo aprovechan (MAQUINAS escribe
+    // aqui la maquina destino). No toca BD: solo el modelo en memoria, que es
+    // lo que despues persiste el auto-save.
+    //
+    // Devuelve True si el nodo ha cambiado de FILA y hay que rehacer el layout
+    // (p.ej. cambio de maquina dentro del mismo centre, que el chequeo de
+    // CentreId no detecta).
+    function AjustarNodoTrasMover(const ANodeIdx, AScreenY: Integer): Boolean; virtual;
+
+    // ANodeIdx ha seguido a AOrigenIdx (miembro de lote arrastrado en bloque):
+    // ya tiene sus fechas, centre y maquina copiados. El control base no hace
+    // nada; los RowMode con su propia estructura de filas la sincronizan aqui.
+    procedure NodoSeguidoAOtro(const ANodeIdx, AOrigenIdx: Integer); virtual;
 
     procedure ApplyResizeToModel(const NodeIdx: Integer;
                 const AStart, AEnd: TDateTime; const ADurMin: Integer);
@@ -10260,6 +10284,19 @@ begin
 end;
 
 
+function TGanttControl.AjustarNodoTrasMover(
+  const ANodeIdx, AScreenY: Integer): Boolean;
+begin
+  // Sin comportamiento en el control base: mover un nodo aqui solo cambia
+  // fechas y centre, que ya se han escrito. Ver la declaracion.
+  Result := False;
+end;
+
+procedure TGanttControl.NodoSeguidoAOtro(const ANodeIdx, AOrigenIdx: Integer);
+begin
+  // Sin comportamiento en el control base. Ver la declaracion.
+end;
+
 function TGanttControl.CentreIdFromScreenY(const ScreenY: Integer): Integer;
 var
   yW: Single;
@@ -11986,6 +12023,16 @@ begin
   FNodes[idx].StartTime := newStart;
   FNodes[idx].EndTime   := newEnd; // cache (opcional però pràctic)
 
+  // Gancho para los RowMode donde la fila aporta algo MAS que el centre (hoy:
+  // MAQUINAS, donde soltar en otra fila cambia de maquina). El control base no
+  // sabe nada de maquinas; el descendiente decide que escribe.
+  //
+  // Puede pedir el rebuild del mapa aunque el centre no haya cambiado: mover un
+  // nodo entre dos maquinas del MISMO centre cambia de fila, y sin rebuild se
+  // seguiria pintando donde estaba.
+  if AjustarNodoTrasMover(idx, FLastMouseY) then
+    bRebuildMap := True;
+
   // aquí: col·lisions (push-right) si el centre és seqüencial
 
 
@@ -12009,9 +12056,17 @@ begin
             FNodes[K].CentreId    := newCentreId;
             FNodes[K].StartTime   := newStart;
             FNodes[K].EndTime     := newEnd;
+            // La maquina va con el centre: un lote es UN bloque, y dejar a sus
+            // miembros repartidos entre maquinas distintas lo partiria en la
+            // vista de MAQUINAS. El nodo arrastrado manda, como con las fechas.
+            FNodes[K].MaquinaId   := FNodes[idx].MaquinaId;
             // Compartir tambien el ancho efectivo (la ventana compartida), por si
             // un miembro tenia DurationMin distinto: el lote es un solo bloque.
             FNodes[K].DurationMin := FNodes[idx].DurationMin;
+            // Avisar al descendiente: escribir FNodes[K].MaquinaId no basta si
+            // el RowMode reparte las filas por otra estructura (MAQUINAS usa su
+            // mapa inyectado), y el miembro se quedaria pintado en su fila vieja.
+            NodoSeguidoAOtro(K, idx);
           end;
 
       // Si es drag MULTIPLE, abrir un batch: agrupa historico Y notificacion.
@@ -12028,6 +12083,12 @@ begin
 
       // Drag multiple: mover todos el mismo delta de tiempo (cada uno en su
       // centro), respetando las reglas.
+      //
+      // A proposito NO se les cambia la maquina (modo MAQUINAS): cada nodo
+      // seleccionado puede estar en una distinta, y llevarlos todos a la del
+      // nodo arrastrado seria una decision que el usuario no ha pedido. Un
+      // drag multiple desplaza en el TIEMPO; para cambiar de maquina se
+      // arrastra el nodo suelto.
       if bMultiDrag then
       begin
         // Copiamos los indices a un array porque ResolveAllConstraints puede

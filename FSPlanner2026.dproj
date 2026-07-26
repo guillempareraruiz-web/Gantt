@@ -108,6 +108,10 @@
         <DCCReference Include="uGanttTypes.pas"/>
         <DCCReference Include="uGanttControl.pas"/>
         <DCCReference Include="uGanttControlGrupo.pas"/>
+        <DCCReference Include="uGanttControlTareas.pas"/>
+        <DCCReference Include="uGanttControlMaquinas.pas"/>
+        <DCCReference Include="uWbsSobrecarga.pas"/>
+        <DCCReference Include="uWbsPanelEsfuerzo.pas"/>
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>

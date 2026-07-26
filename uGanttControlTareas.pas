@@ -9,12 +9,15 @@ unit uGanttControlTareas;
   nodos de FS_PL_Node, asi que se cargan como TNode normales; lo que cambia es
   el ORDEN de las filas (WBS, no por centro) y el pintado de resumen/hito.
 
-  Fase 1: SOLO LECTURA (esqueleto). El orden y los metadatos de cada tarea
-  (nivel, tipo, plegado) se INYECTAN desde uVistaProyectos via SetOrden antes de
-  SetData; el control no toca la BD.
+  El orden y los metadatos de cada tarea (nivel, tipo, plegado, criticidad,
+  holgura, avance) se INYECTAN desde uVistaProyectos via SetOrden antes de
+  SetData: el control NO toca la BD ni calcula fechas. Las barras se pintan tal
+  cual vienen; quien las recalcula es el motor (uWbsScheduler), y la vista
+  vuelve a inyectar el resultado.
 
-  El motor de fechas (mover tarea -> propagar por dependencias) es Fase 2; aqui
-  las barras se pintan tal cual vienen.
+  El drag esta abierto: mover/redimensionar una barra y crear dependencias con
+  Ctrl+handle se notifican a la vista por eventos (TWbsBarraModificadaEvent,
+  TWbsDependenciaCreadaEvent), que persiste y replanifica.
 }
 
 interface
@@ -34,6 +37,20 @@ const
   // ruido, no un problema, y pintarlo de ambar hacia que un proyecto sano
   // pareciera en llamas.
   UMBRAL_DESVIACION = 1.10;   // +10%
+
+  // --- Linea base y sobreasignacion (V082) -----------------------------------
+  // La barra fantasma es una REFERENCIA: fina y apagada, para que se compare
+  // con la real sin competir con ella.
+  ALTO_BASE = 3;              // grosor en px de la barra de linea base
+  COL_BASE          = $00B0B0B0;   // gris medio: en plazo o adelantada
+  COL_BASE_RETRASO  = $000090FF;   // ambar: el fin real se ha ido mas tarde
+  // Cuanto se puede pasar del fin aprobado sin considerarlo retraso. Medio dia
+  // laborable: sin margen, un recalculo que mueve la tarea unos minutos ya
+  // pintaba de ambar medio proyecto.
+  MINUTOS_TOLERANCIA_BASE = 240;
+  // Distintivo de operario sobreasignado (azul de aviso, no rojo de error: las
+  // fechas son validas, lo que falta es gente).
+  COL_SOBRECARGA    = $00CC5A10;
 
 type
   // Metadatos de orden/jerarquia de una tarea, inyectados por la vista.
@@ -62,6 +79,16 @@ type
     // Colores de las etiquetas (V081) de esta tarea. Se pintan como puntos a
     // la izquierda de la barra, estilo Trello.
     ColoresTag: TArray<Integer>;
+
+    // --- Linea base (V082) ---------------------------------------------------
+    // Fechas del plan congelado. Se pintan como una barra FANTASMA fina bajo la
+    // barra real: comparar planificado contra aprobado de un vistazo es el
+    // motivo de tener linea base. Ambas a 0 = esta tarea no la tiene (es
+    // posterior a fijarla), y entonces no se pinta nada.
+    BaseIni: TDateTime;
+    BaseFin: TDateTime;
+    // Operario sobreasignado en algun tramo de esta tarea: marca ambar.
+    Sobrecargada: Boolean;
   end;
   TWbsRowInfoArray = TArray<TWbsRowInfo>;
 
@@ -431,6 +458,48 @@ begin
 
     Kind := FOrden[i].Kind;
     EsCritica := FOrden[i].EsCritica;
+
+    // ---- Linea base: barra FANTASMA bajo la real (V082) ----
+    // Va lo PRIMERO de la fila para que quede por debajo de todo lo demas: es
+    // una referencia, no el dato. Se pinta fina y gris, pegada al borde
+    // inferior, para que la comparacion sea inmediata sin robar protagonismo a
+    // la barra del plan vigente.
+    if (FOrden[i].BaseIni > 0) and (FOrden[i].BaseFin > FOrden[i].BaseIni) then
+    begin
+      xIni := TiempoAX(FOrden[i].BaseIni);
+      xFin := TiempoAX(FOrden[i].BaseFin);
+      if xFin - xIni < 2 then xFin := xIni + 2;   // que siempre se vea algo
+
+      Canvas.Brush.Style := bsSolid;
+      Canvas.Pen.Style := psClear;
+      // Gris si va en plazo o adelantada; ambar si el fin real se ha ido mas
+      // tarde que el aprobado (es lo que hay que mirar de un vistazo).
+      if FNodeLayouts[layoutIdx].Rect.Right - FScrollX >
+         xFin + FPxPerMinute * MINUTOS_TOLERANCIA_BASE then
+        Canvas.Brush.Color := COL_BASE_RETRASO
+      else
+        Canvas.Brush.Color := COL_BASE;
+
+      Canvas.FillRect(Rect(Round(xIni), Round(r.Bottom) + 1,
+                           Round(xFin), Round(r.Bottom) + 1 + ALTO_BASE));
+      Canvas.Pen.Style := psSolid;
+      Canvas.Brush.Style := bsClear;
+    end;
+
+    // ---- Operario sobreasignado: marca ambar al inicio de la barra ----
+    // No se tine la barra entera: las FECHAS son validas, lo que falla es que
+    // no hay gente para cumplirlas. Un distintivo pequeno lo dice sin hacer
+    // que la fila parezca un error de planificacion.
+    if FOrden[i].Sobrecargada and (Kind <> wtkHito) then
+    begin
+      Canvas.Brush.Style := bsSolid;
+      Canvas.Brush.Color := COL_SOBRECARGA;
+      Canvas.Pen.Style := psClear;
+      Canvas.FillRect(Rect(Round(r.Left) - 4, Round(r.Top),
+                           Round(r.Left) - 1, Round(r.Bottom)));
+      Canvas.Pen.Style := psSolid;
+      Canvas.Brush.Style := bsClear;
+    end;
 
     // ---- Hito: rombo (girado 45) sobre el cuadrado del layout ----
     if Kind = wtkHito then

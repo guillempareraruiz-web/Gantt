@@ -44,12 +44,8 @@ uses
   uWbsTypes, uCentreCalendar;
 
 type
-  // Restricciones soportadas (V078: FS_PL_Node.ConstraintKind).
-  TWbsConstraintKind = (
-    wckASAP      = 0,   // lo antes posible (default)
-    wckNoAntesDe = 1,   // Start >= ConstraintDate
-    wckFechaFija = 2    // Start  = ConstraintDate
-  );
+  // TWbsConstraintKind (las restricciones de fecha) vive en uWbsTypes: la ficha
+  // de tarea las ofrece al usuario y no debe depender del motor para eso.
 
   // Resultado del motor para UNA tarea. Volatil, indexado por NodeId.
   TWbsSchedule = record
@@ -110,6 +106,11 @@ type
     function OrdenTopologico: Boolean;            // False si hay ciclo
     procedure ForwardPass;
     procedure BackwardPass;
+    // ALAP (lo mas tarde posible): empuja la tarea contra su LateStart. Va
+    // DESPUES del backward pass porque es de ahi de donde sale esa fecha.
+    // Devuelve True si ha movido alguna tarea (y por tanto hay que rehacer los
+    // pases: las holguras calculadas antes han quedado caducadas).
+    function AplicarALAP: Boolean;
     procedure RollUpResumenes;
     procedure MarcarCriticas(const AToleranciaMin: Double);
 
@@ -516,14 +517,35 @@ begin
         if Cand > Inicio then Inicio := Cand;
       end;
 
-    // Restricciones de la tarea (V078).
+    // Restricciones de la tarea (V078 + V082).
+    //
+    // Las que atan por el INICIO se aplican sobre Inicio; las que atan por el
+    // FIN se traducen a inicio restando la duracion. ALAP no se toca aqui: es
+    // flexible y necesita el fin del proyecto, que todavia no se conoce -> se
+    // resuelve despues del backward pass (AplicarALAP).
     Restriccion := TWbsConstraintKind(T.ConstraintKind);
-    if (Restriccion = wckNoAntesDe) and (T.ConstraintDate > 0) then
-    begin
-      if T.ConstraintDate > Inicio then Inicio := T.ConstraintDate;
-    end
-    else if (Restriccion = wckFechaFija) and (T.ConstraintDate > 0) then
-      Inicio := T.ConstraintDate;
+    if T.ConstraintDate > 0 then
+      case Restriccion of
+        // Semiflexibles por inicio.
+        wckSNET:  // no comenzar ANTES del: empuja hacia adelante
+          if T.ConstraintDate > Inicio then Inicio := T.ConstraintDate;
+        wckSNLT:  // no comenzar DESPUES del: es un techo, tira hacia atras
+          if T.ConstraintDate < Inicio then Inicio := T.ConstraintDate;
+
+        // Semiflexibles por fin: se pasan a inicio restando la duracion.
+        wckFNET:  // no finalizar antes del
+          if RestarLaborables(T.ConstraintDate, Dur) > Inicio then
+            Inicio := RestarLaborables(T.ConstraintDate, Dur);
+        wckFNLT:  // no finalizar despues del
+          if RestarLaborables(T.ConstraintDate, Dur) < Inicio then
+            Inicio := RestarLaborables(T.ConstraintDate, Dur);
+
+        // Rigidas: clavan la fecha, pase lo que pase con los predecesores.
+        wckMSO:   // debe comenzar EL dia
+          Inicio := T.ConstraintDate;
+        wckMFO:   // debe finalizar EL dia
+          Inicio := RestarLaborables(T.ConstraintDate, Dur);
+      end;
 
     // Normalizar a instante laborable y calcular el fin.
     S.EarlyStart := FCalendar.NextWorkingTime(Inicio);
@@ -582,6 +604,102 @@ begin
     S.LateStart := RestarLaborables(S.LateFinish, Dur);
     FSched.AddOrSetValue(NodeId, S);
   end;
+end;
+
+function TWbsScheduler.AplicarALAP: Boolean;
+var
+  K, TareaIdx, I, J: Integer;
+  NodeId: Integer;
+  S, SSuc: TWbsSchedule;
+  T: TWbsTask;
+  Lst: TList<Integer>;
+  Dur: Double;
+  HayALAP: Boolean;
+  Vueltas: Integer;
+begin
+  Result := False;
+  // ALAP = "lo mas tarde posible sin retrasar el proyecto", que es exactamente
+  // la definicion de LateStart. Asi que la tarea se planta ahi y se queda con
+  // holgura cero (pasa a ser critica, como en MS Project).
+  //
+  // No basta con una pasada: mover una tarea ALAP hacia atras puede empujar a
+  // sus sucesores, que a su vez pueden ser ALAP. Se repite mientras algo se
+  // mueva, con tope de seguridad.
+  HayALAP := False;
+  for I := 0 to High(FTareas) do
+    if EsHoja(FTareas[I]) and
+       (TWbsConstraintKind(FTareas[I].ConstraintKind) = wckALAP) then
+    begin
+      HayALAP := True;
+      Break;
+    end;
+  if not HayALAP then Exit;   // el caso normal: ni tocar nada
+
+  Vueltas := 0;
+  repeat
+    Inc(Vueltas);
+    HayALAP := False;
+
+    // En orden topologico INVERSO: una tarea ALAP se coloca despues de que sus
+    // sucesores ya sepan cuando pueden empezar.
+    for K := High(FOrden) downto 0 do
+    begin
+      NodeId := FOrden[K];
+      if not FIdx.TryGetValue(NodeId, TareaIdx) then Continue;
+      T := FTareas[TareaIdx];
+      if TWbsConstraintKind(T.ConstraintKind) <> wckALAP then Continue;
+      if not FSched.TryGetValue(NodeId, S) then Continue;
+      if S.LateStart <= 0 then Continue;    // no calculada (ciclo)
+
+      // Ya esta en su sitio: no hay nada que mover.
+      if SameValue(S.EarlyStart, S.LateStart, 1 / MinsPerDay) then Continue;
+
+      Dur := DuracionDe(T);
+      S.EarlyStart := S.LateStart;
+      S.EarlyFinish := SumarLaborables(S.EarlyStart, Dur);
+      FSched.AddOrSetValue(NodeId, S);
+      HayALAP := True;
+      Result := True;   // algo se ha movido: hay que rehacer los pases
+
+      // Empujar a los sucesores que ahora empezarian antes que su predecesor.
+      // Solo hace falta para FS y SS: son los que atan por el inicio de B.
+      if FSucesores.TryGetValue(NodeId, Lst) then
+        for J := 0 to Lst.Count - 1 do
+        begin
+          if not FSched.TryGetValue(FLinks[Lst[J]].ToNodeId, SSuc) then Continue;
+          case FLinks[Lst[J]].LinkType of
+            wltSS:
+              if SumarLaborables(S.EarlyStart, FLinks[Lst[J]].LagMinutos) >
+                 SSuc.EarlyStart then
+              begin
+                SSuc.EarlyStart := SumarLaborables(S.EarlyStart,
+                  FLinks[Lst[J]].LagMinutos);
+                SSuc.EarlyFinish := SumarLaborables(SSuc.EarlyStart,
+                  SSuc.DuracionMin);
+                FSched.AddOrSetValue(SSuc.NodeId, SSuc);
+              end;
+            wltFS:
+              if SumarLaborables(S.EarlyFinish, FLinks[Lst[J]].LagMinutos) >
+                 SSuc.EarlyStart then
+              begin
+                SSuc.EarlyStart := SumarLaborables(S.EarlyFinish,
+                  FLinks[Lst[J]].LagMinutos);
+                SSuc.EarlyFinish := SumarLaborables(SSuc.EarlyStart,
+                  SSuc.DuracionMin);
+                FSched.AddOrSetValue(SSuc.NodeId, SSuc);
+              end;
+          end;
+        end;
+    end;
+  until (not HayALAP) or (Vueltas > 50);
+
+  // Tope alcanzado: el plan queda a medio resolver y el usuario veria fechas
+  // incoherentes sin saber por que. Se reporta como el resto de incidencias
+  // del motor (los ciclos), en vez de callarlo.
+  if HayALAP then
+    FErrores.Add(
+      'Las restricciones "lo mas tarde posible" no se han podido estabilizar; '#13#10 +
+      'revise si se contradicen con alguna fecha fija.');
 end;
 
 procedure TWbsScheduler.RollUpResumenes;
@@ -751,6 +869,23 @@ begin
   if FFinProyecto <= 0 then FFinProyecto := FInicioAncla;
 
   BackwardPass;
+  // ALAP solo se puede resolver ahora: necesita el LateStart, que es
+  // precisamente lo que acaba de calcular el backward pass.
+  //
+  // Y si ALAP ha movido algo, hay que REHACER los dos pases: las tareas
+  // desplazadas cambian los EarlyStart de su cadena, y las holguras que
+  // MarcarCriticas va a leer se calcularon antes de ese movimiento. Sin esto,
+  // el camino critico se marcaba sobre datos ya caducados.
+  if AplicarALAP then
+  begin
+    ForwardPass;
+    BackwardPass;
+    // Segunda pasada de ALAP sobre las fechas ya reconvergidas. No se itera
+    // mas: dos vueltas bastan para el caso real (una cadena de ALAP), y un
+    // bucle abierto aqui podria no converger nunca con restricciones rigidas
+    // que se contradigan entre si.
+    AplicarALAP;
+  end;
   MarcarCriticas(CToleranciaCriticaMin);
   RollUpResumenes;
 

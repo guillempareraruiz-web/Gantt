@@ -507,7 +507,7 @@ begin
     RowMode := SafeStr(tvProyectos.DataController.Values[I, colProjRowMode.Index]);
     if (RowMode <> 'CENTROS') and (RowMode <> 'GRUPO') and (RowMode <> 'TREE')
        and (RowMode <> 'UTILLAJES') and (RowMode <> 'CLIENTES')
-       and (RowMode <> 'OPERARIOS') then
+       and (RowMode <> 'OPERARIOS') and (RowMode <> 'MAQUINAS') then
       RowMode := 'CENTROS';
 
     S := SafeStr(tvProyectos.DataController.Values[I, colProjNivelAgrupacion.Index]);

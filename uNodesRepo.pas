@@ -74,6 +74,9 @@ begin
     Q.Connection := FConnection;
     Q.SQL.Text :=
       'SELECT n.NodeId, n.CenterId, n.FechaInicio, n.FechaFin, n.DuracionMin, ' +
+      // Maquina dentro del centre (V083). Sin esto, cualquier nodo NO tocado en
+      // esta sesion viajaria con MaquinaId = 0 y se perderia su maquina.
+      '  ISNULL(n.MaquinaId, 0) AS MaquinaId, ' +
       '  ISNULL(n.LoteId, 0) AS LoteId, ' +
       '  ISNULL(n.Source, ''ERP'') AS Source, ' +
       '  ISNULL(n.Caption, '''') AS Caption, ' +
@@ -129,10 +132,16 @@ begin
     while not Q.Eof do
     begin
       // ── TNode ──
+      // Limpiar el record ANTES de rellenarlo: N es una variable local que se
+      // reutiliza en cada vuelta, asi que cualquier campo que no se asigne
+      // explicitamente arrastraria el valor de la fila anterior.
+      N := Default(TNode);
+
       N.Id := Q.FieldByName('NodeId').AsInteger;
       N.DataId := N.Id; // usamos el mismo ID para el lookup a NodeData
       N.LoteId := Q.FieldByName('LoteId').AsInteger;
       N.Source := Q.FieldByName('Source').AsString;
+      N.MaquinaId := Q.FieldByName('MaquinaId').AsInteger;
 
       if Q.FieldByName('CenterId').IsNull then
         N.CentreId := -1

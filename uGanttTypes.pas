@@ -34,6 +34,9 @@ type
   TNode = record
     Id: Integer;
     CentreId: Integer;                  // centre actual on està planificat
+    // Màquina DINS del centre on està planificat (V083). 0 = sense assignar.
+    // El recurs finit real és la màquina; el centre és qui l'agrupa.
+    MaquinaId: Integer;
     StartTime: TDateTime;
     EndTime: TDateTime;
     DurationMin: Double;

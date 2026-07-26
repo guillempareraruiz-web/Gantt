@@ -104,6 +104,11 @@ type
 
 implementation
 
+uses
+  // CoInitialize/CoUninitialize: ADO es COM, y todo hilo que lo use tiene que
+  // inicializarlo por su cuenta (ver el mismo patron en uBusyDialog).
+  Winapi.ActiveX;
+
 { TPlanAutoSaver }
 
 constructor TPlanAutoSaver.Create(AOwner: TComponent;
@@ -247,15 +252,30 @@ begin
       ErrMsg: string;
     begin
       ErrMsg := '';
+      // ADO es COM y hay que inicializarlo EN ESTE HILO: aqui se abre y se usa
+      // una TADOConnection propia (DMPlanner.ConnectorParaHilo), y sin esto
+      // CoCreateInstance falla con CO_E_NOTINITIALIZED y el guardado no llega a
+      // ejecutarse nunca. Mismo patron que uBusyDialog.
+      //
+      // MULTITHREADED y no el apartamento por defecto: la conexion se crea en
+      // el primer ciclo de guardado pero se REUTILIZA en los siguientes, y cada
+      // ciclo es un hilo nuevo. En STA el objeto quedaria atado al apartamento
+      // del hilo que lo creo (que ya no existe) y volveriamos a tener el
+      // problema que este arreglo viene a resolver.
+      CoInitializeEx(nil, COINIT_MULTITHREADED);
       try
-        // 1) Posiciones (ligero) para los solo-movidos/reencadenados.
-        if Assigned(FSavePosProc) and (Length(NodesPos) > 0) then
-          FSavePosProc(ProjectId, NodesPos);
-        // 2) Ficha completa para los editados.
-        if Length(DirtyFull) > 0 then
-          FSaveProc(ProjectId, NodesFull, DirtyFull);
-      except
-        on E: Exception do ErrMsg := E.Message;
+        try
+          // 1) Posiciones (ligero) para los solo-movidos/reencadenados.
+          if Assigned(FSavePosProc) and (Length(NodesPos) > 0) then
+            FSavePosProc(ProjectId, NodesPos);
+          // 2) Ficha completa para los editados.
+          if Length(DirtyFull) > 0 then
+            FSaveProc(ProjectId, NodesFull, DirtyFull);
+        except
+          on E: Exception do ErrMsg := E.Message;
+        end;
+      finally
+        CoUninitialize;
       end;
 
       TThread.Synchronize(nil,

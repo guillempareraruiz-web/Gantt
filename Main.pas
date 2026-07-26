@@ -1633,11 +1633,12 @@ begin
   end;
   FVistaGantt.Inicializar;
 
-  // Cablar OnPlanModified del control interno hacia el AutoSaver del Main
-  if Assigned(FVistaGantt.GanttControl) then
-    FVistaGantt.GanttControl.OnPlanModified := GanttPlanModified;
-  if Assigned(FVistaGantt.GanttControl) then
-    FVistaGantt.GanttControl.OnLinksModified := GanttLinksModified;
+  // Cablar hacia el AutoSaver. Se asigna a LA VISTA, no al control interno: la
+  // vista recrea ese control cada vez que se cambia el modo de filas, y el
+  // control nuevo nacia sin eventos -> el plan dejaba de guardarse en silencio.
+  // La vista los conserva y los reaplica tras cada recreacion.
+  FVistaGantt.OnPlanModified := GanttPlanModified;
+  FVistaGantt.OnLinksModified := GanttLinksModified;
 
   if Assigned(FFiniteCapacity) then
   begin
@@ -1988,10 +1989,18 @@ begin
       procedure(AProjectId: Integer; const ANodes: TArray<TNode>)
       var
         Res: TConnectorResult;
+        Conn: IGanttDataConnector;
       begin
-        if not Assigned(DMPlanner) or not Assigned(DMPlanner.Connector) then
+        // ESTE CODIGO CORRE EN UN HILO SECUNDARIO: hay que usar el conector
+        // con conexion PROPIA. Usar DMPlanner.Connector (el de la UI) cuelga la
+        // aplicacion entera, porque una TADOConnection es COM monohilo y el
+        // hilo principal se queda esperando un apartamento ocupado.
+        if not Assigned(DMPlanner) then
           raise Exception.Create('No hay conexi'#243'n a BD');
-        Res := DMPlanner.Connector.SaveNodePositions(AProjectId, ANodes);
+        Conn := DMPlanner.ConnectorParaHilo;
+        if Conn = nil then
+          raise Exception.Create('No se pudo abrir la conexi'#243'n de guardado');
+        Res := Conn.SaveNodePositions(AProjectId, ANodes);
         if not Res.Success then
           raise Exception.Create(Res.ErrorMessage);
       end;
@@ -2041,11 +2050,18 @@ procedure TForm1.SaveNodesViaConnector(AProjectId: Integer;
   const ANodes: TArray<TNode>; const ANodeData: TArray<TNodeData>);
 var
   Res: TConnectorResult;
+  Conn: IGanttDataConnector;
 begin
-  if not Assigned(DMPlanner) or not Assigned(DMPlanner.Connector) then
+  // Igual que SavePosProc: lo llama el hilo del auto-save, asi que necesita el
+  // conector con conexion propia (ver ConnectorParaHilo).
+  if not Assigned(DMPlanner) then
     raise Exception.Create('No hay conexi'#243'n a BD');
 
-  Res := DMPlanner.Connector.SaveNodes(AProjectId, ANodes, ANodeData);
+  Conn := DMPlanner.ConnectorParaHilo;
+  if Conn = nil then
+    raise Exception.Create('No se pudo abrir la conexi'#243'n de guardado');
+
+  Res := Conn.SaveNodes(AProjectId, ANodes, ANodeData);
   if not Res.Success then
     raise Exception.Create(Res.ErrorMessage);
 end;

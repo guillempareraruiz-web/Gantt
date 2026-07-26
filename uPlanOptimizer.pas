@@ -32,7 +32,7 @@ uses
   System.DateUtils, System.Generics.Collections,
   System.Threading, System.SyncObjs,
   uBacklogScheduler, uPlanLog, uDMPlanner, uCentresRepo, uCentreCalendar,
-  uGanttTypes;
+  uGanttTypes, uUtillajeTypes;
 
 type
   // Parametros del optimizador (con defaults razonables).
@@ -95,7 +95,12 @@ type
     OptParams: TOptimizerParams;
     Base: TArray<TSchedInput>;   // orden de partida (mejor regla)
     OccCache: TOccupancyCache;   // ocupacion existente precargada (sin BD)
+    MaqCache: TMaquinasCache;    // maquinas por centro, precargadas (V083)
     TardRef, MkRef: Double;      // referencias de normalizacion
+    // PLANTILLA de la ocupacion de utillajes (estado inicial, antes de esta
+    // tanda). NO se usa directamente: cada evaluacion trabaja sobre un Clone.
+    // Ver EvaluarCtx. nil = optimizar sin restriccion de utillaje.
+    UtillajeBase: TUtillajeOccupancy;
   end;
 
   // Resultado de UNA cadena SA.
@@ -133,8 +138,34 @@ function EvaluarCtx(const ACtx: TOptContext; const AOrden: TArray<TSchedInput>;
 var
   Res: TSchedResult;
   TardN, MkN: Double;
+  Params: TSchedParams;
+  Occ: TUtillajeOccupancy;
 begin
-  Res := RunAutoScheduling(AOrden, ACtx.SchedParams, ACtx.OccCache);
+  Params := ACtx.SchedParams;   // copia local: no tocamos el contexto compartido
+
+  // Utillajes: una copia LIMPIA por evaluacion, no por hilo.
+  //
+  // TUtillajeOccupancy se va ocupando conforme el motor coloca nodos, asi que
+  // sirve para UNA pasada. Con una copia por hilo, la segunda iteracion de la
+  // cadena encontraria el utillaje ya ocupado por la primera y la evaluacion
+  // saldria peor de lo que es. Clonar aqui cuesta poco (dos diccionarios) y
+  // deja cada evaluacion partiendo del MISMO estado inicial.
+  //
+  // Esto es lo que permite que el optimizador respete los utillajes. Antes se
+  // ponia la restriccion a nil y el plan optimizado podia violarlos.
+  Occ := nil;
+  try
+    if ACtx.UtillajeBase <> nil then
+    begin
+      Occ := ACtx.UtillajeBase.Clone;
+      Params.UtillajeOcc := Occ;
+    end;
+
+    Res := RunAutoScheduling(AOrden, Params, ACtx.OccCache, ACtx.MaqCache);
+  finally
+    Occ.Free;
+  end;
+
   AKpis := ComputeKpis(Res);
   if ACtx.TardRef > 0 then TardN := AKpis.RetrasoTotalH / ACtx.TardRef else TardN := 0;
   if ACtx.MkRef   > 0 then MkN   := AKpis.MakespanH / ACtx.MkRef       else MkN := 0;
@@ -267,6 +298,8 @@ var
   Tasks: TArray<ITask>;
   SW: TStopwatch;
   FechaBloqueo: TDateTime;
+  ParamsFinal: TSchedParams;         // params de la replanificacion final
+  OccFinal: TUtillajeOccupancy;      // su copia limpia de utillajes
 
   // Crea la tarea de la cadena AIdx. AIdx es POR VALOR -> cada tarea captura su
   // propio indice (evita el bug de captura del for). Ctx/Chains/SW se capturan del
@@ -291,10 +324,13 @@ begin
 
   Ctx.SchedParams := ASchedParams;
   Ctx.SchedParams.Order := soPreordenado;   // respetar el orden que damos
-  // TUtillajeOccupancy NO es thread-safe: tiene estado y aqui se lanzan varios
-  // hilos SA que comparten este record. Se anula explicitamente para que nadie
-  // lo comparta por accidente. El optimizador, por tanto, NO respeta la
-  // restriccion de utillaje (la alerta R02 seguira avisando si la viola).
+
+  // Utillajes: el objeto que llega NO se puede compartir entre los hilos SA
+  // (tiene estado y no es thread-safe). Se guarda como PLANTILLA y se anula en
+  // los params compartidos; cada evaluacion se hace un Clone limpio a partir de
+  // ella (ver EvaluarCtx). Asi el optimizador SI respeta la restriccion, que
+  // antes se perdia: se ponia a nil y el plan optimizado podia violar utillajes.
+  Ctx.UtillajeBase := ASchedParams.UtillajeOcc;
   Ctx.SchedParams.UtillajeOcc := nil;
   Ctx.OptParams := AOptParams;
   Ctx.Base := AInicial;
@@ -303,9 +339,12 @@ begin
   // partir de aqui las cadenas evaluan sin tocar BD -> seguras en paralelo.
   FechaBloqueo := 0;   // la comparativa no aplica bloqueo (preview)
   Ctx.OccCache := BuildOccupancyCache(FechaBloqueo);
+  // Maquinas por centro: igual que la ocupacion, se lee UNA vez en el hilo
+  // principal para que las cadenas SA no toquen BD.
+  Ctx.MaqCache := BuildMaquinasCache;
   try
     // Referencias de normalizacion desde la solucion inicial (usando ya la cache).
-    KIni := ComputeKpis(RunAutoScheduling(AInicial, Ctx.SchedParams, Ctx.OccCache));
+    KIni := ComputeKpis(RunAutoScheduling(AInicial, Ctx.SchedParams, Ctx.OccCache, Ctx.MaqCache));
     Ctx.TardRef := Max(1.0, KIni.RetrasoTotalH);
     Ctx.MkRef   := Max(1.0, KIni.MakespanH);
     AProgress.ObjInicial :=
@@ -349,10 +388,24 @@ begin
     for I := 0 to NHilos - 1 do
       Inc(AProgress.Iteraciones, Chains[I].Iteraciones);
 
-    // Resultado final = planificar la mejor permutacion encontrada.
-    Result := RunAutoScheduling(Chains[IdxMejor].Orden, Ctx.SchedParams, Ctx.OccCache);
+    // Resultado final = planificar la mejor permutacion encontrada. Con su
+    // propia copia de utillajes: es el plan que se devuelve y tiene que salir
+    // con la restriccion aplicada, igual que las evaluaciones.
+    ParamsFinal := Ctx.SchedParams;
+    OccFinal := nil;
+    try
+      if Ctx.UtillajeBase <> nil then
+      begin
+        OccFinal := Ctx.UtillajeBase.Clone;
+        ParamsFinal.UtillajeOcc := OccFinal;
+      end;
+      Result := RunAutoScheduling(Chains[IdxMejor].Orden, ParamsFinal, Ctx.OccCache, Ctx.MaqCache);
+    finally
+      OccFinal.Free;
+    end;
   finally
     Ctx.OccCache.Free;
+    Ctx.MaqCache.Free;
   end;
 end;
 

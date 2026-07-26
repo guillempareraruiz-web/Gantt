@@ -69,6 +69,18 @@ type
     DuracionMin: Double;
     MinutosInvertidos: Double;
 
+    // --- Triada de esfuerzo (V082) -------------------------------------------
+    TrabajoMin: Double;
+    TipoTarea: TWbsTipoTarea;
+    // Unidades vigentes (suma de dedicaciones / 100). Entra con lo que hay en
+    // BD y sale recalculada si el usuario toca la pestana de operarios.
+    Unidades: Double;
+
+    // Restriccion de fecha, juego completo de MS Project (V082). Sustituye al
+    // apano de "editar el inicio = fecha fija": ahora se elige explicitamente.
+    ConstraintKind: Integer;
+    ConstraintDate: TDateTime;
+
     Detail: TWbsTaskDetail;
     Operarios: TWbsTaskOperarioArray;
     // Catalogo de etiquetas con Asignada marcada para esta tarea (V081).
@@ -83,12 +95,15 @@ type
   private
     FPages: TPageControl;
     FTabTarea: TTabSheet;
+    FTabTiempo: TTabSheet;      // fechas, restriccion y esfuerzo (V082)
     FTabOperarios: TTabSheet;
     FTabNotas: TTabSheet;
 
     // --- Cabecera ---
     FLblTarea: TLabel;
     FLblAvanceValor: TLabel;
+    // Rotulo bajo la cifra: sin el, un "56 %" suelto no dice de que es.
+    FLblAvanceRotulo: TLabel;
 
     // --- Tab Tarea ---
     FCbTipo: TcxComboBox;
@@ -113,6 +128,19 @@ type
     FMemoNotas: TcxMemo;
     FLblAviso: TLabel;
 
+    // --- Triada de esfuerzo (V082) -------------------------------------------
+    // Trabajo = Duracion x Unidades. FCbTipoTarea decide cual de las tres se
+    // despeja al tocar las otras; FLblUnidades muestra las unidades vigentes
+    // (suma de dedicaciones de la pestana Operarios), que no se teclean aqui.
+    FCbTipoTarea: TcxComboBox;
+    FEdTrabajo: TcxSpinEdit;
+    FLblUnidades: TLabel;
+    FLblEcuacion: TLabel;
+    // Restriccion de fecha (juego completo de MS Project, V082).
+    FCbRestriccion: TcxComboBox;
+    FEdFechaRestr: TcxDateEdit;
+    FLblAvisoRestr: TLabel;
+
     // --- Tab Operarios ---
     // cxGrid en vez de TcxCheckListBox: aquel codifica el marcado en la
     // propiedad EditValue como mascara de bits y revienta con mas de 64 items
@@ -126,6 +154,12 @@ type
     FColNombre: TcxGridColumn;
     FColDedic: TcxGridColumn;
     FColHoras: TcxGridColumn;
+    // KPIs al pie de la pestana: resumen de lo marcado en el grid.
+    FPnlKpiOper: TPanel;
+    FLblKpiOperarios: TLabel;
+    FLblKpiDedicacion: TLabel;
+    FLblKpiHoras: TLabel;
+    FLblKpiTrabajo: TLabel;
 
     FData: TWbsTareaEditData;
     FTags: TWbsTagArray;      // copia de trabajo: los chips la modifican
@@ -137,8 +171,13 @@ type
 
     procedure BuildUI;
     procedure BuildTabTarea;
+    procedure BuildTabTiempo;
     procedure BuildTabOperarios;
     procedure BuildTabNotas;
+    // Titulo de bloque dentro de una pestana (negrita + linea separadora).
+    // Devuelve la Y siguiente, ya con el aire de separacion aplicado.
+    function TituloBloque(AParent: TWinControl; AY: Integer;
+      const ACaption: string; APrimero: Boolean = False): Integer;
     // Empuja los controles que van debajo de las etiquetas cuando los chips
     // ocupan mas de una linea (si no, se solapan con el campo Inicio).
     procedure ReubicarTrasTags;
@@ -148,6 +187,15 @@ type
     procedure DoDuracionChange(Sender: TObject);
     procedure DoInvertidoChange(Sender: TObject);
     procedure DoTipoChange(Sender: TObject);
+    // Triada: al tocar duracion o trabajo se recalcula la otra magnitud segun
+    // el tipo de tarea, y se refresca la linea que explica la ecuacion.
+    procedure DoTrabajoChange(Sender: TObject);
+    procedure DoTipoTareaChange(Sender: TObject);
+    procedure AplicarTriada(ACampo: TWbsCampoEditado);
+    procedure RefrescarEcuacion;
+    // Restriccion: la fecha solo tiene sentido en las que atan a una fecha.
+    procedure DoRestriccionChange(Sender: TObject);
+    procedure AplicarRestriccion;
     // Habilita o bloquea los campos segun el tipo elegido (un hito no dura, un
     // resumen se calcula a partir de sus hijos).
     procedure AplicarTipo;
@@ -162,6 +210,15 @@ type
 
     function LabelEn(AParent: TWinControl; AX, AY: Integer;
       const ACaption: string; AAncho: Integer = 120): TLabel;
+    // Tarjeta de KPI: cifra grande arriba y rotulo pequeno debajo. Devuelve el
+    // label de la CIFRA, que es el que se refresca.
+    function KpiEn(AParent: TWinControl; AX: Integer;
+      const ARotulo: string): TLabel;
+    // Recalcula los KPIs del pie a partir de lo que hay marcado en el grid.
+    procedure RefrescarKpiOperarios;
+    // El grid ha cambiado (marcado o dedicacion): refrescar KPIs.
+    procedure DoOperariosChanged(Sender: TcxCustomGridTableView;
+      AItem: TcxCustomGridTableItem);
   public
     // ACatalogo = operarios disponibles para asignar. ADatos entra con los
     // valores actuales y sale con los editados.
@@ -185,10 +242,20 @@ const
     $00999999    // gris
   );
 
-  MARGEN    = 14;
-  ALTO_FILA = 30;
-  ANCHO_ETQ = 118;
-  ANCHO_ED  = 130;
+  MARGEN    = 16;
+  // Alto de una fila de formulario. Con 30 los controles de 22 px quedaban a
+  // 8 px unos de otros y la ficha se leia como un muro: 34 da el aire justo
+  // para distinguir una fila de la siguiente sin que la pestana crezca de mas.
+  ALTO_FILA = 34;
+  ANCHO_ETQ = 130;
+  ANCHO_ED  = 150;
+  // Ancho de las notas grises que acompanan a un campo ("horas previstas al
+  // abrir la tarea", la ecuacion del esfuerzo...). Antes eran anchos sueltos
+  // por control y la mas larga salia CORTADA por el borde de la ficha.
+  ANCHO_NOTA = 330;
+  // Separacion extra ANTES del titulo de un bloque, para que se lea como una
+  // seccion y no como una fila mas.
+  SEP_BLOQUE = 14;
 
 class function TfrmWbsTareaEdit.Execute(var ADatos: TWbsTareaEditData;
   const ACatalogo: TWbsOperarioItems; ANuevoTag: TWbsNuevoTagEvent;
@@ -234,16 +301,19 @@ end;
 
 procedure TfrmWbsTareaEdit.BuildUI;
 var
-  Pnl: TPanel;
+  Pnl, PnlAvance: TPanel;
   BtnOK, BtnCancel: TcxButton;
 begin
   BorderStyle := bsSizeable;
   Position := poScreenCenter;
   Caption := 'Ficha de tarea';
-  ClientWidth := 560;
-  ClientHeight := 520;
-  Constraints.MinWidth := 480;
-  Constraints.MinHeight := 460;
+  // Se ensancha para que quepa la nota mas larga (la ecuacion del esfuerzo)
+  // sin recortar. El alto baja respecto a la version anterior porque el bloque
+  // de planificacion se ha ido a su propia pestana (ver BuildUI).
+  ClientWidth := 720;
+  ClientHeight := 560;
+  Constraints.MinWidth := 660;
+  Constraints.MinHeight := 520;
   Color := clWhite;
   Font.Name := 'Segoe UI';
   Font.Size := 9;
@@ -252,25 +322,50 @@ begin
   Pnl := TPanel.Create(Self);
   Pnl.Parent := Self;
   Pnl.Align := alTop;
-  Pnl.Height := 52;
+  Pnl.Height := 60;
   Pnl.BevelOuter := bvNone;
   Pnl.Color := $00F7F7F7;
   Pnl.ParentBackground := False;
+
+  // Bloque del avance: cifra grande + rotulo debajo. El rotulo hace falta
+  // porque un "56 %" suelto en una esquina no dice de QUE es el porcentaje
+  // (nadie adivina que es tiempo invertido sobre duracion estimada).
+  PnlAvance := TPanel.Create(Self);
+  PnlAvance.Parent := Pnl;
+  PnlAvance.Align := alRight;
+  PnlAvance.Width := 130;
+  PnlAvance.BevelOuter := bvNone;
+  PnlAvance.Color := $00F7F7F7;
+  PnlAvance.ParentBackground := False;
 
   // OJO: AutoSize := False DESPUES de fijar Caption y fuente, y Align en vez de
   // SetBounds+Anchors. Con SetBounds sobre un panel que aun no tiene su ancho
   // final, el label quedaba de 0 px y el texto no se veia.
   FLblAvanceValor := TLabel.Create(Self);
-  FLblAvanceValor.Parent := Pnl;
-  FLblAvanceValor.Align := alRight;
+  FLblAvanceValor.Parent := PnlAvance;
+  FLblAvanceValor.Align := alTop;
   FLblAvanceValor.AlignWithMargins := True;
-  FLblAvanceValor.Margins.SetBounds(0, 12, MARGEN, 8);
+  FLblAvanceValor.Margins.SetBounds(0, 8, MARGEN, 0);
   FLblAvanceValor.Font.Style := [fsBold];
   FLblAvanceValor.Font.Size := 13;
-  FLblAvanceValor.Layout := tlCenter;
   FLblAvanceValor.Alignment := taRightJustify;
   FLblAvanceValor.AutoSize := False;
-  FLblAvanceValor.Width := 110;
+  FLblAvanceValor.Height := 24;
+
+  FLblAvanceRotulo := TLabel.Create(Self);
+  FLblAvanceRotulo.Parent := PnlAvance;
+  FLblAvanceRotulo.Align := alTop;
+  FLblAvanceRotulo.AlignWithMargins := True;
+  FLblAvanceRotulo.Margins.SetBounds(0, 0, MARGEN, 0);
+  FLblAvanceRotulo.Font.Size := 8;
+  FLblAvanceRotulo.Font.Color := clGray;
+  FLblAvanceRotulo.Alignment := taRightJustify;
+  FLblAvanceRotulo.AutoSize := False;
+  FLblAvanceRotulo.Height := 16;
+  FLblAvanceRotulo.Caption := 'avance';
+  FLblAvanceRotulo.ShowHint := True;
+  FLblAvanceRotulo.Hint :=
+    'Tiempo invertido sobre la duraci'#243'n estimada.';
 
   FLblTarea := TLabel.Create(Self);
   FLblTarea.Parent := Pnl;
@@ -317,6 +412,17 @@ begin
   FTabTarea.PageControl := FPages;
   FTabTarea.Caption := 'Tarea';
 
+  // TIEMPO en su propia pestana: la ficha intentaba hacer dos cosas a la vez,
+  // IDENTIFICAR la tarea (tipo, estado, prioridad, etiquetas) y PLANIFICARLA
+  // (fechas, restriccion, duracion, trabajo, tiempo invertido). Con la triada
+  // de esfuerzo y las restricciones completas (V082) el bloque de planificacion
+  // paso de tres filas a nueve y la pestana se leia como un muro. Separarlas
+  // ademas agrupa lo que se consulta junto: quien mira las fechas no suele
+  // estar cambiando el estado ni las etiquetas.
+  FTabTiempo := TTabSheet.Create(Self);
+  FTabTiempo.PageControl := FPages;
+  FTabTiempo.Caption := 'Tiempo';
+
   FTabOperarios := TTabSheet.Create(Self);
   FTabOperarios.PageControl := FPages;
   FTabOperarios.Caption := 'Operarios';
@@ -328,6 +434,7 @@ begin
   FTabNotas.Caption := 'Comentarios';
 
   BuildTabTarea;
+  BuildTabTiempo;
   BuildTabOperarios;
   BuildTabNotas;
 end;
@@ -349,6 +456,9 @@ var
 begin
   Y := MARGEN;
   X2 := MARGEN + ANCHO_ETQ + ANCHO_ED + 30;
+
+  // ======================= Clasificacion ==================================
+  Y := TituloBloque(FTabTarea, Y, 'Clasificaci'#243'n', True);
 
   // --- Tipo de tarea ---
   LabelEn(FTabTarea, MARGEN, Y, 'Tipo');
@@ -381,7 +491,7 @@ begin
   LabelEn(FTabTarea, X2, Y, 'Prioridad', 70);
   FCbPrioridad := TcxComboBox.Create(Self);
   FCbPrioridad.Parent := FTabTarea;
-  FCbPrioridad.SetBounds(X2 + 74, Y, 110, 22);
+  FCbPrioridad.SetBounds(X2 + 74, Y, ANCHO_ED, 22);
   FCbPrioridad.Properties.DropDownListStyle := lsFixedList;
   FCbPrioridad.Properties.Items.Add('Baja');
   FCbPrioridad.Properties.Items.Add('Normal');
@@ -389,7 +499,10 @@ begin
   FCbPrioridad.Properties.Items.Add('Critica');
   Inc(Y, ALTO_FILA);
 
-  // --- Etiquetas (chips estilo Trello) ---
+  // ======================= Etiquetas ======================================
+  Y := TituloBloque(FTabTarea, Y, 'Etiquetas');
+
+  // --- Chips estilo Trello ---
   FLblEtiquetas := LabelEn(FTabTarea, MARGEN, Y, 'Etiquetas');
   FPnlTags := TPanel.Create(Self);
   FPnlTags.Parent := FTabTarea;
@@ -402,103 +515,378 @@ begin
   // Y se avanza en ConstruirChips, cuando ya se sabe cuantas lineas ocupan:
   // aqui solo se reserva la posicion de partida.
   FYTrasTags := Y;
-  Inc(Y, ALTO_FILA + 8);
 
-  // --- Fechas ---
-  LabelEn(FTabTarea, MARGEN, Y, 'Inicio');
+  // Las fechas, la restriccion y el esfuerzo ya NO estan aqui: viven en la
+  // pestana TIEMPO (BuildTabTiempo). Los comentarios, en la suya (BuildTabNotas).
+end;
+
+function TfrmWbsTareaEdit.KpiEn(AParent: TWinControl; AX: Integer;
+  const ARotulo: string): TLabel;
+var
+  Caja: TPanel;
+  L: TLabel;
+begin
+  // Cada KPI es una CAJA alLeft dentro de la banda: se colocan una tras otra
+  // solas, sin coordenadas absolutas que haya que cuadrar a mano. AX se ignora
+  // (se conserva en la firma por si algun dia hace falta posicion fija).
+  Caja := TPanel.Create(Self);
+  Caja.Parent := AParent;
+  Caja.Align := alLeft;
+  Caja.Width := 165;
+  Caja.BevelOuter := bvNone;
+  Caja.ParentBackground := False;
+  Caja.Color := $00F7F7F7;
+  Caja.AlignWithMargins := True;
+  Caja.Margins.SetBounds(MARGEN, 8, 0, 8);
+
+  // Cifra grande arriba.
+  Result := TLabel.Create(Self);
+  Result.Parent := Caja;
+  Result.Align := alTop;
+  Result.AutoSize := False;
+  Result.Height := 24;
+  Result.Font.Style := [fsBold];
+  Result.Font.Size := 12;
+  Result.Font.Color := $00595959;
+  Result.Caption := '-';
+
+  // Rotulo debajo, pequeno y gris.
+  L := TLabel.Create(Self);
+  L.Parent := Caja;
+  L.Align := alTop;
+  L.AutoSize := False;
+  L.Height := 16;
+  L.Font.Size := 8;
+  L.Font.Color := clGray;
+  L.Caption := ARotulo;
+end;
+
+procedure TfrmWbsTareaEdit.DoOperariosChanged(Sender: TcxCustomGridTableView;
+  AItem: TcxCustomGridTableItem);
+begin
+  if FCargando then Exit;
+  RefrescarKpiOperarios;
+end;
+
+procedure TfrmWbsTareaEdit.RefrescarKpiOperarios;
+var
+  I, Marcados: Integer;
+  V: Variant;
+  Dedic, Horas, D, H: Double;
+  T: TWbsTask;
+begin
+  if FTvOperarios = nil then Exit;
+
+  Marcados := 0;
+  Dedic := 0;
+  Horas := 0;
+
+  // Se lee del DataController, no de FData.Operarios: aqui interesa lo que hay
+  // en pantalla AHORA, no lo ultimo guardado.
+  for I := 0 to Min(FTvOperarios.DataController.RecordCount,
+                    Length(FCatalogo)) - 1 do
+  begin
+    V := FTvOperarios.DataController.Values[I, FColSel.Index];
+    if VarIsNull(V) or VarIsEmpty(V) or (not Boolean(V)) then Continue;
+
+    Inc(Marcados);
+
+    V := FTvOperarios.DataController.Values[I, FColDedic.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then D := 100 else D := V;
+    if (D <= 0) or (D > 100) then D := 100;
+    Dedic := Dedic + D;
+
+    V := FTvOperarios.DataController.Values[I, FColHoras.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then H := 0 else H := V;
+    Horas := Horas + Max(0, H);
+  end;
+
+  // Las unidades vigentes son las del GRID, no las ultimas guardadas: si no,
+  // tras marcar a alguien el KPI y la linea de la ecuacion (que lee
+  // FData.Unidades) dirian cosas distintas en la misma ficha.
+  if Marcados > 0 then
+    FData.Unidades := Dedic / 100
+  else
+    FData.Unidades := 1.0;
+
+  if Marcados = 0 then
+    FLblKpiOperarios.Caption := 'ninguno'
+  else
+    FLblKpiOperarios.Caption := IntToStr(Marcados);
+
+  FLblKpiDedicacion.Caption := Format('%.0f %%', [Dedic]);
+  // Mas del 100 % en UNA tarea no es sobreasignacion (dos personas a jornada
+  // completa son 200 % y es perfectamente normal): solo se destaca cuando NO
+  // llega a una persona entera, que suele ser un despiste al teclear.
+  if (Marcados > 0) and (Dedic < 100) then
+    FLblKpiDedicacion.Font.Color := $000090FF
+  else
+    FLblKpiDedicacion.Font.Color := $00595959;
+
+  FLblKpiHoras.Caption := Format('%.1f h', [Horas]);
+
+  // Trabajo que sale de la ecuacion con la asignacion actual. Es el puente con
+  // la pestana Tiempo: deja ver de inmediato si marcar a alguien mas cambia el
+  // esfuerzo o la duracion, segun el tipo de calculo.
+  T := Default(TWbsTask);
+  T.Kind := FData.Kind;
+  T.TipoTarea := TWbsTipoTarea(Max(0, FCbTipoTarea.ItemIndex));
+  T.DuracionMin := DuracionEditadaMin;
+  T.TrabajoMin := FEdTrabajo.Value * 60;
+  if Marcados > 0 then T.Unidades := Dedic / 100 else T.Unidades := 1.0;
+  T := RecalcularTriada(T, wceUnidades);
+  FLblKpiTrabajo.Caption := Format('%.1f h', [T.TrabajoMin / 60]);
+
+  // FData.Unidades acaba de cambiar, y la linea de la ecuacion (pestana
+  // Tiempo) la muestra: repintarla para que las dos pestanas digan lo mismo.
+  if FLblUnidades <> nil then
+    RefrescarEcuacion;
+end;
+
+function TfrmWbsTareaEdit.TituloBloque(AParent: TWinControl; AY: Integer;
+  const ACaption: string; APrimero: Boolean): Integer;
+var
+  L: TLabel;
+  Linea: TPanel;
+begin
+  // El primer bloque de una pestana no necesita aire por encima: ya lo da el
+  // margen superior.
+  if not APrimero then Inc(AY, SEP_BLOQUE);
+
+  L := TLabel.Create(Self);
+  L.Parent := AParent;
+  L.SetBounds(MARGEN, AY, 300, 18);
+  L.Caption := ACaption;
+  L.Font.Style := [fsBold];
+  L.Font.Color := $00707070;
+
+  // Filete bajo el titulo: separa los bloques sin gastar una fila entera, que
+  // es lo que hacia falta para que la ficha dejara de leerse como un muro.
+  Linea := TPanel.Create(Self);
+  Linea.Parent := AParent;
+  Linea.SetBounds(MARGEN, AY + 20, ClientWidth - MARGEN * 3, 1);
+  Linea.BevelOuter := bvNone;
+  Linea.Color := $00E0E0E0;
+  Linea.ParentBackground := False;
+  Linea.Anchors := [akLeft, akTop, akRight];
+
+  Result := AY + 30;
+end;
+
+procedure TfrmWbsTareaEdit.BuildTabTiempo;
+var
+  Y, X2, XNota: Integer;
+begin
+  Y := MARGEN;
+  X2 := MARGEN + ANCHO_ETQ + ANCHO_ED + 30;
+  // Columna donde arrancan las notas grises de la derecha. Unica para todas,
+  // asi quedan alineadas en vertical en vez de cada una a su aire.
+  XNota := MARGEN + ANCHO_ETQ + 104;
+
+  // ======================= Fechas =========================================
+  Y := TituloBloque(FTabTiempo, Y, 'Fechas', True);
+
+  LabelEn(FTabTiempo, MARGEN, Y, 'Inicio');
   FEdInicio := TcxDateEdit.Create(Self);
-  FEdInicio.Parent := FTabTarea;
+  FEdInicio.Parent := FTabTiempo;
   FEdInicio.SetBounds(MARGEN + ANCHO_ETQ, Y, ANCHO_ED, 22);
 
-  LabelEn(FTabTarea, X2, Y, 'Fin', 70);
+  LabelEn(FTabTiempo, X2, Y, 'Fin', 70);
   FEdFin := TcxDateEdit.Create(Self);
-  FEdFin.Parent := FTabTarea;
-  FEdFin.SetBounds(X2 + 74, Y, 110, 22);
+  FEdFin.Parent := FTabTiempo;
+  FEdFin.SetBounds(X2 + 74, Y, ANCHO_ED, 22);
   // El fin lo calcula el motor a partir de inicio + duracion: mostrarlo
   // editable invitaria a introducir una incoherencia.
   FEdFin.Properties.ReadOnly := True;
   FEdFin.Style.Color := $00F0F0F0;
-  Inc(Y, ALTO_FILA - 4);
+  Inc(Y, ALTO_FILA);
 
-  LabelEn(FTabTarea, MARGEN + ANCHO_ETQ, Y,
-    'Fijar el inicio lo convierte en fecha fija del plan.', 320).Font.Color := clGray;
-  Inc(Y, 24);
+  // --- Restriccion de fecha (juego completo de MS Project, V082) ------------
+  // Antes, teclear el inicio convertia la tarea en "fecha fija" sin decirlo.
+  // Ahora se elige de forma explicita: una restriccion es una decision de
+  // planificacion, no un efecto colateral de rellenar un campo.
+  LabelEn(FTabTiempo, MARGEN, Y, 'Restricci'#243'n');
+  FCbRestriccion := TcxComboBox.Create(Self);
+  FCbRestriccion.Parent := FTabTiempo;
+  FCbRestriccion.SetBounds(MARGEN + ANCHO_ETQ, Y, ANCHO_ED + 60, 22);
+  FCbRestriccion.Properties.DropDownListStyle := lsFixedList;
+  // El orden DEBE coincidir con TWbsConstraintKind (0..7).
+  FCbRestriccion.Properties.Items.Add('Lo antes posible');
+  FCbRestriccion.Properties.Items.Add('No comenzar antes del');
+  FCbRestriccion.Properties.Items.Add('Debe comenzar el');
+  FCbRestriccion.Properties.Items.Add('Lo m'#225's tarde posible');
+  FCbRestriccion.Properties.Items.Add('No comenzar despu'#233's del');
+  FCbRestriccion.Properties.Items.Add('No finalizar antes del');
+  FCbRestriccion.Properties.Items.Add('No finalizar despu'#233's del');
+  FCbRestriccion.Properties.Items.Add('Debe finalizar el');
+  FCbRestriccion.Properties.OnChange := DoRestriccionChange;
+
+  FEdFechaRestr := TcxDateEdit.Create(Self);
+  FEdFechaRestr.Parent := FTabTiempo;
+  FEdFechaRestr.SetBounds(MARGEN + ANCHO_ETQ + ANCHO_ED + 70, Y, ANCHO_ED, 22);
+  Inc(Y, ALTO_FILA - 8);
+
+  FLblAvisoRestr := LabelEn(FTabTiempo, MARGEN + ANCHO_ETQ, Y, '', 460);
+  FLblAvisoRestr.Font.Color := clGray;
+  Inc(Y, 20);
+
+  // ======================= Esfuerzo =======================================
+  Y := TituloBloque(FTabTiempo, Y, 'Esfuerzo');
 
   // --- Duracion en dias / horas / minutos ---
-  LabelEn(FTabTarea, MARGEN, Y, 'Duracion estimada');
+  LabelEn(FTabTiempo, MARGEN, Y, 'Duraci'#243'n');
   FEdDias := TcxSpinEdit.Create(Self);
-  FEdDias.Parent := FTabTarea;
+  FEdDias.Parent := FTabTiempo;
   FEdDias.SetBounds(MARGEN + ANCHO_ETQ, Y, 62, 22);
   FEdDias.Properties.MinValue := 0;
   FEdDias.Properties.MaxValue := 9999;
   FEdDias.Properties.OnChange := DoDuracionChange;
-  LabelEn(FTabTarea, MARGEN + ANCHO_ETQ + 66, Y, 'd', 16).Font.Color := clGray;
+  LabelEn(FTabTiempo, MARGEN + ANCHO_ETQ + 66, Y, 'd', 16).Font.Color := clGray;
 
   FEdHoras := TcxSpinEdit.Create(Self);
-  FEdHoras.Parent := FTabTarea;
+  FEdHoras.Parent := FTabTiempo;
   FEdHoras.SetBounds(MARGEN + ANCHO_ETQ + 84, Y, 56, 22);
   FEdHoras.Properties.MinValue := 0;
   FEdHoras.Properties.MaxValue := 23;
   FEdHoras.Properties.OnChange := DoDuracionChange;
-  LabelEn(FTabTarea, MARGEN + ANCHO_ETQ + 144, Y, 'h', 16).Font.Color := clGray;
+  LabelEn(FTabTiempo, MARGEN + ANCHO_ETQ + 144, Y, 'h', 16).Font.Color := clGray;
 
   FEdMinutos := TcxSpinEdit.Create(Self);
-  FEdMinutos.Parent := FTabTarea;
+  FEdMinutos.Parent := FTabTiempo;
   FEdMinutos.SetBounds(MARGEN + ANCHO_ETQ + 162, Y, 56, 22);
   FEdMinutos.Properties.MinValue := 0;
   FEdMinutos.Properties.MaxValue := 59;
   FEdMinutos.Properties.OnChange := DoDuracionChange;
-  LabelEn(FTabTarea, MARGEN + ANCHO_ETQ + 222, Y, 'min', 30).Font.Color := clGray;
+  LabelEn(FTabTiempo, MARGEN + ANCHO_ETQ + 222, Y, 'min', 30).Font.Color := clGray;
   Inc(Y, ALTO_FILA);
 
-  // --- Esfuerzo estimado (trabajo real, distinto de la duracion) ---
-  LabelEn(FTabTarea, MARGEN, Y, 'Esfuerzo estimado');
+  // --- Triada: Trabajo = Duracion x Unidades (V082) ---
+  LabelEn(FTabTiempo, MARGEN, Y, 'Trabajo');
+  FEdTrabajo := TcxSpinEdit.Create(Self);
+  FEdTrabajo.Parent := FTabTiempo;
+  FEdTrabajo.SetBounds(MARGEN + ANCHO_ETQ, Y, 90, 22);
+  FEdTrabajo.Properties.MinValue := 0;
+  FEdTrabajo.Properties.MaxValue := 99999;
+  FEdTrabajo.Properties.ValueType := vtFloat;
+  FEdTrabajo.Properties.OnChange := DoTrabajoChange;
+  LabelEn(FTabTiempo, XNota, Y, 'horas', 40).Font.Color := clGray;
+
+  FLblUnidades := LabelEn(FTabTiempo, XNota + 46, Y, '', 260);
+  FLblUnidades.Font.Color := clGray;
+  Inc(Y, ALTO_FILA);
+
+  // Que magnitud queda fija al recalcular las otras dos.
+  LabelEn(FTabTiempo, MARGEN, Y, 'Tipo de c'#225'lculo');
+  FCbTipoTarea := TcxComboBox.Create(Self);
+  FCbTipoTarea.Parent := FTabTiempo;
+  FCbTipoTarea.SetBounds(MARGEN + ANCHO_ETQ, Y, ANCHO_ED, 22);
+  FCbTipoTarea.Properties.DropDownListStyle := lsFixedList;
+  // El orden DEBE coincidir con TWbsTipoTarea (0..2).
+  FCbTipoTarea.Properties.Items.Add('Duraci'#243'n fija');
+  FCbTipoTarea.Properties.Items.Add('Trabajo fijo');
+  FCbTipoTarea.Properties.Items.Add('Unidades fijas');
+  FCbTipoTarea.Properties.OnChange := DoTipoTareaChange;
+  Inc(Y, ALTO_FILA - 8);
+
+  // Linea viva que explica que pasara al tocar cada campo. Sin ella, que la
+  // duracion cambie sola al teclear el trabajo parece un error del programa.
+  //
+  // NO se crea con LabelEn: ese helper fija un alto de 20 px pensado para una
+  // sola linea, y con WordWrap el texto se partia en dos y quedaba recortado
+  // (se veian dos restos de linea en vez del rotulo). Aqui hace falta control
+  // explicito del alto.
+  FLblEcuacion := TLabel.Create(Self);
+  FLblEcuacion.Parent := FTabTiempo;
+  FLblEcuacion.AutoSize := False;
+  FLblEcuacion.WordWrap := True;
+  FLblEcuacion.SetBounds(MARGEN + ANCHO_ETQ, Y + 4,
+    ClientWidth - MARGEN - ANCHO_ETQ - MARGEN * 2, 34);
+  FLblEcuacion.Font.Color := clGray;
+  FLblEcuacion.Anchors := [akLeft, akTop, akRight];
+  Inc(Y, 42);
+
+  // ======================= Dedicacion real ================================
+  Y := TituloBloque(FTabTiempo, Y, 'Dedicaci'#243'n real');
+
+  // --- Esfuerzo estimado inicial (la estimacion del responsable) ---
+  // Se conserva junto al trabajo del plan a proposito: uno es lo que se creia
+  // que costaria y el otro lo que el plan dice que cuesta. Que diverjan es
+  // informacion, no un error.
+  LabelEn(FTabTiempo, MARGEN, Y, 'Estimaci'#243'n inicial');
   FEdEsfuerzo := TcxSpinEdit.Create(Self);
-  FEdEsfuerzo.Parent := FTabTarea;
+  FEdEsfuerzo.Parent := FTabTiempo;
   FEdEsfuerzo.SetBounds(MARGEN + ANCHO_ETQ, Y, 90, 22);
   FEdEsfuerzo.Properties.MinValue := 0;
   FEdEsfuerzo.Properties.MaxValue := 99999;
   FEdEsfuerzo.Properties.ValueType := vtFloat;
-  LabelEn(FTabTarea, MARGEN + ANCHO_ETQ + 96, Y,
-    'horas de trabajo (distinto de la duracion)', 300).Font.Color := clGray;
+  LabelEn(FTabTiempo, XNota, Y,
+    'horas previstas al abrir la tarea', ANCHO_NOTA).Font.Color := clGray;
   Inc(Y, ALTO_FILA);
 
   // --- Tiempo invertido (V079) ---
-  LabelEn(FTabTarea, MARGEN, Y, 'Tiempo invertido');
+  LabelEn(FTabTiempo, MARGEN, Y, 'Tiempo invertido');
   FEdInvertido := TcxSpinEdit.Create(Self);
-  FEdInvertido.Parent := FTabTarea;
+  FEdInvertido.Parent := FTabTiempo;
   FEdInvertido.SetBounds(MARGEN + ANCHO_ETQ, Y, 90, 22);
   FEdInvertido.Properties.MinValue := 0;
   FEdInvertido.Properties.MaxValue := 99999;
   FEdInvertido.Properties.ValueType := vtFloat;
   FEdInvertido.Properties.OnChange := DoInvertidoChange;
-  LabelEn(FTabTarea, MARGEN + ANCHO_ETQ + 96, Y, 'horas', 60).Font.Color := clGray;
-  Inc(Y, ALTO_FILA - 4);
+  LabelEn(FTabTiempo, XNota, Y,
+    'horas dedicadas hasta hoy', ANCHO_NOTA).Font.Color := clGray;
+  Inc(Y, ALTO_FILA - 8);
 
   FLblAviso := TLabel.Create(Self);
-  FLblAviso.Parent := FTabTarea;
-  FLblAviso.SetBounds(MARGEN + ANCHO_ETQ, Y, 340, 18);
+  FLblAviso.Parent := FTabTiempo;
+  FLblAviso.SetBounds(MARGEN + ANCHO_ETQ, Y, 440, 18);
   FLblAviso.Font.Color := $000090FF;
   FLblAviso.Visible := False;
-
-  // Los comentarios ya no estan aqui: tienen su propia pestana (BuildTabNotas).
 end;
 
 procedure TfrmWbsTareaEdit.BuildTabOperarios;
 var
-  Y: Integer;
+  PnlCab: TPanel;
 begin
-  Y := MARGEN;
+  // Toda la pestana va por ALIGN, no por SetBounds+Anchors. Mezclar los dos no
+  // funciona: al construir el form la pestana aun no tiene su tamano final, asi
+  // que el alto calculado a mano salia mal y la banda de KPIs quedaba aplastada
+  // a unos pocos pixeles. Con Align el reparto lo hace la VCL cuando el tamano
+  // ya es el bueno. ORDEN OBLIGATORIO: primero los alTop/alBottom, el alClient
+  // el ULTIMO (se queda con lo que sobra).
+  PnlCab := TPanel.Create(Self);
+  PnlCab.Parent := FTabOperarios;
+  PnlCab.Align := alTop;
+  PnlCab.Height := 34;
+  PnlCab.BevelOuter := bvNone;
+  PnlCab.Color := clWhite;
+  PnlCab.ParentBackground := False;
+  LabelEn(PnlCab, MARGEN, 4,
+    'Marca las personas asignadas y ajusta su dedicaci'#243'n:', 420);
 
-  LabelEn(FTabOperarios, MARGEN, Y,
-    'Marca las personas asignadas y ajusta su dedicacion:', 380);
-  Inc(Y, 26);
+  // Barra de KPIs al PIE: cuantos van marcados, cuanta dedicacion suman y que
+  // trabajo sale de ahi. Sin esto hay que contar los checks a mano en una lista
+  // de cientos de operarios para saber si la asignacion cuadra con el esfuerzo
+  // de la pestana Tiempo.
+  FPnlKpiOper := TPanel.Create(Self);
+  FPnlKpiOper.Parent := FTabOperarios;
+  FPnlKpiOper.Align := alBottom;
+  FPnlKpiOper.Height := 62;
+  FPnlKpiOper.BevelOuter := bvNone;
+  FPnlKpiOper.Color := $00F7F7F7;
+  FPnlKpiOper.ParentBackground := False;
+
+  // Cada tarjeta es un panel alLeft de ancho fijo: asi se reparten solas y no
+  // dependen de coordenadas absolutas que se descuadran al redimensionar.
+  FLblKpiOperarios  := KpiEn(FPnlKpiOper, 0, 'Asignados');
+  FLblKpiDedicacion := KpiEn(FPnlKpiOper, 0, 'Dedicaci'#243'n total');
+  FLblKpiHoras      := KpiEn(FPnlKpiOper, 0, 'Horas imputadas');
+  FLblKpiTrabajo    := KpiEn(FPnlKpiOper, 0, 'Trabajo del plan');
 
   FGridOperarios := TcxGrid.Create(Self);
   FGridOperarios.Parent := FTabOperarios;
-  FGridOperarios.SetBounds(MARGEN, Y, FTabOperarios.Width - MARGEN * 2 - 8,
-    FTabOperarios.Height - Y - MARGEN);
-  FGridOperarios.Anchors := [akLeft, akTop, akRight, akBottom];
+  FGridOperarios.Align := alClient;   // el ultimo: ocupa lo que queda
+  FGridOperarios.AlignWithMargins := True;
+  FGridOperarios.Margins.SetBounds(MARGEN, 0, MARGEN, MARGEN);
 
   FLvlOperarios := FGridOperarios.Levels.Add;
   FTvOperarios := FGridOperarios.CreateView(TcxGridTableView)
@@ -518,6 +906,8 @@ begin
   FTvOperarios.OptionsBehavior.ImmediateEditor := True;
   FTvOperarios.OptionsBehavior.FocusCellOnCycle := True;
   FTvOperarios.DataController.RecordCount := 0;
+  // Marcar a alguien o cambiar su dedicacion mueve los KPIs del pie.
+  FTvOperarios.OnEditValueChanged := DoOperariosChanged;
 
   // Columna de marcado.
   FColSel := FTvOperarios.CreateColumn;
@@ -584,9 +974,26 @@ begin
     FEdInvertido.Value := FData.MinutosInvertidos / 60;
     FMemoNotas.Text := FData.Detail.Notas;
 
+    // Triada de esfuerzo (V082).
+    if FData.Unidades <= 0 then FData.Unidades := 1.0;
+    FEdTrabajo.Value := FData.TrabajoMin / 60;
+    FCbTipoTarea.ItemIndex := Ord(FData.TipoTarea);
+
+    // Restriccion de fecha.
+    if (FData.ConstraintKind >= 0) and (FData.ConstraintKind <= 7) then
+      FCbRestriccion.ItemIndex := FData.ConstraintKind
+    else
+      FCbRestriccion.ItemIndex := 0;
+    if FData.ConstraintDate > 0 then
+      FEdFechaRestr.Date := FData.ConstraintDate
+    else
+      FEdFechaRestr.Clear;
+
     // Habilitar/bloquear campos segun el tipo (hito sin duracion, resumen
     // calculado a partir de sus hijos).
     AplicarTipo;
+    AplicarRestriccion;
+    RefrescarEcuacion;
 
     // --- Catalogo de operarios, marcando los ya asignados ---
     FTvOperarios.BeginUpdate;
@@ -619,11 +1026,154 @@ begin
   finally
     FCargando := False;
   end;
+
+  // Fuera del FCargando: los KPIs se calculan sobre lo que ya esta volcado en
+  // el grid, y no deben quedar bloqueados por el flag.
+  RefrescarKpiOperarios;
 end;
 
 function TfrmWbsTareaEdit.DuracionEditadaMin: Double;
 begin
   Result := FEdDias.Value * FJornadaMin + FEdHoras.Value * 60 + FEdMinutos.Value;
+end;
+
+procedure TfrmWbsTareaEdit.AplicarTriada(ACampo: TWbsCampoEditado);
+var
+  T: TWbsTask;
+begin
+  // Se delega en RecalcularTriada (uWbsTypes): la ecuacion vive en UN sitio y
+  // el dialogo no la reimplementa. Aqui solo se traduce a los controles.
+  if FCargando then Exit;
+  if FData.EsHito then Exit;   // un hito no dura ni cuesta
+
+  T := Default(TWbsTask);
+  T.Kind := FData.Kind;
+  T.TipoTarea := TWbsTipoTarea(Max(0, FCbTipoTarea.ItemIndex));
+  T.DuracionMin := DuracionEditadaMin;
+  T.TrabajoMin := FEdTrabajo.Value * 60;
+  T.Unidades := FData.Unidades;
+
+  T := RecalcularTriada(T, ACampo);
+
+  FCargando := True;   // evitar que escribir en un control dispare al otro
+  try
+    case ACampo of
+      wceDuracion:
+        FEdTrabajo.Value := T.TrabajoMin / 60;
+      wceTrabajo:
+        if T.TipoTarea <> wttDuracionFija then
+        begin
+          // Con duracion fija, teclear el trabajo cambia las UNIDADES, no la
+          // duracion: los editores de dias/horas no se tocan.
+          FEdDias.Value := Trunc(T.DuracionMin / FJornadaMin);
+          FEdHoras.Value := Round(T.DuracionMin -
+            FEdDias.Value * FJornadaMin) div 60;
+          FEdMinutos.Value := Round(T.DuracionMin -
+            FEdDias.Value * FJornadaMin) mod 60;
+        end;
+      wceUnidades:
+        begin
+          FEdTrabajo.Value := T.TrabajoMin / 60;
+          FEdDias.Value := Trunc(T.DuracionMin / FJornadaMin);
+          FEdHoras.Value := Round(T.DuracionMin -
+            FEdDias.Value * FJornadaMin) div 60;
+          FEdMinutos.Value := Round(T.DuracionMin -
+            FEdDias.Value * FJornadaMin) mod 60;
+        end;
+    end;
+    FData.Unidades := T.Unidades;
+  finally
+    FCargando := False;
+  end;
+
+  RefrescarEcuacion;
+  // Todo cambio de la triada pasa por aqui, asi que es el sitio para mantener
+  // al dia el KPI "Trabajo del plan" del pie de la pestana Operarios.
+  RefrescarKpiOperarios;
+end;
+
+procedure TfrmWbsTareaEdit.RefrescarEcuacion;
+var
+  U: Double;
+  Explicacion: string;
+begin
+  U := FData.Unidades;
+  if U <= 0 then U := 1.0;
+
+  if Length(FData.Operarios) = 0 then
+    FLblUnidades.Caption := Format('%.0f %% (sin operarios asignados)', [U * 100])
+  else
+    FLblUnidades.Caption := Format('%.0f %% entre %d operario(s)',
+      [U * 100, Length(FData.Operarios)]);
+
+  // Decir de antemano que pasara al tocar cada campo: si no, ver como cambia
+  // solo un valor que no has tocado parece un fallo del programa.
+  case TWbsTipoTarea(Max(0, FCbTipoTarea.ItemIndex)) of
+    wttTrabajoFijo:
+      Explicacion := 'El trabajo manda: a'#241'adir operarios ACORTA la tarea.';
+    wttUnidadesFijas:
+      Explicacion := 'El equipo manda: m'#225's trabajo alarga la duraci'#243'n.';
+  else
+    Explicacion := 'La duraci'#243'n manda: a'#241'adir operarios sube el trabajo total.';
+  end;
+
+  FLblEcuacion.Caption := Format('Trabajo = Duraci'#243'n x Unidades.  %s',
+    [Explicacion]);
+end;
+
+procedure TfrmWbsTareaEdit.DoTrabajoChange(Sender: TObject);
+begin
+  if FCargando then Exit;
+  AplicarTriada(wceTrabajo);
+  RefrescarAvance;
+end;
+
+procedure TfrmWbsTareaEdit.DoTipoTareaChange(Sender: TObject);
+begin
+  if FCargando then Exit;
+  // Cambiar el tipo no recalcula nada por si solo: solo cambia QUE se
+  // recalculara la proxima vez. Se refresca la explicacion y ya.
+  RefrescarEcuacion;
+  // El KPI "Trabajo del plan" depende del tipo de calculo.
+  RefrescarKpiOperarios;
+end;
+
+procedure TfrmWbsTareaEdit.DoRestriccionChange(Sender: TObject);
+begin
+  if FCargando then Exit;
+  AplicarRestriccion;
+end;
+
+procedure TfrmWbsTareaEdit.AplicarRestriccion;
+var
+  K: TWbsConstraintKind;
+  NecesitaFecha: Boolean;
+begin
+  K := TWbsConstraintKind(Max(0, FCbRestriccion.ItemIndex));
+
+  // Las dos FLEXIBLES (ASAP y ALAP) no atan a ninguna fecha: pedirla seria
+  // pedir un dato que el motor va a ignorar.
+  NecesitaFecha := not (K in [wckASAP, wckALAP]);
+  FEdFechaRestr.Enabled := NecesitaFecha;
+  if not NecesitaFecha then
+    FEdFechaRestr.Clear;
+
+  case K of
+    wckASAP:
+      FLblAvisoRestr.Caption :=
+        'La tarea se coloca lo antes que permitan sus predecesoras.';
+    wckALAP:
+      FLblAvisoRestr.Caption :=
+        'La tarea se retrasa al m'#225'ximo sin retrasar el proyecto ' +
+        '(quedar'#225' en el camino cr'#237'tico).';
+    wckMSO, wckMFO:
+      FLblAvisoRestr.Caption :=
+        'Restricci'#243'n R'#205'GIDA: el motor NO mover'#225' la tarea aunque sus ' +
+        'predecesoras se retrasen.';
+  else
+    FLblAvisoRestr.Caption :=
+      'Restricci'#243'n con fecha l'#237'mite: el motor la respeta al recalcular.';
+  end;
 end;
 
 procedure TfrmWbsTareaEdit.RefrescarAvance;
@@ -635,6 +1185,14 @@ begin
   Av := AvanceTarea(Inv, Dur);
 
   FLblAvanceValor.Caption := Format('%.0f %%', [Av * 100]);
+
+  // El rotulo dice de DONDE sale la cifra: "56 %" a secas no se entiende, y
+  // con las horas delante se lee sin tener que ir a la pestana Tiempo.
+  if Dur > 0 then
+    FLblAvanceRotulo.Caption := Format('avance  %.0f/%.0f h',
+      [Inv / 60, Dur / 60])
+  else
+    FLblAvanceRotulo.Caption := 'avance';
 
   if (not FData.EsHito) and (Av > 1.0) then
   begin
@@ -773,25 +1331,12 @@ begin
 end;
 
 procedure TfrmWbsTareaEdit.ReubicarTrasTags;
-var
-  I, Delta: Integer;
-  C: TControl;
 begin
-  // Cuanto ha crecido el bloque de etiquetas respecto al alto de una fila.
-  Delta := (FPnlTags.Top + FPnlTags.Height) - (FYTrasTags + ALTO_FILA - 2);
-  if Delta = 0 then Exit;
-
-  for I := 0 to FTabTarea.ControlCount - 1 do
-  begin
-    C := FTabTarea.Controls[I];
-    if C = FPnlTags then Continue;
-    if C = FLblEtiquetas then Continue;
-    // Solo lo que esta por debajo de la banda de etiquetas.
-    if C.Top >= FYTrasTags + ALTO_FILA - 2 then
-      C.Top := C.Top + Delta;
-  end;
-
-  FYTrasTags := FYTrasTags + Delta;
+  // Ya no hay nada que reubicar: las etiquetas son el ULTIMO bloque de la
+  // pestana Tarea (las fechas y el esfuerzo se fueron a la pestana Tiempo), asi
+  // que pueden crecer a varias lineas sin empujar a nadie. Se conserva el
+  // metodo porque ConstruirChips lo llama tras recalcular las filas de chips;
+  // si algun dia vuelve a haber controles debajo, este es el sitio.
 end;
 
 procedure TfrmWbsTareaEdit.DoNuevoTag(Sender: TObject);
@@ -865,6 +1410,12 @@ begin
   FEdMinutos.Enabled := FEdDias.Enabled;
   FEdEsfuerzo.Enabled := FEdDias.Enabled;
   FEdInvertido.Enabled := FEdDias.Enabled;
+  // La triada tampoco aplica: un hito no cuesta trabajo y el de un resumen es
+  // la suma del de sus hijos (V082).
+  FEdTrabajo.Enabled := FEdDias.Enabled;
+  FCbTipoTarea.Enabled := FEdDias.Enabled;
+  FLblEcuacion.Visible := FEdDias.Enabled;
+  FLblUnidades.Visible := FEdDias.Enabled;
 
   if EsHito then
   begin
@@ -872,6 +1423,7 @@ begin
     FEdDias.Value := 0;
     FEdHoras.Value := 0;
     FEdMinutos.Value := 0;
+    FEdTrabajo.Value := 0;
   end
   else if EsResumen then
     FLblAvisoTipo.Caption := 'La duracion y el avance salen de sus hijos.'
@@ -884,6 +1436,8 @@ end;
 procedure TfrmWbsTareaEdit.DoDuracionChange(Sender: TObject);
 begin
   if FCargando then Exit;
+  // Tocar la duracion mueve la ecuacion de esfuerzo (V082).
+  AplicarTriada(wceDuracion);
   RefrescarAvance;
 end;
 
@@ -900,6 +1454,7 @@ var
   V: Variant;
   Ops: TList<TWbsTaskOperario>;
   O: TWbsTaskOperario;
+  T: TWbsTask;
 begin
   FData.Kind := TWbsTaskKind(Max(0, FCbTipo.ItemIndex));
   FData.EsHito := FData.Kind = wtkHito;
@@ -909,21 +1464,33 @@ begin
   FData.Detail.Notas := FMemoNotas.Text;
   FData.Detail.HorasEstimadas := FEdEsfuerzo.Value * 60;
 
+  // Triada de esfuerzo (V082).
+  FData.TipoTarea := TWbsTipoTarea(Max(0, FCbTipoTarea.ItemIndex));
+
   // Hitos y resumenes no aportan duracion propia: el hito no dura y el resumen
   // la recibe agregada de sus hijos en el siguiente recalculo.
   if FData.Kind = wtkTarea then
   begin
     FData.DuracionMin := DuracionEditadaMin;
     FData.MinutosInvertidos := FEdInvertido.Value * 60;
+    FData.TrabajoMin := FEdTrabajo.Value * 60;
   end
   else if FData.Kind = wtkHito then
   begin
     FData.DuracionMin := 0;
     FData.MinutosInvertidos := 0;
+    FData.TrabajoMin := 0;
   end;
 
-  // Fecha de inicio: solo cuenta como editada si el usuario la ha CAMBIADO.
-  // Es lo que convierte la tarea en fecha fija para el motor.
+  // Restriccion de fecha (V082). Ya NO se deduce de haber tocado el inicio:
+  // se elige explicitamente en su combo. FechaInicioEditada se mantiene solo
+  // por compatibilidad con quien aun la lea, pero la restriccion manda.
+  FData.ConstraintKind := Max(0, FCbRestriccion.ItemIndex);
+  if FEdFechaRestr.Enabled and (FEdFechaRestr.Date > 0) then
+    FData.ConstraintDate := FEdFechaRestr.Date
+  else
+    FData.ConstraintDate := 0;
+
   FData.FechaInicio := FEdInicio.Date;
   FData.FechaInicioEditada :=
     (FEdInicio.Date > 0) and (Abs(FEdInicio.Date - FInicioOriginal) > 1 / 1440);
@@ -963,6 +1530,25 @@ begin
     FData.Operarios := Ops.ToArray;
   finally
     Ops.Free;
+  end;
+
+  // Las UNIDADES salen de quien ha quedado asignado. Si han cambiado respecto
+  // a lo que habia al abrir la ficha, hay que recuadrar la ecuacion antes de
+  // devolver los datos: si no, se guardaria un trabajo que ya no corresponde a
+  // esta gente. (El repo hace lo mismo en SaveOperarios para los cambios que
+  // no pasan por aqui.)
+  FData.Unidades := UnidadesDeOperarios(FData.Operarios);
+  if FData.Kind = wtkTarea then
+  begin
+    T := Default(TWbsTask);
+    T.Kind := FData.Kind;
+    T.TipoTarea := FData.TipoTarea;
+    T.DuracionMin := FData.DuracionMin;
+    T.TrabajoMin := FData.TrabajoMin;
+    T.Unidades := FData.Unidades;
+    T := RecalcularTriada(T, wceUnidades);
+    FData.DuracionMin := T.DuracionMin;
+    FData.TrabajoMin := T.TrabajoMin;
   end;
 end;
 

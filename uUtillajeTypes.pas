@@ -177,6 +177,18 @@ type
     constructor Create;
     destructor Destroy; override;
 
+    // Copia independiente: mismos datos, cero memoria compartida.
+    //
+    // Existe porque esta clase TIENE ESTADO (se va ocupando conforme avanza la
+    // pasada) y NO es thread-safe. El optimizador (uPlanOptimizer) lanza varias
+    // cadenas SA en paralelo; sin una copia por hilo todas escribirian en el
+    // mismo objeto y el resultado seria basura. Antes se resolvia poniendo la
+    // restriccion a nil en el optimizador, es decir: el plan optimizado podia
+    // violar utillajes. Con esto ya no hace falta.
+    //
+    // El llamante es el duenyo del objeto devuelto.
+    function Clone: TUtillajeOccupancy;
+
     // Declara la capacidad de un utillaje. Si no se declara, se asume 1.
     procedure SetCantidad(AUtillajeId, ACantidad: Integer);
 
@@ -238,6 +250,32 @@ begin
   FCantidad.Free;
   FSlots.Free;
   inherited;
+end;
+
+function TUtillajeOccupancy.Clone: TUtillajeOccupancy;
+var
+  Par: TPair<Integer, TList<TUtillajeSlot>>;
+  ParCant: TPair<Integer, Integer>;
+  Lista: TList<TUtillajeSlot>;
+  I: Integer;
+begin
+  Result := TUtillajeOccupancy.Create;
+
+  // Capacidades: enteros, copia directa.
+  for ParCant in FCantidad do
+    Result.FCantidad.AddOrSetValue(ParCant.Key, ParCant.Value);
+
+  // Slots: hay que crear listas NUEVAS. Copiar la referencia dejaria a las dos
+  // instancias escribiendo en la misma lista, que es justo lo que se quiere
+  // evitar. TUtillajeSlot es un record (tipo valor), asi que los elementos se
+  // copian solos al anadirlos.
+  for Par in FSlots do
+  begin
+    Lista := TList<TUtillajeSlot>.Create;
+    for I := 0 to Par.Value.Count - 1 do
+      Lista.Add(Par.Value[I]);
+    Result.FSlots.AddOrSetValue(Par.Key, Lista);
+  end;
 end;
 
 procedure TUtillajeOccupancy.SetCantidad(AUtillajeId, ACantidad: Integer);

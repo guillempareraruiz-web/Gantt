@@ -829,6 +829,8 @@ begin
   // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
   Result.RawItemClaveERP := Row.ClaveERP;
   Result.RawItemTipoOrigen := Row.TipoOrigen;
+  // Secuencia dentro de la OT: con esto se encadenan las precedencias de ruta.
+  Result.Orden := Row.Orden;
 
   // Atributos para el tiempo de cambio secuencia-dependiente (uSetupRules):
   // builtin relevantes + todos los campos personalizados del backlog (Extras).
@@ -964,6 +966,14 @@ begin
       Inp.RawItemClaveERP := Q.FieldByName('ClaveERP').AsString;
       Inp.RawItemTipoOrigen := Q.FieldByName('TipoOrigen').AsString;
 
+      // Secuencia de la operacion dentro de su OT: es lo que define la RUTA y
+      // con lo que se encadenan las precedencias. FindField por robustez ante
+      // vistas anteriores a V053, que no traen la columna.
+      if Q.FindField('Orden') <> nil then
+        Inp.Orden := Q.FieldByName('Orden').AsInteger
+      else
+        Inp.Orden := 0;
+
       L.Add(Inp);
       Q.Next;
     end;
@@ -1077,6 +1087,9 @@ begin
     SetLength(Rows, Length(Rows) + 1);
     Row := Default(TBulkNodeRow);
     Row.CenterId := Item.CenterId;
+    // Maquina elegida por el motor dentro del centro (V083). Se escribe con un
+    // UPDATE posterior, no en el INSERT masivo (ver AsignarMaquinasANodos).
+    Row.MaquinaId := Item.MaquinaId;
     Row.FechaInicio := Item.FechaInicio;
     Row.FechaFin := Item.FechaFin;
     Row.DuracionMin := Item.DuracionMin;
@@ -1124,6 +1137,12 @@ begin
       // Persistencia masiva (Node + NodeData). Asigna Rows[i].NodeId.
       MetodoUsado := BulkInsertNodes(DMPlanner.ADOConnection,
         DMPlanner.CodigoEmpresa, DMPlanner.CurrentProjectId, Rows, MetodoPref);
+
+      // Y a que maquina va cada uno (V083). Va aparte del INSERT porque los
+      // cinco metodos de persistencia construyen SQL distinto; aqui basta un
+      // UPDATE por maquina sobre los NodeId recien creados.
+      AsignarMaquinasANodos(DMPlanner.ADOConnection,
+        DMPlanner.CodigoEmpresa, Rows);
 
       // Resumen (sin log por-fila: 1194 lineas de I/O son ruido y lentitud).
       for I := 0 to High(Rows) do
@@ -1291,6 +1310,7 @@ var
   C: TCentreTreball;
   SetupEngine: TSetupRuleEngine;
   UtilOcc: TUtillajeOccupancy;
+  MaqCache: TMaquinasCache;   // maquinas por centro (V083)
 begin
   if tvBacklog.Controller.SelectedRowCount = 0 then
   begin
@@ -1401,6 +1421,31 @@ begin
       end;
     end;
 
+    // Precedencias de ruta: encadenar las OP de una misma OT (OP10 -> OP20 ->
+    // OP30) y hacer que el motor las respete como restriccion dura. Sin esto,
+    // cada OP se colocaba donde cupiera y la ruta solo se comprobaba DESPUES,
+    // con la alerta D01.
+    //
+    // SOLO EN FORWARD. El motor aplica la restriccion en el branch smForward;
+    // en backward habria que imponer la simetrica (una operacion no puede
+    // acabar despues de que empiece su sucesora) y recorrer en orden topologico
+    // inverso, que no esta hecho. Activarlo en backward daria falsa sensacion
+    // de que se respeta la ruta cuando no es asi.
+    if Params.Mode = smForward then
+    begin
+      BuildPrecedencesFromInputs(Inputs);
+      Params.RespetarPrecedencias := True;
+      if not TopologicalSortInputs(Inputs) then
+        // La ruta del ERP tiene un ciclo. No se aborta: las operaciones del
+        // ciclo se planifican sin encadenar (van al final) y el usuario lo vera
+        // con la alerta D01, igual que antes.
+        PlanLog.Linea('AVISO: ciclo en las precedencias; ' +
+          'esas operaciones se planifican sin encadenar.');
+    end
+    else
+      PlanLog.Linea('AVISO: modo BACKWARD, las precedencias de ruta NO se ' +
+        'aplican como restriccion (solo alerta D01 posterior).');
+
     PlanLog.Linea('--- SCHEDULING: Mode=%d Order=%d FechaBase=%s Agrupacion=%d ---',
       [Ord(Params.Mode), Ord(Params.Order), DateToStr(Params.FechaBase),
        Ord(Params.Agrupacion)]);
@@ -1414,16 +1459,21 @@ begin
     // y lo libera el caller. Si no hay reglas de utillaje, se deja nil y el
     // motor se comporta como siempre.
     UtilOcc := BuildUtillajeOccupancy;
+    // Maquinas de cada centro (V083): se leen UNA vez aqui, en el hilo
+    // principal, y el motor ya no toca BD para esto. Mismo contrato que
+    // SetupEngine/UtillajeOcc: lo crea y lo libera el caller.
+    MaqCache := BuildMaquinasCache;
     try
       SetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
       Params.SetupEngine := SetupEngine;
       Params.UtillajeOcc := UtilOcc;
-      SR := RunAutoScheduling(Inputs, Params);
+      SR := RunAutoScheduling(Inputs, Params, nil, MaqCache);
     finally
       Params.SetupEngine := nil;
       Params.UtillajeOcc := nil;
       SetupEngine.Free;
       UtilOcc.Free;
+      MaqCache.Free;
     end;
     PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados en %d ms ---',
       [Length(SR.Items), SR.TotalPlanificados, MilliSecondsBetween(Now, TCol)]);

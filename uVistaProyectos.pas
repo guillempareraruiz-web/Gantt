@@ -3,13 +3,26 @@
 {
   Modulo de PROYECTOS (planificacion estilo MS Project, paradigma TAREAS).
 
-  Fase 1 (esqueleto, SOLO LECTURA): a la izquierda un grid WBS jerarquico
-  (cxTreeList) con Nombre / Duracion / Inicio / Fin; a la derecha el Gantt de
-  tareas (TGanttControlTareas), sincronizado fila a fila por scroll vertical.
+  A la izquierda un grid WBS jerarquico (cxTreeList) con Nombre / Duracion /
+  Inicio / Fin / Holgura / Avance; a la derecha el Gantt de tareas
+  (TGanttControlTareas), sincronizado fila a fila por scroll vertical. Puede
+  mostrar VARIOS proyectos a la vez, cada uno como una rama de nivel 0.
 
-  Muestra los datos existentes de un proyecto TAREAS (p.ej. el demo ProjectId 6)
-  SIN edicion. La edicion (columnas in-place, indentar, dependencias) y el motor
-  de fechas son fases posteriores.
+  Estado por fases:
+    F1 (hecha) vista WBS + Gantt embebido, plegado sincronizado, tags, banda
+       de carga por operario, seleccion multi-proyecto persistida.
+    F2 (hecha) motor de fechas CPM (uWbsScheduler): forward/backward, FS/SS/
+       FF/SF con lag, holgura, camino critico, roll-up de resumenes. El
+       resultado es VOLATIL: se recalcula al cargar, no se persiste.
+    F3 (hecha) edicion estructural de la WBS: crear / borrar / indentar /
+       renombrar tareas desde la vista, y edicion in-place en el grid.
+    F4 (hecha, V082) esfuerzo y control: triada Trabajo = Duracion x Unidades
+       con tipo de tarea, juego completo de restricciones de MS Project
+       (incluido ALAP), linea base con barra fantasma y columna de desviacion,
+       deteccion de operarios sobreasignados y panel de esfuerzo.
+
+  Pendiente (no implementado): nivelacion automatica de recursos (la
+  sobreasignacion se DETECTA y se avisa, pero resolverla es manual).
 
   Se abre desde el Main (boton de toolbar) segun FS_PL_Project.PlanningParadigm.
 }
@@ -27,6 +40,7 @@ uses
   uGanttControl, uGanttControlTareas, uGanttTypes, uGanttTimeline, uNodeDataRepo,
   uCentreCalendar,
   uErpTypes, uWbsTypes, uWbsRepo, uWbsScheduler, uWbsTareaEdit, uWbsCargaBand,
+  uWbsSobrecarga, uWbsPanelEsfuerzo,
   dxSkinBasic, dxSkinBlack,
   dxSkinBlue, dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom,
   dxSkinDarkSide, dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
@@ -104,6 +118,9 @@ type
     colFin: TcxTreeListColumn;
     colHolgura: TcxTreeListColumn;
     colAvance: TcxTreeListColumn;
+    // Creadas por codigo (V082): el disenador reescribe el DFM y las perdia.
+    colTrabajo: TcxTreeListColumn;   // horas de trabajo del plan
+    colDesvio: TcxTreeListColumn;    // dias de desviacion contra la linea base
     splMain: TSplitter;
     pnlRight: TPanel;
     btnConfigProyectos: TcxButton;
@@ -163,6 +180,16 @@ type
     FTagsPorNodo: TDictionary<Integer, TArray<Integer>>;
     FColorPorTag: TDictionary<Integer, Integer>;
 
+    // --- Linea base y sobreasignacion (V082) ---------------------------------
+    // Desviacion de cada tarea contra la linea base principal (clave NodeId).
+    // Vacio = el proyecto no tiene linea base fijada.
+    FDesvios: TDictionary<Integer, TWbsDesvio>;
+    // Tramos en los que alguien pasa del 100% de jornada, y las tareas
+    // implicadas (para marcarlas en el grid sin recorrer los tramos).
+    FSobrecargas: TWbsSobrecargaArray;
+    FNodosSobrecargados: TDictionary<Integer, Boolean>;
+    FStyleSobrecarga: TcxStyle;   // fila con operario sobreasignado (ambar)
+
 
         // Regla y Gantt comparten viewport horizontal: cada uno sigue al otro.
     // FSincronizando corta la recursion (A mueve a B, B avisa y movería a A).
@@ -183,7 +210,31 @@ type
     // Apertura diferida de la ficha de tarea (ver PedirEditarTarea).
     FTimerEditar: TTimer;
     FNodeIdPendiente: Integer;
-    procedure TimerScrollTick(Sender: TObject);
+        FTimerRecargar: TTimer;
+    FNodeIdRecarga: Integer;
+
+    // --- Edicion estructural de la WBS (F3) ---------------------------------
+    // Menu contextual del arbol, construido en codigo (no en el DFM) porque sus
+    // opciones se habilitan segun la fila sobre la que se ha pulsado.
+    FMenuWbs: TPopupMenu;
+    FMiNuevaHermana: TMenuItem;
+    FMiNuevaHija: TMenuItem;
+    FMiNuevoHito: TMenuItem;
+    FMiRenombrar: TMenuItem;
+    FMiBorrar: TMenuItem;
+    FMiIndentar: TMenuItem;
+    FMiDesindentar: TMenuItem;
+    FMiSubir: TMenuItem;
+    FMiBajar: TMenuItem;
+    // Acciones de PROYECTO (V082), no de fila.
+    FMiQuitarBase: TMenuItem;
+    FMiVerSobrecarga: TMenuItem;
+    procedure MiFijarBaseClick(Sender: TObject);
+    procedure MiQuitarBaseClick(Sender: TObject);
+    procedure MiVerSobrecargaClick(Sender: TObject);
+    procedure MiPanelEsfuerzoClick(Sender: TObject);
+
+     procedure TimerScrollTick(Sender: TObject);
     // True si el arbol ya no puede desplazarse mas hacia abajo.
     function GridEnElFinal: Boolean;
     // Ancho que necesita el arbol para verse entero (columnas + borde).
@@ -226,6 +277,59 @@ type
       const AInicio, AFin: TDateTime);
     function MinutosLaborablesEntre(const AIni, AFin: TDateTime): Double;
 
+
+    procedure CrearMenuWbs;
+    procedure MenuWbsPopup(Sender: TObject);
+    procedure MiNuevaHermanaClick(Sender: TObject);
+    procedure MiNuevaHijaClick(Sender: TObject);
+    procedure MiNuevoHitoClick(Sender: TObject);
+    procedure MiRenombrarClick(Sender: TObject);
+    procedure MiBorrarClick(Sender: TObject);
+    procedure MiIndentarClick(Sender: TObject);
+    procedure MiDesindentarClick(Sender: TObject);
+    procedure MiSubirClick(Sender: TObject);
+    procedure MiBajarClick(Sender: TObject);
+    // Atajos de teclado sobre el arbol (Ins / Supr / Tab / Shift+Tab / F2 /
+    // Alt+flechas), el juego de MS Project.
+    procedure tlWbsKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    // Fin de la edicion in-place de una celda: persiste segun la columna.
+    procedure tlWbsEdited(Sender: TcxCustomTreeList; AColumn: TcxTreeListColumn);
+    // NodeId de la fila enfocada (0 si es una fila de PROYECTO o no hay nada).
+    function NodeIdEnfocado: Integer;
+    // ProjectId al que pertenece la fila enfocada, sea tarea o fila de
+    // proyecto. 0 si no se puede determinar.
+    function ProjectIdEnfocado: Integer;
+    // Datos de la tarea por NodeId (False si no esta cargada).
+    function BuscarTarea(ANodeId: Integer; out ATarea: TWbsTask): Boolean;
+    // Hermano anterior / siguiente dentro del mismo padre (0 si no hay).
+    function HermanoAnterior(const ATarea: TWbsTask): Integer;
+    function HermanoSiguiente(const ATarea: TWbsTask): Integer;
+    // Crea una tarea y deja el foco sobre ella, listo para renombrarla.
+    procedure NuevaTarea(AParentTaskId, AOrden, AKind: Integer);
+    // Recarga y vuelve a poner el foco en ANodeId (si sigue existiendo).
+    procedure RecargarYEnfocar(ANodeId: Integer);
+    // Igual, pero DIFERIDA al siguiente ciclo de mensajes. Obligatoria desde
+    // dentro de un evento del propio arbol (OnEdited, OnKeyDown): reconstruirlo
+    // alli hace tlWbs.Clear, que libera los TcxTreeListNode que el control
+    // todavia esta usando para cerrar su editor -> Access Violation al volver.
+    procedure PedirRecargarYEnfocar(ANodeId: Integer);
+    procedure TimerRecargarTick(Sender: TObject);
+
+
+    // --- Linea base (V082) ---------------------------------------------------
+    // Congela el plan actual como referencia contra la que medir. Pide
+    // confirmacion si ya habia una: rehacerla borra el historico de desvios.
+    procedure FijarLineaBase;
+    procedure QuitarLineaBase;
+    // True si alguno de los proyectos mostrados tiene linea base.
+    function HayLineaBase: Boolean;
+    // Carga desvios y sobrecargas de los proyectos mostrados. Se llama desde
+    // CargarDatos, con las tareas ya en memoria.
+    procedure CargarBaselineYSobrecarga;
+    // Aviso resumido de sobreasignacion, para la barra de subtitulo.
+    function ResumenSobrecarga: string;
+    procedure MostrarSobrecargas;        // detalle en un dialogo
+
     procedure ElegirProyectos;           // selector multi-proyecto
     function CargarSeleccionGuardada: TArray<Integer>;
     procedure GuardarSeleccion;
@@ -267,7 +371,7 @@ implementation
 
 uses
   System.DateUtils, System.Math, Vcl.Dialogs, Data.Win.ADODB,
-  uDMPlanner, uNodesRepo, uRowFilterDialog, uUserPreferencesRepo;
+  uDMPlanner, uNodesRepo, uRowFilterDialog, uUserPreferencesRepo, uLogin;
 
 procedure TfrmVistaProyectos.Inicializar(AProjectId: Integer);
 begin
@@ -297,6 +401,9 @@ begin
   FRaicesProyecto := TDictionary<Integer, TcxTreeListNode>.Create;
   FTagsPorNodo := TDictionary<Integer, TArray<Integer>>.Create;
   FColorPorTag := TDictionary<Integer, Integer>.Create;
+  // Linea base y sobreasignacion (V082).
+  FDesvios := TDictionary<Integer, TWbsDesvio>.Create;
+  FNodosSobrecargados := TDictionary<Integer, Boolean>.Create;
   // Un motor de fechas POR PROYECTO (CPM independiente). Se crean en
   // RecalcularFechas segun los proyectos que se esten mostrando.
   FSchedulers := TObjectDictionary<Integer, TWbsScheduler>.Create([doOwnsValues]);
@@ -320,6 +427,47 @@ begin
   // Seleccionar una fila del arbol resalta su barra en el Gantt.
   tlWbs.OnFocusedNodeChanged := tlWbsFocusedNodeChanged;
 
+  // Edicion estructural (F3): menu contextual, atajos y edicion in-place.
+  CrearMenuWbs;
+  tlWbs.OnKeyDown := tlWbsKeyDown;
+  tlWbs.OnEdited := tlWbsEdited;
+  // La edicion in-place se abre a peticion (F2 o el menu contextual). El doble
+  // clic NO la abre: ya esta cogido para abrir la ficha de la tarea.
+  tlWbs.OptionsData.Editing := True;
+  // Que columnas se pueden teclear. Fin y Holgura NO: las calcula el motor, y
+  // dejar escribir encima daria la falsa impresion de que se respeta.
+  colNombre.Options.Editing   := True;
+  colDuracion.Options.Editing := True;
+  colInicio.Options.Editing   := True;
+  colFin.Options.Editing      := False;
+  colHolgura.Options.Editing  := False;
+  colAvance.Options.Editing   := False;
+
+  // Columnas de esfuerzo y desviacion (V082). Se crean por codigo porque el
+  // disenador reescribe el DFM al abrir el form y las perderia.
+  colTrabajo := tlWbs.CreateColumn;
+  colTrabajo.Caption.Text := 'Trabajo';
+  colTrabajo.Caption.AlignHorz := taRightJustify;
+  colTrabajo.Width := 75;
+  colTrabajo.MinWidth := 60;
+  // El trabajo SI se teclea: es una de las tres magnitudes de la ecuacion.
+  colTrabajo.Options.Editing := True;
+
+  colDesvio := tlWbs.CreateColumn;
+  colDesvio.Caption.Text := 'Desv.';
+  colDesvio.Caption.AlignHorz := taRightJustify;
+  colDesvio.Width := 65;
+  colDesvio.MinWidth := 55;
+  // Es un derivado de la linea base: teclearlo no significaria nada.
+  colDesvio.Options.Editing := False;
+
+  // Fila con algun operario sobreasignado: ambar suave. No es un error del
+  // plan (las fechas son validas), es un aviso de que es inviable con esa
+  // gente, asi que no comparte el rojo del camino critico.
+  FStyleSobrecarga := TcxStyle.Create(Self);
+  FStyleSobrecarga.TextColor := $00105ACC;
+  FStyleSobrecarga.Color := $00E8F4FF;
+
   // Vigilancia del scroll del grid (ver comentario del campo FTimerScroll).
   FTimerScroll := TTimer.Create(Self);
   FTimerScroll.Interval := 60;
@@ -332,6 +480,12 @@ begin
   FTimerEditar.Interval := 1;
   FTimerEditar.OnTimer := TimerEditarTick;
   FTimerEditar.Enabled := False;
+
+  // Recarga diferida tras editar en el propio arbol (ver PedirRecargarYEnfocar).
+  FTimerRecargar := TTimer.Create(Self);
+  FTimerRecargar.Interval := 1;
+  FTimerRecargar.OnTimer := TimerRecargarTick;
+  FTimerRecargar.Enabled := False;
   // El alto de la cabecera del cxTreeList NO se puede imponer (esta version no
   // expone OptionsView.HeaderHeight) y es menor que el de la regla de fechas,
   // que necesita 48 px para sus tres bandas (mes/semana/dia). Para que las
@@ -681,6 +835,8 @@ begin
   FRaicesProyecto.Free;
   FTagsPorNodo.Free;
   FColorPorTag.Free;
+  FDesvios.Free;
+  FNodosSobrecargados.Free;
   FNodeDataRepo.Free;
   FSchedulers.Free;
   // FStyleCritica / FStyleResumen son Owned por el form: no liberar aqui.
@@ -699,7 +855,13 @@ begin
   if Sched.EsResumen then
     AStyle := FStyleResumen
   else if Sched.EsCritica then
-    AStyle := FStyleCritica;
+    AStyle := FStyleCritica
+  // La sobreasignacion va DESPUES de la criticidad a proposito: si una tarea
+  // es critica Y tiene a alguien sobreasignado, lo urgente sigue siendo que
+  // esta en el camino critico. El aviso de sobrecarga se ve igualmente en la
+  // banda de carga y en el subtitulo.
+  else if FNodosSobrecargados.ContainsKey(NodeId) then
+    AStyle := FStyleSobrecarga;
 end;
 
 procedure TfrmVistaProyectos.TimelineViewportChanged(Sender: TObject;
@@ -1206,6 +1368,12 @@ begin
   Datos.FechaFin := FTareas[Idx].FechaFin;
   Datos.DuracionMin := FTareas[Idx].DuracionMin;
   Datos.MinutosInvertidos := FTareas[Idx].MinutosInvertidos;
+  // Triada de esfuerzo y restriccion completa (V082).
+  Datos.TrabajoMin := FTareas[Idx].TrabajoMin;
+  Datos.TipoTarea := FTareas[Idx].TipoTarea;
+  Datos.Unidades := FTareas[Idx].Unidades;
+  Datos.ConstraintKind := FTareas[Idx].ConstraintKind;
+  Datos.ConstraintDate := FTareas[Idx].ConstraintDate;
 
   Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
   try
@@ -1220,21 +1388,32 @@ begin
     // recalcula el motor: son volatiles salvo la restriccion de fecha fija.
     if Datos.Kind <> FTareas[Idx].Kind then
       Repo.SaveTaskKind(ANodeId, Ord(Datos.Kind));
-    if Datos.DuracionMin <> FTareas[Idx].DuracionMin then
-      Repo.SaveDuracion(ANodeId, Datos.DuracionMin);
+    // Duracion, trabajo y tipo van JUNTOS: son una sola ecuacion (V082) y
+    // guardar uno sin el otro la dejaria descuadrada en BD.
+    if (Datos.DuracionMin <> FTareas[Idx].DuracionMin) or
+       (Datos.TrabajoMin <> FTareas[Idx].TrabajoMin) or
+       (Datos.TipoTarea <> FTareas[Idx].TipoTarea) then
+      Repo.SaveEsfuerzo(ANodeId, Datos.DuracionMin, Datos.TrabajoMin,
+        Ord(Datos.TipoTarea));
     if Datos.MinutosInvertidos <> FTareas[Idx].MinutosInvertidos then
       Repo.SaveMinutosInvertidos(ANodeId, Datos.MinutosInvertidos);
 
     Datos.Detail.NodeId := ANodeId;
     Repo.SaveDetail(Datos.Detail);
-    Repo.SaveOperarios(ANodeId, Datos.Operarios);
+    // ARecuadrarTriada = False: la ficha ya ha resuelto la ecuacion al aceptar
+    // (VolcarDatos llama a RecalcularTriada con las unidades finales), asi que
+    // SaveEsfuerzo acaba de guardar el valor bueno. Si se dejara recuadrar,
+    // este UPDATE lo recalcularia a partir de la duracion y sobreescribiria el
+    // trabajo que el usuario acaba de teclear.
+    Repo.SaveOperarios(ANodeId, Datos.Operarios, False);
     Repo.SaveTagsDeTarea(ANodeId, Datos.Tags);
 
-    // Fijar la fecha de inicio a mano = restriccion "fecha fija" (V078). Sin
-    // esto, el CPM recalcularia la fecha por dependencias y borraria de hecho
-    // lo que el usuario acaba de decidir.
-    if Datos.FechaInicioEditada then
-      Repo.SaveRestriccionFecha(ANodeId, 2, Datos.FechaInicio);
+    // La restriccion ahora se elige explicitamente en la ficha (V082), ya no
+    // se deduce de haber tocado el campo Inicio.
+    if (Datos.ConstraintKind <> FTareas[Idx].ConstraintKind) or
+       (Datos.ConstraintDate <> FTareas[Idx].ConstraintDate) then
+      Repo.SaveRestriccionFecha(ANodeId, Datos.ConstraintKind,
+        Datos.ConstraintDate);
   finally
     Repo.Free;
   end;
@@ -1243,6 +1422,841 @@ begin
   // depende de ella. Conservando el plegado que tenia el usuario: reconstruir
   // el arbol hace FullExpand y si no se restaura, editar una tarea deja todos
   // los proyectos abiertos de nuevo.
+  RecargarConservandoVista;
+end;
+
+// ---------------------------------------------------------------------------
+// Edicion estructural de la WBS (F3)
+//
+// Reparto de responsabilidades: aqui se decide QUE se puede hacer sobre la fila
+// enfocada (y se pide confirmacion cuando toca); el COMO se toca el arbol en BD
+// (numeracion, promocion a resumen, arrastre del subarbol) vive en TWbsRepo.
+// Tras cualquier cambio se recarga entero: mover una tarea puede desplazar toda
+// la cadena que depende de ella, y recalcular el CPM es barato comparado con
+// intentar parchear el arbol en memoria.
+// ---------------------------------------------------------------------------
+
+procedure TfrmVistaProyectos.CrearMenuWbs;
+
+  function NuevoItem(const ACaption: string; AOnClick: TNotifyEvent;
+    AShortCut: TShortCut): TMenuItem;
+  begin
+    Result := TMenuItem.Create(Self);
+    Result.Caption := ACaption;
+    Result.OnClick := AOnClick;
+    Result.ShortCut := AShortCut;
+    FMenuWbs.Items.Add(Result);
+  end;
+
+  procedure Separador;
+  var
+    M: TMenuItem;
+  begin
+    M := TMenuItem.Create(Self);
+    M.Caption := '-';
+    FMenuWbs.Items.Add(M);
+  end;
+
+begin
+  FMenuWbs := TPopupMenu.Create(Self);
+  FMenuWbs.OnPopup := MenuWbsPopup;
+
+  FMiNuevaHermana := NuevoItem('Nueva tarea', MiNuevaHermanaClick,
+    ShortCut(VK_INSERT, []));
+  FMiNuevaHija := NuevoItem('Nueva subtarea', MiNuevaHijaClick,
+    ShortCut(VK_INSERT, [ssShift]));
+  FMiNuevoHito := NuevoItem('Nuevo hito', MiNuevoHitoClick, 0);
+  Separador;
+  FMiRenombrar := NuevoItem('Renombrar', MiRenombrarClick,
+    ShortCut(VK_F2, []));
+  FMiBorrar := NuevoItem('Eliminar', MiBorrarClick, ShortCut(VK_DELETE, []));
+  Separador;
+  // Tab / Shift+Tab NO se declaran como ShortCut: el arbol los usa para
+  // navegar entre celdas y el menu se los comeria. Se capturan en OnKeyDown.
+  FMiIndentar := NuevoItem('Aumentar sangr'#237'a', MiIndentarClick, 0);
+  FMiDesindentar := NuevoItem('Disminuir sangr'#237'a', MiDesindentarClick, 0);
+  Separador;
+  FMiSubir := NuevoItem('Subir', MiSubirClick, ShortCut(VK_UP, [ssAlt]));
+  FMiBajar := NuevoItem('Bajar', MiBajarClick, ShortCut(VK_DOWN, [ssAlt]));
+  Separador;
+  // Estas tres son del PROYECTO, no de la fila: se habilitan siempre.
+  NuevoItem('Fijar l'#237'nea base...', MiFijarBaseClick, 0);
+  FMiQuitarBase := NuevoItem('Quitar l'#237'nea base...', MiQuitarBaseClick, 0);
+  FMiVerSobrecarga := NuevoItem('Ver sobreasignaci'#243'n...',
+    MiVerSobrecargaClick, 0);
+  NuevoItem('Esfuerzo del proyecto...', MiPanelEsfuerzoClick, 0);
+
+  tlWbs.PopupMenu := FMenuWbs;
+end;
+
+procedure TfrmVistaProyectos.MenuWbsPopup(Sender: TObject);
+var
+  NodeId: Integer;
+  T: TWbsTask;
+  EsTarea: Boolean;
+  P: TPoint;
+  Bajo: TcxTreeListNode;
+begin
+  // El boton derecho no mueve el foco por si solo, asi que sin esto el menu se
+  // habilitaria (y actuaria) sobre la fila que estuviera seleccionada antes, no
+  // sobre la que el usuario acaba de pulsar. Sender = nil cuando la llamada
+  // viene del teclado: entonces el foco YA es la fila correcta.
+  if Sender <> nil then
+  begin
+    P := tlWbs.ScreenToClient(Mouse.CursorPos);
+    Bajo := tlWbs.GetNodeAt(P.X, P.Y);
+    if Bajo <> nil then
+      tlWbs.FocusedNode := Bajo;
+  end;
+
+  NodeId := NodeIdEnfocado;
+  EsTarea := (NodeId > 0) and BuscarTarea(NodeId, T);
+
+  // Sobre una fila de PROYECTO solo tiene sentido crear una tarea raiz: no hay
+  // nada que renombrar, mover ni borrar (el proyecto se gestiona en su ficha).
+  FMiNuevaHermana.Enabled := (NodeId > 0) or (ProjectIdEnfocado > 0);
+  FMiNuevaHija.Enabled := EsTarea or (ProjectIdEnfocado > 0);
+  FMiNuevoHito.Enabled := FMiNuevaHermana.Enabled;
+  FMiRenombrar.Enabled := EsTarea;
+  FMiBorrar.Enabled := EsTarea;
+
+  // Indentar = pasar a ser hija del hermano anterior: hace falta que lo haya.
+  FMiIndentar.Enabled := EsTarea and (HermanoAnterior(T) > 0);
+  // Desindentar: solo si cuelga de otra tarea (las raices ya estan arriba).
+  FMiDesindentar.Enabled := EsTarea and (T.ParentTaskId > 0);
+  FMiSubir.Enabled := EsTarea and (HermanoAnterior(T) > 0);
+  FMiBajar.Enabled := EsTarea and (HermanoSiguiente(T) > 0);
+
+  // Acciones de proyecto: no dependen de la fila, solo de si hay algo que
+  // quitar o que mirar.
+  FMiQuitarBase.Enabled := HayLineaBase;
+  if Length(FSobrecargas) > 0 then
+    FMiVerSobrecarga.Caption := Format('Ver sobreasignaci'#243'n (%d)...',
+      [Length(FSobrecargas)])
+  else
+    FMiVerSobrecarga.Caption := 'Ver sobreasignaci'#243'n...';
+end;
+
+function TfrmVistaProyectos.NodeIdEnfocado: Integer;
+begin
+  Result := 0;
+  if tlWbs.FocusedNode = nil then Exit;
+  if not FTLNodeToNodeId.TryGetValue(tlWbs.FocusedNode, Result) then
+    Result := 0;
+end;
+
+function TfrmVistaProyectos.ProjectIdEnfocado: Integer;
+var
+  NodeId: Integer;
+  T: TWbsTask;
+  Par: TPair<Integer, TcxTreeListNode>;
+  Nodo: TcxTreeListNode;
+begin
+  Result := 0;
+  NodeId := NodeIdEnfocado;
+  if (NodeId > 0) and BuscarTarea(NodeId, T) then
+    Exit(T.ProjectId);
+
+  // No es una tarea: puede ser la fila de nivel 0 de un proyecto. Se sube
+  // hasta la raiz por si el foco esta en una fila sin tarea asociada.
+  Nodo := tlWbs.FocusedNode;
+  while (Nodo <> nil) and (Nodo.Parent <> nil) do
+    Nodo := Nodo.Parent;
+  if Nodo = nil then Exit;
+
+  for Par in FRaicesProyecto do
+    if Par.Value = Nodo then
+      Exit(Par.Key);
+
+  // Ultimo recurso: si solo se muestra un proyecto, es ese.
+  if Length(FProyectos) = 1 then
+    Result := FProyectos[0].ProjectId;
+end;
+
+function TfrmVistaProyectos.BuscarTarea(ANodeId: Integer;
+  out ATarea: TWbsTask): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  ATarea := Default(TWbsTask);
+  if ANodeId <= 0 then Exit;
+  for I := 0 to High(FTareas) do
+    if FTareas[I].NodeId = ANodeId then
+    begin
+      ATarea := FTareas[I];
+      Exit(True);
+    end;
+end;
+
+function TfrmVistaProyectos.HermanoAnterior(const ATarea: TWbsTask): Integer;
+var
+  I: Integer;
+begin
+  // FTareas viene en orden de arbol, asi que el hermano anterior es la ultima
+  // tarea con el mismo padre que aparece ANTES que esta.
+  Result := 0;
+  for I := 0 to High(FTareas) do
+  begin
+    if FTareas[I].NodeId = ATarea.NodeId then Break;
+    if (FTareas[I].ProjectId = ATarea.ProjectId) and
+       (FTareas[I].ParentTaskId = ATarea.ParentTaskId) then
+      Result := FTareas[I].NodeId;
+  end;
+end;
+
+function TfrmVistaProyectos.HermanoSiguiente(const ATarea: TWbsTask): Integer;
+var
+  I: Integer;
+  Pasado: Boolean;
+begin
+  Result := 0;
+  Pasado := False;
+  for I := 0 to High(FTareas) do
+  begin
+    if FTareas[I].NodeId = ATarea.NodeId then
+    begin
+      Pasado := True;
+      Continue;
+    end;
+    if Pasado and (FTareas[I].ProjectId = ATarea.ProjectId) and
+       (FTareas[I].ParentTaskId = ATarea.ParentTaskId) then
+      Exit(FTareas[I].NodeId);
+  end;
+end;
+
+procedure TfrmVistaProyectos.RecargarYEnfocar(ANodeId: Integer);
+var
+  TLNode: TcxTreeListNode;
+begin
+  RecargarConservandoVista;
+  if ANodeId <= 0 then Exit;
+  if not FNodeToTLNode.TryGetValue(ANodeId, TLNode) then Exit;
+
+  // Si la tarea esta bajo una rama plegada, desplegarla: dejar el foco en una
+  // fila invisible desconcierta (el usuario acaba de crearla y no la ve).
+  TLNode.MakeVisible;
+  tlWbs.FocusedNode := TLNode;
+end;
+
+procedure TfrmVistaProyectos.PedirRecargarYEnfocar(ANodeId: Integer);
+begin
+  FNodeIdRecarga := ANodeId;
+  FTimerRecargar.Enabled := True;
+end;
+
+procedure TfrmVistaProyectos.TimerRecargarTick(Sender: TObject);
+var
+  NodeId: Integer;
+begin
+  FTimerRecargar.Enabled := False;
+  NodeId := FNodeIdRecarga;
+  FNodeIdRecarga := 0;
+  // Cerrar el editor ANTES de tocar el arbol: si sigue abierto, al reconstruir
+  // se quedaria apuntando a un nodo que ya no existe.
+  if tlWbs.IsEditing then tlWbs.HideEdit;
+  RecargarYEnfocar(NodeId);
+end;
+
+procedure TfrmVistaProyectos.NuevaTarea(AParentTaskId, AOrden, AKind: Integer);
+var
+  Repo: TWbsRepo;
+  ProjectId, NuevoId: Integer;
+  Nombre: string;
+begin
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+
+  ProjectId := ProjectIdEnfocado;
+  if ProjectId <= 0 then
+  begin
+    Vcl.Dialogs.MessageDlg(
+      'Sit'#250'ese sobre un proyecto o una tarea para saber d'#243'nde crearla.',
+      mtInformation, [mbOK], 0);
+    Exit;
+  end;
+
+  if AKind = Ord(wtkHito) then
+    Nombre := 'Nuevo hito'
+  else
+    Nombre := 'Nueva tarea';
+  if not InputQuery('Nueva tarea', 'Nombre:', Nombre) then Exit;
+  if Trim(Nombre) = '' then Exit;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    // Duracion de arranque: un dia laborable para una tarea, cero para un
+    // hito. Una tarea de duracion 0 se pintaria como rombo y confundiria.
+    if AKind = Ord(wtkHito) then
+      NuevoId := Repo.InsertTarea(ProjectId, AParentTaskId, AOrden,
+        Trim(Nombre), AKind, 0)
+    else
+      NuevoId := Repo.InsertTarea(ProjectId, AParentTaskId, AOrden,
+        Trim(Nombre), AKind, 480);
+  finally
+    Repo.Free;
+  end;
+
+  if NuevoId <= 0 then
+  begin
+    Vcl.Dialogs.MessageDlg('No se ha podido crear la tarea.',
+      mtError, [mbOK], 0);
+    Exit;
+  end;
+
+  // Diferida siempre: estas acciones tambien se disparan desde OnKeyDown (Ins,
+  // Supr, Tab) y desde los atajos del menu, es decir, desde dentro de un evento
+  // del propio arbol. Ver PedirRecargarYEnfocar.
+  PedirRecargarYEnfocar(NuevoId);
+end;
+
+procedure TfrmVistaProyectos.MiNuevaHermanaClick(Sender: TObject);
+var
+  NodeId: Integer;
+  T: TWbsTask;
+begin
+  NodeId := NodeIdEnfocado;
+  // Sobre una tarea: hermana justo debajo. Sobre la fila de proyecto (o sin
+  // foco util): tarea raiz al final.
+  if (NodeId > 0) and BuscarTarea(NodeId, T) then
+    NuevaTarea(T.ParentTaskId, T.OrdenWBS + 1, Ord(wtkTarea))
+  else
+    NuevaTarea(0, ORDEN_ULTIMO, Ord(wtkTarea));
+end;
+
+procedure TfrmVistaProyectos.MiNuevaHijaClick(Sender: TObject);
+var
+  NodeId: Integer;
+begin
+  NodeId := NodeIdEnfocado;
+  // ORDEN_ULTIMO = "detras de todos sus hermanos"; el repo lo traduce a la
+  // posicion real (ver ResolverOrden).
+  if NodeId > 0 then
+    NuevaTarea(NodeId, ORDEN_ULTIMO, Ord(wtkTarea))
+  else
+    NuevaTarea(0, ORDEN_ULTIMO, Ord(wtkTarea));
+end;
+
+procedure TfrmVistaProyectos.MiNuevoHitoClick(Sender: TObject);
+var
+  NodeId: Integer;
+  T: TWbsTask;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId > 0) and BuscarTarea(NodeId, T) then
+    NuevaTarea(T.ParentTaskId, T.OrdenWBS + 1, Ord(wtkHito))
+  else
+    NuevaTarea(0, ORDEN_ULTIMO, Ord(wtkHito));
+end;
+
+procedure TfrmVistaProyectos.MiRenombrarClick(Sender: TObject);
+begin
+  if NodeIdEnfocado <= 0 then Exit;
+  // Abrir el editor in-place de la columna Nombre: renombrar es lo bastante
+  // frecuente como para no merecer un dialogo modal.
+  tlWbs.FocusedColumn := colNombre;
+  tlWbs.ShowEdit;
+end;
+
+procedure TfrmVistaProyectos.MiBorrarClick(Sender: TObject);
+var
+  NodeId, Borradas: Integer;
+  T: TWbsTask;
+  Repo: TWbsRepo;
+  Msg: string;
+  TLNode: TcxTreeListNode;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId <= 0) or (not BuscarTarea(NodeId, T)) then Exit;
+
+  // Avisar de que se lleva el subarbol por delante: borrar un resumen sin
+  // saberlo puede vaciar media planificacion.
+  Msg := 'Eliminar la tarea "' + T.Caption + '"?';
+  if FNodeToTLNode.TryGetValue(NodeId, TLNode) and (TLNode.Count > 0) then
+    Msg := Msg + #13#10#13#10 +
+      'Se eliminar'#225'n TAMBI'#201'N todas sus subtareas y las ' +
+      'dependencias en las que participen.';
+
+  if Vcl.Dialogs.MessageDlg(Msg, mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    Exit;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Borradas := Repo.DeleteTarea(NodeId);
+  finally
+    Repo.Free;
+  end;
+
+  if Borradas <= 0 then Exit;
+  // El foco vuelve al padre, que es lo que queda mas cerca de lo borrado.
+  PedirRecargarYEnfocar(T.ParentTaskId);
+end;
+
+procedure TfrmVistaProyectos.MiIndentarClick(Sender: TObject);
+var
+  NodeId, Anterior: Integer;
+  T: TWbsTask;
+  Repo: TWbsRepo;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId <= 0) or (not BuscarTarea(NodeId, T)) then Exit;
+
+  // Indentar = colgar del hermano anterior, como ultima hija (MS Project).
+  Anterior := HermanoAnterior(T);
+  if Anterior <= 0 then Exit;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    if not Repo.MoverTarea(NodeId, Anterior, ORDEN_ULTIMO) then Exit;
+  finally
+    Repo.Free;
+  end;
+  PedirRecargarYEnfocar(NodeId);
+end;
+
+procedure TfrmVistaProyectos.MiDesindentarClick(Sender: TObject);
+var
+  NodeId: Integer;
+  T, Padre: TWbsTask;
+  Repo: TWbsRepo;
+  NuevoParent, NuevoOrden: Integer;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId <= 0) or (not BuscarTarea(NodeId, T)) then Exit;
+  if T.ParentTaskId <= 0 then Exit;   // ya esta en la raiz
+  if not BuscarTarea(T.ParentTaskId, Padre) then Exit;
+
+  // Desindentar = pasar a ser hermana de su padre, justo detras de el.
+  NuevoParent := Padre.ParentTaskId;
+  NuevoOrden := Padre.OrdenWBS + 1;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    if not Repo.MoverTarea(NodeId, NuevoParent, NuevoOrden) then Exit;
+  finally
+    Repo.Free;
+  end;
+  PedirRecargarYEnfocar(NodeId);
+end;
+
+procedure TfrmVistaProyectos.MiSubirClick(Sender: TObject);
+var
+  NodeId, Anterior: Integer;
+  T, Prev: TWbsTask;
+  Repo: TWbsRepo;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId <= 0) or (not BuscarTarea(NodeId, T)) then Exit;
+  Anterior := HermanoAnterior(T);
+  if (Anterior <= 0) or (not BuscarTarea(Anterior, Prev)) then Exit;
+
+  // Ocupar el sitio del hermano de arriba, sin cambiar de padre.
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    if not Repo.MoverTarea(NodeId, T.ParentTaskId, Prev.OrdenWBS) then Exit;
+  finally
+    Repo.Free;
+  end;
+  PedirRecargarYEnfocar(NodeId);
+end;
+
+procedure TfrmVistaProyectos.MiBajarClick(Sender: TObject);
+var
+  NodeId, Siguiente: Integer;
+  T, Next: TWbsTask;
+  Repo: TWbsRepo;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId <= 0) or (not BuscarTarea(NodeId, T)) then Exit;
+  Siguiente := HermanoSiguiente(T);
+  if (Siguiente <= 0) or (not BuscarTarea(Siguiente, Next)) then Exit;
+
+  // Colocarse DETRAS del siguiente: +1 porque al quitarse de en medio, el
+  // hermano de abajo sube un puesto.
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    if not Repo.MoverTarea(NodeId, T.ParentTaskId, Next.OrdenWBS + 1) then Exit;
+  finally
+    Repo.Free;
+  end;
+  PedirRecargarYEnfocar(NodeId);
+end;
+
+procedure TfrmVistaProyectos.MiFijarBaseClick(Sender: TObject);
+begin
+  // Diferida como el resto: puede venir de un atajo del menu, es decir, desde
+  // dentro de un evento del arbol (ver PedirRecargarYEnfocar).
+  FijarLineaBase;
+end;
+
+procedure TfrmVistaProyectos.MiQuitarBaseClick(Sender: TObject);
+begin
+  QuitarLineaBase;
+end;
+
+procedure TfrmVistaProyectos.MiVerSobrecargaClick(Sender: TObject);
+begin
+  MostrarSobrecargas;
+end;
+
+procedure TfrmVistaProyectos.MiPanelEsfuerzoClick(Sender: TObject);
+var
+  Datos: TWbsEsfuerzoInput;
+  Repo: TWbsRepo;
+  Ids: TArray<Integer>;
+  P: Integer;
+begin
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+  if Length(FProyectos) = 0 then Exit;
+
+  Datos := Default(TWbsEsfuerzoInput);
+  if Length(FProyectos) = 1 then
+    Datos.Titulo := FProyectos[0].Nombre
+  else
+    Datos.Titulo := Format('%d proyectos', [Length(FProyectos)]);
+  Datos.Tareas := FTareas;
+  Datos.Sobrecargas := FSobrecargas;
+  Datos.Desvios := FDesvios;
+  Datos.JornadaMin := 480;
+
+  // Las asignaciones no estan en memoria (la banda de carga las pide aparte),
+  // asi que se traen aqui: es un solo viaje y solo al abrir el panel.
+  SetLength(Ids, Length(FProyectos));
+  for P := 0 to High(FProyectos) do
+    Ids[P] := FProyectos[P].ProjectId;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Datos.Cargas := Repo.LoadCargaOperarios(Ids);
+  finally
+    Repo.Free;
+  end;
+
+  TfrmWbsPanelEsfuerzo.Execute(Datos);
+end;
+
+procedure TfrmVistaProyectos.tlWbsKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  // Tab / Shift+Tab = sangria, como en MS Project. Van aqui y no como ShortCut
+  // del menu porque el arbol los usa para moverse entre celdas y hay que
+  // quitarselos ANTES (Key := 0).
+  if Key = VK_TAB then
+  begin
+    if tlWbs.IsEditing then Exit;   // dentro del editor, Tab es del editor
+    // MenuWbsPopup es quien decide si la accion es posible, y solo se ejecuta
+    // al abrir el menu: por teclado hay que recalcularlo antes de actuar.
+    MenuWbsPopup(nil);
+    if ssShift in Shift then
+    begin
+      if FMiDesindentar.Enabled then MiDesindentarClick(nil);
+    end
+    else
+      if FMiIndentar.Enabled then MiIndentarClick(nil);
+    Key := 0;
+  end;
+end;
+
+procedure TfrmVistaProyectos.tlWbsEdited(Sender: TcxCustomTreeList;
+  AColumn: TcxTreeListColumn);
+var
+  NodeId: Integer;
+  T: TWbsTask;
+  Repo: TWbsRepo;
+  Texto: string;
+  Dias, Nueva: Double;
+  Fecha: TDateTime;
+begin
+  NodeId := NodeIdEnfocado;
+  if (NodeId <= 0) or (not BuscarTarea(NodeId, T)) then Exit;
+  if tlWbs.FocusedNode = nil then Exit;
+
+  Texto := Trim(tlWbs.FocusedNode.Texts[AColumn.ItemIndex]);
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    if AColumn = colNombre then
+    begin
+      // El rombo del hito es decoracion de la celda, no parte del nombre: si
+      // se guardara tal cual, cada edicion iria acumulando rombos.
+      if (Length(Texto) > 0) and (Texto[1] = #$25C6) then
+        Texto := Trim(Copy(Texto, 2, MaxInt));
+      if (Texto = '') or (Texto = T.Caption) then Exit;
+      Repo.RenombrarTarea(NodeId, Texto);
+    end
+    else if AColumn = colDuracion then
+    begin
+      // Se teclea en dias ("3", "3 d", "2,5"); en BD son minutos.
+      Texto := StringReplace(Texto, 'd', '', [rfReplaceAll, rfIgnoreCase]);
+      Texto := Trim(StringReplace(Texto, '.', FormatSettings.DecimalSeparator,
+        [rfReplaceAll]));
+      if not TryStrToFloat(Texto, Dias) then Exit;
+      if Dias < 0 then Exit;
+      Nueva := DiasAMinutos(Dias);
+      if Nueva = T.DuracionMin then Exit;
+      // Cambiar la duracion mueve la ecuacion de esfuerzo (V082): se recalcula
+      // aqui igual que en la ficha, para que teclear en el grid y teclear en el
+      // dialogo den exactamente el mismo resultado.
+      T.DuracionMin := Nueva;
+      T := RecalcularTriada(T, wceDuracion);
+      Repo.SaveEsfuerzo(NodeId, T.DuracionMin, T.TrabajoMin, Ord(T.TipoTarea));
+    end
+    else if AColumn = colTrabajo then
+    begin
+      // Se teclea en horas ("12", "12 h", "7,5").
+      Texto := StringReplace(Texto, 'h', '', [rfReplaceAll, rfIgnoreCase]);
+      Texto := Trim(StringReplace(Texto, '.', FormatSettings.DecimalSeparator,
+        [rfReplaceAll]));
+      if not TryStrToFloat(Texto, Dias) then Exit;   // aqui Dias son HORAS
+      if Dias < 0 then Exit;
+      Nueva := Dias * 60;
+      if Nueva = T.TrabajoMin then Exit;
+      T.TrabajoMin := Nueva;
+      T := RecalcularTriada(T, wceTrabajo);
+      Repo.SaveEsfuerzo(NodeId, T.DuracionMin, T.TrabajoMin, Ord(T.TipoTarea));
+    end
+    else if AColumn = colInicio then
+    begin
+      if Texto = '' then
+      begin
+        // Vaciar la fecha = quitar la restriccion y devolver la tarea al
+        // control del motor (vuelve a ser ASAP).
+        if T.ConstraintKind = 0 then Exit;
+        Repo.SaveRestriccionFecha(NodeId, 0, 0);
+      end
+      else
+      begin
+        if not TryStrToDate(Texto, Fecha) then Exit;
+        if (T.ConstraintKind = 2) and (Trunc(Fecha) = Trunc(T.ConstraintDate)) then
+          Exit;
+        // Teclear una fecha de inicio es fijarla: igual que en la ficha, se
+        // traduce a restriccion de fecha fija para que el CPM la respete en
+        // vez de recalcularla por dependencias.
+        Repo.SaveRestriccionFecha(NodeId, 2, Fecha);
+      end;
+    end
+    else
+      Exit;
+  finally
+    Repo.Free;
+  end;
+
+  // DIFERIDA: se esta dentro de OnEdited (ver PedirRecargarYEnfocar).
+  PedirRecargarYEnfocar(NodeId);
+end;
+
+// ---------------------------------------------------------------------------
+// Linea base y sobreasignacion (V082)
+// ---------------------------------------------------------------------------
+
+procedure TfrmVistaProyectos.CargarBaselineYSobrecarga;
+var
+  Repo: TWbsRepo;
+  P: Integer;
+  DesviosP: TDictionary<Integer, TWbsDesvio>;
+  Par: TPair<Integer, TWbsDesvio>;
+  Ids: TArray<Integer>;
+  Cargas: TWbsCargaArray;
+begin
+  FDesvios.Clear;
+  SetLength(FSobrecargas, 0);
+  FNodosSobrecargados.Clear;
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+  if Length(FProyectos) = 0 then Exit;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    // Desvios contra la linea base, proyecto a proyecto (cada uno tiene la
+    // suya; comparar entre proyectos no significaria nada).
+    for P := 0 to High(FProyectos) do
+    begin
+      DesviosP := Repo.LoadDesvios(FProyectos[P].ProjectId);
+      try
+        for Par in DesviosP do
+          FDesvios.AddOrSetValue(Par.Key, Par.Value);
+      finally
+        DesviosP.Free;
+      end;
+    end;
+
+    // Sobreasignacion: se calcula sobre TODOS los proyectos mostrados a la vez.
+    // Una persona no se libra de estar al 200% porque sus dos tareas sean de
+    // proyectos distintos: es la misma persona y la misma jornada.
+    SetLength(Ids, Length(FProyectos));
+    for P := 0 to High(FProyectos) do
+      Ids[P] := FProyectos[P].ProjectId;
+
+    Cargas := Repo.LoadCargaOperarios(Ids);
+  finally
+    Repo.Free;
+  end;
+
+  FSobrecargas := DetectarSobrecargas(Cargas);
+  FNodosSobrecargados.Free;
+  FNodosSobrecargados := NodosSobrecargados(FSobrecargas);
+end;
+
+function TfrmVistaProyectos.HayLineaBase: Boolean;
+var
+  Par: TPair<Integer, TWbsDesvio>;
+begin
+  Result := False;
+  for Par in FDesvios do
+    if Par.Value.TieneBaseline then Exit(True);
+end;
+
+function TfrmVistaProyectos.ResumenSobrecarga: string;
+var
+  Personas: TDictionary<Integer, Boolean>;
+  I: Integer;
+  Pico: Double;
+begin
+  Result := '';
+  if Length(FSobrecargas) = 0 then Exit;
+
+  Personas := TDictionary<Integer, Boolean>.Create;
+  try
+    Pico := 0;
+    for I := 0 to High(FSobrecargas) do
+    begin
+      Personas.AddOrSetValue(FSobrecargas[I].OperatorId, True);
+      if FSobrecargas[I].PorcentajePico > Pico then
+        Pico := FSobrecargas[I].PorcentajePico;
+    end;
+
+    if Personas.Count = 1 then
+      Result := Format('%s sobreasignado (pico %.0f %%)',
+        [FSobrecargas[0].Nombre, Pico])
+    else
+      Result := Format('%d operarios sobreasignados (pico %.0f %%)',
+        [Personas.Count, Pico]);
+  finally
+    Personas.Free;
+  end;
+end;
+
+procedure TfrmVistaProyectos.MostrarSobrecargas;
+var
+  I, J: Integer;
+  S: TStringBuilder;
+  Nombres: string;
+  T: TWbsTask;
+begin
+  if Length(FSobrecargas) = 0 then
+  begin
+    Vcl.Dialogs.MessageDlg(
+      'Ning'#250'n operario supera el 100 % de su jornada en los proyectos ' +
+      'mostrados.', mtInformation, [mbOK], 0);
+    Exit;
+  end;
+
+  S := TStringBuilder.Create;
+  try
+    S.AppendLine('Tramos en los que un operario supera su jornada:');
+    S.AppendLine;
+    // Un tope de tramos: con un plan muy roto la lista podria ser enorme y el
+    // dialogo dejaria de ser legible. Se dice cuantos quedan fuera.
+    for I := 0 to Min(High(FSobrecargas), 19) do
+    begin
+      S.AppendLine(Format('%s   %s - %s   pico %.0f %%',
+        [FSobrecargas[I].Nombre,
+         FormatDateTime('dd/mm/yyyy', FSobrecargas[I].Desde),
+         FormatDateTime('dd/mm/yyyy', FSobrecargas[I].Hasta),
+         FSobrecargas[I].PorcentajePico]));
+
+      Nombres := '';
+      for J := 0 to High(FSobrecargas[I].NodeIds) do
+        if BuscarTarea(FSobrecargas[I].NodeIds[J], T) then
+        begin
+          if Nombres <> '' then Nombres := Nombres + ', ';
+          Nombres := Nombres + T.Caption;
+        end;
+      if Nombres <> '' then
+        S.AppendLine('    ' + Nombres);
+      S.AppendLine;
+    end;
+
+    if Length(FSobrecargas) > 20 then
+      S.AppendLine(Format('... y %d tramos m'#225's.',
+        [Length(FSobrecargas) - 20]));
+
+    Vcl.Dialogs.MessageDlg(S.ToString, mtWarning, [mbOK], 0);
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TfrmVistaProyectos.FijarLineaBase;
+var
+  Repo: TWbsRepo;
+  P, Total, N: Integer;
+  Nombre: string;
+  Msg: string;
+begin
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+  if Length(FProyectos) = 0 then Exit;
+
+  // Rehacer la linea base borra la referencia contra la que se venia midiendo:
+  // hay que decirlo antes, no despues.
+  if HayLineaBase then
+    Msg := 'Ya hay una l'#237'nea base fijada.'#13#10#13#10 +
+      'Al fijarla de nuevo se sustituye por el plan ACTUAL y se pierden ' +
+      'las desviaciones acumuladas hasta ahora.'#13#10#13#10#191'Continuar?'
+  else
+    Msg := 'Se guardar'#225' una foto del plan actual (fechas, duraci'#243'n y ' +
+      'trabajo) para medir contra ella las desviaciones.'#13#10#13#10 +
+      #191'Fijar la l'#237'nea base?';
+
+  if Vcl.Dialogs.MessageDlg(Msg, mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    Exit;
+
+  Nombre := 'L'#237'nea base ' + FormatDateTime('dd/mm/yyyy hh:nn', Now);
+  if not InputQuery('Fijar l'#237'nea base', 'Nombre:', Nombre) then Exit;
+
+  Total := 0;
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    for P := 0 to High(FProyectos) do
+    begin
+      N := Repo.FijarBaseline(FProyectos[P].ProjectId, Nombre,
+        CurrentSession.UserId);
+      Inc(Total, N);
+    end;
+  finally
+    Repo.Free;
+  end;
+
+  RecargarConservandoVista;
+  Vcl.Dialogs.MessageDlg(
+    Format('L'#237'nea base fijada: %d tareas en %d proyecto(s).',
+      [Total, Length(FProyectos)]), mtInformation, [mbOK], 0);
+end;
+
+procedure TfrmVistaProyectos.QuitarLineaBase;
+var
+  Repo: TWbsRepo;
+  P: Integer;
+begin
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+  if not HayLineaBase then
+  begin
+    Vcl.Dialogs.MessageDlg('No hay ninguna l'#237'nea base fijada.',
+      mtInformation, [mbOK], 0);
+    Exit;
+  end;
+
+  if Vcl.Dialogs.MessageDlg(
+    'Se borrar'#225' la l'#237'nea base de los proyectos mostrados y se dejar'#225'n ' +
+    'de calcular desviaciones.'#13#10#13#10#191'Continuar?',
+    mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    for P := 0 to High(FProyectos) do
+      Repo.BorrarBaseline(FProyectos[P].ProjectId);
+  finally
+    Repo.Free;
+  end;
+
   RecargarConservandoVista;
 end;
 
@@ -1418,6 +2432,13 @@ begin
       [Length(FProyectos), FormatDateTime('dd/mm/yyyy', IniGlobal),
        FormatDateTime('dd/mm/yyyy', FinGlobal), CriticasTotal]);
 
+  // Sobreasignacion: se anade al subtitulo porque un plan con gente al 200 %
+  // es tan inviable como uno con dependencias imposibles, y hasta ahora no lo
+  // decia nadie (V082). El detalle esta en el menu contextual.
+  if Length(FSobrecargas) > 0 then
+    lblSubtitulo.Caption := lblSubtitulo.Caption + '  ' + #$2022 + '  ' +
+      #$26A0' ' + ResumenSobrecarga;
+
   // Dependencias circulares: avisar sin romper (el resto si se ha calculado).
   if Msg <> '' then
     Vcl.Dialogs.MessageDlg(
@@ -1523,6 +2544,10 @@ begin
     lblTitulo.Caption := FProyectos[0].Nombre
   else
     lblTitulo.Caption := 'Ingenier'#237'a';
+
+  // Linea base y sobreasignacion: van despues de tener las tareas cargadas,
+  // porque el detalle de la sobrecarga se resuelve contra ellas (V082).
+  CargarBaselineYSobrecarga;
 end;
 
 procedure TfrmVistaProyectos.ConstruirArbol;
@@ -1531,6 +2556,7 @@ var
   T: TWbsTask;
   TLNode, TLParent, TLProyecto: TcxTreeListNode;
   Sched: TWbsSchedule;
+  Desvio: TWbsDesvio;
   // Fila de nivel 0 de cada proyecto: ProjectId -> nodo del arbol.
 
 begin
@@ -1578,6 +2604,23 @@ begin
 
       TLNode.Texts[colNombre.ItemIndex]   := T.Caption;
       TLNode.Texts[colDuracion.ItemIndex] := FormatDias(T.DuracionMin);
+
+      // Trabajo del plan, en horas: es la unidad en la que se piensa el
+      // esfuerzo (los dias son para la duracion).
+      if T.Kind <> wtkHito then
+        TLNode.Texts[colTrabajo.ItemIndex] :=
+          Format('%.1f h', [T.TrabajoMin / 60]);
+
+      // Desviacion contra la linea base, en dias de fin. Se muestra con signo
+      // para que se lea de un vistazo: + va tarde, - va adelantado.
+      if FDesvios.TryGetValue(T.NodeId, Desvio) and Desvio.TieneBaseline then
+      begin
+        if Desvio.DesvioFinDias = 0 then
+          TLNode.Texts[colDesvio.ItemIndex] := 'En plazo'
+        else
+          TLNode.Texts[colDesvio.ItemIndex] :=
+            Format('%+d d', [Desvio.DesvioFinDias]);
+      end;
       if T.FechaInicio > 0 then
         TLNode.Texts[colInicio.ItemIndex] := FormatDateTime('dd/mm/yyyy', T.FechaInicio);
       if T.FechaFin > 0 then
@@ -1657,6 +2700,7 @@ var
   I, J, P, K: Integer;
   TagIds: TArray<Integer>;
   Ini, Fin: TDateTime;
+  Desvio: TWbsDesvio;
 begin
   if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
 
@@ -1735,6 +2779,17 @@ begin
         Orden[K].HolguraMin := Sched.TotalSlackMin;
         Orden[K].Avance := Sched.Avance;
       end;
+
+      // Linea base y sobreasignacion (V082): la barra fantasma y la marca
+      // ambar del overlay.
+      if FDesvios.TryGetValue(FTareas[I].NodeId, Desvio) and
+         Desvio.TieneBaseline then
+      begin
+        Orden[K].BaseIni := Desvio.BaseInicio;
+        Orden[K].BaseFin := Desvio.BaseFin;
+      end;
+      Orden[K].Sobrecargada :=
+        FNodosSobrecargados.ContainsKey(FTareas[I].NodeId);
     end;
   end;
   FGantt.SetOrden(Orden);
