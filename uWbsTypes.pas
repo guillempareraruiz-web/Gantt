@@ -196,6 +196,12 @@ type
     FechaInicio: TDateTime;
     FechaFin: TDateTime;
     Dedicacion: Double;      // % de jornada
+    // Coste laboral en EUR/hora de esta persona. Sale de FS_PL_Operator:
+    // CosteHoraNormal (V037, el que trae el ERP) y, si viene a cero,
+    // SueldoEurHora (V020, el que se teclea en el planificador). Con 0 en las
+    // dos, esta persona no suma coste: se informa aparte en vez de inventarse
+    // una tarifa media, que daria una cifra creible y falsa.
+    CosteHora: Double;
   end;
   TWbsCargaArray = TArray<TWbsCarga>;
 

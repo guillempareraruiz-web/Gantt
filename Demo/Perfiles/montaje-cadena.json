@@ -1,0 +1,29 @@
+{
+  "nombre": "Montaje en cadena",
+  "descripcion": "Linea de ensamblaje equilibrada por puestos. Cambio corto pero constante entre variantes.",
+  "sector": "Bienes de equipo",
+  "atributoSetup": "Variante",
+  "unidad": "unidades",
+  "prefijoOrden": "OF",
+  "numOrdenes": 15,
+  "opsPorOrden": 5,
+  "pctPlanificado": 85,
+  "operaciones": ["PREPARAR KIT", "MONTAR BASE", "MONTAR CONJUNTO", "PROBAR", "EMBALAR"],
+  "clientes": ["DISTRIB EUROPA", "INSTALADORES SA", "GRAN CUENTA NORTE", "SERVICIO TECNICO", "OEM LEVANTE"],
+  "centros": [
+    { "codigo": "DEMO-KIT",  "nombre": "Preparacion de kits",  "maxLanes": 2, "setupMin": 10 },
+    { "codigo": "DEMO-P1",   "nombre": "Puesto 1 - Base",      "maxLanes": 1, "setupMin": 20 },
+    { "codigo": "DEMO-P2",   "nombre": "Puesto 2 - Conjunto",  "maxLanes": 1, "setupMin": 20 },
+    { "codigo": "DEMO-P3",   "nombre": "Puesto 3 - Acabado",   "maxLanes": 1, "setupMin": 15 },
+    { "codigo": "DEMO-TEST", "nombre": "Banco de pruebas",     "maxLanes": 2, "setupMin": 0  }
+  ],
+  "articulos": [
+    { "codigo": "EQ-100", "descripcion": "Equipo compacto 3kW",     "valorSetup": "COMPACTO" },
+    { "codigo": "EQ-101", "descripcion": "Equipo compacto 5kW",     "valorSetup": "COMPACTO" },
+    { "codigo": "EQ-200", "descripcion": "Equipo industrial 10kW",  "valorSetup": "INDUSTRIAL" },
+    { "codigo": "EQ-201", "descripcion": "Equipo industrial 15kW",  "valorSetup": "INDUSTRIAL" },
+    { "codigo": "EQ-300", "descripcion": "Version inox alimentaria","valorSetup": "INOX" },
+    { "codigo": "EQ-400", "descripcion": "Version ATEX",            "valorSetup": "ATEX" },
+    { "codigo": "EQ-500", "descripcion": "Kit recambio motor",      "valorSetup": "RECAMBIO" }
+  ]
+}

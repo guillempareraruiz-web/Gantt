@@ -41,8 +41,16 @@ type
     MaxMillis: Integer;        // tope de tiempo en ms (def. 4000)
     TempInicial: Double;       // temperatura inicial SA (def. 1.0, objetivo 0..1)
     TempFinal: Double;         // temperatura final (def. 0.001)
-    PesoTardiness: Double;     // peso del retraso en el objetivo (def. 0.7)
-    PesoMakespan: Double;      // peso del makespan en el objetivo (def. 0.3)
+    PesoTardiness: Double;     // peso del retraso en el objetivo (def. 0.55)
+    PesoMakespan: Double;      // peso del makespan en el objetivo (def. 0.20)
+    // Peso del TIEMPO DE CAMBIO (def. 0.25). Con esto el optimizador no solo
+    // agrupa por intuicion: BUSCA activamente el orden que minimiza las
+    // preparaciones, que en una planta de series largas es el coste dominante.
+    //
+    // El reparto NO es arbitrario: el retraso sigue mandando porque llegar
+    // tarde a una entrega es peor que pagar un cambio de formato. Subir mucho
+    // este peso da planes muy agrupados que sacrifican fechas comprometidas.
+    PesoSetup: Double;
     Semilla: Cardinal;         // semilla PRNG (def. 12345, reproducible)
     class function Default: TOptimizerParams; static;
   end;
@@ -55,6 +63,16 @@ type
     ObjFinal: Double;          // objetivo de la mejor solucion global
     MillisUsados: Integer;
     Hilos: Integer;            // cadenas SA lanzadas en paralelo
+    // Tiempo de cambio ANTES y DESPUES de optimizar, en minutos. Es la cifra
+    // que hace visible el trabajo del optimizador: sin ella, que el motor haya
+    // reordenado para agrupar es invisible para quien mira el plan.
+    // 0 en ambos = no hay reglas de cambio definidas.
+    SetupInicialMin: Double;
+    SetupFinalMin: Double;
+    CambiosInicial: Integer;
+    CambiosFinal: Integer;
+    // Ahorro en %, positivo = se ha reducido. 0 si no hay referencia.
+    function AhorroSetupPct: Double;
   end;
 
   TPlanOptimizer = class
@@ -71,6 +89,14 @@ type
 
 implementation
 
+{ TOptimizerProgress }
+
+function TOptimizerProgress.AhorroSetupPct: Double;
+begin
+  if SetupInicialMin <= 0 then Exit(0);
+  Result := (SetupInicialMin - SetupFinalMin) / SetupInicialMin * 100.0;
+end;
+
 { TOptimizerParams }
 
 class function TOptimizerParams.Default: TOptimizerParams;
@@ -83,8 +109,12 @@ begin
   Result.MaxMillis      := 20000;    // 20 s
   Result.TempInicial    := 1.0;
   Result.TempFinal      := 0.001;
-  Result.PesoTardiness  := 0.7;
-  Result.PesoMakespan   := 0.3;
+  // Reparto 0.55 / 0.20 / 0.25: el retraso manda, pero el tiempo de cambio
+  // tiene peso suficiente para alterar el orden de verdad. Sin regla de setup
+  // definida el tercer termino vale 0 y el comportamiento es el de antes.
+  Result.PesoTardiness  := 0.55;
+  Result.PesoMakespan   := 0.20;
+  Result.PesoSetup      := 0.25;
   Result.Semilla        := 12345;
 end;
 
@@ -96,7 +126,7 @@ type
     Base: TArray<TSchedInput>;   // orden de partida (mejor regla)
     OccCache: TOccupancyCache;   // ocupacion existente precargada (sin BD)
     MaqCache: TMaquinasCache;    // maquinas por centro, precargadas (V083)
-    TardRef, MkRef: Double;      // referencias de normalizacion
+    TardRef, MkRef, SetupRef: Double;   // referencias de normalizacion
     // PLANTILLA de la ocupacion de utillajes (estado inicial, antes de esta
     // tanda). NO se usa directamente: cada evaluacion trabaja sobre un Clone.
     // Ver EvaluarCtx. nil = optimizar sin restriccion de utillaje.
@@ -137,7 +167,7 @@ function EvaluarCtx(const ACtx: TOptContext; const AOrden: TArray<TSchedInput>;
   out AKpis: TSchedKpis): Double;
 var
   Res: TSchedResult;
-  TardN, MkN: Double;
+  TardN, MkN, SetupN: Double;
   Params: TSchedParams;
   Occ: TUtillajeOccupancy;
 begin
@@ -166,10 +196,19 @@ begin
     Occ.Free;
   end;
 
-  AKpis := ComputeKpis(Res);
-  if ACtx.TardRef > 0 then TardN := AKpis.RetrasoTotalH / ACtx.TardRef else TardN := 0;
-  if ACtx.MkRef   > 0 then MkN   := AKpis.MakespanH / ACtx.MkRef       else MkN := 0;
-  Result := ACtx.OptParams.PesoTardiness * TardN + ACtx.OptParams.PesoMakespan * MkN;
+  // Los KPIs se piden CON el motor de setup: asi el objetivo puede penalizar
+  // el tiempo de preparacion explicitamente. Sin este parametro, el cambio de
+  // formato solo influia de refilon (inflando el makespan) y con un peso
+  // demasiado diluido para cambiar el orden que elige el optimizador.
+  AKpis := ComputeKpis(Res, Params.SetupEngine);
+
+  if ACtx.TardRef  > 0 then TardN  := AKpis.RetrasoTotalH / ACtx.TardRef   else TardN := 0;
+  if ACtx.MkRef    > 0 then MkN    := AKpis.MakespanH / ACtx.MkRef         else MkN := 0;
+  if ACtx.SetupRef > 0 then SetupN := AKpis.SetupTotalMin / ACtx.SetupRef  else SetupN := 0;
+
+  Result := ACtx.OptParams.PesoTardiness * TardN +
+            ACtx.OptParams.PesoMakespan  * MkN +
+            ACtx.OptParams.PesoSetup     * SetupN;
 end;
 
 // Vecino in-place: 50% swap, 50% mover (insercion). Rng por referencia.
@@ -344,11 +383,29 @@ begin
   Ctx.MaqCache := BuildMaquinasCache;
   try
     // Referencias de normalizacion desde la solucion inicial (usando ya la cache).
-    KIni := ComputeKpis(RunAutoScheduling(AInicial, Ctx.SchedParams, Ctx.OccCache, Ctx.MaqCache));
+    //
+    // El motor de setup NO se anula como el de utillajes: solo lee su array de
+    // reglas (ver uSetupRules), asi que las cadenas SA pueden compartirlo.
+    KIni := ComputeKpis(
+      RunAutoScheduling(AInicial, Ctx.SchedParams, Ctx.OccCache, Ctx.MaqCache),
+      Ctx.SchedParams.SetupEngine);
     Ctx.TardRef := Max(1.0, KIni.RetrasoTotalH);
     Ctx.MkRef   := Max(1.0, KIni.MakespanH);
+    // Sin reglas de cambio, SetupTotalMin es 0 -> SetupRef queda a 0 y el
+    // tercer termino del objetivo desaparece: el comportamiento es EXACTAMENTE
+    // el de antes para quien no haya definido tiempos de cambio.
+    if KIni.SetupTotalMin > 0 then
+      Ctx.SetupRef := KIni.SetupTotalMin
+    else
+      Ctx.SetupRef := 0;
+
     AProgress.ObjInicial :=
-      AOptParams.PesoTardiness * 1.0 + AOptParams.PesoMakespan * 1.0;  // inicial ~= 1
+      AOptParams.PesoTardiness * 1.0 + AOptParams.PesoMakespan * 1.0 +
+      IfThen(Ctx.SetupRef > 0, AOptParams.PesoSetup, 0.0);   // inicial ~= 1
+
+    // Punto de partida, para poder decir cuanto se ha mejorado.
+    AProgress.SetupInicialMin := KIni.SetupTotalMin;
+    AProgress.CambiosInicial := KIni.SetupCambios;
 
     // PRE-CALENTAR las caches de TODOS los calendarios para el rango del plan,
     // EN EL HILO PRINCIPAL. Sin esto, NextWorkingTime/AddWorkingMinutes llenan
@@ -400,6 +457,13 @@ begin
         ParamsFinal.UtillajeOcc := OccFinal;
       end;
       Result := RunAutoScheduling(Chains[IdxMejor].Orden, ParamsFinal, Ctx.OccCache, Ctx.MaqCache);
+
+      // Tiempo de cambio del plan que se devuelve, para poder compararlo con
+      // el de partida. Se mide sobre el resultado FINAL y no sobre la mejor
+      // evaluacion de la cadena: es el plan que el usuario va a ver.
+      if Ctx.SchedParams.SetupEngine <> nil then
+        AProgress.SetupFinalMin := ComputeSetupKpi(Result,
+          Ctx.SchedParams.SetupEngine, AProgress.CambiosFinal);
     finally
       OccFinal.Free;
     end;

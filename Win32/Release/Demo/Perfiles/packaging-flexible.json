@@ -1,0 +1,29 @@
+﻿{
+  "nombre": "Packaging flexible / impresion",
+  "descripcion": "Pocas lineas de impresion. El cambio de color y substrato manda.",
+  "sector": "Packaging",
+  "atributoSetup": "Color",
+  "unidad": "m2",
+  "prefijoOrden": "OF",
+  "numOrdenes": 14,
+  "opsPorOrden": 4,
+  "pctPlanificado": 80,
+  "operaciones": ["IMPRIMIR", "LAMINAR", "CORTAR", "SLEEVING"],
+  "clientes": ["BEBIDAS DEL SUR", "LACTEOS NORTE", "CONSERVAS MAR", "HIGIENE PLUS", "SNACKS IBERIA"],
+  "centros": [
+    { "codigo": "DEMO-FLEXO1", "nombre": "Flexo 8 colores",   "maxLanes": 1, "setupMin": 90 },
+    { "codigo": "DEMO-HUECO1", "nombre": "Huecograbado",      "maxLanes": 1, "setupMin": 120 },
+    { "codigo": "DEMO-LAM",    "nombre": "Laminadora",        "maxLanes": 1, "setupMin": 30 },
+    { "codigo": "DEMO-CORTE",  "nombre": "Corte y rebobinado","maxLanes": 2, "setupMin": 20 }
+  ],
+  "articulos": [
+    { "codigo": "SLV-0100", "descripcion": "Sleeve refresco 500ml",     "valorSetup": "AZUL" },
+    { "codigo": "SLV-0101", "descripcion": "Sleeve refresco 1,5L",      "valorSetup": "AZUL" },
+    { "codigo": "SLV-0200", "descripcion": "Sleeve yogur pack 4",       "valorSetup": "BLANCO" },
+    { "codigo": "SLV-0201", "descripcion": "Sleeve yogur familiar",     "valorSetup": "BLANCO" },
+    { "codigo": "DOY-0300", "descripcion": "Doypack salsa 250g",        "valorSetup": "ROJO" },
+    { "codigo": "DOY-0301", "descripcion": "Doypack detergente 1kg",    "valorSetup": "VERDE" },
+    { "codigo": "FLM-0400", "descripcion": "Film snacks 40 micras",     "valorSetup": "NEGRO" },
+    { "codigo": "FLM-0401", "descripcion": "Film conserva 60 micras",   "valorSetup": "NEGRO" }
+  ]
+}

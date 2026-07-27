@@ -152,6 +152,10 @@ type
     procedure SaveTagsDeTarea(ANodeId: Integer; const ATags: TWbsTagArray);
     // TagIds por NodeId, para pintar los badges del Gantt sin una consulta
     // por tarea.
+    // Estado declarado (FS_PL_TaskDetail.Estado) de las tareas que tienen
+    // ficha, para todos los proyectos dados. El llamante libera.
+    function LoadEstadosPorNodo(
+      AProjectIds: TArray<Integer>): TDictionary<Integer, Integer>;
     function LoadTagsPorNodo(AProjectId: Integer):
       TDictionary<Integer, TArray<Integer>>;
     // Alta/edicion del catalogo. Devuelve el TagId (nuevo o el existente).
@@ -1402,10 +1406,17 @@ begin
     Q := TADOQuery.Create(nil);
     try
       Q.Connection := FConnection;
+      // Tarifa: la del ERP (CosteHoraNormal, V037) manda; si viene a cero se
+      // cae a la que se teclea en el planificador (SueldoEurHora, V020). Las
+      // dos columnas son NOT NULL DEFAULT 0, asi que 0 significa "sin tarifa",
+      // no "gratis": el panel de costes lo cuenta aparte.
       Q.SQL.Text :=
         'SELECT t.OperatorId, ISNULL(o.Nombre, '''') AS Nombre, ' +
         '  t.NodeId, ISNULL(n.Caption, '''') AS Caption, ' +
-        '  n.FechaInicio, n.FechaFin, t.Dedicacion ' +
+        '  n.FechaInicio, n.FechaFin, t.Dedicacion, ' +
+        '  CASE WHEN ISNULL(o.CosteHoraNormal, 0) > 0 ' +
+        '       THEN o.CosteHoraNormal ELSE ISNULL(o.SueldoEurHora, 0) ' +
+        '  END AS CosteHora ' +
         'FROM FS_PL_TaskOperario t ' +
         'JOIN FS_PL_Node n ' +
         '  ON n.CodigoEmpresa = t.CodigoEmpresa AND n.NodeId = t.NodeId ' +
@@ -1429,6 +1440,7 @@ begin
         if not Q.FieldByName('FechaFin').IsNull then
           C.FechaFin := Q.FieldByName('FechaFin').AsDateTime;
         C.Dedicacion := Q.FieldByName('Dedicacion').AsFloat;
+        C.CosteHora := Q.FieldByName('CosteHora').AsFloat;
         L.Add(C);
         Q.Next;
       end;
@@ -1548,6 +1560,52 @@ begin
       SetLength(Lst, Length(Lst) + 1);
       Lst[High(Lst)] := Q.FieldByName('TagId').AsInteger;
       Result.AddOrSetValue(NodeId, Lst);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TWbsRepo.LoadEstadosPorNodo(
+  AProjectIds: TArray<Integer>): TDictionary<Integer, Integer>;
+var
+  Q: TADOQuery;
+  Lista: string;
+  I: Integer;
+begin
+  // Estado declarado de cada tarea, en UNA consulta para todos los proyectos
+  // mostrados. Lo pide el resumen del proyecto para contar pendientes / en
+  // curso / hechas sin abrir la ficha de cada tarea.
+  //
+  // Solo salen las tareas que TIENEN ficha (FS_PL_TaskDetail es opcional): las
+  // que no estan en el diccionario no es que esten pendientes, es que nadie ha
+  // declarado su estado, y quien lo consume debe distinguirlo.
+  Result := TDictionary<Integer, Integer>.Create;
+  if Length(AProjectIds) = 0 then Exit;
+
+  Lista := '';
+  for I := 0 to High(AProjectIds) do
+  begin
+    if Lista <> '' then Lista := Lista + ',';
+    Lista := Lista + IntToStr(AProjectIds[I]);
+  end;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := FConnection;
+    Q.SQL.Text :=
+      'SELECT d.NodeId, d.Estado ' +
+      'FROM FS_PL_TaskDetail d ' +
+      'JOIN FS_PL_Node n ' +
+      '  ON n.CodigoEmpresa = d.CodigoEmpresa AND n.NodeId = d.NodeId ' +
+      'WHERE d.CodigoEmpresa = :CE AND n.ProjectId IN (' + Lista + ')';
+    Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Result.AddOrSetValue(Q.FieldByName('NodeId').AsInteger,
+        Q.FieldByName('Estado').AsInteger);
       Q.Next;
     end;
   finally

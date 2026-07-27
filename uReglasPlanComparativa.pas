@@ -90,7 +90,7 @@ implementation
 uses
   System.DateUtils, System.Threading,
   uHelpViewer, uPlanningEngine, uPlanningEngineRules, uPlanLog,
-  uPlanOptimizer, uBusyDialog;
+  uPlanOptimizer, uBusyDialog, uSetupRules, uDMPlanner;
 const
   COL_BEST = $00E8F5E9;   // verde muy suave para resaltar la mejor celda
 class procedure TfrmReglasPlanComparativa.Execute(
@@ -420,9 +420,12 @@ var
   P: TSchedParams;
   Run: TReglaRun;
   Idx: Integer;
+  SetupEng: TSetupRuleEngine;
+  Msg: string;
 begin
   if Length(FInputs) = 0 then Exit;
 
+  SetupEng := nil;
   FbtnOptim.Enabled := False;
   try
     // 1) Orden de partida = la mejor regla actual (FIdxMejor).
@@ -435,6 +438,16 @@ begin
     // 2) Params de planificacion coherentes con el toggle de compactacion.
     P := FParams;
     if FCompactar then P.Placement := ppHueco else P.Placement := ppFinCola;
+
+    // Motor de tiempos de cambio: SIN esto el optimizador no puede minimizar
+    // las preparaciones (el tercer termino de su objetivo quedaria a cero) y
+    // el plan "optimizado" agruparia solo de refilon.
+    //
+    // Se crea AQUI, en el hilo principal: GetActiveSetupProfile lee de BD y
+    // RunBusy corre en un hilo propio que NO puede tocar la conexion compartida.
+    SetupEng := TSetupRuleEngine.Create;
+    SetupEng.LoadProfile(DMPlanner.GetActiveSetupProfile);
+    P.SetupEngine := SetupEng;
 
     // 3) Ejecutar el optimizador DENTRO de RunBusy: corre en un hilo de fondo
     //    mientras el hilo principal anima el spinner del dialogo (feedback vivo
@@ -456,12 +469,15 @@ begin
       end);
     Run.Rule := Low(TPriorityRule);   // marcador; no es una regla real
     Run.Nombre := 'Optimizado (SA)';
-    Run.Kpis := ComputeKpis(Run.Res);
+    Run.Kpis := ComputeKpis(Run.Res, SetupEng);
 
     PlanLog.Linea('=== OPTIMIZAR SA: %d hilos, %d iter total, %d mejoras, ' +
-      'obj %.4f -> %.4f, %d ms | makespan=%.1f h retrasos=%d ===',
+      'obj %.4f -> %.4f, %d ms | makespan=%.1f h retrasos=%d ' +
+      'setup %.0f -> %.0f min (%d -> %d cambios) ===',
       [Prog.Hilos, Prog.Iteraciones, Prog.Mejoras, Prog.ObjInicial, Prog.ObjFinal,
-       Prog.MillisUsados, Run.Kpis.MakespanH, Run.Kpis.Retrasos]);
+       Prog.MillisUsados, Run.Kpis.MakespanH, Run.Kpis.Retrasos,
+       Prog.SetupInicialMin, Prog.SetupFinalMin,
+       Prog.CambiosInicial, Prog.CambiosFinal]);
 
     // 4) Anadir o reemplazar la fila "Optimizado (SA)" en FRuns.
     if FTieneOptim and (Length(FRuns) > 0) then
@@ -484,13 +500,42 @@ begin
 
     // Informe breve al usuario.
     Idx := High(FRuns);
-    ShowMessage(Format(
+    Msg := Format(
       'Optimizacion (SA) terminada en %d ms (%d iteraciones, %d mejoras).' + sLineBreak +
-      'Makespan: %.1f h    Con retraso: %d    Retraso total: %.1f h' + sLineBreak + sLineBreak +
-      'Se ha anadido la fila "Optimizado (SA)" a la comparativa.',
+      'Makespan: %.1f h    Con retraso: %d    Retraso total: %.1f h',
       [Prog.MillisUsados, Prog.Iteraciones, Prog.Mejoras,
-       FRuns[Idx].Kpis.MakespanH, FRuns[Idx].Kpis.Retrasos, FRuns[Idx].Kpis.RetrasoTotalH]));
+       FRuns[Idx].Kpis.MakespanH, FRuns[Idx].Kpis.Retrasos,
+       FRuns[Idx].Kpis.RetrasoTotalH]);
+
+    // El tiempo de cambio, solo si hay reglas que lo midan. Es la cifra que
+    // hace VISIBLE lo que ha hecho el optimizador: sin ella, que haya
+    // reordenado para agrupar no se aprecia mirando el plan.
+    if Prog.SetupInicialMin > 0 then
+    begin
+      Msg := Msg + sLineBreak + sLineBreak + Format(
+        'Tiempo de cambio: %.1f h -> %.1f h    (%d -> %d cambios)',
+        [Prog.SetupInicialMin / 60, Prog.SetupFinalMin / 60,
+         Prog.CambiosInicial, Prog.CambiosFinal]);
+      if Prog.AhorroSetupPct > 0.5 then
+        Msg := Msg + sLineBreak + Format(
+          'Se ahorran %.1f h de preparacion (%.0f %% menos).',
+          [(Prog.SetupInicialMin - Prog.SetupFinalMin) / 60,
+           Prog.AhorroSetupPct])
+      else if Prog.AhorroSetupPct < -0.5 then
+        // Puede empeorar: el objetivo tambien pesa retraso y makespan, y a
+        // veces compensa pagar un cambio de mas para llegar a una entrega.
+        // Decirlo es mas honesto que ensenar solo los casos favorables.
+        Msg := Msg + sLineBreak +
+          'El plan paga algo mas de preparacion a cambio de cumplir mejor ' +
+          'las fechas.';
+    end;
+
+    Msg := Msg + sLineBreak + sLineBreak +
+      'Se ha anadido la fila "Optimizado (SA)" a la comparativa.';
+    ShowMessage(Msg);
   finally
+    // El motor de setup lo posee este metodo: el optimizador solo lo usa.
+    SetupEng.Free;
     FbtnOptim.Enabled := True;
   end;
 end;

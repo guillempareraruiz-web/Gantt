@@ -111,7 +111,27 @@
         <DCCReference Include="uGanttControlTareas.pas"/>
         <DCCReference Include="uGanttControlMaquinas.pas"/>
         <DCCReference Include="uWbsSobrecarga.pas"/>
-        <DCCReference Include="uWbsPanelEsfuerzo.pas"/>
+        <DCCReference Include="uModulos.pas"/>
+        <DCCReference Include="uModulosConfig.pas">
+            <Form>frmModulosConfig</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uDemoPerfiles.pas"/>
+        <DCCReference Include="uDemoPerfilGen.pas"/>
+        <DCCReference Include="uDemoPerfilDlg.pas">
+            <Form>frmDemoPerfilDlg</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uWbsResumen.pas"/>
+        <DCCReference Include="uWbsPanelEsfuerzo.pas">
+            <Form>frmWbsPanelEsfuerzo</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="uWbsNivelacion.pas"/>
+        <DCCReference Include="uWbsNivelacionDlg.pas">
+            <Form>frmWbsNivelacionDlg</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <DCCReference Include="uCentreCalendar.pas"/>
         <DCCReference Include="uGanttHelpers.pas"/>
         <DCCReference Include="uGanttTimeline.pas"/>

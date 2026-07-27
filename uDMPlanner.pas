@@ -241,7 +241,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uLogin, uAppConfig, uCentreCalendar, uPlanLog, System.Diagnostics;
+  uLogin, uAppConfig, uCentreCalendar, uPlanLog, uModulos, System.Diagnostics;
 
 procedure TDMPlanner.InstallTvfPendingErp;
 var
@@ -1232,6 +1232,11 @@ begin
   finally
     Q.Free;
   end;
+
+  // Modulos contratados (V084). Va aqui porque es informacion DE LA EMPRESA y
+  // tiene que estar cargada antes de que Main decida que menus ensena. Es
+  // tolerante: si la tabla no existe, deja todo activo (ver uModulos).
+  CargarModulos(ADOConnection, FCodigoEmpresa);
 
   var TL := Now;
   LoadCalendars;

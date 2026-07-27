@@ -1,33 +1,21 @@
-﻿2026-07-26 23:52:20.865  ========================================================
-2026-07-26 23:52:20.865  === LOGIN btnDevAdmin (arranque)
-2026-07-26 23:52:20.865  ========================================================
-2026-07-26 23:52:20.906    LOGIN.Connect (con migraciones): 0 ms
-2026-07-26 23:52:20.927    LOGIN.ValidateUser: 21 ms
-2026-07-26 23:52:20.943    LOGIN.LoadPermissions: 16 ms
-2026-07-26 23:52:21.016      DM.LoadCalendars: 73 ms
-2026-07-26 23:52:21.028      DM.LoadCentres: 12 ms
-2026-07-26 23:52:21.028    LOGIN.LoadEmpresaInfo (+Calendars+Centres): 85 ms
-2026-07-26 23:52:21.043    LOGIN.LoadMasterProject: 15 ms
-2026-07-26 23:52:21.043  ======== LOGIN btnDevAdmin FIN ========
-2026-07-26 23:52:21.046  ======== ARRANQUE Main.FormCreate INICIO ========
-2026-07-26 23:52:21.064    ARRANQUE.ConfigJSON: 3 ms
-2026-07-26 23:52:21.076    ARRANQUE.Operarios+Deptos: 12 ms
-2026-07-26 23:52:21.097    ARRANQUE.Repos(Habil/OpTypes/Absen/Pesos): 21 ms
-2026-07-26 23:52:21.107    ARRANQUE.MigracionHabilidades: 1 ms
-2026-07-26 23:52:21.214    ARRANQUE.LoadActivePlan: 107 ms
-2026-07-26 23:52:21.279    ARRANQUE.MostrarDashboard(sin refresco): 65 ms
-2026-07-26 23:52:21.279  ======== ARRANQUE Main.FormCreate FIN (refresco diferido) ========
-2026-07-26 23:52:21.360  DASH.FormShow INICIO (EstaCargado=False)
-2026-07-26 23:52:21.360  DASH.Refrescar INICIO (Forzar=False Demo=False)
-2026-07-26 23:52:21.378    DASH.Contadores: 18 ms
-2026-07-26 23:52:21.493    DASH.ProyectoActivo: 115 ms
-2026-07-26 23:52:21.528    DASH.PendingSync: 35 ms
-2026-07-26 23:52:21.544    DASH.Salud: 16 ms
-2026-07-26 23:52:21.659    DASH.KPIsAvanzados: 115 ms
-2026-07-26 23:52:21.659    DASH.KPIsStock: 0 ms
-2026-07-26 23:52:21.659  DASH.Refrescar TOTAL: 299 ms
-2026-07-26 23:52:21.659    DASH.FormShow.Refrescar: 299 ms
-2026-07-26 23:52:21.678    DASH.FormShow.RelayoutAll: 19 ms
-2026-07-26 23:52:22.014    ARRANQUE.RefrescoDiferido: 104 ms
-2026-07-26 23:52:22.025  ======== ARRANQUE refresco diferido COMPLETO ========
-2026-07-26 23:52:46.646  utillajes demo: 6 creados y ligados a operaciones
+﻿2026-07-28 00:01:04.272  ========================================================
+2026-07-28 00:01:04.272  === DEMO ENGINE PRO (M5 bulk file)  -  proyecto 5: 18 OF x 3 OT x 4 OP
+2026-07-28 00:01:04.273  ========================================================
+2026-07-28 00:01:04.303  metadatos: 41 centros reales, SinCentroId=58, 86 operarios, BaseId=900021776
+2026-07-28 00:01:04.305  planificado: 176 colocados (20 sin-centro), 40 pendientes, 162 deps, 0 solapamientos | gen=0ms plan=2ms
+2026-07-28 00:01:04.458    crear #temp: 9 ms
+2026-07-28 00:01:04.529    llenar #temp (M5 bulk file): 70 ms
+2026-07-28 00:01:04.592    M3 volcado set-based (servidor): 62 ms
+2026-07-28 00:01:04.642  utillajes demo: 6 creados y ligados a operaciones
+2026-07-28 00:01:04.642  PERSISTIDO. persist=296ms | TOTAL=371ms para 216 nodos
+2026-07-28 00:01:04.644  --- VERIFICACION: 0 solapamientos. Plan limpio. ---
+2026-07-28 00:01:04.645  === FIN ===============================================
+2026-07-28 00:01:05.293  Demo perfil "Bolsas de papel": 216 nodos renombrados
+2026-07-28 00:01:05.443  DASH.Refrescar INICIO (Forzar=True Demo=True)
+2026-07-28 00:01:05.444    DASH.Contadores: 1 ms
+2026-07-28 00:01:05.451    DASH.ProyectoActivo: 6 ms
+2026-07-28 00:01:05.452    DASH.PendingSync: 1 ms
+2026-07-28 00:01:05.453    DASH.Salud: 0 ms
+2026-07-28 00:01:05.454    DASH.KPIsAvanzados: 0 ms
+2026-07-28 00:01:05.455    DASH.KPIsStock: 0 ms
+2026-07-28 00:01:05.456  DASH.Refrescar TOTAL: 13 ms

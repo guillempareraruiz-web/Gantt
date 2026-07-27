@@ -1,0 +1,29 @@
+{
+  "nombre": "Taller de reparacion y servicio",
+  "descripcion": "Trabajo por encargo sin dos ordenes iguales. Manda la disponibilidad del tecnico, no el cambio de maquina.",
+  "sector": "Servicios industriales",
+  "atributoSetup": "Especialidad",
+  "unidad": "intervenciones",
+  "prefijoOrden": "OT",
+  "numOrdenes": 20,
+  "opsPorOrden": 3,
+  "pctPlanificado": 75,
+  "operaciones": ["DIAGNOSTICAR", "DESMONTAR", "REPARAR", "PROBAR", "ENTREGAR"],
+  "clientes": ["FLOTA MUNICIPAL", "INDUSTRIA LOCAL", "PARTICULARES", "SEGUROS Y PERITAJES", "CONTRATO MANTENIMIENTO"],
+  "centros": [
+    { "codigo": "DEMO-DIAG",  "nombre": "Diagnostico",          "maxLanes": 2, "setupMin": 0  },
+    { "codigo": "DEMO-BANC1", "nombre": "Banco mecanico 1",     "maxLanes": 1, "setupMin": 20 },
+    { "codigo": "DEMO-BANC2", "nombre": "Banco mecanico 2",     "maxLanes": 1, "setupMin": 20 },
+    { "codigo": "DEMO-ELEC",  "nombre": "Banco electrico",      "maxLanes": 1, "setupMin": 25 },
+    { "codigo": "DEMO-PRUEB", "nombre": "Sala de pruebas",      "maxLanes": 2, "setupMin": 0  }
+  ],
+  "articulos": [
+    { "codigo": "REP-1001", "descripcion": "Revision motor electrico",   "valorSetup": "ELECTRICO" },
+    { "codigo": "REP-1002", "descripcion": "Rebobinado motor",           "valorSetup": "ELECTRICO" },
+    { "codigo": "REP-2001", "descripcion": "Reparacion bomba hidraulica","valorSetup": "HIDRAULICO" },
+    { "codigo": "REP-2002", "descripcion": "Cambio de cilindro",         "valorSetup": "HIDRAULICO" },
+    { "codigo": "REP-3001", "descripcion": "Ajuste reductor",            "valorSetup": "MECANICO" },
+    { "codigo": "REP-3002", "descripcion": "Sustitucion rodamientos",    "valorSetup": "MECANICO" },
+    { "codigo": "REP-4001", "descripcion": "Diagnostico electronico",    "valorSetup": "ELECTRONICO" }
+  ]
+}

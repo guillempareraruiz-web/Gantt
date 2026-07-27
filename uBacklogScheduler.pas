@@ -242,6 +242,15 @@ type
     MakespanH: Double;        // (max fin - min inicio) en horas
     FechaMin: TDateTime;      // inicio mas temprano de la tanda (0 si nada)
     FechaMax: TDateTime;      // fin mas tardio de la tanda (0 si nada)
+    // Tiempo de PREPARACION acumulado del plan: la suma de los cambios entre
+    // trabajos consecutivos de cada linea (ver uSetupRules). Es tiempo de
+    // maquina parada, y en una planta de series largas suele ser el coste que
+    // mas pesa, asi que se mide aparte del makespan aunque forme parte de el.
+    //
+    // 0 cuando no hay reglas de cambio definidas: no significa "no hay
+    // cambios", significa "nadie ha dicho cuanto cuestan".
+    SetupTotalMin: Double;
+    SetupCambios: Integer;    // cuantos cambios de preparacion hay en el plan
   end;
 
   // ---------------------------------------------------------------------------
@@ -300,7 +309,27 @@ type
 
 function PriorityRuleToStr(R: TPriorityRule): string;
 function DefaultRuleSet: TPriorityRuleSet;
-function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
+// ASetupEngine es OPCIONAL: si se pasa, los KPIs incluyen ademas el tiempo de
+// preparacion del plan. Se deja por defecto en nil para no obligar a tocar las
+// llamadas que no lo necesitan.
+function ComputeKpis(const AResult: TSchedResult;
+  ASetupEngine: TSetupRuleEngine = nil): TSchedKpis;
+
+// Tiempo de preparacion acumulado de un plan ya resuelto, en minutos.
+//
+// Se calcula A POSTERIORI recorriendo el resultado, en vez de acumularlo
+// mientras se planifica: asi cualquier plan puede medirse (venga del motor
+// automatico, de una regla o del optimizador) sin tocar el motor.
+//
+// Criterio: los trabajos se agrupan por CENTRO, se ordenan por fecha y se suma
+// el cambio entre cada par consecutivo. Es exactamente lo que el usuario ve
+// como huecos marcados entre barras de una misma linea del Gantt.
+//
+// Devuelve 0 si no hay motor de reglas o no hay ninguna regla activa: eso NO
+// significa "este plan no tiene cambios", significa "nadie ha declarado cuanto
+// cuestan", y quien lo presente debe distinguirlo.
+function ComputeSetupKpi(const AResult: TSchedResult;
+  ASetupEngine: TSetupRuleEngine; out ACambios: Integer): Double;
 
 // Duracion de una OP en minutos. Replica de FS_PL_fn_DuracionOpMin (V054):
 // unica fuente de verdad para "cuanto dura una operacion" antes de planificar.
@@ -415,12 +444,71 @@ begin
   Result := PrepMin + FabMin;
 end;
 
-function ComputeKpis(const AResult: TSchedResult): TSchedKpis;
+function ComputeSetupKpi(const AResult: TSchedResult;
+  ASetupEngine: TSetupRuleEngine; out ACambios: Integer): Double;
+var
+  PorCentro: TObjectDictionary<string, TList<TSchedOutput>>;
+  Lst: TList<TSchedOutput>;
+  Par: TPair<string, TList<TSchedOutput>>;
+  I: Integer;
+  Min: Integer;
+begin
+  Result := 0;
+  ACambios := 0;
+  if (ASetupEngine = nil) or (not ASetupEngine.HasRules) then Exit;
+  if Length(AResult.Items) = 0 then Exit;
+
+  PorCentro := TObjectDictionary<string, TList<TSchedOutput>>.Create([doOwnsValues]);
+  try
+    for I := 0 to High(AResult.Items) do
+    begin
+      // Solo lo que ha quedado colocado: lo no planificado no genera cambios.
+      if AResult.Items[I].FechaInicio = 0 then Continue;
+      if AResult.Items[I].CenterCode = '' then Continue;
+
+      if not PorCentro.TryGetValue(AResult.Items[I].CenterCode, Lst) then
+      begin
+        Lst := TList<TSchedOutput>.Create;
+        PorCentro.Add(AResult.Items[I].CenterCode, Lst);
+      end;
+      Lst.Add(AResult.Items[I]);
+    end;
+
+    for Par in PorCentro do
+    begin
+      Lst := Par.Value;
+      if Lst.Count < 2 then Continue;
+
+      Lst.Sort(TComparer<TSchedOutput>.Construct(
+        function(const A, B: TSchedOutput): Integer
+        begin
+          Result := CompareDateTime(A.FechaInicio, B.FechaInicio);
+        end));
+
+      for I := 1 to Lst.Count - 1 do
+      begin
+        Min := ASetupEngine.CalcSetupMin(
+          Lst[I - 1].Input.SetupAttrs, Lst[I].Input.SetupAttrs, True, Par.Key);
+        if Min > 0 then
+        begin
+          Result := Result + Min;
+          Inc(ACambios);
+        end;
+      end;
+    end;
+  finally
+    PorCentro.Free;
+  end;
+end;
+
+function ComputeKpis(const AResult: TSchedResult;
+  ASetupEngine: TSetupRuleEngine): TSchedKpis;
 var
   I: Integer;
   Item: TSchedOutput;
   MinIni, MaxFin: TDateTime;
   TieneRango: Boolean;
+  Cambios: Integer;
 begin
   Result := Default(TSchedKpis);
   Result.Total          := Length(AResult.Items);
@@ -468,6 +556,13 @@ begin
     Result.MakespanH := (MaxFin - MinIni) * 24.0;
     Result.FechaMin := MinIni;
     Result.FechaMax := MaxFin;
+  end;
+
+  // Tiempo de preparacion: solo si el llamante ha pasado el motor de reglas.
+  if ASetupEngine <> nil then
+  begin
+    Result.SetupTotalMin := ComputeSetupKpi(AResult, ASetupEngine, Cambios);
+    Result.SetupCambios := Cambios;
   end;
 end;
 

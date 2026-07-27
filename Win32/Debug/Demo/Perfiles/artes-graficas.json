@@ -1,0 +1,29 @@
+{
+  "nombre": "Artes graficas (offset)",
+  "descripcion": "Imprenta offset y digital. El cambio de tinta y formato de pliego marca el orden de la maquina.",
+  "sector": "Artes graficas",
+  "atributoSetup": "Tinta",
+  "unidad": "pliegos",
+  "prefijoOrden": "OT",
+  "numOrdenes": 20,
+  "opsPorOrden": 4,
+  "pctPlanificado": 80,
+  "operaciones": ["PREIMPRESION", "IMPRIMIR", "PLASTIFICAR", "ENCUADERNAR", "GUILLOTINAR"],
+  "clientes": ["EDITORIAL CENTRO", "PACKAGING SUR", "AGENCIA CREATIVA", "ADMINISTRACION", "GRAN CONSUMO"],
+  "centros": [
+    { "codigo": "DEMO-PREP",  "nombre": "Preimpresion",         "maxLanes": 2, "setupMin": 15 },
+    { "codigo": "DEMO-OFF4",  "nombre": "Offset 4 colores",     "maxLanes": 1, "setupMin": 75 },
+    { "codigo": "DEMO-OFF5",  "nombre": "Offset 5 colores",     "maxLanes": 1, "setupMin": 90 },
+    { "codigo": "DEMO-DIGI",  "nombre": "Digital",              "maxLanes": 1, "setupMin": 10 },
+    { "codigo": "DEMO-ENCU",  "nombre": "Encuadernacion",       "maxLanes": 2, "setupMin": 30 }
+  ],
+  "articulos": [
+    { "codigo": "GRA-1001", "descripcion": "Catalogo 32 pag cuatricromia", "valorSetup": "CMYK" },
+    { "codigo": "GRA-1002", "descripcion": "Folleto A4 cuatricromia",      "valorSetup": "CMYK" },
+    { "codigo": "GRA-2001", "descripcion": "Estuche pantone corporativo",  "valorSetup": "PANTONE 300" },
+    { "codigo": "GRA-2002", "descripcion": "Etiqueta pantone corporativo", "valorSetup": "PANTONE 300" },
+    { "codigo": "GRA-3001", "descripcion": "Manual 1 tinta negro",         "valorSetup": "NEGRO" },
+    { "codigo": "GRA-4001", "descripcion": "Cartel gran formato",          "valorSetup": "CMYK+BARNIZ" },
+    { "codigo": "GRA-5001", "descripcion": "Tirada corta digital",         "valorSetup": "DIGITAL" }
+  ]
+}

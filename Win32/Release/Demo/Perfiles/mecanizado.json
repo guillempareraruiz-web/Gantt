@@ -1,0 +1,28 @@
+﻿{
+  "nombre": "Mecanizado y taller",
+  "descripcion": "Taller con varias secciones y rutas largas. El cambio de utillaje marca el ritmo.",
+  "sector": "Metal",
+  "atributoSetup": "Utillaje",
+  "unidad": "piezas",
+  "prefijoOrden": "OF",
+  "numOrdenes": 12,
+  "opsPorOrden": 5,
+  "pctPlanificado": 80,
+  "operaciones": ["CORTAR", "MECANIZAR", "TALADRAR", "SOLDAR", "PINTAR", "EMBALAR"],
+  "clientes": ["INDUSTRIAS ROCA", "TALLERES MB", "MONTAJES NORTE", "FERRETERIA MAYOR", "OBRAS Y GRUAS"],
+  "centros": [
+    { "codigo": "DEMO-CNC1",  "nombre": "Centro CNC 1",  "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-CNC2",  "nombre": "Centro CNC 2",  "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-TORNO", "nombre": "Torneado",      "maxLanes": 2, "setupMin": 30 },
+    { "codigo": "DEMO-SOLD",  "nombre": "Soldadura",     "maxLanes": 2, "setupMin": 20 },
+    { "codigo": "DEMO-PINT",  "nombre": "Pintura",       "maxLanes": 1, "setupMin": 60 }
+  ],
+  "articulos": [
+    { "codigo": "ART-1001", "descripcion": "Pieza A grande",        "valorSetup": "UTIL-1" },
+    { "codigo": "ART-1002", "descripcion": "Pieza A pequena",       "valorSetup": "UTIL-1" },
+    { "codigo": "ART-2050", "descripcion": "Pieza B chasis",        "valorSetup": "UTIL-2" },
+    { "codigo": "ART-2051", "descripcion": "Pieza B soporte",       "valorSetup": "UTIL-2" },
+    { "codigo": "ART-3100", "descripcion": "Caja electronica",      "valorSetup": "UTIL-3" },
+    { "codigo": "ART-4200", "descripcion": "Conjunto C ensamblado", "valorSetup": "UTIL-4" }
+  ]
+}

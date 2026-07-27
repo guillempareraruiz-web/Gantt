@@ -1,0 +1,29 @@
+{
+  "nombre": "Farmacia y cosmetica",
+  "descripcion": "Sala limpia por lotes con validacion entre productos. La limpieza entre formulas es larga y obligatoria.",
+  "sector": "Farmaceutico",
+  "atributoSetup": "Formula",
+  "unidad": "unidades",
+  "prefijoOrden": "LOTE",
+  "numOrdenes": 12,
+  "opsPorOrden": 5,
+  "pctPlanificado": 85,
+  "operaciones": ["PESAR", "FABRICAR", "ACONDICIONAR", "CONTROL CALIDAD", "LIBERAR"],
+  "clientes": ["DISTRIB FARMA", "MARCA COSMETICA", "PARAFARMACIA", "EXPORT LATAM", "HOSPITALARIO"],
+  "centros": [
+    { "codigo": "DEMO-PESAJE", "nombre": "Sala de pesaje",       "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-FAB1",   "nombre": "Reactor 1",            "maxLanes": 1, "setupMin": 180 },
+    { "codigo": "DEMO-FAB2",   "nombre": "Reactor 2",            "maxLanes": 1, "setupMin": 180 },
+    { "codigo": "DEMO-ACOND",  "nombre": "Acondicionamiento",    "maxLanes": 2, "setupMin": 60 },
+    { "codigo": "DEMO-QC",     "nombre": "Control de calidad",   "maxLanes": 2, "setupMin": 0  }
+  ],
+  "articulos": [
+    { "codigo": "FAR-1001", "descripcion": "Crema hidratante 50ml",   "valorSetup": "BASE-A" },
+    { "codigo": "FAR-1002", "descripcion": "Crema hidratante 200ml",  "valorSetup": "BASE-A" },
+    { "codigo": "FAR-2001", "descripcion": "Gel higienizante 500ml",  "valorSetup": "BASE-B" },
+    { "codigo": "FAR-2002", "descripcion": "Gel higienizante 1L",     "valorSetup": "BASE-B" },
+    { "codigo": "FAR-3001", "descripcion": "Jarabe pediatrico",       "valorSetup": "BASE-C" },
+    { "codigo": "FAR-4001", "descripcion": "Solucion topica 100ml",   "valorSetup": "BASE-D" },
+    { "codigo": "FAR-5001", "descripcion": "Comprimidos 30u",         "valorSetup": "SOLIDO" }
+  ]
+}

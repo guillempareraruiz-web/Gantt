@@ -54,6 +54,8 @@ type
     Proyectos1: TMenuItem;
     PuntosRestauracion1: TMenuItem;
     ConfigEmpresa1: TMenuItem;
+    ModulosLicencia1: TMenuItem;
+
     SelectorErp1: TMenuItem;
     SincronizarERP1: TMenuItem;
     AsistenteInstalacion1: TMenuItem;
@@ -129,10 +131,12 @@ type
     btnTB_Help: TcxButton;
     btnLinkERP: TcxButton;
     btnTB_Demo: TcxButton;
+    btnTB_Demo2: TcxButton;
     cxButton2: TcxButton;
     btnTB_PlaniAlertas: TcxButton;
     N7: TMenuItem;
 
+    procedure ModulosLicencia1Click(Sender: TObject);
     procedure Roles1Click(Sender: TObject);
     procedure Usuarios1Click(Sender: TObject);
     procedure InstalarDemos1Click(Sender: TObject);
@@ -163,6 +167,11 @@ type
     // tras pintar la ventana, con el busy visible, y al final lo cierra.
     procedure RefrescoArranqueDiferido;
     procedure AplicarModoDemoGantt;   // entra/sale del proyecto demo y recarga
+    // Modulos por licencia (V084): oculta del menu lo que la empresa no ha
+    // contratado. Se llama tras cargar la informacion de empresa.
+    procedure AplicarLicencias;
+    // Guarda para los handlers: avisa y devuelve False si no esta contratado.
+    function ExigeModulo(const ACodigo: string): Boolean;
     procedure ActualizarCaption;      // "FSPlanner 2026 - Empresa - Proyecto"
     procedure MostrarBacklog;
     procedure OcultarBacklog;
@@ -236,6 +245,7 @@ type
     procedure btnTB_HelpClick(Sender: TObject);
     procedure btnLinkERPClick(Sender: TObject);
     procedure btnTB_DemoClick(Sender: TObject);
+    procedure btnTB_Demo2Click(Sender: TObject);
     procedure cxButton2Click(Sender: TObject);
   private
     { Private declarations }
@@ -304,6 +314,11 @@ var
   FDashboard: TfrmDashboard;
   FVistaGantt: TfrmVistaGantt;
   FVistaProyectos: TfrmVistaProyectos;   // Modulo de Proyectos (paradigma TAREAS)
+    // True cuando el proyecto demo lo ha llenado "Demo 2.0" (datos del sector
+    // del cliente). Lo necesita el boton Demo clasico: al pasar de uno a otro
+    // el proyecto demo NO esta vacio, asi que sin este aviso se quedaria con
+    // los datos del sector anterior bajo el boton equivocado.
+    FDemoEsDePerfil: Boolean;
   FFiniteCapacity: TfrmFiniteCapacityPlanner;
   FBacklog: uBacklog.TfrmBacklog;
   FFiniteOps: uFiniteCapacityOperaris.TfrmFiniteCapacityOperaris;
@@ -314,6 +329,8 @@ implementation
 uses uErpSampleBuilder, uGestionCentres, uGestionMaquinas, uKanbanBoard, uVistaKanban, uDispatchList,
   uAlertConfig, uRestorePoints,
   uDemoBacklog, uDemoMode, uDemoUtillajes,
+  uDemoPerfiles, uDemoPerfilDlg, uDemoPerfilGen,
+  uModulos, uModulosConfig,
   uOperarioAusencias,
   uGestionHabilidades, uPesosScoring, uAutoPlanificacion,
   uBacklogScheduler, uSetupRules, uGanttConfig, uPlanningEngine, uPlanningEngineRules,
@@ -616,6 +633,7 @@ end;
 
 procedure TForm1.HeatmapCargaCentro1Click(Sender: TObject);
 begin
+  if not ExigeModulo(MOD_ANALITICA) then Exit;
   TfrmHeatmapCargaCentro.Execute;
 end;
 
@@ -626,11 +644,13 @@ end;
 
 procedure TForm1.HeatmapEntregasVsCarga1Click(Sender: TObject);
 begin
+  if not ExigeModulo(MOD_ANALITICA) then Exit;
   TfrmHeatmapEntregasVsCarga.Execute;
 end;
 
 procedure TForm1.AnalisisPlan1Click(Sender: TObject);
 begin
+  if not ExigeModulo(MOD_ANALITICA) then Exit;
   TfrmPlanAnalisis.Ejecutar;
 end;
 
@@ -786,8 +806,14 @@ begin
     // defecto (sin dialogo): el motor real coloca los nodos (colisiones/lanes/
     // calendario) y reencadena dependencias. Para personalizar, usar
     // "Regenerar Gantt Demo".
-    if DMPlanner.ContarNodosProyecto(DemoId) = 0 then
+    //
+    // Tambien se regenera si lo que hay dentro son los datos de "Demo 2.0"
+    // (un sector concreto): al volver al demo clasico el usuario espera SU
+    // demo, no las bolsas de papel del cliente anterior. Sin esto el proyecto
+    // no esta vacio y se quedaria tal cual, bajo el boton equivocado.
+    if (DMPlanner.ContarNodosProyecto(DemoId) = 0) or FDemoEsDePerfil then
     begin
+      FDemoEsDePerfil := False;
       Generados := 0;
       ShowBusy(Self, 'Generando y planificando el Gantt de demostraci'#243'n...',
         procedure
@@ -828,6 +854,227 @@ begin
     FDashboard.Refrescar(True);
 end;
 
+procedure TForm1.ModulosLicencia1Click(Sender: TObject);
+begin
+  // Solo el administrador: decide que ha comprado el cliente, no como trabaja.
+  if not uLogin.IsAdmin then
+  begin
+    MessageDlg('Solo un administrador puede cambiar los m'#243'dulos contratados.',
+      mtInformation, [mbOK], 0);
+    Exit;
+  end;
+
+  if TfrmModulosConfig.Execute then
+    // Aplicar sin reiniciar: los menus se recalculan con lo que se acaba de
+    // guardar. Hacerlo aqui evita que quede la pantalla anterior en un estado
+    // que ya no corresponde a la licencia.
+    AplicarLicencias;
+end;
+
+procedure TForm1.AplicarLicencias;
+
+  // Un modulo apagado desaparece del menu... salvo que su ficha diga que hay
+  // que ensenarlo igualmente (ver MostrarSiApagado en uModulos): lo que no le
+  // aplica a esta fabrica se oculta, y lo que podria querer comprar se deja a
+  // la vista para que pregunte. Si se deja visible, el handler avisa.
+  procedure Gate(AItem: TMenuItem; const ACodigo: string);
+  begin
+    if AItem = nil then Exit;
+    if IsModuleEnabled(ACodigo) then
+      AItem.Visible := True
+    else
+      AItem.Visible := ModuloVisibleSiApagado(ACodigo);
+  end;
+
+begin
+  // --- OPERARIOS ---------------------------------------------------------
+  Gate(Operarios1, MOD_OPERARIOS);
+  Gate(Ausencias1, MOD_OPERARIOS);
+  Gate(Habilidades1, MOD_OPERARIOS);
+  Gate(OperacionHabilidades1, MOD_OPERARIOS);
+  Gate(Departamentos1, MOD_OPERARIOS);
+  Gate(FiniteCapacityOperaris1, MOD_OPERARIOS);
+  Gate(HeatmapCargaOperario1, MOD_OPERARIOS);
+  Gate(HistogramasOperarios1, MOD_OPERARIOS);
+  // El boton del toolbar es la via mas visible al planificador por operario:
+  // sin esto, un cliente sin el modulo lo tendria delante todo el dia.
+  if Assigned(btnTB_PlaniOperarios) then
+    btnTB_PlaniOperarios.Visible := IsModuleEnabled(MOD_OPERARIOS);
+
+  // --- UTILLAJES Y MOLDES ------------------------------------------------
+  // Van juntos: son el mismo concepto de negocio (un recurso secundario que
+  // limita la produccion) con dos nombres segun el sector.
+  Gate(Moldes1, MOD_UTILLAJES);
+  Gate(Utillajes1, MOD_UTILLAJES);
+
+  // --- STOCK / MRP -------------------------------------------------------
+  Gate(StockCockpit1, MOD_MRP);
+  Gate(ArticleDetail1, MOD_MRP);
+
+  // --- OPTIMIZACION ------------------------------------------------------
+  Gate(ReglasPlanificacion1, MOD_OPTIMIZACION);
+  Gate(PlanificacionReglas1, MOD_OPTIMIZACION);
+  Gate(PesosScoring1, MOD_OPTIMIZACION);
+
+  // --- ANALITICA ---------------------------------------------------------
+  Gate(AnalisisPlan1, MOD_ANALITICA);
+  Gate(HeatmapCargaCentro1, MOD_ANALITICA);
+  Gate(HeatmapEntregasVsCarga1, MOD_ANALITICA);
+  Gate(Indicadoresdecentros1, MOD_ANALITICA);
+  Gate(DashboardOperativo1, MOD_ANALITICA);
+
+  // --- INGENIERIA (modulo de proyectos) ----------------------------------
+  // No tiene entrada de menu propia: se entra por el boton del toolbar.
+  if Assigned(btnTB_Proyectos) then
+  begin
+    if IsModuleEnabled(MOD_INGENIERIA) then
+      btnTB_Proyectos.Visible := True
+    else
+      // Es la venta cruzada mas natural del producto, asi que el boton se deja
+      // a la vista y es el handler quien explica que no esta contratado.
+      btnTB_Proyectos.Visible := ModuloVisibleSiApagado(MOD_INGENIERIA);
+  end;
+
+  // NESTING: la suite de corte se abre desde el hub de optimizacion, que hoy
+  // no tiene entrada de menu propia en este formulario. Se controla en su
+  // handler (ver ShowOptimizacionHub).
+end;
+
+// True si el modulo esta contratado. Si no lo esta, avisa y devuelve False:
+// asi un handler se protege con una sola linea.
+function TForm1.ExigeModulo(const ACodigo: string): Boolean;
+begin
+  Result := IsModuleEnabled(ACodigo);
+  if not Result then
+    MessageDlg(MensajeModuloNoContratado(ACodigo), mtInformation, [mbOK], 0);
+end;
+
+procedure TForm1.btnTB_Demo2Click(Sender: TObject);
+var
+  Perfil: TDemoPerfil;
+  CrearSetup: Boolean;
+  DemoId, Generados, Renombrados: Integer;
+  Prep: TDemoPerfilResult;
+  Msg: string;
+begin
+  // DEMO A MEDIDA. Deliberadamente SEPARADO del boton "Demo" de siempre: ese
+  // sigue funcionando exactamente igual y es la red de seguridad si algo aqui
+  // falla en mitad de una visita comercial.
+  //
+  // Lo unico que aporta este camino es el VOCABULARIO y la FORMA de la planta
+  // (lineas, articulos, tiempos de cambio) segun el perfil elegido. La
+  // generacion y la planificacion las sigue haciendo el motor de siempre.
+  if not DMPlanner.IsConnected then
+  begin
+    ShowMessage('No hay conexi'#243'n con la base de datos.');
+    btnTB_Demo2.Down := False;
+    Exit;
+  end;
+
+  // Los dos botones de demo comparten GroupIndex, asi que se excluyen: pulsar
+  // uno suelta el otro. Si este queda SUBIDO es que se esta saliendo del modo
+  // demostracion, igual que con el boton clasico.
+  if not btnTB_Demo2.Down then
+  begin
+    uDemoMode.DemoMode.Active := False;
+    DMPlanner.SalirModoDemo;
+    FDemoEsDePerfil := False;
+    LoadActivePlan;
+    ActualizarCaption;
+    if Assigned(FDashboard) and FDashboard.Visible then
+      FDashboard.Refrescar(True);
+    Exit;
+  end;
+
+  if not TfrmDemoPerfilDlg.Execute(Perfil, CrearSetup) then
+  begin
+    // Cancelar el dialogo no debe dejar el boton pulsado: no se ha entrado en
+    // modo demostracion.
+    btnTB_Demo2.Down := False;
+    Exit;
+  end;
+
+  DemoId := DMPlanner.EntrarModoDemo;
+  if DemoId <= 0 then
+  begin
+    ShowMessage('No se ha podido preparar el proyecto de demostraci'#243'n.');
+    btnTB_Demo2.Down := False;
+    Exit;
+  end;
+  // Las pantallas suscritas (KPIs, heatmaps) se enteran por DemoMode.
+  uDemoMode.DemoMode.Active := True;
+
+  Generados := 0;
+  Renombrados := 0;
+  Prep := Default(TDemoPerfilResult);
+
+  ShowBusy(Self, 'Preparando la planta y generando el plan...',
+    procedure
+    begin
+      // 1. Lineas del perfil + reglas de tiempo de cambio. ANTES de generar:
+      //    el generador reparte los trabajos entre los centros que encuentre.
+      Prep := PrepararPlantaDemo(DMPlanner.ADOConnection,
+        DMPlanner.CodigoEmpresa, Perfil, CrearSetup);
+
+      // 2. Generacion y planificacion: el motor de SIEMPRE, sin tocar.
+      Generados := TfrmGenerarNodosDemo.ExecuteSilent(
+        DemoId, Perfil.NumOrdenes, Perfil.OpsPorOrden);
+
+      // 3. Vocabulario del cliente sobre lo ya planificado. Va al final porque
+      //    el motor no mira los nombres para nada: renombrar no altera el plan.
+      if Generados > 0 then
+        Renombrados := AplicarVocabularioDemo(DMPlanner.ADOConnection,
+          DMPlanner.CodigoEmpresa, DemoId, Perfil);
+    end);
+
+  // Recargar el catalogo de CENTROS: sin esto las lineas nuevas del perfil no
+  // aparecen en el Gantt. El repositorio se llena al conectar y NO lo refresca
+  // LoadActivePlan (solo lo hace el mantenimiento de centros), asi que los
+  // centros creados hace un momento no existirian para la vista.
+  DMPlanner.LoadCentres;
+
+  // El proyecto demo lleva ahora datos de un sector concreto: si el usuario
+  // vuelve al boton Demo clasico, hay que regenerarlos (ver AplicarModoDemoGantt).
+  FDemoEsDePerfil := True;
+
+  if Generados <= 0 then
+  begin
+    ShowMessage('No se han podido generar los datos de demostraci'#243'n. '
+      + #191'Hay centros de trabajo activos?');
+    // Sin datos no hay demo que ensenar: se sale del modo y el boton sube.
+    DMPlanner.SalirModoDemo;
+    uDemoMode.DemoMode.Active := False;
+    FDemoEsDePerfil := False;
+    btnTB_Demo2.Down := False;
+    LoadActivePlan;
+    ActualizarCaption;
+    Exit;
+  end;
+
+  LoadActivePlan;
+  ActualizarCaption;
+  if Assigned(FDashboard) and FDashboard.Visible then
+    FDashboard.Refrescar(True);
+
+  Msg := Format(
+    'Demostraci'#243'n preparada: %s'#13#10#13#10 +
+    '%d l'#237'neas (%d nuevas)'#13#10 +
+    '%d operaciones planificadas'#13#10 +
+    '%d con los art'#237'culos del sector',
+    [Perfil.Nombre,
+     Prep.CentrosCreados + Prep.CentrosActualizados, Prep.CentrosCreados,
+     Generados, Renombrados]);
+  if Prep.ReglasSetup > 0 then
+    Msg := Msg + Format(#13#10'%d reglas de tiempo de cambio activas',
+      [Prep.ReglasSetup]);
+  // Si las reglas de setup no se pudieron crear, se dice: la demo funciona
+  // igual pero sin las franjas de cambio, y conviene saberlo ANTES de la visita.
+  if Prep.Mensaje <> '' then
+    Msg := Msg + #13#10#13#10 + Prep.Mensaje;
+
+  ShowMessage(Msg);
+end;
+
 procedure TForm1.btnTB_HelpClick(Sender: TObject);
 var
   TopicKey, Titulo: string;
@@ -860,6 +1107,11 @@ begin
   begin
     TopicKey := 'uDashboard';
     Titulo := 'Panel de control';
+  end
+  else if Assigned(FVistaProyectos) and FVistaProyectos.Visible then
+  begin
+    TopicKey := 'uVistaProyectos';
+    Titulo := 'Ingenier'#237'a';
   end;
 
   if TopicKey = '' then
@@ -888,6 +1140,9 @@ var
   Q: TADOQuery;
   Pid: Integer;
 begin
+  // El boton se deja visible aunque el modulo no este contratado (es la venta
+  // cruzada mas natural del producto), asi que el aviso va aqui.
+  if not ExigeModulo(MOD_INGENIERIA) then Exit;
   if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
 
   Pid := 0;
@@ -974,6 +1229,7 @@ end;
 
 procedure TForm1.ReglasPlanificacion1Click(Sender: TObject);
 begin
+  if not ExigeModulo(MOD_OPTIMIZACION) then Exit;
   if TfrmPlanningRulesEditor.Execute(FPlanningRuleEngine) then
     FPlanningRuleEngine.SaveToFile;
   // Recargar las reglas de tiempo de cambio (setup) en el Gantt para que la
@@ -1506,6 +1762,11 @@ begin
     begin
       RefrescoArranqueDiferido;
     end);
+
+  // Modulos por licencia: ocultar del menu lo que la empresa no ha contratado.
+  // Va al FINAL del arranque, cuando DMPlanner ya ha leido la informacion de
+  // empresa (LoadEmpresaInfo carga los modulos) y todos los menus existen.
+  AplicarLicencias;
 
   // Conectar handler de cierre con check de dirty + flush
   Self.OnCloseQuery := FormCloseQuery;
@@ -2287,6 +2548,7 @@ procedure TForm1.StockCockpit1Click(Sender: TObject);
 var
   Reader: IErpReader;
 begin
+  if not ExigeModulo(MOD_MRP) then Exit;
   Reader := GetActiveErpReader;
   if Reader = nil then
   begin
@@ -2301,6 +2563,7 @@ procedure TForm1.DashboardOperativo1Click(Sender: TObject);
 var
   Reader: IErpReader;
 begin
+  if not ExigeModulo(MOD_ANALITICA) then Exit;
   Reader := GetActiveErpReader;
   if Reader = nil then
   begin
@@ -2313,6 +2576,7 @@ end;
 
 procedure TForm1.ArticleDetail1Click(Sender: TObject);
 begin
+  if not ExigeModulo(MOD_MRP) then Exit;
   MostrarArticleDetail;
 end;
 
@@ -2562,6 +2826,7 @@ var
   TituloRegla: string;
   MR: TModalResult;
   SetupEngine: TSetupRuleEngine;
+  // Guard de licencia: se evalua en el begin principal (ver mas abajo).
 
   // Convierte los nodos (en su orden actual) a TSchedInput.
   procedure NodesToInputs(const ANodes: TArray<TNodeData>);
@@ -2631,6 +2896,7 @@ var
   end;
 
 begin
+  if not ExigeModulo(MOD_OPTIMIZACION) then Exit;
   if not Assigned(DMPlanner) or not Assigned(DMPlanner.NodeDataRepo) then
   begin
     ShowMessage('Repositorio de nodos no inicializado.');

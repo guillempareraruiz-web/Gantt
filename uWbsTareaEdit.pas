@@ -230,6 +230,9 @@ type
 
 implementation
 
+uses
+  uHelpViewer;
+
 const
   // Paleta de partida para etiquetas nuevas (BGR). Se va rotando segun cuantas
   // haya, para que dos etiquetas seguidas no salgan del mismo color.
@@ -437,6 +440,12 @@ begin
   BuildTabTiempo;
   BuildTabOperarios;
   BuildTabNotas;
+
+  // Ayuda contextual: boton '?' en el caption + F1. Esta ficha la tiene propia
+  // (y no basta con la de la vista) porque es donde se toman las decisiones mas
+  // finas del modulo: la triada duracion/trabajo/personas y las restricciones
+  // de fecha, que son justo lo que se malinterpreta.
+  THelpViewer.InstallHelp(Self, 'uWbsTareaEdit', 'Ficha de tarea');
 end;
 
 procedure TfrmWbsTareaEdit.BuildTabNotas;

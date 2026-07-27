@@ -1,0 +1,30 @@
+{
+  "nombre": "Textil y confeccion",
+  "descripcion": "Corte por tallas, confeccion en talleres y acabado. El cambio de color obliga a limpiar la linea.",
+  "sector": "Textil",
+  "atributoSetup": "Color",
+  "unidad": "prendas",
+  "prefijoOrden": "OF",
+  "numOrdenes": 18,
+  "opsPorOrden": 4,
+  "pctPlanificado": 80,
+  "operaciones": ["CORTAR", "CONFECCIONAR", "ESTAMPAR", "PLANCHAR", "EMBOLSAR"],
+  "clientes": ["CADENA MODA", "UNIFORMES PRO", "DEPORTE Y OCIO", "MARCA PROPIA", "EXPORT EUROPA"],
+  "centros": [
+    { "codigo": "DEMO-CORTE-T", "nombre": "Mesa de corte",      "maxLanes": 1, "setupMin": 35 },
+    { "codigo": "DEMO-CONF1",   "nombre": "Taller confeccion 1","maxLanes": 4, "setupMin": 15 },
+    { "codigo": "DEMO-CONF2",   "nombre": "Taller confeccion 2","maxLanes": 4, "setupMin": 15 },
+    { "codigo": "DEMO-ESTAM",   "nombre": "Estampacion",        "maxLanes": 1, "setupMin": 60 },
+    { "codigo": "DEMO-ACAB-T",  "nombre": "Plancha y acabado",  "maxLanes": 3, "setupMin": 0  }
+  ],
+  "articulos": [
+    { "codigo": "TEX-1001", "descripcion": "Camiseta basica negra",    "valorSetup": "NEGRO" },
+    { "codigo": "TEX-1002", "descripcion": "Sudadera negra",          "valorSetup": "NEGRO" },
+    { "codigo": "TEX-2001", "descripcion": "Camiseta basica blanca",  "valorSetup": "BLANCO" },
+    { "codigo": "TEX-2002", "descripcion": "Polo blanco",             "valorSetup": "BLANCO" },
+    { "codigo": "TEX-3001", "descripcion": "Pantalon marino",         "valorSetup": "MARINO" },
+    { "codigo": "TEX-3002", "descripcion": "Chaqueta marino",         "valorSetup": "MARINO" },
+    { "codigo": "TEX-4001", "descripcion": "Camiseta tecnica roja",   "valorSetup": "ROJO" },
+    { "codigo": "TEX-5001", "descripcion": "Bata sanitaria verde",    "valorSetup": "VERDE" }
+  ]
+}

@@ -160,7 +160,7 @@ object Form1: TForm1
       SpeedButtonOptions.GroupIndex = 1
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
-      TabOrder = 11
+      TabOrder = 12
       OnClick = btnTB_ProyectosClick
       ExplicitLeft = 447
     end
@@ -231,6 +231,35 @@ object Form1: TForm1
       Font.Style = [fsBold]
       ParentFont = False
       OnClick = btnTB_DemoClick
+    end
+    object btnTB_Demo2: TcxButton
+      AlignWithMargins = True
+      Left = 921
+      Top = 6
+      Width = 67
+      Height = 21
+      Hint = 'Demostraci'#243'n a medida del sector del cliente'
+      Margins.Top = 6
+      Margins.Right = 4
+      Margins.Bottom = 6
+      Align = alRight
+      Caption = 'Demo 2.0'
+      LookAndFeel.Kind = lfUltraFlat
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      ParentShowHint = False
+      ShowHint = True
+      SpeedButtonOptions.GroupIndex = 2
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.AllowAllUp = True
+      TabOrder = 11
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clBlack
+      Font.Height = -9
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      OnClick = btnTB_Demo2Click
     end
     object cxButton2: TcxButton
       AlignWithMargins = True
@@ -432,6 +461,10 @@ object Form1: TForm1
       object ConfigEmpresa1: TMenuItem
         Caption = 'Configuraci'#243'n de Empresa...'
         OnClick = ConfigEmpresa1Click
+      end
+      object ModulosLicencia1: TMenuItem
+        Caption = 'M'#243'dulos contratados...'
+        OnClick = ModulosLicencia1Click
       end
       object PreferenciasGantt1: TMenuItem
         Caption = 'Preferencias del Gantt...'

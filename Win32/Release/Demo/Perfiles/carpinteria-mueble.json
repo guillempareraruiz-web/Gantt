@@ -1,0 +1,30 @@
+{
+  "nombre": "Carpinteria y mueble",
+  "descripcion": "Tablero a medida. Corte optimizado, canteado y montaje; el cambio de material manda en la seccionadora.",
+  "sector": "Madera",
+  "atributoSetup": "Material",
+  "unidad": "piezas",
+  "prefijoOrden": "OF",
+  "numOrdenes": 14,
+  "opsPorOrden": 4,
+  "pctPlanificado": 80,
+  "operaciones": ["SECCIONAR", "CANTEAR", "TALADRAR", "MONTAR", "EMBALAR"],
+  "clientes": ["COCINAS DEL NORTE", "HOTELES RIBERA", "OFICINAS PLUS", "BANOS Y HOGAR", "CONTRACT SUR"],
+  "centros": [
+    { "codigo": "DEMO-SECC",  "nombre": "Seccionadora",        "maxLanes": 1, "setupMin": 35 },
+    { "codigo": "DEMO-CNC-M", "nombre": "CNC mecanizado",      "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-CANT",  "nombre": "Canteadora",          "maxLanes": 1, "setupMin": 25 },
+    { "codigo": "DEMO-MONT",  "nombre": "Montaje",             "maxLanes": 3, "setupMin": 0  },
+    { "codigo": "DEMO-EMB",   "nombre": "Embalaje",            "maxLanes": 2, "setupMin": 0  }
+  ],
+  "articulos": [
+    { "codigo": "MUE-1010", "descripcion": "Modulo alto 60 roble",      "valorSetup": "ROBLE 19" },
+    { "codigo": "MUE-1011", "descripcion": "Modulo alto 80 roble",      "valorSetup": "ROBLE 19" },
+    { "codigo": "MUE-2020", "descripcion": "Modulo bajo 90 blanco",     "valorSetup": "BLANCO 19" },
+    { "codigo": "MUE-2021", "descripcion": "Cajonera 60 blanco",        "valorSetup": "BLANCO 19" },
+    { "codigo": "MUE-3030", "descripcion": "Frente puerta nogal",       "valorSetup": "NOGAL 16" },
+    { "codigo": "MUE-3031", "descripcion": "Costado nogal 16",          "valorSetup": "NOGAL 16" },
+    { "codigo": "MUE-4040", "descripcion": "Encimera compacto 12",      "valorSetup": "COMPACTO 12" },
+    { "codigo": "MUE-5050", "descripcion": "Estanteria melamina gris",  "valorSetup": "GRIS 19" }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "nombre": "Alimentacion (proceso por lotes)",
+  "descripcion": "Proceso continuo por lotes con limpieza entre recetas. El cambio de receta obliga a lavar la linea.",
+  "sector": "Alimentacion",
+  "atributoSetup": "Receta",
+  "unidad": "kg",
+  "prefijoOrden": "LOTE",
+  "numOrdenes": 16,
+  "opsPorOrden": 4,
+  "pctPlanificado": 85,
+  "operaciones": ["MEZCLAR", "COCER", "ENVASAR", "ETIQUETAR", "PALETIZAR"],
+  "clientes": ["SUPER CENTRAL", "DISTRIB LEVANTE", "HORECA NORTE", "MARCA BLANCA SL", "EXPORT IBERIA"],
+  "centros": [
+    { "codigo": "DEMO-MEZ",  "nombre": "Mezcladora",           "maxLanes": 1, "setupMin": 90 },
+    { "codigo": "DEMO-COC1", "nombre": "Linea coccion 1",      "maxLanes": 1, "setupMin": 120 },
+    { "codigo": "DEMO-COC2", "nombre": "Linea coccion 2",      "maxLanes": 1, "setupMin": 120 },
+    { "codigo": "DEMO-ENV1", "nombre": "Envasadora 1",         "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-ENV2", "nombre": "Envasadora 2",         "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-PAL",  "nombre": "Paletizado",           "maxLanes": 2, "setupMin": 0  }
+  ],
+  "articulos": [
+    { "codigo": "ALI-1001", "descripcion": "Salsa tomate 400g",        "valorSetup": "TOMATE" },
+    { "codigo": "ALI-1002", "descripcion": "Salsa tomate 700g",        "valorSetup": "TOMATE" },
+    { "codigo": "ALI-2001", "descripcion": "Crema verduras 500ml",     "valorSetup": "VERDURAS" },
+    { "codigo": "ALI-2002", "descripcion": "Crema calabaza 500ml",     "valorSetup": "VERDURAS" },
+    { "codigo": "ALI-3001", "descripcion": "Legumbre cocida 400g",     "valorSetup": "LEGUMBRE" },
+    { "codigo": "ALI-4001", "descripcion": "Sofrito casero 300g",      "valorSetup": "SOFRITO" },
+    { "codigo": "ALI-5001", "descripcion": "Caldo pollo 1L",           "valorSetup": "CALDO" },
+    { "codigo": "ALI-5002", "descripcion": "Caldo verduras 1L",        "valorSetup": "CALDO" }
+  ]
+}

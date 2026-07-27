@@ -1,0 +1,40 @@
+{
+  "nombre": "Bolsas de papel",
+  "descripcion": "Varias lineas de formato en paralelo. El cambio de formato es el coste principal.",
+  "sector": "Packaging",
+  "atributoSetup": "Formato",
+  "unidad": "bolsas",
+  "prefijoOrden": "OF",
+  "numOrdenes": 18,
+  "opsPorOrden": 4,
+  "pctPlanificado": 80,
+  "operaciones": ["IMPRIMIR", "FORMAR", "COLOCAR ASA", "ACABADO"],
+  "clientes": [
+    "RETAIL NORTE",
+    "PANADERIAS UNIDAS",
+    "MODA & CO",
+    "GOURMET SELECT",
+    "FARMACIAS DEL SUR"
+  ],
+  "centros": [
+    { "codigo": "DEMO-L1", "nombre": "Linea 1 - Asa rizada",   "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-L2", "nombre": "Linea 2 - Asa rizada",   "maxLanes": 1, "setupMin": 45 },
+    { "codigo": "DEMO-L3", "nombre": "Linea 3 - Asa plana",    "maxLanes": 1, "setupMin": 60 },
+    { "codigo": "DEMO-L4", "nombre": "Linea 4 - Asa plana",    "maxLanes": 1, "setupMin": 60 },
+    { "codigo": "DEMO-L5", "nombre": "Linea 5 - SOS",          "maxLanes": 1, "setupMin": 40 },
+    { "codigo": "DEMO-L6", "nombre": "Linea 6 - Industrial",   "maxLanes": 1, "setupMin": 75 },
+    { "codigo": "DEMO-L7", "nombre": "Linea 7 - Versatil",     "maxLanes": 1, "setupMin": 50 }
+  ],
+  "articulos": [
+    { "codigo": "BOL-2232",  "descripcion": "Bolsa asa rizada 22x32 kraft",    "valorSetup": "22x32" },
+    { "codigo": "BOL-2232B", "descripcion": "Bolsa asa rizada 22x32 blanca",   "valorSetup": "22x32" },
+    { "codigo": "BOL-3241",  "descripcion": "Bolsa asa rizada 32x41 kraft",    "valorSetup": "32x41" },
+    { "codigo": "BOL-1826",  "descripcion": "Bolsa asa plana 18x26 blanca",    "valorSetup": "18x26" },
+    { "codigo": "BOL-1826K", "descripcion": "Bolsa asa plana 18x26 kraft",     "valorSetup": "18x26" },
+    { "codigo": "BOL-4050",  "descripcion": "Bolsa asa plana 40x50 reforzada", "valorSetup": "40x50" },
+    { "codigo": "SOS-1220",  "descripcion": "Bolsa SOS 12x20 panaderia",       "valorSetup": "12x20" },
+    { "codigo": "SOS-1830",  "descripcion": "Bolsa SOS 18x30 alimentacion",    "valorSetup": "18x30" },
+    { "codigo": "IND-5070",  "descripcion": "Bolsa industrial doble capa",     "valorSetup": "50x70" },
+    { "codigo": "REG-2535",  "descripcion": "Bolsa regalo 25x35 plastificada", "valorSetup": "25x35" }
+  ]
+}

@@ -40,7 +40,7 @@ uses
   uGanttControl, uGanttControlTareas, uGanttTypes, uGanttTimeline, uNodeDataRepo,
   uCentreCalendar,
   uErpTypes, uWbsTypes, uWbsRepo, uWbsScheduler, uWbsTareaEdit, uWbsCargaBand,
-  uWbsSobrecarga, uWbsPanelEsfuerzo,
+  uWbsSobrecarga, uWbsPanelEsfuerzo, uWbsNivelacion, uWbsNivelacionDlg,
   dxSkinBasic, dxSkinBlack,
   dxSkinBlue, dxSkinBlueprint, dxSkinCaramel, dxSkinCoffee, dxSkinDarkroom,
   dxSkinDarkSide, dxSkinDevExpressDarkStyle, dxSkinDevExpressStyle, dxSkinFoggy,
@@ -105,6 +105,24 @@ type
     pnlTop: TPanel;
     lblTitulo: TLabel;
     lblSubtitulo: TLabel;
+    // KPIs de la cabecera, mismo patron que uVistaGantt: 5 paneles alRight con
+    // titulo arriba y valor debajo. El color de fondo ES el semaforo.
+    pnlKPI0: TPanel;
+    lblKPITitulo0: TLabel;
+    lblKPIValor0: TLabel;
+    pnlKPI1: TPanel;
+    lblKPITitulo1: TLabel;
+    lblKPIValor1: TLabel;
+    pnlKPI2: TPanel;
+    lblKPITitulo2: TLabel;
+    lblKPIValor2: TLabel;
+    pnlKPI3: TPanel;
+    lblKPITitulo3: TLabel;
+    lblKPIValor3: TLabel;
+    pnlKPI4: TPanel;
+    lblKPITitulo4: TLabel;
+    lblKPIValor4: TLabel;
+
     pnlLeft: TPanel;
     // Banda superior del panel izquierdo: iguala la altura de la regla de
     // fechas para que las filas del grid y del Gantt arranquen a la par, y
@@ -125,6 +143,9 @@ type
     pnlRight: TPanel;
     btnConfigProyectos: TcxButton;
     btnTreeWide: TcxButton;
+
+    procedure pnlKPI4Click(Sender: TObject);
+
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     // TcxTreeListGetContentStyleEvent: el orden es (Sender, AColumn, ANode).
@@ -229,10 +250,12 @@ type
     // Acciones de PROYECTO (V082), no de fila.
     FMiQuitarBase: TMenuItem;
     FMiVerSobrecarga: TMenuItem;
+    FMiNivelar: TMenuItem;
     procedure MiFijarBaseClick(Sender: TObject);
     procedure MiQuitarBaseClick(Sender: TObject);
     procedure MiVerSobrecargaClick(Sender: TObject);
     procedure MiPanelEsfuerzoClick(Sender: TObject);
+    procedure MiNivelarClick(Sender: TObject);
 
      procedure TimerScrollTick(Sender: TObject);
     // True si el arbol ya no puede desplazarse mas hacia abajo.
@@ -326,9 +349,28 @@ type
     // Carga desvios y sobrecargas de los proyectos mostrados. Se llama desde
     // CargarDatos, con las tareas ya en memoria.
     procedure CargarBaselineYSobrecarga;
+    // KPIs de la cabecera. Se refrescan al final de RecalcularFechas, que es
+    // cuando ya se conocen las fechas, las criticas y las sobrecargas.
+    procedure ActualizarKPIs;
     // Aviso resumido de sobreasignacion, para la barra de subtitulo.
     function ResumenSobrecarga: string;
     procedure MostrarSobrecargas;        // detalle en un dialogo
+
+    // --- Nivelacion de recursos --------------------------------------------
+    // Abre la previsualizacion; si el usuario acepta, persiste la propuesta.
+    procedure NivelarRecursos;
+    // Calcula UNA propuesta con las opciones dadas. Se le pasa al dialogo como
+    // callback para que pueda renivelar en vivo al cambiar los interruptores,
+    // sin que el dialogo tenga que conocer ni el motor ni los datos.
+    function CalcularNivelacion(
+      const AOpciones: TWbsNivelacionOpciones): TWbsNivelacionResult;
+    // True si la tarea existe y pertenece al proyecto dado. Sirve para repartir
+    // las asignaciones (que vienen de todos los proyectos a la vez) entre las
+    // pasadas de nivelacion, que son por proyecto.
+    function BuscarTareaEnProyecto(ANodeId, AProjectId: Integer): Boolean;
+    // Escribe la propuesta aceptada: cada tarea movida pasa a "no comenzar
+    // antes del" (SNET) con su nueva fecha. Devuelve cuantas se han guardado.
+    function AplicarNivelacion(const ARes: TWbsNivelacionResult): Integer;
 
     procedure ElegirProyectos;           // selector multi-proyecto
     function CargarSeleccionGuardada: TArray<Integer>;
@@ -520,6 +562,19 @@ begin
   btnConfigProyectos.OnClick := btnConfigProyectosClick;
   btnConfigProyectos.Hint := 'Elegir que proyectos se muestran';
   btnConfigProyectos.ShowHint := True;
+
+  // El KPI de sobreasignacion es el unico que lleva a algun sitio: se anuncia
+  // con el cursor de mano, o nadie descubre que se puede pulsar. Las etiquetas
+  // de dentro tambien, o al pasar por encima del numero el cursor cambia.
+  pnlKPI4.Cursor := crHandPoint;
+  lblKPITitulo4.Cursor := crHandPoint;
+  lblKPIValor4.Cursor := crHandPoint;
+  pnlKPI4.Hint := 'Ver el detalle de la sobreasignaci'#243'n';
+  pnlKPI4.ShowHint := True;
+  // Las etiquetas se tragan el clic si no se les reenvia: un panel con dos
+  // labels encima solo es clicable en los margenes.
+  lblKPITitulo4.OnClick := pnlKPI4Click;
+  lblKPIValor4.OnClick := pnlKPI4Click;
 
 
   // Control de Gantt de tareas a la derecha (creado en codigo, como en el resto
@@ -1484,7 +1539,8 @@ begin
   FMiQuitarBase := NuevoItem('Quitar l'#237'nea base...', MiQuitarBaseClick, 0);
   FMiVerSobrecarga := NuevoItem('Ver sobreasignaci'#243'n...',
     MiVerSobrecargaClick, 0);
-  NuevoItem('Esfuerzo del proyecto...', MiPanelEsfuerzoClick, 0);
+  FMiNivelar := NuevoItem('Nivelar recursos...', MiNivelarClick, 0);
+  NuevoItem('Resumen del proyecto...', MiPanelEsfuerzoClick, 0);
 
   tlWbs.PopupMenu := FMenuWbs;
 end;
@@ -1535,6 +1591,11 @@ begin
       [Length(FSobrecargas)])
   else
     FMiVerSobrecarga.Caption := 'Ver sobreasignaci'#243'n...';
+
+  // Nivelar sin sobrecargas no tiene nada que hacer. Se deja VISIBLE pero
+  // deshabilitado (en vez de ocultarlo) para que la opcion se descubra y se
+  // entienda que hoy no hace falta.
+  FMiNivelar.Enabled := Length(FSobrecargas) > 0;
 end;
 
 function TfrmVistaProyectos.NodeIdEnfocado: Integer;
@@ -1898,6 +1959,11 @@ begin
   MostrarSobrecargas;
 end;
 
+procedure TfrmVistaProyectos.MiNivelarClick(Sender: TObject);
+begin
+  NivelarRecursos;
+end;
+
 procedure TfrmVistaProyectos.MiPanelEsfuerzoClick(Sender: TObject);
 var
   Datos: TWbsEsfuerzoInput;
@@ -1927,11 +1993,24 @@ begin
   Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
   try
     Datos.Cargas := Repo.LoadCargaOperarios(Ids);
+    // Estados declarados: el resumen cuenta pendientes / en curso / hechas y
+    // detecta bloqueos. Sin esto tendria que deducirlo todo de las horas.
+    Datos.Estados := Repo.LoadEstadosPorNodo(Ids);
   finally
     Repo.Free;
   end;
 
-  TfrmWbsPanelEsfuerzo.Execute(Datos);
+  try
+    // Criticas: las sabe el motor (una tarea no lleva esa marca encima), asi
+    // que se cuentan aqui y se pasan hechas.
+    Datos.NumCriticas := 0;
+    for P := 0 to High(FProyectos) do
+      Inc(Datos.NumCriticas, FProyectos[P].TareasCriticas);
+
+    TfrmWbsPanelEsfuerzo.Execute(Datos);
+  finally
+    Datos.Estados.Free;
+  end;
 end;
 
 procedure TfrmVistaProyectos.tlWbsKeyDown(Sender: TObject; var Key: Word;
@@ -2104,6 +2183,170 @@ begin
     if Par.Value.TieneBaseline then Exit(True);
 end;
 
+procedure TfrmVistaProyectos.ActualizarKPIs;
+const
+  // Misma paleta que los KPIs de Produccion (uVistaGantt), en BGR.
+  COL_DEF    = $007D6F62;   // gris/marron: informativo, sin juicio
+  COL_RED    = $004949D1;
+  COL_ORANGE = $00559BE1;
+  COL_GREEN  = $007EC770;
+
+  procedure SetKPI(APanel: TPanel; AValor: TLabel; const ATexto: string;
+    AColor: TColor);
+  begin
+    AValor.Caption := ATexto;
+    APanel.Color := AColor;
+  end;
+
+var
+  I, P: Integer;
+  FinGlobal, Hoy: TDateTime;
+  Criticas, Retrasadas, Personas: Integer;
+  PlanMin, InvertidoMin, Pct: Double;
+  Estados: TDictionary<Integer, Integer>;
+  Repo: TWbsRepo;
+  Ids: TArray<Integer>;
+  Est: Integer;
+  Vistos: TDictionary<Integer, Boolean>;
+  T: TWbsTask;
+begin
+  if Length(FProyectos) = 0 then
+  begin
+    SetKPI(pnlKPI0, lblKPIValor0, '-', COL_DEF);
+    SetKPI(pnlKPI1, lblKPIValor1, '-', COL_DEF);
+    SetKPI(pnlKPI2, lblKPIValor2, '-', COL_DEF);
+    SetKPI(pnlKPI3, lblKPIValor3, '-', COL_DEF);
+    SetKPI(pnlKPI4, lblKPIValor4, '-', COL_DEF);
+    Exit;
+  end;
+
+  Hoy := Date;
+  FinGlobal := 0;
+  Criticas := 0;
+  for P := 0 to High(FProyectos) do
+  begin
+    if FProyectos[P].FechaFin > FinGlobal then
+      FinGlobal := FProyectos[P].FechaFin;
+    Inc(Criticas, FProyectos[P].TareasCriticas);
+  end;
+
+  // --- KPI 0: fin previsto -------------------------------------------------
+  // La fecha es lo primero que se pregunta. El color la califica: rojo si ya
+  // se ha pasado, ambar si es esta semana.
+  if FinGlobal > 0 then
+  begin
+    if FinGlobal < Hoy then
+      SetKPI(pnlKPI0, lblKPIValor0,
+        FormatDateTime('dd/mm/yy', FinGlobal), COL_RED)
+    else if FinGlobal < Hoy + 7 then
+      SetKPI(pnlKPI0, lblKPIValor0,
+        FormatDateTime('dd/mm/yy', FinGlobal), COL_ORANGE)
+    else
+      SetKPI(pnlKPI0, lblKPIValor0,
+        FormatDateTime('dd/mm/yy', FinGlobal), COL_DEF);
+  end
+  else
+    SetKPI(pnlKPI0, lblKPIValor0, '-', COL_DEF);
+
+  // --- KPI 1: avance + KPI 3: retrasadas -----------------------------------
+  // Se recorren las hojas una sola vez para las dos cifras.
+  PlanMin := 0;
+  InvertidoMin := 0;
+  Retrasadas := 0;
+
+  // Estado declarado: hace falta para no contar como retrasada una tarea que
+  // ya esta hecha o cancelada. Sin ficha se deduce de las horas.
+  Estados := nil;
+  if (DMPlanner <> nil) and (DMPlanner.ADOConnection <> nil) then
+  begin
+    SetLength(Ids, Length(FProyectos));
+    for P := 0 to High(FProyectos) do
+      Ids[P] := FProyectos[P].ProjectId;
+    Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+    try
+      Estados := Repo.LoadEstadosPorNodo(Ids);
+    finally
+      Repo.Free;
+    end;
+  end;
+
+  try
+    for I := 0 to High(FTareas) do
+    begin
+      T := FTareas[I];
+      // Solo hojas: los resumenes agregan y contarian el trabajo dos veces.
+      if (T.Kind = wtkResumen) or T.HasChildren then Continue;
+
+      PlanMin := PlanMin + T.TrabajoMin;
+      InvertidoMin := InvertidoMin + T.MinutosInvertidos;
+
+      if (T.FechaFin <= 0) or (T.FechaFin >= Hoy) then Continue;
+
+      Est := -1;
+      if (Estados <> nil) and (not Estados.TryGetValue(T.NodeId, Est)) then
+        Est := -1;
+      if (Est = Ord(wteHecha)) or (Est = Ord(wteCancelada)) then Continue;
+      if (Est < 0) and (AvanceTarea(T.MinutosInvertidos, T.DuracionMin) >= 1) then
+        Continue;
+
+      Inc(Retrasadas);
+    end;
+  finally
+    if Estados <> nil then Estados.Free;
+  end;
+
+  if PlanMin > 0 then Pct := InvertidoMin / PlanMin * 100 else Pct := 0;
+  // El avance no lleva semaforo: un 30 % no es bueno ni malo por si mismo, hay
+  // que compararlo con el calendario consumido (eso lo hace el Resumen). Darle
+  // color aqui seria un juicio que el dato no sostiene.
+  if PlanMin > 0 then
+    SetKPI(pnlKPI1, lblKPIValor1, Format('%.0f %%', [Pct]), COL_DEF)
+  else
+    SetKPI(pnlKPI1, lblKPIValor1, '-', COL_DEF);
+
+  // --- KPI 2: camino critico -----------------------------------------------
+  // Informativo: todo proyecto tiene camino critico, no es una anomalia.
+  SetKPI(pnlKPI2, lblKPIValor2, IntToStr(Criticas), COL_DEF);
+
+  // --- KPI 3: retrasadas ---------------------------------------------------
+  if Retrasadas > 0 then
+    SetKPI(pnlKPI3, lblKPIValor3, IntToStr(Retrasadas), COL_RED)
+  else
+    SetKPI(pnlKPI3, lblKPIValor3, '0', COL_GREEN);
+
+  // --- KPI 4: sobreasignados (clicable) ------------------------------------
+  // Cuenta PERSONAS, no tramos: "3 tramos" puede ser la misma persona tres
+  // veces y suena peor de lo que es. Lo accionable es a cuanta gente afecta.
+  Personas := 0;
+  if Length(FSobrecargas) > 0 then
+  begin
+    Vistos := TDictionary<Integer, Boolean>.Create;
+    try
+      for I := 0 to High(FSobrecargas) do
+        if not Vistos.ContainsKey(FSobrecargas[I].OperatorId) then
+        begin
+          Vistos.Add(FSobrecargas[I].OperatorId, True);
+          Inc(Personas);
+        end;
+    finally
+      Vistos.Free;
+    end;
+  end;
+
+  if Personas > 0 then
+    SetKPI(pnlKPI4, lblKPIValor4, IntToStr(Personas), COL_ORANGE)
+  else
+    SetKPI(pnlKPI4, lblKPIValor4, '0', COL_GREEN);
+end;
+
+procedure TfrmVistaProyectos.pnlKPI4Click(Sender: TObject);
+begin
+  // El unico KPI clicable: lleva al detalle de quien esta sobreasignado y
+  // cuando. Los demas son informativos y no tienen a donde llevar.
+  if Length(FSobrecargas) > 0 then
+    MostrarSobrecargas;
+end;
+
 function TfrmVistaProyectos.ResumenSobrecarga: string;
 var
   Personas: TDictionary<Integer, Boolean>;
@@ -2183,6 +2426,216 @@ begin
   finally
     S.Free;
   end;
+end;
+
+// ---------------------------------------------------------------------------
+// Nivelacion de recursos
+//
+// El reparto: uWbsNivelacion PROPONE (no toca BD), el dialogo ENSEÑA y aqui se
+// APLICA. Aplicar = convertir cada tarea movida en una restriccion SNET ("no
+// comenzar antes del") con su nueva fecha, y dejar que el CPM recalcule desde
+// ahi. No se escriben las fechas a pelo porque las borraria el siguiente
+// recalculo: en este modulo las fechas son VOLATILES y lo unico que persiste
+// una decision de planificacion es la restriccion.
+// ---------------------------------------------------------------------------
+
+function TfrmVistaProyectos.BuscarTareaEnProyecto(
+  ANodeId, AProjectId: Integer): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to High(FTareas) do
+    if FTareas[I].NodeId = ANodeId then
+      Exit(FTareas[I].ProjectId = AProjectId);
+end;
+
+function TfrmVistaProyectos.CalcularNivelacion(
+  const AOpciones: TWbsNivelacionOpciones): TWbsNivelacionResult;
+var
+  Repo: TWbsRepo;
+  Ids: TArray<Integer>;
+  P, I: Integer;
+  Cargas: TWbsCargaArray;
+  Nivelador: TWbsNivelador;
+  Sch: TWbsScheduler;
+  TareasP: TWbsTaskArray;
+  CargasP: TWbsCargaArray;
+  Parcial: TWbsNivelacionResult;
+  Cal: TCentreCalendar;
+begin
+  Result := Default(TWbsNivelacionResult);
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+  if Length(FProyectos) = 0 then Exit;
+
+  SetLength(Ids, Length(FProyectos));
+  for P := 0 to High(FProyectos) do
+    Ids[P] := FProyectos[P].ProjectId;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    Cargas := Repo.LoadCargaOperarios(Ids);
+  finally
+    Repo.Free;
+  end;
+  if Length(Cargas) = 0 then Exit;
+
+  Cal := CalendarioComun;
+  if Cal = nil then Exit;
+
+  // UNA pasada POR PROYECTO, igual que el CPM: las holguras y la criticidad son
+  // de cada proyecto por separado, y el motor de nivelacion las necesita.
+  //
+  // La contrapartida: una persona repartida entre dos proyectos se nivela dos
+  // veces sin que la segunda pasada vea las reservas de la primera, asi que un
+  // solape ENTRE proyectos puede sobrevivir. Se acepta a sabiendas: el recuento
+  // final (SobrecargasDespues) se hace sobre TODAS las cargas juntas, o sea que
+  // si eso pasa el dialogo lo dice en vez de cantar victoria.
+  for P := 0 to High(FProyectos) do
+  begin
+    if not FSchedulers.TryGetValue(FProyectos[P].ProjectId, Sch) then Continue;
+
+    SetLength(TareasP, 0);
+    for I := 0 to High(FTareas) do
+      if FTareas[I].ProjectId = FProyectos[P].ProjectId then
+      begin
+        SetLength(TareasP, Length(TareasP) + 1);
+        TareasP[High(TareasP)] := FTareas[I];
+      end;
+    if Length(TareasP) = 0 then Continue;
+
+    // Cargas de las tareas de ESTE proyecto.
+    SetLength(CargasP, 0);
+    for I := 0 to High(Cargas) do
+      if BuscarTareaEnProyecto(Cargas[I].NodeId, FProyectos[P].ProjectId) then
+      begin
+        SetLength(CargasP, Length(CargasP) + 1);
+        CargasP[High(CargasP)] := Cargas[I];
+      end;
+    if Length(CargasP) = 0 then Continue;
+
+    Nivelador := TWbsNivelador.Create(Cal);
+    try
+      Parcial := Nivelador.Nivelar(TareasP, CargasP, Sch, AOpciones);
+    finally
+      Nivelador.Free;
+    end;
+
+    // Acumular las propuestas de todos los proyectos en un solo resultado.
+    for I := 0 to High(Parcial.Retrasos) do
+    begin
+      SetLength(Result.Retrasos, Length(Result.Retrasos) + 1);
+      Result.Retrasos[High(Result.Retrasos)] := Parcial.Retrasos[I];
+    end;
+    for I := 0 to High(Parcial.Conflictos) do
+    begin
+      SetLength(Result.Conflictos, Length(Result.Conflictos) + 1);
+      Result.Conflictos[High(Result.Conflictos)] := Parcial.Conflictos[I];
+    end;
+    // El retraso del conjunto es el del proyecto que mas se alarga, no la suma:
+    // los proyectos corren en paralelo.
+    if Parcial.RetrasoProyectoMin > Result.RetrasoProyectoMin then
+      Result.RetrasoProyectoMin := Parcial.RetrasoProyectoMin;
+    if Parcial.FinAntes > Result.FinAntes then
+      Result.FinAntes := Parcial.FinAntes;
+    if Parcial.FinDespues > Result.FinDespues then
+      Result.FinDespues := Parcial.FinDespues;
+  end;
+
+  // Recuento GLOBAL: el "antes" es el que ya tiene la vista (calculado sobre
+  // todos los proyectos a la vez) y el "despues" se recalcula aplicando las
+  // fechas propuestas sobre esas mismas cargas. Hacerlo aqui y no dentro del
+  // nivelador es lo que permite detectar los solapes entre proyectos.
+  Result.SobrecargasAntes := Length(FSobrecargas);
+  for I := 0 to High(Cargas) do
+    for P := 0 to High(Result.Retrasos) do
+      if Cargas[I].NodeId = Result.Retrasos[P].NodeId then
+      begin
+        Cargas[I].FechaInicio := Result.Retrasos[P].InicioNuevo;
+        Cargas[I].FechaFin := Result.Retrasos[P].FinNuevo;
+        Break;
+      end;
+  Result.SobrecargasDespues := Length(DetectarSobrecargas(Cargas, 100));
+end;
+
+function TfrmVistaProyectos.AplicarNivelacion(
+  const ARes: TWbsNivelacionResult): Integer;
+var
+  Repo: TWbsRepo;
+  I: Integer;
+  T: TWbsTask;
+begin
+  Result := 0;
+  if Length(ARes.Retrasos) = 0 then Exit;
+  if (DMPlanner = nil) or (DMPlanner.ADOConnection = nil) then Exit;
+
+  Repo := TWbsRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
+  try
+    for I := 0 to High(ARes.Retrasos) do
+    begin
+      if not BuscarTarea(ARes.Retrasos[I].NodeId, T) then Continue;
+
+      // SNET ("no comenzar antes del"), no MSO ("debe comenzar el"): la
+      // nivelacion dice cuando puede empezar como pronto, no clava la fecha.
+      // Con MSO, un cambio posterior en la cadena (acortar la predecesora)
+      // dejaria la tarea anclada a una fecha que ya no tiene sentido y el
+      // usuario tendria que ir quitando restricciones a mano.
+      Repo.SaveRestriccionFecha(ARes.Retrasos[I].NodeId,
+        Ord(wckSNET), ARes.Retrasos[I].InicioNuevo);
+      Inc(Result);
+    end;
+  finally
+    Repo.Free;
+  end;
+end;
+
+procedure TfrmVistaProyectos.NivelarRecursos;
+var
+  Opciones, OpcionesFinales: TWbsNivelacionOpciones;
+  Res: TWbsNivelacionResult;
+  N: Integer;
+  Titulo: string;
+  Cursor: TCursor;
+begin
+  if Length(FProyectos) = 0 then Exit;
+
+  if Length(FSobrecargas) = 0 then
+  begin
+    Vcl.Dialogs.MessageDlg(
+      'No hay ninguna sobreasignaci'#243'n que resolver: ning'#250'n operario ' +
+      'supera su jornada.', mtInformation, [mbOK], 0);
+    Exit;
+  end;
+
+  Opciones := OpcionesNivelacionPorDefecto;
+
+  Cursor := Screen.Cursor;
+  Screen.Cursor := crHourGlass;
+  try
+    Res := CalcularNivelacion(Opciones);
+  finally
+    Screen.Cursor := Cursor;
+  end;
+
+  if Length(FProyectos) = 1 then
+    Titulo := FProyectos[0].Nombre
+  else
+    Titulo := Format('%d proyectos', [Length(FProyectos)]);
+
+  if not TfrmWbsNivelacionDlg.Execute(Titulo, Res, Opciones,
+    CalcularNivelacion, 480, Res, OpcionesFinales) then Exit;
+
+  N := AplicarNivelacion(Res);
+  if N = 0 then Exit;
+
+  // Recargar entero: las restricciones nuevas cambian el CPM de toda la cadena.
+  RecargarConservandoVista;
+
+  Vcl.Dialogs.MessageDlg(Format(
+    'Se han reprogramado %d tarea(s).'#13#10#13#10 +
+    'Cada una ha quedado con la restricci'#243'n "no comenzar antes del" en su ' +
+    'nueva fecha. Puede quitarla desde la ficha de la tarea.', [N]),
+    mtInformation, [mbOK], 0);
 end;
 
 procedure TfrmVistaProyectos.FijarLineaBase;
@@ -2438,6 +2891,10 @@ begin
   if Length(FSobrecargas) > 0 then
     lblSubtitulo.Caption := lblSubtitulo.Caption + '  ' + #$2022 + '  ' +
       #$26A0' ' + ResumenSobrecarga;
+
+  // KPIs de la cabecera: aqui y no antes, porque necesitan las fechas, las
+  // criticas y las sobrecargas ya calculadas.
+  ActualizarKPIs;
 
   // Dependencias circulares: avisar sin romper (el resto si se ha calculado).
   if Msg <> '' then

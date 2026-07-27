@@ -1,0 +1,30 @@
+{
+  "nombre": "Chapa y corte",
+  "descripcion": "Corte laser, plegado y soldadura. El cambio de espesor obliga a reglar la maquina.",
+  "sector": "Metal",
+  "atributoSetup": "Espesor",
+  "unidad": "piezas",
+  "prefijoOrden": "OF",
+  "numOrdenes": 16,
+  "opsPorOrden": 4,
+  "pctPlanificado": 80,
+  "operaciones": ["CORTAR LASER", "PLEGAR", "SOLDAR", "PINTAR", "EMBALAR"],
+  "clientes": ["MAQUINARIA DEL SUR", "MOBILIARIO URBANO", "CLIMA E INSTALACIONES", "NAVES Y ESTRUCTURAS", "AUTOMOCION CENTRO"],
+  "centros": [
+    { "codigo": "DEMO-LASER", "nombre": "Laser fibra",         "maxLanes": 1, "setupMin": 30 },
+    { "codigo": "DEMO-PLEG1", "nombre": "Plegadora 1",         "maxLanes": 1, "setupMin": 40 },
+    { "codigo": "DEMO-PLEG2", "nombre": "Plegadora 2",         "maxLanes": 1, "setupMin": 40 },
+    { "codigo": "DEMO-SOLDR", "nombre": "Soldadura robot",     "maxLanes": 1, "setupMin": 55 },
+    { "codigo": "DEMO-PINTC", "nombre": "Cabina de pintura",   "maxLanes": 1, "setupMin": 70 }
+  ],
+  "articulos": [
+    { "codigo": "CHA-1002", "descripcion": "Chapa base 2mm galvanizada",   "valorSetup": "2 mm" },
+    { "codigo": "CHA-1003", "descripcion": "Tapa registro 2mm",            "valorSetup": "2 mm" },
+    { "codigo": "CHA-2004", "descripcion": "Bastidor 4mm",                 "valorSetup": "4 mm" },
+    { "codigo": "CHA-2005", "descripcion": "Refuerzo lateral 4mm",         "valorSetup": "4 mm" },
+    { "codigo": "CHA-3006", "descripcion": "Estructura 6mm",               "valorSetup": "6 mm" },
+    { "codigo": "CHA-4001", "descripcion": "Panel inox 1,5mm",             "valorSetup": "INOX 1,5" },
+    { "codigo": "CHA-4002", "descripcion": "Frente inox 1,5mm",            "valorSetup": "INOX 1,5" },
+    { "codigo": "CHA-5010", "descripcion": "Perfil aluminio 10mm",         "valorSetup": "ALU 10" }
+  ]
+}

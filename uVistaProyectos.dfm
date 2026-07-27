@@ -60,6 +60,267 @@ object frmVistaProyectos: TfrmVistaProyectos
       Font.Style = []
       ParentFont = False
     end
+    object pnlKPI4: TPanel
+      AlignWithMargins = True
+      Left = 1091
+      Top = 5
+      Width = 90
+      Height = 60
+      Margins.Left = 1
+      Margins.Top = 5
+      Margins.Right = 1
+      Margins.Bottom = 5
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 8220514
+      ParentBackground = False
+      ShowCaption = False
+      TabOrder = 4
+      OnClick = pnlKPI4Click
+      object lblKPITitulo4: TLabel
+        Left = 0
+        Top = 0
+        Width = 90
+        Height = 28
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Sobreasignados'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+        WordWrap = True
+      end
+      object lblKPIValor4: TLabel
+        Left = 0
+        Top = 28
+        Width = 90
+        Height = 24
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '-'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
+    object pnlKPI3: TPanel
+      AlignWithMargins = True
+      Left = 999
+      Top = 5
+      Width = 90
+      Height = 60
+      Margins.Left = 1
+      Margins.Top = 5
+      Margins.Right = 1
+      Margins.Bottom = 5
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 8220514
+      ParentBackground = False
+      ShowCaption = False
+      TabOrder = 3
+      object lblKPITitulo3: TLabel
+        Left = 0
+        Top = 0
+        Width = 90
+        Height = 28
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Retrasadas'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+        WordWrap = True
+      end
+      object lblKPIValor3: TLabel
+        Left = 0
+        Top = 28
+        Width = 90
+        Height = 24
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '-'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
+    object pnlKPI2: TPanel
+      AlignWithMargins = True
+      Left = 907
+      Top = 5
+      Width = 90
+      Height = 60
+      Margins.Left = 1
+      Margins.Top = 5
+      Margins.Right = 1
+      Margins.Bottom = 5
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 8220514
+      ParentBackground = False
+      ShowCaption = False
+      TabOrder = 2
+      object lblKPITitulo2: TLabel
+        Left = 0
+        Top = 0
+        Width = 90
+        Height = 28
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Camino cr'#237'tico'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+        WordWrap = True
+      end
+      object lblKPIValor2: TLabel
+        Left = 0
+        Top = 28
+        Width = 90
+        Height = 24
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '-'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
+    object pnlKPI1: TPanel
+      AlignWithMargins = True
+      Left = 815
+      Top = 5
+      Width = 90
+      Height = 60
+      Margins.Left = 1
+      Margins.Top = 5
+      Margins.Right = 1
+      Margins.Bottom = 5
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 8220514
+      ParentBackground = False
+      ShowCaption = False
+      TabOrder = 1
+      object lblKPITitulo1: TLabel
+        Left = 0
+        Top = 0
+        Width = 90
+        Height = 28
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Avance'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+        WordWrap = True
+      end
+      object lblKPIValor1: TLabel
+        Left = 0
+        Top = 28
+        Width = 90
+        Height = 24
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '-'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
+    object pnlKPI0: TPanel
+      AlignWithMargins = True
+      Left = 723
+      Top = 5
+      Width = 90
+      Height = 60
+      Margins.Left = 1
+      Margins.Top = 5
+      Margins.Right = 1
+      Margins.Bottom = 5
+      Align = alRight
+      BevelOuter = bvNone
+      Color = 8220514
+      ParentBackground = False
+      ShowCaption = False
+      TabOrder = 0
+      object lblKPITitulo0: TLabel
+        Left = 0
+        Top = 0
+        Width = 90
+        Height = 28
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Fin previsto'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -9
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+        WordWrap = True
+      end
+      object lblKPIValor0: TLabel
+        Left = 0
+        Top = 28
+        Width = 90
+        Height = 24
+        Align = alTop
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '-'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
   end
   object pnlLeft: TPanel
     Left = 0

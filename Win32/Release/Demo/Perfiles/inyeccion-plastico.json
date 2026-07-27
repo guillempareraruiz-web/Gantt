@@ -1,0 +1,29 @@
+﻿{
+  "nombre": "Inyeccion de plastico",
+  "descripcion": "Maquinas de inyeccion. El cambio de molde es largo y manda en la secuencia.",
+  "sector": "Transformacion de plastico",
+  "atributoSetup": "Molde",
+  "unidad": "piezas",
+  "prefijoOrden": "OF",
+  "numOrdenes": 15,
+  "opsPorOrden": 3,
+  "pctPlanificado": 80,
+  "operaciones": ["INYECTAR", "DESBARBAR", "MONTAR", "EMBALAR"],
+  "clientes": ["AUTOMOCION LEVANTE", "ELECTRO HOGAR", "JARDIN VERDE", "MENAJE SUR", "JUGUETES ALFA"],
+  "centros": [
+    { "codigo": "DEMO-INY-150", "nombre": "Inyectora 150T", "maxLanes": 1, "setupMin": 120 },
+    { "codigo": "DEMO-INY-300", "nombre": "Inyectora 300T", "maxLanes": 1, "setupMin": 150 },
+    { "codigo": "DEMO-INY-500", "nombre": "Inyectora 500T", "maxLanes": 1, "setupMin": 180 },
+    { "codigo": "DEMO-ACAB",    "nombre": "Acabado",        "maxLanes": 3, "setupMin": 15 }
+  ],
+  "articulos": [
+    { "codigo": "PZA-1000", "descripcion": "Carcasa frontal",    "valorSetup": "MOLDE-A1" },
+    { "codigo": "PZA-1001", "descripcion": "Carcasa trasera",    "valorSetup": "MOLDE-A1" },
+    { "codigo": "PZA-2000", "descripcion": "Tapa contenedor",    "valorSetup": "MOLDE-B2" },
+    { "codigo": "PZA-2001", "descripcion": "Base contenedor",    "valorSetup": "MOLDE-B2" },
+    { "codigo": "PZA-3000", "descripcion": "Soporte tecnico",    "valorSetup": "MOLDE-C3" },
+    { "codigo": "PZA-4000", "descripcion": "Conjunto bisagra",   "valorSetup": "MOLDE-D4" },
+    { "codigo": "PZA-5000", "descripcion": "Maceta 30cm",        "valorSetup": "MOLDE-E5" },
+    { "codigo": "PZA-5001", "descripcion": "Plato maceta 30cm",  "valorSetup": "MOLDE-E5" }
+  ]
+}
