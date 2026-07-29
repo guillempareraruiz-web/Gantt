@@ -124,6 +124,15 @@ function DemoHistoricoMensual(const ACodigo: string; AMeses: Integer;
 // sentido para MP/SE; para producto acabado (PA) suele ir vacio.
 function DemoDondeSeUsa(const ACodigo: string): TArray<TDondeSeUsaErp>;
 
+// -- ESCANDALLO (formula) ---------------------------------------------------
+// Arbol de materiales de los articulos fabricables del catalogo demo. Permite
+// que la explosion multinivel de "Disponibilidad fabricacion" tenga algo que
+// mostrar en Demo. El escenario esta montado para que se vean las tres
+// situaciones: componentes cubiertos, uno justo, y uno que falta.
+function DemoFormulaCabecera(const ACodigo: string): TFormulaCabecera;
+function DemoFormulaComponentes(const ACodigo: string;
+  AVersion: SmallInt): TArray<TFormulaComponente>;
+
 // OFs activas que producen este articulo (solo si es fabricable).
 function DemoOFsActivas(const ACodigo: string;
   AHoy: TDateTime): TArray<TOFActivaArticuloErp>;
@@ -288,9 +297,18 @@ type
 
 // Catalogo demo. Cuatro historias distintas para que cargar varios articulos
 // muestre situaciones diferentes (fabricado con OF, compra pura, critico).
+const
+  // Cuantas definiciones de DemoDefs son articulos navegables; el resto son
+  // componentes del escandallo, que existen solo para dar stock a la explosion.
+  DEMO_ARTICULOS_PRINCIPALES = 4;
+
 function DemoDefs: TArray<TDemoArtDef>;
 begin
-  SetLength(Result, 4);
+  // Los 4 primeros son los articulos "protagonistas" (los que rota el boton
+  // Buscar). Del 5 en adelante son componentes del escandallo: no se navegan
+  // directamente, pero necesitan stock propio para que la explosion de
+  // "Disponibilidad fabricacion" muestre datos creibles.
+  SetLength(Result, 9);
 
   // 1) Producto acabado fabricable: ruptura clara, se resuelve con OF -> el
   //    boton "Fabricar -> Gantt" tiene sentido. Es el articulo por defecto.
@@ -395,6 +413,121 @@ begin
   Result[3].OFDia := 15;
   Result[3].Cliente := 'Ferreteria Segre S.L.';
   Result[3].Proveedor := '';
+
+  // --- Componentes del escandallo (nivel 2 y 3) ---------------------------
+  // Sus stocks estan elegidos para que, al explosionar PA-CAJA-2040, se vean
+  // las tres situaciones a la vez: holgado, justo-pero-en-camino, y en falta.
+
+  // 5) Semielaborado: cuerpo de la caja. Hay algo de stock, no llega a todo.
+  Result[4].Codigo := 'SE-CUERPO-2040';
+  Result[4].Descripcion := 'Cuerpo caja 200x400 inyectado';
+  Result[4].Familia := 'SE';
+  Result[4].UnidadMedida := 'ud';
+  Result[4].Fabricable := True;
+  Result[4].Almacen := 'GEN';
+  Result[4].StockActual := 260;
+  Result[4].Reservado := 40;
+  Result[4].StockMinimo := 200;
+  Result[4].Lote := 500;
+  Result[4].LeadTimeDias := 2;
+  Result[4].PrecioVenta := 2.30;
+  Result[4].NumVentas := 3;
+  Result[4].VentaBase := 120;
+  Result[4].PrimerVentaDia := 5;
+  Result[4].PasoVentaDias := 7;
+  Result[4].OFUnid := 400;
+  Result[4].OFDia := 9;
+  Result[4].Cliente := 'Consumo interno';
+
+  // 6) Pigmento: el CUELLO DE BOTELLA del escenario. Poco stock y nada en
+  //    camino -> sale en rojo y arrastra a toda la rama.
+  Result[5].Codigo := 'MP-PIGM-NEGRO';
+  Result[5].Descripcion := 'Pigmento negro masterbatch (bidon 5kg)';
+  Result[5].Familia := 'MP';
+  Result[5].UnidadMedida := 'kg';
+  Result[5].Fabricable := False;
+  Result[5].Almacen := 'MP';
+  Result[5].StockActual := 6;
+  Result[5].Reservado := 2;
+  Result[5].StockMinimo := 15;
+  Result[5].Lote := 25;
+  Result[5].LeadTimeDias := 21;      // importado: reponer tarda
+  Result[5].PrecioCompra := 8.90;
+  Result[5].NumVentas := 3;
+  Result[5].VentaBase := 2;
+  Result[5].PrimerVentaDia := 2;
+  Result[5].PasoVentaDias := 6;
+  Result[5].CompraUnid := 0;         // NADA en camino: por eso falta
+  Result[5].CompraDia := 0;
+  Result[5].Cliente := 'Consumo interno';
+  Result[5].Proveedor := 'Colorants Europa S.A.';
+
+  // 7) Etiqueta: sobra stock, siempre en verde.
+  Result[6].Codigo := 'MP-ETIQ-LOGO';
+  Result[6].Descripcion := 'Etiqueta adhesiva logo 60x40';
+  Result[6].Familia := 'MP';
+  Result[6].UnidadMedida := 'ud';
+  Result[6].Fabricable := False;
+  Result[6].Almacen := 'MP';
+  Result[6].StockActual := 24000;
+  Result[6].Reservado := 1500;
+  Result[6].StockMinimo := 5000;
+  Result[6].Lote := 10000;
+  Result[6].LeadTimeDias := 7;
+  Result[6].PrecioCompra := 0.03;
+  Result[6].NumVentas := 4;
+  Result[6].VentaBase := 900;
+  Result[6].PrimerVentaDia := 3;
+  Result[6].PasoVentaDias := 5;
+  Result[6].CompraUnid := 20000;
+  Result[6].CompraDia := 14;
+  Result[6].Cliente := 'Consumo interno';
+  Result[6].Proveedor := 'Etiquetas Ponent S.L.';
+
+  // 8) Carton separador: JUSTO. No llega con lo que hay, pero entra un pedido
+  //    dentro de pocos dias -> ambar con fecha de cobertura.
+  Result[7].Codigo := 'MP-CARTON-SEP';
+  Result[7].Descripcion := 'Separador de cart'#243'n 195x395';
+  Result[7].Familia := 'MP';
+  Result[7].UnidadMedida := 'ud';
+  Result[7].Fabricable := False;
+  Result[7].Almacen := 'MP';
+  Result[7].StockActual := 700;
+  Result[7].Reservado := 250;
+  Result[7].StockMinimo := 800;
+  Result[7].Lote := 2000;
+  Result[7].LeadTimeDias := 6;
+  Result[7].PrecioCompra := 0.11;
+  Result[7].NumVentas := 4;
+  Result[7].VentaBase := 300;
+  Result[7].PrimerVentaDia := 2;
+  Result[7].PasoVentaDias := 4;
+  Result[7].CompraUnid := 3000;      // en camino
+  Result[7].CompraDia := 6;
+  Result[7].Cliente := 'Consumo interno';
+  Result[7].Proveedor := 'Cartonatges Segria S.L.';
+
+  // 9) Nylon (componente de PA-BRIDA-125).
+  Result[8].Codigo := 'MP-NYLON-66';
+  Result[8].Descripcion := 'Nylon 6.6 natural (saco 25kg)';
+  Result[8].Familia := 'MP';
+  Result[8].UnidadMedida := 'kg';
+  Result[8].Fabricable := False;
+  Result[8].Almacen := 'MP';
+  Result[8].StockActual := 850;
+  Result[8].Reservado := 100;
+  Result[8].StockMinimo := 400;
+  Result[8].Lote := 500;
+  Result[8].LeadTimeDias := 12;
+  Result[8].PrecioCompra := 3.40;
+  Result[8].NumVentas := 3;
+  Result[8].VentaBase := 120;
+  Result[8].PrimerVentaDia := 4;
+  Result[8].PasoVentaDias := 6;
+  Result[8].CompraUnid := 1000;
+  Result[8].CompraDia := 13;
+  Result[8].Cliente := 'Consumo interno';
+  Result[8].Proveedor := 'Polimeros Ibericos S.A.';
 end;
 
 // Localiza la definicion de un codigo (o la primera si no se encuentra).
@@ -413,11 +546,16 @@ end;
 function DemoArticuloCodigos: TArray<string>;
 var
   Defs: TArray<TDemoArtDef>;
-  I: Integer;
+  I, N: Integer;
 begin
+  // Solo los articulos "protagonistas" (PA/SE navegables), no los componentes
+  // del escandallo: el boton Buscar rota por escenarios, y caer en una materia
+  // prima intermedia no cuenta ninguna historia.
   Defs := DemoDefs;
-  SetLength(Result, Length(Defs));
-  for I := 0 to High(Defs) do
+  N := Length(Defs);
+  if N > DEMO_ARTICULOS_PRINCIPALES then N := DEMO_ARTICULOS_PRINCIPALES;
+  SetLength(Result, N);
+  for I := 0 to N - 1 do
     Result[I] := Defs[I].Codigo;
 end;
 
@@ -471,6 +609,101 @@ begin
   Result[0].UnidadSaldo := D.StockActual;
   Result[0].StockReservado := D.Reservado;
   Result[0].Disponible := D.StockActual - D.Reservado;
+  // Pendiente de recibir: el pedido de compra en curso del escenario. Sin
+  // esto la columna "En camino" sale siempre vacia y no se puede distinguir
+  // "falta y no llega nada" de "falta pero entra el dia X".
+  Result[0].PendienteRecibir := D.CompraUnid;
+end;
+
+// ---------------------------------------------------------------------------
+// ESCANDALLO DEMO
+// ---------------------------------------------------------------------------
+// Arbol montado a proposito para que la explosion multinivel se vea bien:
+//
+//   PA-CAJA-2040 (caja plegable)          <- producto acabado
+//     +- SE-TAPA-M8      x2   (semielab.) <- tiene formula propia -> baja
+//     |    +- MP-GRANZA-PP01  x0,180 kg
+//     |    +- MP-PIGM-NEGRO   x0,004 kg   <- FALTA: stock corto
+//     +- SE-CUERPO-2040  x1   (semielab.)
+//     |    +- MP-GRANZA-PP01  x0,850 kg   <- se repite: prueba la cache
+//     +- MP-ETIQ-LOGO    x1   (material)
+//     +- MP-CARTON-SEP   x1   (material)  <- justo, entra pedido en camino
+//
+// Asi en una sola pantalla se ve: verde (sobra), rojo (falta) y un material
+// que se repite en dos ramas, que es el caso realista que mas confunde.
+
+function DemoFormulaCabecera(const ACodigo: string): TFormulaCabecera;
+var
+  Cod: string;
+begin
+  Result := Default(TFormulaCabecera);
+  Cod := UpperCase(Trim(ACodigo));
+  // Solo los articulos fabricables del escenario tienen formula.
+  if (Cod = 'PA-CAJA-2040') or (Cod = 'SE-TAPA-M8') or
+     (Cod = 'SE-CUERPO-2040') or (Cod = 'PA-BRIDA-125') then
+  begin
+    Result.Encontrada := True;
+    Result.Version := 1;
+    Result.CodigoArticulo := ACodigo;
+    Result.DescripcionArticulo := DemoDefDe(ACodigo).Descripcion;
+    Result.CosteArticulos := 0;
+  end;
+end;
+
+function DemoFormulaComponentes(const ACodigo: string;
+  AVersion: SmallInt): TArray<TFormulaComponente>;
+
+  // Alta compacta de un componente (evita 10 lineas por cada uno).
+  procedure Add(const ACod, ADesc, AUM: string; AUnidades, AMermas: Double;
+    AEsSemi: Boolean; const AOper: string);
+  var
+    I: Integer;
+  begin
+    I := Length(Result);
+    SetLength(Result, I + 1);
+    Result[I] := Default(TFormulaComponente);
+    Result[I].Orden := (I + 1) * 10;
+    Result[I].CodigoArticuloComponente := ACod;
+    Result[I].DescripcionArticulo := ADesc;
+    Result[I].UnidadesNecesarias := AUnidades;
+    Result[I].UnidadMedida := AUM;
+    Result[I].Mermas := AMermas;
+    Result[I].EsSemielaborado := AEsSemi;
+    if AEsSemi then
+      Result[I].VersionFormulaComp := 1
+    else
+      Result[I].VersionFormulaComp := 0;
+    Result[I].OperacionAsociada := AOper;
+  end;
+
+var
+  Cod: string;
+begin
+  SetLength(Result, 0);
+  Cod := UpperCase(Trim(ACodigo));
+
+  if Cod = 'PA-CAJA-2040' then
+  begin
+    Add('SE-CUERPO-2040', 'Cuerpo caja 200x400 inyectado', 'ud', 1, 0, True,  'MONTAJE');
+    Add('SE-TAPA-M8',     'Tapa inyectada M8 gris RAL7035', 'ud', 2, 0, True,  'MONTAJE');
+    Add('MP-ETIQ-LOGO',   'Etiqueta adhesiva logo 60x40',   'ud', 1, 2, False, 'ETIQUETADO');
+    Add('MP-CARTON-SEP',  'Separador de cart'#243'n 195x395',    'ud', 1, 0, False, 'EMBALAJE');
+  end
+  else if Cod = 'SE-TAPA-M8' then
+  begin
+    Add('MP-GRANZA-PP01', 'Granza PP copol'#237'mero natural',  'kg', 0.18,  3, False, 'INYECCION');
+    Add('MP-PIGM-NEGRO',  'Pigmento negro masterbatch',     'kg', 0.004, 5, False, 'INYECCION');
+  end
+  else if Cod = 'SE-CUERPO-2040' then
+  begin
+    Add('MP-GRANZA-PP01', 'Granza PP copol'#237'mero natural',  'kg', 0.85,  3, False, 'INYECCION');
+    Add('MP-PIGM-NEGRO',  'Pigmento negro masterbatch',     'kg', 0.012, 5, False, 'INYECCION');
+  end
+  else if Cod = 'PA-BRIDA-125' then
+  begin
+    Add('MP-NYLON-66',    'Nylon 6.6 natural (saco 25kg)',  'kg', 0.02,  4, False, 'INYECCION');
+    Add('MP-BOLSA-100',   'Bolsa PE 100 uds impresa',       'ud', 1,     1, False, 'EMBALAJE');
+  end;
 end;
 
 function DemoEntradasCompra(const ACodigo: string;

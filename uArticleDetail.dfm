@@ -102,6 +102,33 @@ object frmArticleDetail: TfrmArticleDetail
       TabOrder = 1
       OnClick = btnBuscarArticuloClick
     end
+    object pnlTipoAprov: TPanel
+      Left = 396
+      Top = 6
+      Width = 130
+      Height = 23
+      BevelOuter = bvNone
+      Color = 3050327
+      ParentBackground = False
+      TabOrder = 7
+      Visible = False
+      object lblTipoAprov: TLabel
+        Left = 0
+        Top = 0
+        Width = 130
+        Height = 23
+        Align = alClient
+        Alignment = taCenter
+        Caption = 'PARA FABRICAR'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -11
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        Layout = tlCenter
+      end
+    end
     object ccbAlmacenes: TcxCheckComboBox
       Left = 552
       Top = 20
@@ -280,13 +307,29 @@ object frmArticleDetail: TfrmArticleDetail
           TabOrder = 2
           OnClick = btnRecargarDispClick
         end
+        object chkSoloFaltasDisp: TcxCheckBox
+          Left = 490
+          Top = 9
+          Caption = 'Solo lo que falta'
+          TabOrder = 3
+          OnClick = chkSoloFaltasDispClick
+          Width = 140
+        end
+      end
+      object pbDispTimeline: TPaintBox
+        Left = 0
+        Top = 399
+        Width = 892
+        Height = 120
+        Align = alBottom
+        OnPaint = pbDispTimelinePaint
       end
       object tlDisp: TcxTreeList
         AlignWithMargins = True
         Left = 3
         Top = 73
         Width = 886
-        Height = 487
+        Height = 326
         Align = alClient
         Bands = <
           item
@@ -370,10 +413,46 @@ object frmArticleDetail: TfrmArticleDetail
           Summary.FooterSummaryItems = <>
           Summary.GroupFooterSummaryItems = <>
         end
+        object colDispReservado: TcxTreeListColumn
+          Caption.Text = 'Reservado'
+          Width = 80
+          Position.ColIndex = 8
+          Position.RowIndex = 0
+          Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
+        end
+        object colDispEnCamino: TcxTreeListColumn
+          Caption.Text = 'En camino'
+          Width = 80
+          Position.ColIndex = 9
+          Position.RowIndex = 0
+          Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
+        end
+        object colDispRotura: TcxTreeListColumn
+          Caption.Text = 'Rotura'
+          Width = 85
+          Position.ColIndex = 10
+          Position.RowIndex = 0
+          Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
+        end
+        object colDispCobertura: TcxTreeListColumn
+          Caption.Text = 'Recuperaci'#243'n'
+          Width = 95
+          Position.ColIndex = 11
+          Position.RowIndex = 0
+          Position.BandIndex = 0
+          Summary.FooterSummaryItems = <>
+          Summary.GroupFooterSummaryItems = <>
+        end
         object colDispEstado: TcxTreeListColumn
           Caption.Text = 'Estado'
           Width = 70
-          Position.ColIndex = 8
+          Position.ColIndex = 12
           Position.RowIndex = 0
           Position.BandIndex = 0
           Summary.FooterSummaryItems = <>
@@ -382,31 +461,53 @@ object frmArticleDetail: TfrmArticleDetail
       end
       object Panel1: TPanel
         Left = 0
-        Top = 563
+        Top = 519
         Width = 892
-        Height = 41
+        Height = 85
         Align = alBottom
         BevelOuter = bvNone
         Color = 15921906
         ParentBackground = False
         TabOrder = 2
+        object pnlSemaforo: TPanel
+          Left = 0
+          Top = 0
+          Width = 10
+          Height = 85
+          Align = alLeft
+          BevelOuter = bvNone
+          Color = clGray
+          ParentBackground = False
+          TabOrder = 0
+        end
         object lblDispVeredicto: TLabel
           AlignWithMargins = True
-          Left = 3
-          Top = 3
-          Width = 886
-          Height = 35
-          Align = alClient
+          Left = 22
+          Top = 8
+          Width = 860
+          Height = 26
           AutoSize = False
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
-          Font.Height = -16
+          Font.Height = -17
           Font.Name = 'Segoe UI'
           Font.Style = [fsBold]
           ParentFont = False
-          ExplicitLeft = 62
-          ExplicitWidth = 600
-          ExplicitHeight = 25
+        end
+        object lblDispDetalle: TLabel
+          AlignWithMargins = True
+          Left = 22
+          Top = 38
+          Width = 860
+          Height = 40
+          AutoSize = False
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -13
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          WordWrap = True
         end
       end
     end
@@ -1458,41 +1559,6 @@ object frmArticleDetail: TfrmArticleDetail
       Color = 3748653
       ParentBackground = False
       TabOrder = 2
-      object pnlTipoAprov: TPanel
-        AlignWithMargins = True
-        Left = 40
-        Top = 10
-        Width = 80
-        Height = 44
-        Margins.Top = 10
-        Margins.Right = 6
-        Margins.Bottom = 10
-        Align = alRight
-        BevelOuter = bvNone
-        Color = 3050327
-        ParentBackground = False
-        TabOrder = 6
-        Visible = False
-        ExplicitLeft = 3
-        object lblTipoAprov: TLabel
-          Left = 0
-          Top = 0
-          Width = 80
-          Height = 44
-          Align = alClient
-          Alignment = taCenter
-          Caption = 'FABRICAR'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWhite
-          Font.Height = -13
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          Layout = tlCenter
-          ExplicitLeft = 8
-          ExplicitTop = 7
-        end
-      end
       object pnlKPI2: TPanel
         AlignWithMargins = True
         Left = 233

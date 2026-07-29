@@ -5803,6 +5803,14 @@ var
   OpNom: TDictionary<Integer, string>;
   Op: TOperario;
   Nom: string;
+  // Modo CENTROS: el filtro oculta filas (Visible del centro), no nodos.
+  EsModoCentros: Boolean;
+  Cens: TArray<TCentreTreball>;
+  Cen: TCentreTreball;
+  J, CenId: Integer;
+  VisiblePorCentre: TDictionary<Integer, Boolean>;  // CentreId -> Visible actual
+  Vis: Boolean;
+  Filas: TArray<TRowLayout>;
 begin
   if DMPlanner.NodeDataRepo = nil then Exit;
   Modo := UpperCase(Trim(DMPlanner.CurrentProjectRowMode));
@@ -5811,6 +5819,7 @@ begin
   // TNodeData no lleva el centro (esta en el TNode). Para el modo CENTROS
   // montamos DataId -> CentreId a partir de los nodos del Gantt.
   CentrePorData := TDictionary<Integer, Integer>.Create;
+  VisiblePorCentre := TDictionary<Integer, Boolean>.Create;
   if DMPlanner.NodesRepo <> nil then
   begin
     Nodos := DMPlanner.NodesRepo.GetAll;
@@ -5823,6 +5832,7 @@ begin
   CaptionPorClave := nil;
   ClaveDeData := nil;
   CaptionDeClave := nil;
+  EsModoCentros := False;
   try
 
   // Segun el modo, definimos como se agrupan los nodos.
@@ -5910,6 +5920,10 @@ begin
   begin
     // CENTROS (y cualquier otro): filtrar por centro. La clave es el CentreId,
     // que sale del mapa DataId->CentreId (el centro no esta en el TNodeData).
+    // A diferencia del resto de modos, aqui el filtro oculta FILAS del panel
+    // izquierdo (los centros no seleccionados), no nodos: filtrar por centro y
+    // seguir viendo todos los centros en la lista no tiene sentido.
+    EsModoCentros := DMPlanner.CentresRepo <> nil;
     Titulo := 'Filtrar por centro';
     ClaveDeData := function(AD: TNodeData): string
       var Cid: Integer;
@@ -5935,6 +5949,30 @@ begin
   // --- Contar cuantos nodos hay por clave ---
   Cuenta := TDictionary<string, Integer>.Create;
   try
+    // En CENTROS el filtro actua sobre las FILAS del panel izquierdo, no sobre
+    // los nodos: hay que ofrecer TODOS los centros del proyecto, tambien los
+    // que ahora mismo no tienen ningun nodo planificado (si solo se contaran
+    // nodos, un centro vacio no se podria ni mostrar ni ocultar).
+    if EsModoCentros then
+    begin
+      // Que centros se ven AHORA: hay que leerlo del propio Gantt, no del
+      // repo. El repo guarda el estado persistido y este filtro no persiste
+      // nada, asi que tras filtrar una vez los dos dejan de coincidir.
+      // GetRowsCopy solo devuelve las filas realmente pintadas: estar en la
+      // lista equivale a ser visible.
+      Filas := FGanttControl.GetRowsCopy;
+      for J := 0 to High(Filas) do
+        VisiblePorCentre.AddOrSetValue(Filas[J].CentreId, True);
+
+      Cens := DMPlanner.CentresRepo.GetAll;
+      for J := 0 to High(Cens) do
+      begin
+        Cuenta.AddOrSetValue(IntToStr(Cens[J].Id), 0);
+        if not VisiblePorCentre.ContainsKey(Cens[J].Id) then
+          VisiblePorCentre.AddOrSetValue(Cens[J].Id, False);
+      end;
+    end;
+
     for I := 0 to High(Datas) do
     begin
       D := Datas[I];
@@ -5974,6 +6012,11 @@ begin
       else
         Items[High(Items)].Caption := Pair.Key;
       Items[High(Items)].Count := Pair.Value;
+      // CENTROS: el dialogo arranca reflejando que centros se ven ahora, para
+      // que el usuario parta del estado real y no de "todo marcado".
+      if EsModoCentros and TryStrToInt(Pair.Key, CenId) and
+         VisiblePorCentre.TryGetValue(CenId, Vis) then
+        Items[High(Items)].Marcado := Vis;
     end;
   finally
     Cuenta.Free;
@@ -5995,8 +6038,41 @@ begin
   if not TfrmRowFilterDialog.Execute(Titulo, Items, SelClaves, HideMode) then
     Exit;
 
-  // --- Aplicar: resolver DataIds de las claves seleccionadas ---
-  if Length(SelClaves) = 0 then
+  // --- Aplicar ---
+  // CENTROS: el filtro actua sobre las filas (Visible del centro), no sobre
+  // los nodos. Sin seleccion se vuelven a mostrar todos.
+  if EsModoCentros then
+  begin
+    SelSet := TDictionary<string, Byte>.Create;
+    try
+      for I := 0 to High(SelClaves) do
+        SelSet.AddOrSetValue(SelClaves[I], 1);
+
+      // Seleccion vacia = mostrar todos. El dialogo devuelve lo mismo al pulsar
+      // "Quitar filtro" que al desmarcarlo todo, y de las dos lecturas posibles
+      // la util es restaurar: ocultar todos los centros dejaria el Gantt vacio.
+      Cens := DMPlanner.CentresRepo.GetAll;
+      for J := 0 to High(Cens) do
+      begin
+        Cen := Cens[J];
+        Cen.Visible := (Length(SelClaves) = 0) or
+                       SelSet.ContainsKey(IntToStr(Cen.Id));
+        FGanttControl.UpdateCentre(Cen.Id, Cen);
+      end;
+
+      // El filtro de nodos no interviene en este modo: limpiarlo para no
+      // arrastrar un atenuado de una seleccion anterior.
+      FGanttControl.ClearOperarioFilter;
+      if Length(SelClaves) = 0 then
+        FGanttControl.OpFilterLabel := ''
+      else
+        FGanttControl.OpFilterLabel := Titulo + ': ' +
+          IntToStr(Length(SelClaves)) + ' sel.';
+    finally
+      SelSet.Free;
+    end;
+  end
+  else if Length(SelClaves) = 0 then
   begin
     FGanttControl.ClearOperarioFilter;
     FGanttControl.OpFilterLabel := '';
@@ -6037,6 +6113,7 @@ begin
 
   finally
     CentrePorData.Free;
+    VisiblePorCentre.Free;
     CaptionPorClave.Free;
     if ClavesUtilPorNodo <> nil then
     begin

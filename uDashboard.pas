@@ -1371,6 +1371,12 @@ begin
     begin
       TErpSyncWidget(FErpWidget).SetEstado('Error al comprobar: ' +
         Copy(E.Message, 1, 80));
+      // El estado del widget trunca a 80 caracteres y es facil no verlo: el
+      // error completo va al log y se avisa explicitamente, porque si no la
+      // pantalla se queda "pensando" sin dar resultados y sin explicar nada.
+      PlanLog.Linea('ComprobarErp ERROR: ' + E.ClassName + ': ' + E.Message);
+      MessageDlg('No se ha podido comprobar la sincronizaci'#243'n con el ERP.'#13#10#13#10 +
+        E.Message, mtError, [mbOK], 0);
       Exit;
     end;
   end;
@@ -1383,6 +1389,9 @@ begin
       ssActualizado:  Inc(Actu);
       ssSinCambios:   Inc(SinC);
       ssEliminadoErp: Inc(Obs);
+      // Cerrados en el ERP: tambien salen del plan, cuentan como pendientes
+      // de retirar hasta que se sincroniza.
+      ssCerradoErp:   Inc(Obs);
     end;
 
   TErpSyncWidget(FErpWidget).SetResumen(Total, Nuevos, Actu, SinC, Obs,

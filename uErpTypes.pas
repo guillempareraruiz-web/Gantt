@@ -1032,6 +1032,12 @@ type
     OpPctParaSigOperacion: Double;
     OpPctDedicacionOperario: Double;
 
+    // True si el ERP devuelve este item pero YA CERRADO (EstadoOF/OT/OP > 1).
+    // Estos items no son trabajo pendiente: se devuelven solo para que la
+    // sincronizacion pueda distinguir "cerrado en el ERP" (trabajo terminado,
+    // sale del Planner) de "desaparecido del ERP" (posible borrado accidental).
+    CerradoEnErp: Boolean;
+
     // Campos custom poblados desde el ERP via mapeo (FS_PL_Cfg_ErpFieldMap).
     // Vacio si no hay mapeo activo para el nivel de este item.
     ExtraFields: TArray<TErpExtraValue>;

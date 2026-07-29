@@ -45,6 +45,18 @@ uses
   dxSkinWhiteprint, dxSkinWXI, dxSkinXmas2008Blue, dxBarBuiltInMenu,
   dxGDIPlusClasses, cxImage;
 type
+  // Hito de la linea de tiempo de disponibilidad: una fecha en la que pasa
+  // algo relevante para poder fabricar (se rompe un material o entra uno).
+  TTimelineTipo = (tlRotura, tlEntrada);
+
+  TTimelineEvento = record
+    Fecha: TDateTime;
+    Tipo: TTimelineTipo;
+    Articulo: string;
+    Descripcion: string;
+    Cantidad: Double;      // solo para entradas
+  end;
+
   TfrmArticleDetail = class(TForm)
     pnlNav: TPanel;
     tvNav: TTreeView;
@@ -122,6 +134,7 @@ type
     lblDispCantidad: TLabel;
     lblDispFecha: TLabel;
     lblDispLeyenda: TLabel;
+    chkSoloFaltasDisp: TcxCheckBox;
     seDispCantidad: TcxSpinEdit;
     dtDispFecha: TDateTimePicker;
     btnRecargarDisp: TButton;
@@ -135,6 +148,11 @@ type
     colDispFaltaActual: TcxTreeListColumn;
     colDispFaltaProy: TcxTreeListColumn;
     colDispEstado: TcxTreeListColumn;
+    // Desglose del stock y fechas clave (cuando rompe / cuando se recupera).
+    colDispReservado: TcxTreeListColumn;
+    colDispEnCamino: TcxTreeListColumn;
+    colDispRotura: TcxTreeListColumn;
+    colDispCobertura: TcxTreeListColumn;
     pnlTop: TPanel;
     lblArticulo: TLabel;
     edArticulo: TEdit;
@@ -203,6 +221,9 @@ type
     mmoLog: TMemo;
     Panel1: TPanel;
     lblDispVeredicto: TLabel;
+    lblDispDetalle: TLabel;   // segunda linea: fechas de rotura/recuperacion
+    pnlSemaforo: TPanel;      // franja de color: verde / ambar / rojo
+    pbDispTimeline: TPaintBox;   // linea de tiempo: roturas y entradas
     Panel2: TPanel;
     lblDondeUsaResumen: TLabel;
     Panel3: TPanel;
@@ -242,11 +263,13 @@ type
       AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
     procedure btnRecargarDispClick(Sender: TObject);
     procedure btnRecargarDondeUsaClick(Sender: TObject);
+    procedure chkSoloFaltasDispClick(Sender: TObject);
     procedure btnRecargarHistClick(Sender: TObject);
     procedure pbHistoricoPaint(Sender: TObject);
     procedure btnRecargarOFsClick(Sender: TObject);
     procedure btnRecargarProvClick(Sender: TObject);
     procedure btnRecargarCliClick(Sender: TObject);
+    procedure pbDispTimelinePaint(Sender: TObject);
     procedure tlDispCustomDrawDataCell(Sender: TcxCustomTreeList;
       ACanvas: TcxCanvas; AViewInfo: TcxTreeListEditCellViewInfo;
       var ADone: Boolean);
@@ -268,6 +291,13 @@ type
     FPartidasCargadas: Boolean;
     FMovsFutCargados: Boolean;
     FDispCalculada: Boolean;
+    // Datos para la linea de tiempo de disponibilidad (se llenan al calcular).
+    FTLHoy: TDateTime;
+    FTLObjetivo: TDateTime;      // fecha en que se quiere fabricar
+    FTLPrimeraRotura: TDateTime; // 0 = ningun material rompe
+    FTLCoberturaTotal: TDateTime;// 0 = nada en camino / no hace falta
+    FTLViable: Boolean;          // True si hay material para la fecha objetivo
+    FTLEventos: TArray<TTimelineEvento>;
     FDondeUsaCargado: Boolean;
     FHistoricoCargado: Boolean;
     FHistorico: TArray<THistoricoMesErp>;
@@ -299,6 +329,7 @@ type
     procedure CalcularDisponibilidad;
     procedure CrearColumnasDondeUsa;
     procedure CargarDondeUsa;
+    procedure AplicarFiltroSoloFaltas;
     procedure CargarHistorico;
     procedure CrearColumnasOFs;
     procedure CrearColumnasProv;
@@ -405,6 +436,7 @@ begin
   CrearColumnasOFs;
   CrearColumnasProv;
   CrearColumnasCli;
+
   FPartidasCargadas := False;
   FMovsFutCargados := False;
   FDispCalculada := False;
@@ -603,9 +635,16 @@ begin
       'lotes con caducidad pasada o pr'#243'xima (30 d'#237'as): revisar rotaci'#243'n.'
   else if APage = tabDisponibilidad then
     Result :=
-      'Comprueba si hay stock proyectado de todos los componentes para ' +
-      'fabricar una cantidad objetivo a una fecha. Explosiona la f'#243'rmula ' +
-      'nivel a nivel; en rojo los componentes que faltar'#237'an.'
+      'Comprueba si hay material para fabricar una cantidad objetivo a una ' +
+      'fecha: explosiona el escandallo por todos sus niveles hasta las ' +
+      'materias primas y cruza cada componente con el stock.'#13#10 +
+      'VERDE = hay stock suficiente hoy. '#193'MBAR = hoy no llega, pero s'#237' con ' +
+      'lo pendiente de recibir (mira "Cobertura", la fecha en que entra). ' +
+      'ROJO = falta material y no hay bastante en camino.'#13#10 +
+      '"Stock" es el f'#237'sico y "Disponible" le descuenta lo ya reservado por ' +
+      'pedidos de venta: es el material con el que realmente puedes contar. ' +
+      'De los semielaborados se descuenta su propio stock antes de bajar a ' +
+      'sus componentes, porque lo que ya est'#225' hecho no se vuelve a fabricar.'
   else if APage = tabDondeUsa then
     Result :=
       'D'#243'nde se usa (pegging inverso): f'#243'rmulas de otros art'#237'culos que ' +
@@ -637,9 +676,9 @@ end;
 
 function TfrmArticleDetail.TabNoDisponibleEnDemo: Boolean;
 begin
-  Result := DemoMode.Active;
-  if Result then
-    LogInfo('La disponibilidad (explosi'#243'n de f'#243'rmula) no tiene datos demo.');
+  // Desde que uDemoMode tiene escandallo demo (DemoFormulaComponentes), la
+  // explosion de formula SI funciona en Demo: ya no se bloquea nada.
+  Result := False;
 end;
 
 procedure TfrmArticleDetail.CargarTabsDemo;
@@ -653,7 +692,8 @@ begin
   FOFsCargadas := False;       CargarOFs;
   FProvCargados := False;      CargarProveedores;
   FCliCargados := False;       CargarClientes;
-  // Disponibilidad (explosion BOM) no tiene datos demo: se deja sin cargar.
+  // Disponibilidad: ya tiene escandallo demo, asi que tambien se calcula.
+  FDispCalculada := False;     CalcularDisponibilidad;
 end;
 
 procedure TfrmArticleDetail.AjustarBotonesRecargarDemo;
@@ -669,7 +709,9 @@ begin
   btnRecargarOFs.Visible      := Mostrar;
   btnRecargarProv.Visible     := Mostrar;
   btnRecargarCli.Visible      := Mostrar;
-  btnRecargarDisp.Visible     := Mostrar;
+  // Disponibilidad SI se recalcula en Demo: la cantidad y la fecha objetivo
+  // son parametros del usuario, no datos del ERP.
+  btnRecargarDisp.Visible     := True;
   // En Demo ocultamos el edit de codigo suelto (Edit1, 'AUT0801KIT'): el
   // articulo se elige con el catalogo demo (boton Buscar), no tecleandolo.
   Edit1.Visible := Mostrar;
@@ -776,6 +818,8 @@ begin
   lblPartidasResumen.Caption := '';
   lblMovsFutResumen.Caption := '';
   lblDispVeredicto.Caption := '';
+  lblDispDetalle.Caption := '';
+  pnlSemaforo.Color := clGray;
   lblDondeUsaResumen.Caption := '';
   tlDisp.Clear;
   FPartidasCargadas := False;
@@ -1774,12 +1818,30 @@ type
   TStockArtCache = record
     Actual: Double;
     Proyectado: Double;
+    // Desglose para entender POR QUE el disponible es el que es.
+    Fisico: Double;          // stock fisico, sin descontar reservas
+    Reservado: Double;       // comprometido por pedidos de venta
+    EnCamino: Double;        // pendiente de recibir de proveedor
+    FechaEntrada: TDateTime; // primera entrada prevista (0 = nada en camino)
+    FechaRotura: TDateTime;  // cuando el saldo se va a negativo (0 = nunca)
   end;
 var
   CacheStock: TDictionary<string, TStockArtCache>;
   FechaObjetivo: TDateTime;
   QtyObjetivo: Double;
   FaltaGlobalActual, FaltaGlobalProy: Integer;
+  // Entrada prevista mas tardia de entre el material que falta: marca cuando
+  // estaria completo el material para poder fabricar.
+  FechaCobGlobal: TDateTime;
+  // Articulos ya contados como en falta, para no duplicar en el resumen
+  // cuando un mismo material aparece en varias ramas del escandallo.
+  ArtsFaltaHoy, ArtsFaltaProy: TDictionary<string, Byte>;
+  // Fecha de rotura mas temprana de todo el escandallo: el dia en que la
+  // fabricacion se pararia por falta de material.
+  PrimeraRotura: TDateTime;
+  // True si ALGUN material que falta no tiene pedido de compra en curso. Si es
+  // asi no hay fecha posible de fabricacion por mucho que otros si lleguen.
+  HayFaltaSinPedido: Boolean;
   function GetStockArt(const ACodArt: string): TStockArtCache;
   var
     Base: TArray<TStockDisponibleErp>;
@@ -1789,24 +1851,56 @@ var
     Proy: TStockProjector;
     i: Integer;
     StockIni: Double;
+    FEnt: TDateTime;
     Res: TResumenProyeccion;
     SC: TStockArtCache;
   begin
     if CacheStock.TryGetValue(ACodArt, Result) then Exit;
-    SC.Actual := 0;
-    SC.Proyectado := 0;
+    SC := Default(TStockArtCache);
     try
-      Base := FReader.ReadStockDisponible(ACodArt, '');
+      if DemoMode.Active then
+        Base := uDemoMode.DemoStockDisponible(ACodArt)
+      else
+        Base := FReader.ReadStockDisponible(ACodArt, '');
       StockIni := 0;
       for i := 0 to High(Base) do
+      begin
         StockIni := StockIni + Base[i].Disponible;
+        // Desglose: el disponible ya viene neto, pero interesa ver de que se
+        // compone para saber si la falta es por stock real o por reservas.
+        SC.Fisico    := SC.Fisico + Base[i].UnidadSaldo;
+        SC.Reservado := SC.Reservado + Base[i].StockReservado;
+        SC.EnCamino  := SC.EnCamino + Base[i].PendienteRecibir;
+      end;
       SC.Actual := StockIni;
-      Compras := FReader.ReadEntradasFuturasFiltered(
-        ACodArt, [], 0, FechaObjetivo);
-      Ventas := FReader.ReadSalidasFuturasVenta(
-        ACodArt, [], 0, FechaObjetivo);
-      MovsOF := FReader.ReadMovimientosOFsPendientes(
-        ACodArt, [], FechaObjetivo);
+      if DemoMode.Active then
+        Compras := uDemoMode.DemoEntradasCompra(ACodArt, Date)
+      else
+        Compras := FReader.ReadEntradasFuturasFiltered(
+          ACodArt, [], 0, FechaObjetivo);
+      // Primera entrada prevista: es la fecha a partir de la cual el material
+      // deja de faltar, la respuesta a "y cuando lo tendre?".
+      for i := 0 to High(Compras) do
+      begin
+        if Compras[i].UnidadesPendientes <= 0 then Continue;
+        FEnt := Compras[i].FechaRecepcion;
+        if FEnt = 0 then FEnt := Compras[i].FechaNecesaria;
+        if FEnt = 0 then Continue;
+        if (SC.FechaEntrada = 0) or (FEnt < SC.FechaEntrada) then
+          SC.FechaEntrada := FEnt;
+      end;
+      if DemoMode.Active then
+      begin
+        Ventas := uDemoMode.DemoSalidasVenta(ACodArt, Date);
+        MovsOF := uDemoMode.DemoMovimientosOF(ACodArt, Date);
+      end
+      else
+      begin
+        Ventas := FReader.ReadSalidasFuturasVenta(
+          ACodArt, [], 0, FechaObjetivo);
+        MovsOF := FReader.ReadMovimientosOFsPendientes(
+          ACodArt, [], FechaObjetivo);
+      end;
       Proy := TStockProjector.Create;
       try
         Proy.StockInicial := StockIni;
@@ -1816,6 +1910,11 @@ var
         Proy.SetMovimientosOF(MovsOF);
         Res := Proy.Resumen(FechaObjetivo);
         SC.Proyectado := Res.StockFinal;
+        // Fecha de ROTURA: cuando el saldo toca su punto mas bajo. Solo se
+        // considera rotura si ese minimo es negativo (si no, es solo el valle
+        // normal del consumo, no un problema).
+        if Res.SaldoMinimoAlcanzado < 0 then
+          SC.FechaRotura := Res.FechaSaldoMinimo;
       finally
         Proy.Free;
       end;
@@ -1826,8 +1925,33 @@ var
     CacheStock.Add(ACodArt, SC);
     Result := SC;
   end;
-  procedure SetEstadoYColor(ANode: TcxTreeListNode;
-    ANecesario, AStockActual, AStockProy: Double);
+  // Registra un hito para la linea de tiempo, evitando duplicados: un mismo
+  // material puede aparecer en varias ramas y su rotura es la misma.
+  procedure AddEvento(AFecha: TDateTime; ATipo: TTimelineTipo;
+    const AArt, ADesc: string; ACant: Double);
+  var
+    I, N: Integer;
+  begin
+    if AFecha <= 0 then Exit;
+    for I := 0 to High(FTLEventos) do
+      if (FTLEventos[I].Tipo = ATipo) and
+         SameText(FTLEventos[I].Articulo, AArt) then Exit;
+    N := Length(FTLEventos);
+    SetLength(FTLEventos, N + 1);
+    FTLEventos[N].Fecha := AFecha;
+    FTLEventos[N].Tipo := ATipo;
+    FTLEventos[N].Articulo := AArt;
+    FTLEventos[N].Descripcion := ADesc;
+    FTLEventos[N].Cantidad := ACant;
+  end;
+  // AStk trae el desglose (fisico/reservado/en camino/fecha de entrada) para
+  // poder explicar de que se compone el disponible y cuando llega lo que falta.
+  // AEsRaiz: el articulo que se va a FABRICAR. Su propio stock no decide nada
+  // (justamente se fabrica porque no lo hay), asi que nunca se marca en falta:
+  // lo que manda es si estan sus componentes.
+  procedure SetEstadoYColor(ANode: TcxTreeListNode; const ACodArtNodo: string;
+    ANecesario, AStockActual, AStockProy: Double;
+    const AStk: TStockArtCache; AEsRaiz: Boolean = False);
   var
     FaltaA, FaltaP: Double;
     Estado: string;
@@ -1836,9 +1960,80 @@ var
     FaltaP := ANecesario - AStockProy;
     if FaltaA < 0 then FaltaA := 0;
     if FaltaP < 0 then FaltaP := 0;
-    ANode.Values[colDispNecesario.ItemIndex]   := FormatFloat('#,##0.##', ANecesario);
+    // Si no se necesita nada de este material, no puede faltar: pasa en las
+    // ramas de un semielaborado que ya esta cubierto con stock. Sin esto, un
+    // material con saldo proyectado negativo (por otros consumos ajenos a
+    // esta orden) saldria en rojo aunque esta orden no lo consuma.
+    if ANecesario <= 0 then
+    begin
+      FaltaA := 0;
+      FaltaP := 0;
+    end;
+    if AEsRaiz then
+    begin
+      FaltaA := 0;
+      FaltaP := 0;
+    end;
+    // Necesidad 0 = rama no consumida: dejarla en blanco en vez de "0", que
+    // se lee como "no hace falta nada" cuando en realidad es "no aplica".
+    if (ANecesario > 0) or AEsRaiz then
+      ANode.Values[colDispNecesario.ItemIndex] := FormatFloat('#,##0.##', ANecesario)
+    else
+      ANode.Values[colDispNecesario.ItemIndex] := '';
     ANode.Values[colDispStockActual.ItemIndex] := FormatFloat('#,##0.##', AStockActual);
     ANode.Values[colDispStockProy.ItemIndex]   := FormatFloat('#,##0.##', AStockProy);
+    // Reservado y en camino: solo se muestran si hay algo, para no llenar la
+    // rejilla de ceros que no aportan nada.
+    if AStk.Reservado > 0 then
+      ANode.Values[colDispReservado.ItemIndex] := FormatFloat('#,##0.##', AStk.Reservado)
+    else
+      ANode.Values[colDispReservado.ItemIndex] := '';
+    // "En camino" solo donde aporta: en una rama que no se consume, saber que
+    // entran 5.000 kg mas es ruido.
+    if (AStk.EnCamino > 0) and ((ANecesario > 0) or AEsRaiz) then
+      ANode.Values[colDispEnCamino.ItemIndex] := FormatFloat('#,##0.##', AStk.EnCamino)
+    else
+      ANode.Values[colDispEnCamino.ItemIndex] := '';
+    // Fecha de ROTURA: el dia en que este material se queda sin stock. Es el
+    // dato que permite decir "puedes empezar, pero el dia X te paras".
+    // En la raiz la rotura es la del producto acabado por sus ventas, que no
+    // tiene nada que ver con si hay material para fabricarlo: mostrarla en
+    // esta pantalla solo confunde (para eso esta "Stock proyectado (ATP)").
+    // Tampoco en las ramas no consumidas: si esta orden no gasta el material,
+    // cuando se agote por otros motivos no pinta nada aqui.
+    if (AStk.FechaRotura > 0) and (not AEsRaiz) and (ANecesario > 0) then
+    begin
+      ANode.Values[colDispRotura.ItemIndex] :=
+        FormatDateTime('dd/mm/yyyy', AStk.FechaRotura);
+      // La rotura del conjunto es la mas temprana ENTRE EL MATERIAL QUE FALTA:
+      // si de un material hay de sobra para esta orden, que su saldo se agote
+      // mas adelante por otros consumos no frena esta fabricacion.
+      if (not AEsRaiz) and (ANecesario > 0) and (FaltaP > 0) and
+         ((PrimeraRotura = 0) or (AStk.FechaRotura < PrimeraRotura)) then
+        PrimeraRotura := AStk.FechaRotura;
+      // Solo se marca en el grafico la rotura de material que REALMENTE frena
+      // esta orden (FaltaP > 0). Un material con rotura pero con stock de
+      // sobra para esta cantidad no para nada, y pintarlo haria que el grafico
+      // contradijera al veredicto ("SE PUEDE FABRICAR" con la banda en rojo).
+      if (not AEsRaiz) and (ANecesario > 0) and (FaltaP > 0) then
+        AddEvento(AStk.FechaRotura, tlRotura, ACodArtNodo,
+          VarToStr(ANode.Values[colDispDescripcion.ItemIndex]), 0);
+    end
+    else
+      ANode.Values[colDispRotura.ItemIndex] := '';
+    // Entradas previstas: solo las del material que FALTA. Si de un material
+    // hay de sobra, cuando entre mas mercancia no le importa a nadie para esta
+    // orden, y llenar el grafico de hitos irrelevantes lo hace ilegible.
+    if (not AEsRaiz) and (ANecesario > 0) and (FaltaP > 0) and
+       (AStk.FechaEntrada > 0) and (AStk.EnCamino > 0) then
+      AddEvento(AStk.FechaEntrada, tlEntrada, ACodArtNodo,
+        VarToStr(ANode.Values[colDispDescripcion.ItemIndex]), AStk.EnCamino);
+    // La fecha de cobertura solo tiene sentido si falta algo y hay entrada.
+    if (FaltaP > 0) and (AStk.FechaEntrada > 0) then
+      ANode.Values[colDispCobertura.ItemIndex] :=
+        FormatDateTime('dd/mm/yyyy', AStk.FechaEntrada)
+    else
+      ANode.Values[colDispCobertura.ItemIndex] := '';
     if FaltaA > 0 then
       ANode.Values[colDispFaltaActual.ItemIndex] := FormatFloat('#,##0.##', FaltaA)
     else
@@ -1850,14 +2045,48 @@ var
     if FaltaP > 0 then
     begin
       Estado := 'CRITICO';
-      Inc(FaltaGlobalProy);
-      if FaltaA > 0 then Inc(FaltaGlobalActual);
+      // Contar ARTICULOS distintos, no apariciones: un mismo material puede
+      // estar en varias ramas del escandallo y contarlo dos veces daria un
+      // resumen incoherente ("4 componentes, de los cuales 5 faltan hoy").
+      if not ArtsFaltaProy.ContainsKey(ACodArtNodo) then
+      begin
+        ArtsFaltaProy.Add(ACodArtNodo, 1);
+        Inc(FaltaGlobalProy);
+      end;
+      if (FaltaA > 0) and (not ArtsFaltaHoy.ContainsKey(ACodArtNodo)) then
+      begin
+        ArtsFaltaHoy.Add(ACodArtNodo, 1);
+        Inc(FaltaGlobalActual);
+      end;
+      // Cobertura del conjunto: la entrada MAS TARDIA, porque hasta que no
+      // llega el ultimo material no se puede fabricar. Si alguno no tiene
+      // pedido, no hay fecha posible: se marca y manda sobre todo lo demas.
+      if AStk.FechaEntrada > 0 then
+      begin
+        if AStk.FechaEntrada > FechaCobGlobal then
+          FechaCobGlobal := AStk.FechaEntrada;
+      end
+      else
+        HayFaltaSinPedido := True;
     end
     else if FaltaA > 0 then
     begin
       Estado := 'FALTA HOY';
-      Inc(FaltaGlobalActual);
+      if not ArtsFaltaHoy.ContainsKey(ACodArtNodo) then
+      begin
+        ArtsFaltaHoy.Add(ACodArtNodo, 1);
+        Inc(FaltaGlobalActual);
+      end;
+      // Falta hoy pero llega a tiempo: interesa saber cuando entra.
+      if AStk.FechaEntrada > 0 then
+        ANode.Values[colDispCobertura.ItemIndex] :=
+          FormatDateTime('dd/mm/yyyy', AStk.FechaEntrada);
     end
+    else if (ANecesario <= 0) and (not AEsRaiz) then
+      // Rama de un semielaborado que ya esta cubierto con stock: esta orden no
+      // consume estos materiales. Se muestra para no ocultar la estructura del
+      // producto, pero dejarlo en "OK" haria pensar que se ha comprobado algo.
+      Estado := 'NO SE USA'
     else
       Estado := 'OK';
     ANode.Values[colDispEstado.ItemIndex] := Estado;
@@ -1874,7 +2103,10 @@ var
   begin
     if ANivel > 10 then Exit; // safety
     try
-      Comps := FReader.ReadFormulaComponentes(ACodArt, AVersion);
+      if DemoMode.Active then
+        Comps := uDemoMode.DemoFormulaComponentes(ACodArt, AVersion)
+      else
+        Comps := FReader.ReadFormulaComponentes(ACodArt, AVersion);
     except
       on E: Exception do
       begin
@@ -1897,7 +2129,8 @@ var
         Child.Values[colDispTipo.ItemIndex] := 'S'
       else
         Child.Values[colDispTipo.ItemIndex] := 'M';
-      SetEstadoYColor(Child, Necesario, Stk.Actual, Stk.Proyectado);
+      SetEstadoYColor(Child, Comps[i].CodigoArticuloComponente,
+                      Necesario, Stk.Actual, Stk.Proyectado, Stk);
       if EsSemiConBOM then
       begin
         // Cuanto cubrimos con stock proyectado del semi
@@ -1907,7 +2140,18 @@ var
         NecRestante := Necesario - StockUsable;
         if NecRestante > 0 then
           ExplosionarBOM(Child, Comps[i].CodigoArticuloComponente,
-            Comps[i].VersionFormulaComp, NecRestante, ANivel + 1);
+            Comps[i].VersionFormulaComp, NecRestante, ANivel + 1)
+        else
+        begin
+          // Hay stock del semielaborado para todo: no hace falta fabricarlo,
+          // asi que sus componentes no se consumen. Aun asi se explosiona con
+          // necesidad 0 para que el arbol se vea entero (si no, la estructura
+          // del producto queda oculta justo cuando todo va bien) y se marca
+          // por que no se necesita.
+          ExplosionarBOM(Child, Comps[i].CodigoArticuloComponente,
+            Comps[i].VersionFormulaComp, 0, ANivel + 1);
+          Child.Values[colDispCobertura.ItemIndex] := 'Cubierto con stock';
+        end;
         Child.Expanded := True;
       end;
     end;
@@ -1917,8 +2161,8 @@ var
   Cab: TFormulaCabecera;
   StkRoot: TStockArtCache;
 begin
-  if TabNoDisponibleEnDemo then Exit;
-  if FReader = nil then
+  // En Demo no hace falta ERP: el escandallo y el stock salen de uDemoMode.
+  if (FReader = nil) and (not DemoMode.Active) then
   begin
     ShowMessage('No hay conector ERP activo.');
     Exit;
@@ -1934,18 +2178,37 @@ begin
   FechaObjetivo := dtDispFecha.Date;
   FaltaGlobalActual := 0;
   FaltaGlobalProy := 0;
+  FechaCobGlobal := 0;
+  PrimeraRotura := 0;
+  HayFaltaSinPedido := False;
+  SetLength(FTLEventos, 0);
+  FTLHoy := Date;
+  FTLObjetivo := FechaObjetivo;
+  FTLPrimeraRotura := 0;
+  FTLCoberturaTotal := 0;
+  FTLViable := False;
   Screen.Cursor := crHourGlass;
   tlDisp.BeginUpdate;
   CacheStock := TDictionary<string, TStockArtCache>.Create;
+  ArtsFaltaHoy := TDictionary<string, Byte>.Create;
+  ArtsFaltaProy := TDictionary<string, Byte>.Create;
   try
     tlDisp.Clear;
     // 1) Cabecera de formula del articulo raiz
-    Cab := FReader.ReadFormulaCabecera(FCodigoArticulo);
+    if DemoMode.Active then
+      Cab := uDemoMode.DemoFormulaCabecera(FCodigoArticulo)
+    else
+      Cab := FReader.ReadFormulaCabecera(FCodigoArticulo);
     if not Cab.Encontrada then
     begin
       lblDispVeredicto.Caption :=
-        'El art'#237'culo no tiene f'#243'rmula de fabricaci'#243'n definida.';
-      lblDispVeredicto.Font.Color := clMaroon;
+        'Este art'#237'culo no se fabrica: no tiene escandallo definido.';
+      lblDispVeredicto.Font.Color := clWindowText;
+      lblDispDetalle.Caption :=
+        'Es un art'#237'culo de compra: se repone con un pedido a proveedor, no ' +
+        'con una orden de fabricaci'#243'n. Consulta "Stock proyectado (ATP)" para ' +
+        'ver cu'#225'ndo hay que reponerlo.';
+      pnlSemaforo.Color := clGray;
       FDispCalculada := True;
       Exit;
     end;
@@ -1955,10 +2218,8 @@ begin
     RootNode.Values[colDispArticulo.ItemIndex]    := FCodigoArticulo;
     RootNode.Values[colDispDescripcion.ItemIndex] := FDescripcionArticulo;
     RootNode.Values[colDispTipo.ItemIndex]        := 'P';
-    SetEstadoYColor(RootNode, QtyObjetivo, StkRoot.Actual, StkRoot.Proyectado);
-    // El nodo raiz no cuenta como "falta" si tiene formula: se va a fabricar
-    if FaltaGlobalActual > 0 then Dec(FaltaGlobalActual);
-    if FaltaGlobalProy > 0 then Dec(FaltaGlobalProy);
+    SetEstadoYColor(RootNode, FCodigoArticulo, QtyObjetivo, StkRoot.Actual,
+                    StkRoot.Proyectado, StkRoot, True);  // raiz: se fabrica
     // 3) Explosi'o recursiva
     ExplosionarBOM(RootNode, FCodigoArticulo, Cab.Version, QtyObjetivo, 1);
     RootNode.Expanded := True;
@@ -1966,26 +2227,366 @@ begin
     if FaltaGlobalProy = 0 then
     begin
       lblDispVeredicto.Caption := Format(
-        'OK: hay stock proyectado para fabricar %s uds de %s a fecha %s',
+        'SE PUEDE FABRICAR: hay material para %s uds de %s a %s',
         [FormatFloat('#,##0.##', QtyObjetivo), FCodigoArticulo,
          FormatDateTime('dd/mm/yyyy', FechaObjetivo)]);
       lblDispVeredicto.Font.Color := clGreen;
+      pnlSemaforo.Color := TColor($002D7D2D);   // verde
+      lblDispDetalle.Caption :=
+        'Todos los materiales del escandallo tienen stock suficiente en la ' +
+        'fecha objetivo. Se puede lanzar la orden de fabricaci'#243'n.';
     end
     else
     begin
       lblDispVeredicto.Caption := Format(
-        'FALTA: %d componente(s) sin stock proyectado a %s (de los cuales %d ya faltan hoy)',
-        [FaltaGlobalProy, FormatDateTime('dd/mm/yyyy', FechaObjetivo),
-         FaltaGlobalActual]);
+        'NO se puede fabricar %s uds a %s: faltan %d material(es)',
+        [FormatFloat('#,##0.##', QtyObjetivo),
+         FormatDateTime('dd/mm/yyyy', FechaObjetivo), FaltaGlobalProy]);
+      // La pregunta que viene justo despues de "falta material" es "y cuando
+      // podre?". Si todo lo que falta tiene entrada prevista, se responde con
+      // la fecha; si algo no tiene ni pedido, hay que decirlo claro porque
+      // entonces no hay fecha posible sin comprar antes.
       lblDispVeredicto.Font.Color := clMaroon;
+      // Basta con que UN material no tenga pedido para que no haya fecha
+      // posible: los que si llegan no compensan al que no viene.
+      if HayFaltaSinPedido then
+      begin
+        pnlSemaforo.Color := TColor($002222C8);   // rojo
+        lblDispDetalle.Caption :=
+          'Hay material que falta y NO tiene pedido de compra en curso: ' +
+          'hasta que no se compre, no hay fecha posible de fabricaci'#243'n. ' +
+          'Marca "Solo lo que falta" para ver qu'#233' hay que pedir.';
+        if FechaCobGlobal > 0 then
+          lblDispDetalle.Caption := lblDispDetalle.Caption + Format(
+            ' (El resto del material que falta entra el %s.)',
+            [FormatDateTime('dd/mm/yyyy', FechaCobGlobal)]);
+      end
+      else if FechaCobGlobal > 0 then
+      begin
+        // Todo lo que falta tiene pedido en curso: es un problema de FECHA,
+        // no de compra. Ambar.
+        pnlSemaforo.Color := TColor($001CA6E0);   // ambar
+        lblDispDetalle.Caption := Format(
+          'Con los pedidos ya en curso, el material estar'#237'a completo el %s. ' +
+          'Retrasando la orden a esa fecha se puede fabricar sin comprar nada m'#225's.',
+          [FormatDateTime('dd/mm/yyyy', FechaCobGlobal)]);
+      end
+      else
+      begin
+        pnlSemaforo.Color := TColor($002222C8);   // rojo
+        lblDispDetalle.Caption :=
+          'No hay pedidos de compra en curso para el material que falta: ' +
+          'hasta que no se compre, no hay fecha posible de fabricaci'#243'n. ' +
+          'Marca "Solo lo que falta" para ver qu'#233' hay que pedir.';
+      end;
+      if PrimeraRotura > 0 then
+        lblDispDetalle.Caption := lblDispDetalle.Caption +
+          ' Primera rotura de stock: ' +
+          FormatDateTime('dd/mm/yyyy', PrimeraRotura) + '.';
     end;
+    // Volcar el resultado a la linea de tiempo y repintarla.
+    FTLPrimeraRotura := PrimeraRotura;
+    // Si algo falta sin pedido no hay cobertura real: el grafico no debe
+    // pintar de verde a partir de una fecha que no resuelve el problema.
+    if HayFaltaSinPedido then
+      FTLCoberturaTotal := 0
+    else
+      FTLCoberturaTotal := FechaCobGlobal;
+    FTLViable := FaltaGlobalProy = 0;
+    pbDispTimeline.Invalidate;
+
     FDispCalculada := True;
+    AplicarFiltroSoloFaltas;
   finally
+    ArtsFaltaProy.Free;
+    ArtsFaltaHoy.Free;
     CacheStock.Free;
     tlDisp.EndUpdate;
     Screen.Cursor := crDefault;
   end;
 end;
+procedure TfrmArticleDetail.chkSoloFaltasDispClick(Sender: TObject);
+begin
+  // Refiltrar no requiere recalcular: se ocultan nodos del arbol ya montado.
+  if FDispCalculada then AplicarFiltroSoloFaltas;
+end;
+
+// Oculta las ramas totalmente cubiertas. Un nodo se conserva si el mismo
+// falta, o si algun descendiente suyo falta (si no, se perderia el camino
+// hasta el material problematico y el arbol quedaria sin contexto).
+procedure TfrmArticleDetail.AplicarFiltroSoloFaltas;
+var
+  SoloFaltas: Boolean;
+
+  function ProcesarNodo(ANode: TcxTreeListNode): Boolean;
+  var
+    I: Integer;
+    HijoFalla, Falla: Boolean;
+    Estado: string;
+  begin
+    HijoFalla := False;
+    for I := 0 to ANode.Count - 1 do
+      if ProcesarNodo(ANode.Items[I]) then
+        HijoFalla := True;
+
+    Estado := VarToStr(ANode.Values[colDispEstado.ItemIndex]);
+    Falla := (Estado = 'CRITICO') or (Estado = 'FALTA HOY');
+    Result := Falla or HijoFalla;
+
+    if SoloFaltas then
+      ANode.Visible := Result
+    else
+      ANode.Visible := True;
+
+    // Desplegar solo el camino hacia lo que falla: si esta todo bien, no
+    // interesa desplegar el arbol entero.
+    if Result then ANode.Expanded := True;
+  end;
+
+var
+  I: Integer;
+begin
+  SoloFaltas := chkSoloFaltasDisp.Checked;
+  tlDisp.BeginUpdate;
+  try
+    for I := 0 to tlDisp.Count - 1 do
+      ProcesarNodo(tlDisp.Items[I]);
+  finally
+    tlDisp.EndUpdate;
+  end;
+end;
+
+// ============================================================================
+// Linea de tiempo de disponibilidad
+// ============================================================================
+// Responde visualmente a "cuando puedo fabricar": un eje de HOY a la fecha
+// objetivo (o hasta la ultima entrada, si cae despues), con la zona viable en
+// verde, las roturas de material en rojo y las entradas previstas como hitos.
+// Es el grafico que se ensena en demo, asi que prima que se entienda de un
+// vistazo por encima de la densidad de datos.
+procedure TfrmArticleDetail.pbDispTimelinePaint(Sender: TObject);
+const
+  COL_FONDO    = $00FAFAFA;
+  COL_EJE      = $00B0B0B0;
+  COL_TEXTO    = $00505050;
+  COL_VERDE    = $002D7D2D;
+  COL_ROJO     = $002222C8;
+  COL_AMBAR    = $001CA6E0;
+  COL_HOY      = $00806040;
+var
+  Buf: TBitmap;
+  C: TCanvas;
+  W, H: Integer;
+  EjeY, EjeL, EjeR, EjeW: Integer;
+  T0, T1: TDateTime;
+  I, X, XObj, XRot: Integer;
+  Txt: string;
+  RangoDias: Double;
+  Ev: TTimelineEvento;
+  YTxt: Integer;
+  UsadoDerecha: Integer;   // para no solapar etiquetas de hitos
+
+  // Convierte una fecha a coordenada X dentro del eje.
+  function FechaAX(AF: TDateTime): Integer;
+  begin
+    if RangoDias <= 0 then Exit(EjeL);
+    Result := EjeL + Round((AF - T0) / RangoDias * EjeW);
+    if Result < EjeL then Result := EjeL;
+    if Result > EjeR then Result := EjeR;
+  end;
+
+  procedure TextoCentrado(AX, AY: Integer; const S: string; ACol: TColor;
+    ABold: Boolean);
+  begin
+    C.Font.Color := ACol;
+    if ABold then C.Font.Style := [fsBold] else C.Font.Style := [];
+    C.Brush.Style := bsClear;
+    C.TextOut(AX - C.TextWidth(S) div 2, AY, S);
+    C.Brush.Style := bsSolid;
+  end;
+
+begin
+  W := pbDispTimeline.Width;
+  H := pbDispTimeline.Height;
+  if (W <= 0) or (H <= 0) then Exit;
+
+  Buf := TBitmap.Create;
+  try
+    Buf.SetSize(W, H);
+    C := Buf.Canvas;
+    C.Brush.Color := COL_FONDO;
+    C.FillRect(Rect(0, 0, W, H));
+    C.Font.Name := 'Segoe UI';
+    C.Font.Size := 8;
+
+    // Sin calculo todavia: mensaje neutro, no un eje vacio.
+    if not FDispCalculada then
+    begin
+      C.Font.Color := $00909090;
+      C.Font.Style := [];
+      Txt := 'Pulsa "Calcular" para ver la l'#237'nea de tiempo de disponibilidad.';
+      C.Brush.Style := bsClear;
+      C.TextOut((W - C.TextWidth(Txt)) div 2, H div 2 - 8, Txt);
+      C.Brush.Style := bsSolid;
+      pbDispTimeline.Canvas.Draw(0, 0, Buf);
+      Exit;
+    end;
+
+    EjeL := 70;
+    EjeR := W - 70;
+    EjeY := 62;
+    EjeW := EjeR - EjeL;
+    if EjeW < 50 then
+    begin
+      pbDispTimeline.Canvas.Draw(0, 0, Buf);
+      Exit;
+    end;
+
+    // Rango temporal: de hoy hasta la fecha objetivo, ampliado si hay entradas
+    // o coberturas posteriores (si no, los hitos se saldrian del eje).
+    T0 := FTLHoy;
+    T1 := FTLObjetivo;
+    if FTLCoberturaTotal > T1 then T1 := FTLCoberturaTotal;
+    for I := 0 to High(FTLEventos) do
+      if FTLEventos[I].Fecha > T1 then T1 := FTLEventos[I].Fecha;
+    if T1 <= T0 then T1 := T0 + 1;
+    // Un poco de aire a la derecha para que el ultimo hito no toque el borde.
+    T1 := T1 + (T1 - T0) * 0.08;
+    RangoDias := T1 - T0;
+
+    XObj := FechaAX(FTLObjetivo);
+
+    // --- Banda de fondo: la lectura rapida "hasta aqui puedo, aqui no" ----
+    // Debe coincidir SIEMPRE con el veredicto de abajo: si el titular dice
+    // que se puede fabricar, la banda no puede estar en rojo bajo el objetivo.
+    if FTLViable then
+    begin
+      // Todo cubierto: verde de principio a fin.
+      C.Brush.Color := $00E8F8E8;
+      C.FillRect(Rect(EjeL, EjeY - 14, EjeR, EjeY + 14));
+    end
+    else if FTLCoberturaTotal > 0 then
+    begin
+      // Falta material pero entra: rojo hasta que llega, verde a partir de
+      // ahi. Se lee directamente "a partir del dia X ya puedes".
+      XRot := FechaAX(FTLCoberturaTotal);
+      C.Brush.Color := $00DADAFF;
+      C.FillRect(Rect(EjeL, EjeY - 14, XRot, EjeY + 14));
+      C.Brush.Color := $00E8F8E8;
+      C.FillRect(Rect(XRot, EjeY - 14, EjeR, EjeY + 14));
+    end
+    else if FTLPrimeraRotura > 0 then
+    begin
+      // Falta y no entra nada: verde hasta la rotura, rojo el resto.
+      XRot := FechaAX(FTLPrimeraRotura);
+      C.Brush.Color := $00E8F8E8;
+      C.FillRect(Rect(EjeL, EjeY - 14, XRot, EjeY + 14));
+      C.Brush.Color := $00DADAFF;
+      C.FillRect(Rect(XRot, EjeY - 14, EjeR, EjeY + 14));
+    end
+    else
+    begin
+      // Falta desde hoy y sin fecha: todo rojo.
+      C.Brush.Color := $00DADAFF;
+      C.FillRect(Rect(EjeL, EjeY - 14, EjeR, EjeY + 14));
+    end;
+
+      // --- Eje ------------------------------------------------------------
+      C.Pen.Color := COL_EJE;
+      C.Pen.Width := 2;
+      C.MoveTo(EjeL, EjeY);
+      C.LineTo(EjeR, EjeY);
+
+      // --- HOY -------------------------------------------------------------
+      C.Pen.Color := COL_HOY;
+      C.Pen.Width := 2;
+      C.MoveTo(EjeL, EjeY - 18);
+      C.LineTo(EjeL, EjeY + 18);
+      TextoCentrado(EjeL, EjeY + 22, 'HOY', COL_HOY, True);
+      TextoCentrado(EjeL, EjeY + 36, FormatDateTime('dd/mm', FTLHoy),
+                    COL_TEXTO, False);
+
+      // --- Fecha objetivo (la que ha pedido el usuario) --------------------
+      C.Pen.Color := COL_HOY;
+      C.Pen.Width := 2;
+      C.MoveTo(XObj, EjeY - 26);
+      C.LineTo(XObj, EjeY + 18);
+      TextoCentrado(XObj, EjeY - 42, 'OBJETIVO', COL_HOY, True);
+      TextoCentrado(XObj, EjeY - 28, FormatDateTime('dd/mm/yy', FTLObjetivo),
+                    COL_TEXTO, False);
+
+      // Todo cubierto y sin hitos: decirlo dentro de la banda. Un eje verde
+      // vacio se lee como "no se ha calculado nada", justo lo contrario.
+      if FTLViable and (Length(FTLEventos) = 0) then
+        TextoCentrado((EjeL + XObj) div 2, EjeY - 5,
+          'Sin roturas de material en todo el periodo', COL_VERDE, True);
+
+      // --- Hitos: roturas y entradas --------------------------------------
+      UsadoDerecha := 0;
+      for I := 0 to High(FTLEventos) do
+      begin
+        Ev := FTLEventos[I];
+        X := FechaAX(Ev.Fecha);
+        if Ev.Tipo = tlRotura then
+        begin
+          // Rotura: marca roja bajo el eje.
+          C.Brush.Color := COL_ROJO;
+          C.Pen.Color := COL_ROJO;
+          C.Pen.Width := 1;
+          C.Polygon([Point(X, EjeY + 8), Point(X - 6, EjeY + 18),
+                     Point(X + 6, EjeY + 18)]);
+          YTxt := EjeY + 20;
+        end
+        else
+        begin
+          // Entrada prevista: marca ambar sobre el eje.
+          C.Brush.Color := COL_AMBAR;
+          C.Pen.Color := COL_AMBAR;
+          C.Pen.Width := 1;
+          C.Polygon([Point(X, EjeY - 8), Point(X - 6, EjeY - 18),
+                     Point(X + 6, EjeY - 18)]);
+          YTxt := EjeY - 32;
+        end;
+        // Etiqueta del hito: articulo + dia. Si pisaria la anterior se baja un
+        // piso en vez de omitirla: un triangulo sin texto no dice nada y en
+        // una demo genera justo la pregunta que no quieres que te hagan.
+        Txt := Ev.Articulo + ' ' + FormatDateTime('dd/mm', Ev.Fecha);
+        if X - C.TextWidth(Txt) div 2 <= UsadoDerecha then
+        begin
+          if Ev.Tipo = tlRotura then
+            Inc(YTxt, 13)
+          else
+            Dec(YTxt, 13);
+        end
+        else
+          UsadoDerecha := X + C.TextWidth(Txt) div 2 + 8;
+        if Ev.Tipo = tlRotura then
+          TextoCentrado(X, YTxt, Txt, COL_ROJO, False)
+        else
+          TextoCentrado(X, YTxt, Txt, $00806000, False);
+      end;
+
+      // --- Veredicto a la derecha del eje ---------------------------------
+      C.Font.Size := 9;
+      if FTLViable then
+        TextoCentrado((EjeL + EjeR) div 2, EjeY - 58,
+          'Material disponible para la fecha objetivo', COL_VERDE, True)
+      else if FTLCoberturaTotal > 0 then
+        TextoCentrado((EjeL + EjeR) div 2, EjeY - 58,
+          'Material completo el ' +
+          FormatDateTime('dd/mm/yyyy', FTLCoberturaTotal) +
+          ' con los pedidos en curso', $00806000, True)
+      else
+        TextoCentrado((EjeL + EjeR) div 2, EjeY - 58,
+          'Falta material sin pedido en curso: hay que comprar', COL_ROJO, True);
+    C.Font.Size := 8;
+
+    pbDispTimeline.Canvas.Draw(0, 0, Buf);
+  finally
+    Buf.Free;
+  end;
+end;
+
 procedure TfrmArticleDetail.tlDispCustomDrawDataCell(
   Sender: TcxCustomTreeList; ACanvas: TcxCanvas;
   AViewInfo: TcxTreeListEditCellViewInfo; var ADone: Boolean);
@@ -2005,6 +2606,10 @@ begin
   begin
     ACanvas.Brush.Color := $00CCFFFF;
   end
+  else if Estado = 'NO SE USA' then
+    // Rama no consumida (el semielaborado padre ya esta en stock): se atenua
+    // entera para que no compita visualmente con el material que si importa.
+    ACanvas.Font.Color := clGrayText
   else if Estado = 'OK' then
   begin
     if AViewInfo.Column = colDispEstado then
@@ -2094,6 +2699,7 @@ begin
     Screen.Cursor := crDefault;
   end;
 end;
+
 // ============================================================================
 // KPI cards (cabecera)
 // ============================================================================
@@ -2123,9 +2729,9 @@ begin
 end;
 procedure TfrmArticleDetail.ActualizarTipoAprov;
 begin
-  // Badge en la cabecera: FABRICAR (verde) si el articulo tiene formula, o
-  // COMPRAR (azul) si es de aprovisionamiento externo. Si no hay articulo
-  // leido aun, se oculta. Vale igual en modo real y en Demo.
+  // Badge junto al codigo de articulo: PARA FABRICAR (verde) si el articulo
+  // tiene formula, o PARA COMPRAR (azul) si es de aprovisionamiento externo.
+  // Si no hay articulo leido aun, se oculta. Vale igual en real y en Demo.
   if not FArticuloLeido then
   begin
     pnlTipoAprov.Visible := False;
@@ -2133,12 +2739,12 @@ begin
   end;
   if FArticuloActual.TieneFormula then
   begin
-    lblTipoAprov.Caption := 'FABRICAR';
+    lblTipoAprov.Caption := 'PARA FABRICAR';
     pnlTipoAprov.Color := TColor($002D7D2D);   // verde
   end
   else
   begin
-    lblTipoAprov.Caption := 'COMPRAR';
+    lblTipoAprov.Caption := 'PARA COMPRAR';
     pnlTipoAprov.Color := TColor($00A6651C);    // azul-info corporativo
   end;
   pnlTipoAprov.Visible := True;

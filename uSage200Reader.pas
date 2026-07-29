@@ -37,6 +37,10 @@ type
       ANumeroTrabajo: Integer; const AExtraMaps: TArray<TErpFieldMap>): TArray<TOrdenTrabajoErp>;
     function ReadOperacionesOTEx(AEjercicioTrabajo: SmallInt;
       ANumeroTrabajo: Integer; const AExtraMaps: TArray<TErpFieldMap>): TArray<TOperacionOTErp>;
+    // Anade las CLAVES de OF/OT/OP ya cerradas en el ERP (CerradoEnErp=True),
+    // para que la sincronizacion pueda retirarlas del Planner.
+    procedure AddClavesCerradas(AItems: TList<TRawItemErp>;
+      const AEjercicios: TArray<SmallInt>; AEjercicio: SmallInt);
   public
     constructor Create; overload;
     constructor Create(const ACfg: TErpSage200Config); overload;
@@ -1708,7 +1712,23 @@ begin
       BuildExtraJoins(Maps) +
       'WHERE [ot].CodigoEmpresa = :CE AND [ot].EjercicioTrabajo = :Ej ';
     if ANumeroTrabajo > 0 then
-      SQL := SQL + 'AND [ot].NumeroTrabajo = :NT ';
+      SQL := SQL + 'AND [ot].NumeroTrabajo = :NT '
+    else
+    begin
+      // Lectura en bloque (backlog): filtrar en SQL las OTs cerradas
+      // (EstadoOT > 1). Al pedir una OT concreta no se filtra, porque quien la
+      // pide por numero la quiere sea cual sea su estado.
+      SQL := SQL + 'AND [ot].EstadoOT IN (0, 1) ';
+      // Y ademas solo las OTs que cuelgan de una OF viva: las de OFs cerradas
+      // no llegan nunca al planner, asi que no vale la pena traerlas.
+      SQL := SQL +
+        'AND EXISTS (SELECT 1 FROM dbo.OrdenesFabricacion AS [f] ' +
+        '            WHERE [f].CodigoEmpresa = [ot].CodigoEmpresa ' +
+        '              AND [f].EjercicioFabricacion = [ot].EjercicioFabricacion ' +
+        '              AND [f].SerieFabricacion = [ot].SerieFabricacion ' +
+        '              AND [f].NumeroFabricacion = [ot].NumeroFabricacion ' +
+        '              AND [f].EstadoOF IN (0, 1)) ';
+    end;
     SQL := SQL + 'ORDER BY [ot].NumeroTrabajo';
     Q.SQL.Text := SQL;
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
@@ -1767,18 +1787,19 @@ var
   Q: TADOQuery;
   O: TOperacionOTErp;
   Idx: Integer;
+  SQL: string;
   Maps: TArray<TErpFieldMap>;
 begin
   SetLength(Result, 0);
   EnsureConnected;
-  if ANumeroTrabajo <= 0 then
-    raise Exception.Create('NumeroTrabajo es obligatorio para leer operaciones de OT.');
+  // ANumeroTrabajo <= 0: lectura en bloque de TODAS las operaciones del
+  // ejercicio (la usa ReadBacklogOF para no lanzar una consulta por OT).
   // Mapeos custom de Nivel 3 (OP); alias [op] sobre OperacionesOT.
   Maps := FilterMapsForNivel(AExtraMaps, 3);
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := FConn;
-    Q.SQL.Text :=
+    SQL :=
       'SELECT [op].EjercicioTrabajo, [op].NumeroTrabajo, [op].Orden, ' +
       '  [op].Operacion, [op].DescripcionOperacion, ' +
       '  [op].CentroTrabajo, [op].CentroTrabajoDefecto, [op].OperacionExterna, ' +
@@ -1795,11 +1816,31 @@ begin
       BuildExtraSelect(Maps) + ' ' +
       'FROM dbo.OperacionesOT AS [op] ' +
       BuildExtraJoins(Maps) +
-      'WHERE [op].CodigoEmpresa = :CE AND [op].EjercicioTrabajo = :Ej AND [op].NumeroTrabajo = :NT ' +
-      'ORDER BY [op].Orden';
+      'WHERE [op].CodigoEmpresa = :CE AND [op].EjercicioTrabajo = :Ej ';
+    if ANumeroTrabajo > 0 then
+      SQL := SQL + 'AND [op].NumeroTrabajo = :NT '
+    else
+      // Lectura en bloque (backlog): descartar en SQL las operaciones cerradas
+      // y las que cuelgan de una OT/OF ya cerrada (no llegan nunca al planner).
+      SQL := SQL +
+        'AND [op].EstadoOperacion IN (0, 1) ' +
+        'AND EXISTS (SELECT 1 FROM dbo.OrdenesTrabajo AS [t] ' +
+        '            INNER JOIN dbo.OrdenesFabricacion AS [f] ' +
+        '              ON [f].CodigoEmpresa = [t].CodigoEmpresa ' +
+        '             AND [f].EjercicioFabricacion = [t].EjercicioFabricacion ' +
+        '             AND [f].SerieFabricacion = [t].SerieFabricacion ' +
+        '             AND [f].NumeroFabricacion = [t].NumeroFabricacion ' +
+        '            WHERE [t].CodigoEmpresa = [op].CodigoEmpresa ' +
+        '              AND [t].EjercicioTrabajo = [op].EjercicioTrabajo ' +
+        '              AND [t].NumeroTrabajo = [op].NumeroTrabajo ' +
+        '              AND [t].EstadoOT IN (0, 1) ' +
+        '              AND [f].EstadoOF IN (0, 1)) ';
+    SQL := SQL + 'ORDER BY [op].NumeroTrabajo, [op].Orden';
+    Q.SQL.Text := SQL;
     Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
     Q.Parameters.ParamByName('Ej').Value := AEjercicioTrabajo;
-    Q.Parameters.ParamByName('NT').Value := ANumeroTrabajo;
+    if ANumeroTrabajo > 0 then
+      Q.Parameters.ParamByName('NT').Value := ANumeroTrabajo;
     Q.Open;
     SetLength(Result, Q.RecordCount);
     Idx := 0;
@@ -1977,7 +2018,6 @@ function TSage200Reader.ReadBacklogOF(AEjercicio: SmallInt;
   const AExtraMaps: TArray<TErpFieldMap>): TArray<TRawItemErp>;
 var
   OFs, OFsTotales: TArray<TOrdenFabricacionErp>;
-  Rel: TArray<TRelacionOTOFErp>;
   OTs: TArray<TOrdenTrabajoErp>;
   Ops: TArray<TOperacionOTErp>;
   Items: TList<TRawItemErp>;
@@ -1985,13 +2025,18 @@ var
   OFErp: TOrdenFabricacionErp;
   OTErp: TOrdenTrabajoErp;
   OpErp: TOperacionOTErp;
-  R: TRelacionOTOFErp;
   ClaveOF, ClaveOT: string;
   Ejercicios: TArray<SmallInt>;
   Q: TADOQuery;
   Ej: SmallInt;
-  I, J, Idx: Integer;
+  I, J, K, L, Idx: Integer;
   Maps: TArray<TErpFieldMap>;
+  // Indices en memoria para la lectura en bloque (evitan el N+1 contra el ERP)
+  OTsPorOF: TDictionary<string, TList<TOrdenTrabajoErp>>;
+  OpsPorOT: TDictionary<string, TList<TOperacionOTErp>>;
+  ListaOT: TList<TOrdenTrabajoErp>;
+  ListaOp: TList<TOperacionOTErp>;
+  EjTrabajo: TList<SmallInt>;
 begin
   SetLength(Result, 0);
   EnsureConnected;
@@ -2009,9 +2054,12 @@ begin
     Q := TADOQuery.Create(nil);
     try
       Q.Connection := FConn;
+      // Todos los ejercicios con OFs, vivas o cerradas: las vivas dan el
+      // trabajo pendiente y las cerradas hacen falta para poder retirar del
+      // plan lo que el ERP ya ha terminado.
       Q.SQL.Text :=
         'SELECT DISTINCT EjercicioFabricacion FROM dbo.OrdenesFabricacion ' +
-        'WHERE CodigoEmpresa = :CE AND EstadoOF IN (0, 1) ' +
+        'WHERE CodigoEmpresa = :CE ' +
         'ORDER BY EjercicioFabricacion';
       Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
       Q.Open;
@@ -2043,10 +2091,64 @@ begin
   else
     OFs := ReadOrdenesFabricacionEx(AEjercicio, '', 0, Maps);
 
-  if Length(OFs) = 0 then Exit;
+  // OJO: aunque no haya ninguna OF viva NO se puede salir aqui, porque todavia
+  // hay que devolver las claves de lo ya cerrado en el ERP (si todas las OF de
+  // la empresa estan cerradas, esa es justamente la informacion que hace falta
+  // para retirarlas del plan).
 
+  // Lectura en BLOQUE de OTs y operaciones: una consulta por ejercicio en vez
+  // de una por OF (relaciones) + una por OT + una por OT (operaciones). Con
+  // cientos de OFs eso eran miles de idas y vueltas al ERP.
+  // OrdenesTrabajo ya lleva las claves de la OF padre, asi que la tabla de
+  // relaciones OT-OF no hace falta para reconstruir la jerarquia.
+  OTsPorOF := TDictionary<string, TList<TOrdenTrabajoErp>>.Create;
+  OpsPorOT := TDictionary<string, TList<TOperacionOTErp>>.Create;
   Items := TList<TRawItemErp>.Create;
   try
+    // Ejercicios de TRABAJO implicados: los de las OFs leidas. Una OT puede
+    // estar en un ejercicio distinto al de su OF, por eso se recorren las OFs
+    // y tambien se anaden los ejercicios de las propias OFs.
+    EjTrabajo := TList<SmallInt>.Create;
+    try
+      for OFErp in OFs do
+        if not EjTrabajo.Contains(OFErp.EjercicioFabricacion) then
+          EjTrabajo.Add(OFErp.EjercicioFabricacion);
+
+      for I := 0 to EjTrabajo.Count - 1 do
+      begin
+        Ej := EjTrabajo[I];
+
+        OTs := ReadOrdenesTrabajoEx(Ej, 0, Maps);   // 0 = todo el ejercicio
+        for J := 0 to High(OTs) do
+        begin
+          ClaveOF := Format('OF|%d|%s|%d',
+            [OTs[J].EjercicioFabricacion, Trim(OTs[J].SerieFabricacion),
+             OTs[J].NumeroFabricacion]);
+          if not OTsPorOF.TryGetValue(ClaveOF, ListaOT) then
+          begin
+            ListaOT := TList<TOrdenTrabajoErp>.Create;
+            OTsPorOF.Add(ClaveOF, ListaOT);
+          end;
+          ListaOT.Add(OTs[J]);
+        end;
+
+        Ops := ReadOperacionesOTEx(Ej, 0, Maps);    // 0 = todo el ejercicio
+        for J := 0 to High(Ops) do
+        begin
+          ClaveOT := Format('OT|%d|%d',
+            [Ops[J].EjercicioTrabajo, Ops[J].NumeroTrabajo]);
+          if not OpsPorOT.TryGetValue(ClaveOT, ListaOp) then
+          begin
+            ListaOp := TList<TOperacionOTErp>.Create;
+            OpsPorOT.Add(ClaveOT, ListaOp);
+          end;
+          ListaOp.Add(Ops[J]);
+        end;
+      end;
+    finally
+      EjTrabajo.Free;
+    end;
+
     for OFErp in OFs do
     begin
       ClaveOF := Format('OF|%d|%s|%d',
@@ -2074,15 +2176,11 @@ begin
       Item.ExtraFields         := OFErp.ExtraFields;
       Items.Add(Item);
 
-      // OTs lligades a aquesta OF
-      Rel := ReadRelacionOTOF(OFErp.EjercicioFabricacion,
-                              OFErp.SerieFabricacion,
-                              OFErp.NumeroFabricacion);
-      for R in Rel do
+      // OTs lligades a aquesta OF (ja llegides en bloc mes amunt)
+      if not OTsPorOF.TryGetValue(ClaveOF, ListaOT) then Continue;
+      for K := 0 to ListaOT.Count - 1 do
       begin
-        OTs := ReadOrdenesTrabajoEx(R.EjercicioTrabajo, R.NumeroTrabajo, Maps);
-        if Length(OTs) = 0 then Continue;
-        OTErp := OTs[0];
+        OTErp := ListaOT[K];
 
         // Filtro de OT: descartar OTs cerradas. EstadoOT > 1 = finalitzada
         // (mateix criteri que OFs).
@@ -2112,10 +2210,12 @@ begin
         Item.ExtraFields         := OTErp.ExtraFields;
         Items.Add(Item);
 
-        // Operacions (Nivel 3) - les planificables
-        Ops := ReadOperacionesOTEx(OTErp.EjercicioTrabajo, OTErp.NumeroTrabajo, Maps);
-        for OpErp in Ops do
+        // Operacions (Nivel 3) - les planificables (ja llegides en bloc)
+        if not OpsPorOT.TryGetValue(ClaveOT, ListaOp) then ListaOp := nil;
+        if ListaOp = nil then Continue;
+        for L := 0 to ListaOp.Count - 1 do
         begin
+          OpErp := ListaOp[L];
           if OpErp.EstadoOperacion > 1 then Continue;
 
           Item := Default(TRawItemErp);
@@ -2171,9 +2271,126 @@ begin
       end;
     end;
 
+    // Items YA CERRADOS en el ERP. Solo se leen las CLAVES (consulta ligera,
+    // sin campos ni jerarquia): sirven para que la sincronizacion distinga
+    // "cerrado en el ERP" de "desaparecido del ERP". Sin esto ambos casos
+    // llegarian igual (ausentes) y no se podrian tratar distinto.
+    AddClavesCerradas(Items, Ejercicios, AEjercicio);
+
     Result := Items.ToArray;
   finally
     Items.Free;
+    for ListaOT in OTsPorOF.Values do ListaOT.Free;
+    OTsPorOF.Free;
+    for ListaOp in OpsPorOT.Values do ListaOp.Free;
+    OpsPorOT.Free;
+  end;
+end;
+
+// Anade a AItems las claves de OF/OT/OP cerradas (Estado > 1) marcadas con
+// CerradoEnErp=True. Consulta deliberadamente ligera: solo las columnas que
+// forman la clave, sin joins de campos custom ni datos de negocio, porque
+// estos items no se planifican: solo se usan para retirar del Planner el
+// trabajo que el ERP ya ha dado por terminado.
+procedure TSage200Reader.AddClavesCerradas(AItems: TList<TRawItemErp>;
+  const AEjercicios: TArray<SmallInt>; AEjercicio: SmallInt);
+var
+  Q: TADOQuery;
+  Item: TRawItemErp;
+  EjList: string;
+  I: Integer;
+begin
+  // Lista de ejercicios a consultar. Solo se miran los ejercicios en juego,
+  // no todo el historico: una empresa con muchos anos de datos tiene decenas
+  // de miles de OF cerradas que nunca llegaron al Planner y no interesan.
+  if AEjercicio > 0 then
+    EjList := IntToStr(AEjercicio)
+  else
+  begin
+    EjList := '';
+    for I := 0 to High(AEjercicios) do
+    begin
+      if EjList <> '' then EjList := EjList + ',';
+      EjList := EjList + IntToStr(AEjercicios[I]);
+    end;
+  end;
+  if EjList = '' then Exit;
+
+  Q := TADOQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+
+    // --- OFs cerradas ---
+    Q.SQL.Text :=
+      'SELECT EjercicioFabricacion, SerieFabricacion, NumeroFabricacion, EstadoOF ' +
+      'FROM dbo.OrdenesFabricacion ' +
+      'WHERE CodigoEmpresa = :CE AND EstadoOF > 1 ' +
+      '  AND EjercicioFabricacion IN (' + EjList + ')';
+    Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Item := Default(TRawItemErp);
+      Item.TipoOrigen   := 'OF ';
+      Item.Nivel        := 1;
+      Item.CerradoEnErp := True;
+      Item.ClaveERP     := Format('OF|%d|%s|%d',
+        [Q.FieldByName('EjercicioFabricacion').AsInteger,
+         Trim(Q.FieldByName('SerieFabricacion').AsString),
+         Q.FieldByName('NumeroFabricacion').AsInteger]);
+      Item.EstadoERP    := IntToStr(Q.FieldByName('EstadoOF').AsInteger);
+      AItems.Add(Item);
+      Q.Next;
+    end;
+    Q.Close;
+
+    // --- OTs cerradas ---
+    Q.SQL.Text :=
+      'SELECT EjercicioTrabajo, NumeroTrabajo, EstadoOT ' +
+      'FROM dbo.OrdenesTrabajo ' +
+      'WHERE CodigoEmpresa = :CE AND EstadoOT > 1 ' +
+      '  AND EjercicioTrabajo IN (' + EjList + ')';
+    Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Item := Default(TRawItemErp);
+      Item.TipoOrigen   := 'OF ';
+      Item.Nivel        := 2;
+      Item.CerradoEnErp := True;
+      Item.ClaveERP     := Format('OT|%d|%d',
+        [Q.FieldByName('EjercicioTrabajo').AsInteger,
+         Q.FieldByName('NumeroTrabajo').AsInteger]);
+      Item.EstadoERP    := IntToStr(Q.FieldByName('EstadoOT').AsInteger);
+      AItems.Add(Item);
+      Q.Next;
+    end;
+    Q.Close;
+
+    // --- Operaciones cerradas ---
+    Q.SQL.Text :=
+      'SELECT EjercicioTrabajo, NumeroTrabajo, Orden, EstadoOperacion ' +
+      'FROM dbo.OperacionesOT ' +
+      'WHERE CodigoEmpresa = :CE AND EstadoOperacion > 1 ' +
+      '  AND EjercicioTrabajo IN (' + EjList + ')';
+    Q.Parameters.ParamByName('CE').Value := FCodigoEmpresa;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Item := Default(TRawItemErp);
+      Item.TipoOrigen   := 'OF ';
+      Item.Nivel        := 3;
+      Item.CerradoEnErp := True;
+      Item.ClaveERP     := Format('OP|%d|%d|%d',
+        [Q.FieldByName('EjercicioTrabajo').AsInteger,
+         Q.FieldByName('NumeroTrabajo').AsInteger,
+         Q.FieldByName('Orden').AsInteger]);
+      Item.EstadoERP    := IntToStr(Q.FieldByName('EstadoOperacion').AsInteger);
+      AItems.Add(Item);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
   end;
 end;
 

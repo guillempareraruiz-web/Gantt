@@ -21,6 +21,10 @@ type
     ssActualizado,    // ERP ha cambiado; local no estaba tocado
     ssConflicto,      // ERP ha cambiado y local tambien
     ssEliminadoErp,   // Existia en local con Source='ERP'; ERP ya no lo devuelve
+    ssCerradoErp,     // El ERP lo devuelve pero YA CERRADO (EstadoOF/OT/OP > 1):
+                      // trabajo terminado, sale del Planner automaticamente.
+                      // Se distingue de ssEliminadoErp (desaparecido del ERP,
+                      // que puede ser un borrado accidental y pide confirmacion).
     ssError           // Mapeo fallo
   );
 
@@ -155,6 +159,7 @@ type
     LocalRawItemId: Int64;        // 0 si no existe en local
     LocalLastErpHash: string;
     HasPlannedNode: Boolean;      // True si hi ha algun FS_PL_NodeData lligat
+    LocalActivo: Boolean;         // False si ja es va retirar del pla (Activo=0)
     Status: TSyncStatus;
     Aplicar: Boolean;
     ErrorMsg: string;
@@ -188,6 +193,7 @@ begin
     ssActualizado:  Result := 'Actualizado';
     ssConflicto:    Result := 'CONFLICTO';
     ssEliminadoErp: Result := 'Eliminado en ERP';
+    ssCerradoErp:   Result := 'Cerrado en ERP';
     ssError:        Result := 'Error';
   else
     Result := '';
@@ -202,6 +208,7 @@ begin
     ssSinCambios:   Result := clWhite;
     ssConflicto:    Result := $00D6D6FF; // rosa/rojo suave
     ssEliminadoErp: Result := $00E0E0E0; // gris
+    ssCerradoErp:   Result := $00D0E8D0; // verde grisaceo: trabajo terminado
     ssError:        Result := $008080FF; // rojo
   else
     Result := clWhite;

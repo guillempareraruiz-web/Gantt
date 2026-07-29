@@ -80,6 +80,10 @@ type
     procedure ApplyRawItemExtras(ARawItemId: Int64;
       const AExtras: TArray<TErpExtraValue>);
     procedure MarkRawItemObsoleto(ALocalRawItemId: Int64);
+    // Retira del plan un item cerrado en el ERP: borra sus nodos y desactiva
+    // el Raw_Item (que se conserva como traza).
+    procedure RetirarItemCerrado(ALocalRawItemId: Int64;
+      const AClaveERP, ATipoOrigen: string);
   public
     constructor Create(AConnection: TADOConnection; ACodigoEmpresa: SmallInt;
       const AErpSistema: string);
@@ -2563,7 +2567,8 @@ begin
       '                          WHERE nd.CodigoEmpresa = ri.CodigoEmpresa ' +
       '                            AND nd.RawItemTipoOrigen = ri.TipoOrigen ' +
       '                            AND nd.RawItemClaveERP = ri.ClaveERP) ' +
-      '            THEN 1 ELSE 0 END AS HasNode ' +
+      '            THEN 1 ELSE 0 END AS HasNode, ' +
+      '       ISNULL(ri.Activo, 1) AS Activo ' +
       'FROM FS_PL_Raw_Item ri ' +
       'WHERE ri.CodigoEmpresa = :Emp AND ri.TipoOrigen = :Tipo';
     Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
@@ -2575,6 +2580,9 @@ begin
       Row.LocalRawItemId    := Q.FieldByName('RawItemId').AsLargeInt;
       Row.LocalLastErpHash  := Q.FieldByName('LastErpHash').AsString;
       Row.HasPlannedNode    := Q.FieldByName('HasNode').AsInteger = 1;
+      // Activo es BIT en FS_PL_Raw_Item: ADO lo expone como booleano, no como
+      // entero (AsInteger lanza "Cannot access field as type Integer").
+      Row.LocalActivo       := Q.FieldByName('Activo').AsBoolean;
       Clave := Q.FieldByName('ClaveERP').AsString;
       AByClave.AddOrSetValue(Clave, Row);
       Q.Next;
@@ -2666,6 +2674,7 @@ var
   LocalFull: TDictionary<string, TRawItemErp>;
   MapRepo: TErpFieldMapRepo;
   Maps: TArray<TErpFieldMap>;
+  HayObsoletos: Boolean;
 begin
   SetLength(Result, 0);
   // Los mapeos custom viven en la BD Planner (FS_PL_Cfg_ErpFieldMap); se cargan
@@ -2689,12 +2698,36 @@ begin
       Row.NewHash := HashRawItem(Item);
       ErpSeen.AddOrSetValue(Item.ClaveERP, True);
 
+      // Item CERRADO en el ERP: el cierre siempre lo decide el ERP (planta u
+      // oficina), nunca el Planner. Aqui solo se obedece: sale del plan de
+      // forma automatica. Si no existe en local no hay nada que retirar.
+      if Item.CerradoEnErp then
+      begin
+        if not Locals.TryGetValue(Item.ClaveERP, LocalRow) then Continue;
+        // Ya retirado en una sincronizacion anterior (Activo=0): no volver a
+        // listarlo, o el contador de "pendientes de retirar" creceria sin fin
+        // con todo el historico de trabajo cerrado.
+        if not LocalRow.LocalActivo then Continue;
+        Row.LocalRawItemId   := LocalRow.LocalRawItemId;
+        Row.LocalLastErpHash := LocalRow.LocalLastErpHash;
+        Row.HasPlannedNode   := LocalRow.HasPlannedNode;
+        Row.LocalActivo      := LocalRow.LocalActivo;
+        Row.Status  := ssCerradoErp;
+        Row.Aplicar := True;   // automatico, a diferencia de ssEliminadoErp
+        ResList.Add(Row);
+        Continue;
+      end;
+
       if Locals.TryGetValue(Item.ClaveERP, LocalRow) then
       begin
         Row.LocalRawItemId   := LocalRow.LocalRawItemId;
         Row.LocalLastErpHash := LocalRow.LocalLastErpHash;
         Row.HasPlannedNode   := LocalRow.HasPlannedNode;
-        if Row.NewHash = Row.LocalLastErpHash then
+        Row.LocalActivo      := LocalRow.LocalActivo;
+        // Si el hash coincide pero el item esta retirado (Activo=0), el ERP lo
+        // ha REABIERTO tras haberlo cerrado: hay que reactivarlo, no darlo por
+        // "sin cambios" (el UPDATE de ApplyRawItem pone Activo=1).
+        if (Row.NewHash = Row.LocalLastErpHash) and Row.LocalActivo then
         begin
           Row.Status := ssSinCambios;
           Row.Aplicar := False;
@@ -2718,13 +2751,27 @@ begin
     // Activo=0 al ApplyRawItems. Si tenen node, els deixem desmarcats i
     // l'usuari decideix.
     // Carreguem dades reals dels Raw_Item locals per poder mostrar-les al grid.
-    LoadLocalRawItemsFull('OF ', LocalFull);
+    // Nomes si realment hi ha obsolets: aquesta consulta llegeix tota la taula
+    // Raw_Item i en el cas normal (cap obsolet) no s'usa per a res.
+    // Els ja retirats (Activo=0) no es tornen a llistar: si no, cada
+    // comprovacio arrossegaria tot l'historic ja resolt.
+    HayObsoletos := False;
+    for Pair in Locals do
+      if Pair.Value.LocalActivo and (not ErpSeen.ContainsKey(Pair.Key)) then
+      begin
+        HayObsoletos := True;
+        Break;
+      end;
+
+    LocalFull := nil;
+    if HayObsoletos then
+      LoadLocalRawItemsFull('OF ', LocalFull);
     try
       for Pair in Locals do
-        if not ErpSeen.ContainsKey(Pair.Key) then
+        if Pair.Value.LocalActivo and (not ErpSeen.ContainsKey(Pair.Key)) then
         begin
           Row := Pair.Value;
-          if LocalFull.TryGetValue(Pair.Key, FullData) then
+          if (LocalFull <> nil) and LocalFull.TryGetValue(Pair.Key, FullData) then
             Row.ErpData := FullData
           else
           begin
@@ -2756,6 +2803,69 @@ begin
     'UPDATE FS_PL_Raw_Item SET Activo = 0, LastErpSyncAt = SYSUTCDATETIME() ' +
     'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
     '  AND RawItemId = ' + IntToStr(ALocalRawItemId);
+  ExecSql(Sql);
+end;
+
+// Retira del Planner un item que el ERP ya ha cerrado: borra sus nodos
+// planificados (el trabajo ya esta hecho, no tiene sentido seguir ocupando
+// capacidad futura) y marca el Raw_Item como inactivo.
+// El Raw_Item NO se borra: queda como traza de que ese trabajo existio y se
+// planifico, pero fuera de la ecuacion del plan.
+procedure TErpSyncRepo.RetirarItemCerrado(ALocalRawItemId: Int64;
+  const AClaveERP, ATipoOrigen: string);
+var
+  Sql: string;
+begin
+  // 1) Fuera del plan: borrar los nodos ligados a esta clave ERP y, si es una
+  //    OF u OT, tambien los de toda su descendencia. Hace falta porque el ERP
+  //    puede cerrar una OF de golpe sin marcar una a una sus operaciones, y los
+  //    nodos del Gantt cuelgan del nivel OP: sin esto quedarian huerfanos en el
+  //    plan, ocupando capacidad de un trabajo ya terminado.
+  Sql :=
+    'DELETE nd FROM FS_PL_NodeData nd ' +
+    'WHERE nd.CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+    '  AND nd.RawItemTipoOrigen = ' + SqlStr(ATipoOrigen) +
+    '  AND (nd.RawItemClaveERP = ' + SqlStr(AClaveERP) +
+    '    OR EXISTS (' +
+    '         SELECT 1 FROM FS_PL_Raw_Item hijo ' +
+    '         WHERE hijo.CodigoEmpresa = nd.CodigoEmpresa ' +
+    '           AND hijo.TipoOrigen = nd.RawItemTipoOrigen ' +
+    '           AND hijo.ClaveERP = nd.RawItemClaveERP ' +
+    '           AND (hijo.ClaveERPPadre = ' + SqlStr(AClaveERP) +
+    '             OR EXISTS (' +
+    '                  SELECT 1 FROM FS_PL_Raw_Item nieto ' +
+    '                  WHERE nieto.CodigoEmpresa = hijo.CodigoEmpresa ' +
+    '                    AND nieto.TipoOrigen = hijo.TipoOrigen ' +
+    '                    AND nieto.ClaveERP = hijo.ClaveERPPadre ' +
+    '                    AND nieto.ClaveERPPadre = ' + SqlStr(AClaveERP) + '))))';
+  ExecSql(Sql);
+
+  // 2) Traza: el Raw_Item se conserva, solo se desactiva. Igual que con los
+  //    nodos, se desactiva tambien la descendencia (una OF cerrada arrastra
+  //    sus OTs y operaciones), para que el Backlog no siga mostrando hijos
+  //    vivos de un padre ya terminado.
+  if ALocalRawItemId > 0 then
+  begin
+    Sql :=
+      'UPDATE FS_PL_Raw_Item SET Activo = 0, LastErpSyncAt = SYSUTCDATETIME() ' +
+      'WHERE CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+      '  AND RawItemId = ' + IntToStr(ALocalRawItemId);
+    ExecSql(Sql);
+  end;
+
+  Sql :=
+    'UPDATE hijo SET Activo = 0, LastErpSyncAt = SYSUTCDATETIME() ' +
+    'FROM FS_PL_Raw_Item hijo ' +
+    'WHERE hijo.CodigoEmpresa = ' + IntToStr(FCodigoEmpresa) +
+    '  AND hijo.TipoOrigen = ' + SqlStr(ATipoOrigen) +
+    '  AND hijo.Activo = 1 ' +
+    '  AND (hijo.ClaveERPPadre = ' + SqlStr(AClaveERP) +
+    '    OR EXISTS (' +
+    '         SELECT 1 FROM FS_PL_Raw_Item padre ' +
+    '         WHERE padre.CodigoEmpresa = hijo.CodigoEmpresa ' +
+    '           AND padre.TipoOrigen = hijo.TipoOrigen ' +
+    '           AND padre.ClaveERP = hijo.ClaveERPPadre ' +
+    '           AND padre.ClaveERPPadre = ' + SqlStr(AClaveERP) + '))';
   ExecSql(Sql);
 end;
 
@@ -3052,15 +3162,26 @@ begin
         ssActualizado:  Inc(Result.Actualizados);
         ssSinCambios:   Inc(Result.SinCambios);
         ssEliminadoErp: Inc(Result.Eliminados);
+        ssCerradoErp:   Inc(Result.Eliminados);   // salen del plan igualmente
         ssError:        Inc(Result.Errores);
       end;
 
       if not Row.Aplicar then Continue;
 
       try
-        if Row.Status = ssEliminadoErp then
+        if Row.Status = ssCerradoErp then
         begin
-          // Marcar obsolet nomes si NO te node planificat
+          // Cerrado en el ERP: fuera del plan SIEMPRE, tenga nodos o no. El
+          // cierre lo decide el ERP y el Planner lo obedece; el Raw_Item queda
+          // como traza (Activo=0), pero deja de ocupar capacidad.
+          RetirarItemCerrado(Row.LocalRawItemId, Row.ErpData.ClaveERP,
+                             Row.ErpData.TipoOrigen);
+          Inc(Result.Aplicados);
+        end
+        else if Row.Status = ssEliminadoErp then
+        begin
+          // Desaparecido del ERP (no cerrado): puede ser un borrado accidental,
+          // asi que solo se retira si NO hay nada planificado.
           if (Row.LocalRawItemId > 0) and (not Row.HasPlannedNode) then
           begin
             MarkRawItemObsoleto(Row.LocalRawItemId);

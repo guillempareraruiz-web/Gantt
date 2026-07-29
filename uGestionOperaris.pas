@@ -54,6 +54,7 @@ type
     lvOperaris: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
     procedure FormCreate(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure btnAddClick(Sender: TObject);
     procedure btnDelClick(Sender: TObject);
     procedure btnSaveClick(Sender: TObject);
@@ -80,6 +81,7 @@ type
     FCustomCols: TArray<TOperarioCustomCol>;
     FCustomColumns: TArray<TcxGridColumn>;
     FStyleInactivo: TcxStyle;   // fons vermell clar per operaris no actius
+    FLoaded: Boolean;           // la carga pesada solo se hace una vez, en OnShow
     procedure LoadCalendars;
     procedure SetupCombos;
     procedure LoadCustomColumnDefs;
@@ -92,6 +94,9 @@ type
     function CalendarNameFromId(ACalendarId: Integer): string;
     function GetDeptsCSV(AOperatorId: Integer): string;
     function GetSkillsCount(AOperatorId: Integer): Integer;
+    // Precarga en bloque (1 consulta cada una) para evitar N+1 al abrir el form.
+    function LoadAllDeptsCSV: TDictionary<Integer, string>;
+    function LoadAllSkillsCount: TDictionary<Integer, Integer>;
     procedure RefreshDeptsCell(ARecIdx: Integer);
     procedure RefreshSkillsCell(ARecIdx: Integer);
     function Exec(const ASQL: string): Integer;
@@ -110,7 +115,7 @@ implementation
 uses
   uDMPlanner, uAsignarDepartamentos,
   uOperarioPolivalencia, uMatrizPolivalencia, uOperariosCustomCols, uLogin,
-  uHelpViewer, Main;
+  uHelpViewer, uBusyDialog, Main;
 
 const
   OPERARIOS_GRID_ID = 'OPERARIOS';
@@ -157,14 +162,26 @@ begin
   FStyleInactivo.TextColor := clWindowText;
   tvOperaris.Styles.OnGetContentStyle := tvOperarisGetContentStyle;
 
-  LoadCalendars;
-  SetupCombos;
-  LoadCustomColumnDefs;
-  BuildCustomColumns;
-  LoadOperarios;
-
   // Boton '?' en el caption (requiere BorderStyle=bsDialog) + F1 = ayuda.
   THelpViewer.InstallHelp(Self, 'uGestionOperaris', 'Gesti'#243'n de Operarios');
+end;
+
+procedure TfrmGestionOperaris.FormShow(Sender: TObject);
+begin
+  // La carga toca varias tablas: hacerla en OnShow (con el form ya visible y
+  // un aviso de espera) en vez de en OnCreate, que dejaba la pantalla bloqueada
+  // y sin repintar hasta terminar.
+  if FLoaded then Exit;
+  FLoaded := True;
+  RunBusy(Self, 'Cargando operarios...',
+    procedure
+    begin
+      LoadCalendars;
+      SetupCombos;
+      LoadCustomColumnDefs;
+      BuildCustomColumns;
+      LoadOperarios;
+    end);
 end;
 
 procedure TfrmGestionOperaris.tvOperarisGetContentStyle(
@@ -508,12 +525,75 @@ begin
     Q.Free;
   end;
 end;
+function TfrmGestionOperaris.LoadAllDeptsCSV: TDictionary<Integer, string>;
+var
+  Q: TADOQuery;
+  OpId: Integer;
+  S, Prev: string;
+begin
+  Result := TDictionary<Integer, string>.Create;
+  try
+    // Una sola consulta para todos los operarios; se agrupa en Pascal por orden.
+    Q := OpenQuery(
+      'SELECT od.OperatorId, d.Nombre FROM FS_PL_OperatorDepartment od ' +
+      'INNER JOIN FS_PL_Department d ON d.CodigoEmpresa = od.CodigoEmpresa ' +
+      '  AND d.DepartmentId = od.DepartmentId ' +
+      'WHERE od.CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+      ' ORDER BY od.OperatorId, d.Nombre');
+    try
+      while not Q.Eof do
+      begin
+        OpId := Q.FieldByName('OperatorId').AsInteger;
+        S := Q.FieldByName('Nombre').AsString;
+        if Result.TryGetValue(OpId, Prev) and (Prev <> '') then
+          Result.AddOrSetValue(OpId, Prev + ', ' + S)
+        else
+          Result.AddOrSetValue(OpId, S);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function TfrmGestionOperaris.LoadAllSkillsCount: TDictionary<Integer, Integer>;
+var
+  Q: TADOQuery;
+begin
+  Result := TDictionary<Integer, Integer>.Create;
+  try
+    Q := OpenQuery(
+      'SELECT OperatorId, COUNT(*) AS N FROM FS_PL_OperarioHabilidad ' +
+      'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
+      ' GROUP BY OperatorId');
+    try
+      while not Q.Eof do
+      begin
+        Result.AddOrSetValue(Q.FieldByName('OperatorId').AsInteger,
+                             Q.FieldByName('N').AsInteger);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
 procedure TfrmGestionOperaris.LoadOperarios;
 var
   Q: TADOQuery;
-  I, J, OpId, CalId: Integer;
-  Sel, Joins, Alias, FldName: string;
+  I, J, OpId, CalId, N: Integer;
+  Sel, Joins, Alias, FldName, S: string;
   V: Variant;
+  Depts: TDictionary<Integer, string>;
+  Skills: TDictionary<Integer, Integer>;
 begin
   // JOIN dinamico para columnas custom: cada una como X_<key>.
   Sel := '';
@@ -529,8 +609,11 @@ begin
       '  AND ' + Alias + '.FieldKey = ' + QStr(FCustomCols[I].ColumnKey);
   end;
 
+  Depts := LoadAllDeptsCSV;
+  Skills := nil;
   tvOperaris.BeginUpdate;
   try
+    Skills := LoadAllSkillsCount;
     tvOperaris.DataController.RecordCount := 0;
     Q := OpenQuery(
       'SELECT o.OperatorId, o.Nombre, ISNULL(o.CalendarId, 0) AS CalendarId, o.Activo' + Sel +
@@ -539,18 +622,23 @@ begin
       ' ORDER BY o.Nombre');
     try
       SetLength(FOperatorIds, Q.RecordCount);
+      // Dimensionar una sola vez: asignar RecordCount fila a fila es O(n^2).
+      tvOperaris.DataController.RecordCount := Q.RecordCount;
       I := 0;
       while not Q.Eof do
       begin
         OpId := Q.FieldByName('OperatorId').AsInteger;
         CalId := Q.FieldByName('CalendarId').AsInteger;
-        tvOperaris.DataController.RecordCount := I + 1;
+        if I >= tvOperaris.DataController.RecordCount then
+          tvOperaris.DataController.RecordCount := I + 1;
         tvOperaris.DataController.Values[I, colOpId.Index] := OpId;
         tvOperaris.DataController.Values[I, colOpNombre.Index] := Q.FieldByName('Nombre').AsString;
         tvOperaris.DataController.Values[I, colOpCalendario.Index] := CalendarNameFromId(CalId);
         tvOperaris.DataController.Values[I, colOpActivo.Index] := Q.FieldByName('Activo').AsBoolean;
-        tvOperaris.DataController.Values[I, colOpDepartamentos.Index] := GetDeptsCSV(OpId);
-        tvOperaris.DataController.Values[I, colOpCapacitaciones.Index] := GetSkillsCount(OpId);
+        if not Depts.TryGetValue(OpId, S) then S := '';
+        tvOperaris.DataController.Values[I, colOpDepartamentos.Index] := S;
+        if not Skills.TryGetValue(OpId, N) then N := 0;
+        tvOperaris.DataController.Values[I, colOpCapacitaciones.Index] := N;
         FOperatorIds[I] := OpId;
 
         for J := 0 to High(FCustomCols) do
@@ -572,11 +660,17 @@ begin
         Inc(I);
         Q.Next;
       end;
+      // RecordCount de ADO puede sobrestimar; ajustar al total real leido.
+      if tvOperaris.DataController.RecordCount <> I then
+        tvOperaris.DataController.RecordCount := I;
+      SetLength(FOperatorIds, I);
     finally
       Q.Free;
     end;
   finally
     tvOperaris.EndUpdate;
+    Skills.Free;
+    Depts.Free;
   end;
 end;
 function TfrmGestionOperaris.GetSelectedIdx: Integer;

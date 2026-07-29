@@ -279,9 +279,9 @@ end;
 procedure TfrmSyncBacklogPreview.RefreshResumen;
 var
   Row: TSyncRowRawItem;
-  Nuevos, Actu, Sin_, Elim, Sel: Integer;
+  Nuevos, Actu, Sin_, Elim, Cerr, Sel: Integer;
 begin
-  Nuevos := 0; Actu := 0; Sin_ := 0; Elim := 0; Sel := 0;
+  Nuevos := 0; Actu := 0; Sin_ := 0; Elim := 0; Cerr := 0; Sel := 0;
   for Row in FRows do
   begin
     case Row.Status of
@@ -289,13 +289,14 @@ begin
       ssActualizado:  Inc(Actu);
       ssSinCambios:   Inc(Sin_);
       ssEliminadoErp: Inc(Elim);
+      ssCerradoErp:   Inc(Cerr);
     end;
     if Row.Aplicar then Inc(Sel);
   end;
   lblResumen.Caption :=
     Format('Total: %d   Nuevos: %d   Actualizados: %d   Sin cambios: %d   Obsoletos: %d   ' +
-           'Seleccionados: %d',
-           [Length(FRows), Nuevos, Actu, Sin_, Elim, Sel]);
+           'Cerrados en ERP: %d   Seleccionados: %d',
+           [Length(FRows), Nuevos, Actu, Sin_, Elim, Cerr, Sel]);
 end;
 procedure TfrmSyncBacklogPreview.SetAllAplicar(AValue: Boolean);
 var
@@ -331,6 +332,13 @@ begin
   // Recull el valor del checkbox del grid a l'array
   for I := 0 to High(FRows) do
   begin
+    // Els tancats a l'ERP no son opcionals: el tancament el decideix l'ERP i
+    // el Planner l'obeeix, aixi que no depenen del checkbox del grid.
+    if FRows[I].Status = ssCerradoErp then
+    begin
+      FRows[I].Aplicar := True;
+      Continue;
+    end;
     V := GridView.DataController.Values[I, colAplicar.Index];
     FRows[I].Aplicar := (not VarIsNull(V)) and Boolean(V);
   end;
@@ -348,7 +356,9 @@ begin
   ShowMessage(Format(
     'Sincronizacion completada.'#13#10#13#10 +
     'Aplicados: %d'#13#10 +
-    'Nuevos: %d   Actualizados: %d   Obsoletos: %d   Errores: %d',
+    'Nuevos: %d   Actualizados: %d   Retirados del plan: %d   Errores: %d'#13#10#13#10 +
+    'Los items cerrados en el ERP se han retirado del plan automaticamente; ' +
+    'se conservan como traza pero ya no ocupan capacidad.',
     [Summary.Aplicados, Summary.Nuevos, Summary.Actualizados,
      Summary.Eliminados, Summary.Errores]));
   FApplied := True;

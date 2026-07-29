@@ -13,6 +13,7 @@ object frmGestionOperaris: TfrmGestionOperaris
   Font.Style = []
   Position = poScreenCenter
   OnCreate = FormCreate
+  OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 15
   object pnlHeader: TPanel
