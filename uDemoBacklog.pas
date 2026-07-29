@@ -558,7 +558,7 @@ begin
   begin
     if MessageDlg(
          'Se generaran arboles demo en FS_PL_Raw_Item ' +
-         '(OF>OT>OP, PEDIDO>LINEA>OP, PROYECTO>TAREA>OP; OrigenERP=DEMO).' + sLineBreak +
+         '(OF>OT>OP, PEDIDO>LINEA>OP; OrigenERP=DEMO).' + sLineBreak +
          'Se borraran los datos demo anteriores.' + sLineBreak + sLineBreak +
          'Continuar?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
       Exit;
@@ -568,7 +568,11 @@ begin
 
   NumOFs := Max(0, ANumOFs);
   NumCom := Max(0, ANumCom);
-  NumPrj := Max(0, ANumPrj);
+  // V085: el Backlog es solo produccion (OF/PEDIDO). Ya no se generan arboles
+  // PROYECTO>TAREA>OP: las vistas del Backlog no los exponen y apareceria una
+  // familia sin filtro ni etiqueta. Los proyectos se planifican en Ingenieria.
+  // Se conserva el parametro para no romper las llamadas existentes.
+  NumPrj := 0;
 
   AConn.BeginTrans;
   try
@@ -586,6 +590,8 @@ begin
       GenerarPedido(AConn, CE, I, Centros);
       Inc(TotalPed);
     end;
+    // V085: NumPrj es siempre 0; el bucle queda por si se reactivase la familia
+    // PRJ el dia que exista el puente ERP -> WBS de Ingenieria.
     for I := 1 to NumPrj do
     begin
       GenerarProyecto(AConn, CE, I, Centros);
@@ -616,9 +622,8 @@ begin
       'Backlog demo generado:' + sLineBreak +
       '  %d OFs (con OTs y OPs)' + sLineBreak +
       '  %d Pedidos (con Lineas y OPs)' + sLineBreak +
-      '  %d Proyectos (con Tareas y OPs)' + sLineBreak +
       '  %d items totales en Raw_Item',
-      [TotalOFs, TotalPed, TotalPrj, TotalItems]));
+      [TotalOFs, TotalPed, TotalItems]));
 end;
 
 end.

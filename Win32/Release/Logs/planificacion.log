@@ -1,41 +1,11 @@
-﻿2026-07-28 22:02:53.781  ========================================================
-2026-07-28 22:02:53.781  === LOGIN btnDevAdmin (arranque)
-2026-07-28 22:02:53.782  ========================================================
-2026-07-28 22:02:53.825    LOGIN.Connect (con migraciones): 0 ms
-2026-07-28 22:02:53.844    LOGIN.ValidateUser: 19 ms
-2026-07-28 22:02:53.850    LOGIN.LoadPermissions: 5 ms
-2026-07-28 22:02:53.927      DM.LoadCalendars: 68 ms
-2026-07-28 22:02:53.942      DM.LoadCentres: 14 ms
-2026-07-28 22:02:53.942    LOGIN.LoadEmpresaInfo (+Calendars+Centres): 91 ms
-2026-07-28 22:02:53.950    LOGIN.LoadMasterProject: 7 ms
-2026-07-28 22:02:53.950  ======== LOGIN btnDevAdmin FIN ========
-2026-07-28 22:02:53.963  ======== ARRANQUE Main.FormCreate INICIO ========
-2026-07-28 22:02:53.969    ARRANQUE.ConfigJSON: 4 ms
-2026-07-28 22:02:53.985    ARRANQUE.Operarios+Deptos: 15 ms
-2026-07-28 22:02:54.007    ARRANQUE.Repos(Habil/OpTypes/Absen/Pesos): 22 ms
-2026-07-28 22:02:54.014    ARRANQUE.MigracionHabilidades: 7 ms
-2026-07-28 22:02:54.122    ARRANQUE.LoadActivePlan: 108 ms
-2026-07-28 22:02:54.181    ARRANQUE.MostrarDashboard(sin refresco): 59 ms
-2026-07-28 22:02:54.181  ======== ARRANQUE Main.FormCreate FIN (refresco diferido) ========
-2026-07-28 22:02:54.260  DASH.FormShow INICIO (EstaCargado=False)
-2026-07-28 22:02:54.260  DASH.Refrescar INICIO (Forzar=False Demo=False)
-2026-07-28 22:02:54.270    DASH.Contadores: 10 ms
-2026-07-28 22:02:54.425    DASH.ProyectoActivo: 155 ms
-2026-07-28 22:02:54.465    DASH.PendingSync: 40 ms
-2026-07-28 22:02:54.490    DASH.Salud: 25 ms
-2026-07-28 22:02:54.609    DASH.KPIsAvanzados: 119 ms
-2026-07-28 22:02:54.610    DASH.KPIsStock: 0 ms
-2026-07-28 22:02:54.610  DASH.Refrescar TOTAL: 350 ms
-2026-07-28 22:02:54.611    DASH.FormShow.Refrescar: 351 ms
-2026-07-28 22:02:54.615    DASH.FormShow.RelayoutAll: 4 ms
-2026-07-28 22:02:55.020    ARRANQUE.RefrescoDiferido: 105 ms
-2026-07-28 22:02:55.021  ======== ARRANQUE refresco diferido COMPLETO ========
-2026-07-28 22:05:00.034  utillajes demo: 6 creados y ligados a operaciones
-2026-07-28 22:05:00.141  DASH.Refrescar INICIO (Forzar=True Demo=True)
-2026-07-28 22:05:00.142    DASH.Contadores: 1 ms
-2026-07-28 22:05:00.149    DASH.ProyectoActivo: 7 ms
-2026-07-28 22:05:00.149    DASH.PendingSync: 0 ms
-2026-07-28 22:05:00.150    DASH.Salud: 0 ms
-2026-07-28 22:05:00.150    DASH.KPIsAvanzados: 0 ms
-2026-07-28 22:05:00.151    DASH.KPIsStock: 0 ms
-2026-07-28 22:05:00.151  DASH.Refrescar TOTAL: 10 ms
+﻿2026-07-29 22:19:54.015  ========================================================
+2026-07-29 22:19:54.015  === TOGGLE TAB -> 1 (0=Pend,1=Planif)
+2026-07-29 22:19:54.015  ========================================================
+2026-07-29 22:19:54.187  LOADDATA query (tab=1 nivel=3): 0 ms [CACHE]
+2026-07-29 22:19:54.187  LOADDATA volcado 0 filas: 0 ms
+2026-07-29 22:19:54.218  LOADDATA pintado+KPIs: 31 ms
+2026-07-29 22:19:54.218  === TOGGLE total: 203 ms ===
+2026-07-29 22:19:54.218  === FIN ===============================================
+2026-07-29 22:19:56.010  LOADDATA query (tab=1 nivel=3): 232 ms [BD]
+2026-07-29 22:19:56.010  LOADDATA volcado 30 filas: 0 ms
+2026-07-29 22:19:56.087  LOADDATA pintado+KPIs: 77 ms

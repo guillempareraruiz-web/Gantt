@@ -113,8 +113,7 @@ object frmBacklogCustomColEdit: TfrmBacklogCustomColEdit
     TabOrder = 3
     Items.Strings = (
       'OF'
-      'PEDIDO'
-      'PROYECTO')
+      'PEDIDO')
   end
   object cmbNivel: TComboBox
     Left = 144
@@ -124,8 +123,8 @@ object frmBacklogCustomColEdit: TfrmBacklogCustomColEdit
     Style = csDropDownList
     TabOrder = 4
     Items.Strings = (
-      'Cabecera (OF / PEDIDO / PROYECTO)'
-      'Intermedio (OT / LINEA / TAREA)'
+      'Cabecera (OF / PEDIDO)'
+      'Intermedio (OT / LINEA)'
       'Operacion (OP)')
   end
   object edtOrderDefault: TSpinEdit

@@ -20,7 +20,7 @@ Una columna personalizada le permite guardar y ver información propia de su emp
 
 Las columnas del Backlog tienen dos opciones extra, porque los pendientes vienen de documentos del ERP con jerarquía:
 
-- **Origen**: si el campo pertenece a la **OF / Pedido / Proyecto**.
+- **Origen**: si el campo pertenece a la **OF** o al **Pedido**.
 - **Nivel**: si se asocia al documento (OF), a su línea (OT), o a la operación (OP).
 
 Así, por ejemplo, puede tener una columna "Acabado" que viva a nivel de operación (OP) y otra "Cliente final" a nivel de OF.

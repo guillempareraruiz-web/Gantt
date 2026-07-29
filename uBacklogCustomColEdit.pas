@@ -18,8 +18,8 @@ type
     ColumnKey: string;
     Caption: string;
     DataType: Char;          // 'S','N','D','B'
-    SourceEntity: string;    // 'OF','PEDIDO','PROYECTO'
-    AppliesToNivel: Integer; // 1=OF/PED/PRJ, 2=OT/LINEA/TAREA, 3=OP, 0=auto(leaf)
+    SourceEntity: string;    // 'OF','PEDIDO' (V085: fuera 'PROYECTO')
+    AppliesToNivel: Integer; // 1=OF/PEDIDO, 2=OT/LINEA, 3=OP, 0=auto(leaf)
     OrderDefault: Integer;
     WidthDefault: Integer;
   end;
@@ -96,9 +96,10 @@ begin
     cmbDataType.ItemIndex := 0;
   end;
 
+  // V085: 'PROYECTO' ya no es una opcion. Una definicion antigua guardada con
+  // esa entidad cae al else y se muestra como 'OF'.
   if SameText(FData.SourceEntity, 'OF') then       cmbSourceEntity.ItemIndex := 0
   else if SameText(FData.SourceEntity, 'PEDIDO')   then cmbSourceEntity.ItemIndex := 1
-  else if SameText(FData.SourceEntity, 'PROYECTO') then cmbSourceEntity.ItemIndex := 2
   else cmbSourceEntity.ItemIndex := 0;
 
   // Mapeo Nivel: 1->idx0 (cabecera), 2->idx1 (intermedio), 3->idx2 (OP).
@@ -190,7 +191,8 @@ begin
   case cmbSourceEntity.ItemIndex of
     0: FData.SourceEntity := 'OF';
     1: FData.SourceEntity := 'PEDIDO';
-    2: FData.SourceEntity := 'PROYECTO';
+  else
+    FData.SourceEntity := 'OF';   // V085: fuera 'PROYECTO'
   end;
   case cmbNivel.ItemIndex of
     0: FData.AppliesToNivel := 1;

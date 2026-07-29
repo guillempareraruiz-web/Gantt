@@ -1,6 +1,8 @@
 object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
   Left = 0
   Top = 0
+  BorderIcons = [biSystemMenu, biHelp]
+  BorderStyle = bsDialog
   Caption = 'F'#243'rmula del art'#237'culo'
   ClientHeight = 640
   ClientWidth = 1200
@@ -11,6 +13,7 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
   Font.Name = 'Segoe UI'
   Font.Style = []
   Position = poScreenCenter
+  OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = FormShow
   PixelsPerInch = 96
@@ -51,6 +54,88 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
       Font.Style = []
       ParentFont = False
     end
+    object pnlKpiComp: TPanel
+      Left = 900
+      Top = 8
+      Width = 138
+      Height = 44
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 0
+      object lblKpiCompVal: TLabel
+        Left = 0
+        Top = 3
+        Width = 138
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiCompCap: TLabel
+        Left = 0
+        Top = 26
+        Width = 138
+        Height = 15
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Componentes'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
+    object pnlKpiOper: TPanel
+      Left = 1046
+      Top = 8
+      Width = 138
+      Height = 44
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      Color = 5526612
+      ParentBackground = False
+      TabOrder = 1
+      object lblKpiOperVal: TLabel
+        Left = 0
+        Top = 3
+        Width = 138
+        Height = 22
+        Alignment = taCenter
+        AutoSize = False
+        Caption = '0'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -18
+        Font.Name = 'Segoe UI Semibold'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+      object lblKpiOperCap: TLabel
+        Left = 0
+        Top = 26
+        Width = 138
+        Height = 15
+        Alignment = taCenter
+        AutoSize = False
+        Caption = 'Operaciones'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = 14869218
+        Font.Height = -10
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+      end
+    end
   end
   object pnlBottom: TPanel
     Left = 0
@@ -60,6 +145,22 @@ object frmFormulaArticuloViewer: TfrmFormulaArticuloViewer
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
+    object lblFooterHint: TLabel
+      Left = 12
+      Top = 13
+      Width = 700
+      Height = 15
+      AutoSize = False
+      Caption =
+        'Doble clic en un semielaborado para desplegar su f'#243'rmula.  ' +
+        'F1: ayuda.'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clGrayText
+      Font.Height = -11
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
     object btnClose: TButton
       Left = 1092
       Top = 6

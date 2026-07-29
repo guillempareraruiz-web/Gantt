@@ -46,7 +46,9 @@ begin
     begin
       ANumOFs := F.spNumOFs.Value;
       ANumCom := F.spNumCom.Value;
-      ANumPrj := F.spNumPrj.Value;
+      // V085: el Backlog es solo produccion; no se generan proyectos demo.
+      // Los controles quedan ocultos en el DFM (ver lblNumPrj / spNumPrj).
+      ANumPrj := 0;
       AVaciarPlan := F.chkVaciarPlan.Checked;
     end;
   finally

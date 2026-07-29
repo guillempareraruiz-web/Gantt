@@ -1,10 +1,12 @@
 ﻿unit uBacklog;
-
 {
   TfrmBacklog - Pantalla de Backlog / Carga pendiente.
-
-  - Muestra OFs, Comandas y Proyectos pendientes de planificar
-    (vista FS_PL_vw_Backlog, que excluye lo que ya tiene nodo en el Plan MASTER).
+  - Muestra OFs y Pedidos pendientes de planificar (vista FS_PL_vw_Backlog, que
+    excluye lo que ya tiene nodo en el Plan MASTER).
+  - V085: el Backlog es la bandeja de entrada de PRODUCCION. La familia PRJ
+    (proyectos) queda fuera: se planifica en el modulo de Ingenieria (paradigma
+    TAREAS / WBS). El ERP los sigue importando a FS_PL_Raw_Item; simplemente las
+    vistas del Backlog no los exponen.
   - Grid totalmente personalizable (cxGrid): reordenar/ocultar columnas,
     filtros por columna, multi-sort, column chooser.
   - Soporta campos personalizados por cliente (FS_PL_Cfg_GridColumns +
@@ -14,9 +16,7 @@
   - El impacto detallado (calendarios/torns) se implementara en una fase posterior;
     de momento ofrece agregados basicos (count, horas, fin estimado simple).
 }
-
 interface
-
 uses
   Winapi.Windows, System.SysUtils, System.Classes, System.Variants,
   System.NetEncoding,
@@ -51,14 +51,13 @@ uses
   dxSkinVisualStudio2013Light, dxSkinVS2010, dxSkinWhiteprint, dxSkinWXI,
   dxSkinXmas2008Blue, Vcl.Menus, cxButtons, dxGDIPlusClasses, cxImage,
   Vcl.WinXCtrls, uBulkNodePersist;
-
 const
   BACKLOG_GRID_ID = 'BACKLOG';
-
 type
   TBacklogRow = record
     Origen: string;
-    TipoOrigen: string;      // CHAR(3) del modelo Raw_Item: 'OF ','PED','PRJ'
+    TipoOrigen: string;      // CHAR(3) Raw_Item. En Backlog solo 'OF ','PED'
+                             // (V085: PRJ se planifica en Ingenieria, no aqui)
     Nivel: Integer;          // nivel del leaf (1/2/3) tal como expone la vista
     RawId: Int64;            // RawItemId del leaf
     ParentRawItemId: Int64;  // padre del leaf
@@ -123,16 +122,14 @@ type
     NumOpsPlan: Integer;
     NumCentros: Integer;
   end;
-
   TCustomColumnDef = record
     ColumnKey: string;
     Caption: string;
     DataType: Char;
-    SourceEntity: string;   // 'OF','PEDIDO','PROYECTO'
+    SourceEntity: string;   // 'OF','PEDIDO' ('PROYECTO' solo en defs antiguas)
     FieldKey: string;       // = ColumnKey si SourceExpression es NULL
     AppliesToNivel: Integer; // 1/2/3, 0 = no especificado (cae al leaf)
   end;
-
   TfrmBacklog = class(TForm)
     pnlHeader: TPanel;
     lblTitle: TLabel;
@@ -159,6 +156,10 @@ type
     chkUsaFechaDesde: TCheckBox;
     chkUsaFechaHasta: TCheckBox;
     btnLimpiarFiltros: TButton;
+    bvlBuscar: TBevel;
+    lblBuscar: TLabel;
+    edtBuscar: TEdit;
+    lblBuscarHint: TLabel;
     tabMode: TTabControl;
     pnlImpacto: TPanel;
     pnlImpactoHeader: TPanel;
@@ -185,10 +186,6 @@ type
     RegenerarNodosDemo1: TMenuItem;
     RegenerarBacklogDemo1: TMenuItem;
     pnlSubTitulo: TPanel;
-    btnDesplanificarSel: TButton;
-    btnPlanificar: TButton;
-    btnPlanificarExpress: TButton;
-    btnSyncErp: TcxButton;
     PopupMenu2: TPopupMenu;
     Columnas1: TMenuItem;
     Configurar1: TMenuItem;
@@ -198,8 +195,14 @@ type
     ConfigurarVencimiento1: TMenuItem;
     N4: TMenuItem;
     Vaciarylimpiartodalaplanificacin2: TMenuItem;
+    pmGridRow: TPopupMenu;
+    miVerFormula: TMenuItem;
+    miVerDocumento: TMenuItem;
+    N5: TMenuItem;
+    miLimpiarSeleccion: TMenuItem;
+    N6: TMenuItem;
+    miCopiarCelda: TMenuItem;
     imgSection: TcxImage;
-    btnRecargar: TcxButton;
     lblCountRegs: TLabel;
     pnlKpiOF: TPanel;
     lblKpiOFVal: TLabel;
@@ -223,15 +226,24 @@ type
     cxButton9: TcxButton;
     chkVerImpacto: TcxCheckBox;
     chkVerFiltros: TcxCheckBox;
-    procedure btnSyncErpClick(Sender: TObject);
+    btnRecargar: TcxButton;
+    btnPlanificar: TcxButton;
+    btnPlanificarExpress: TcxButton;
+    btnDesplanificarSel: TcxButton;
+    btnSyncErp: TcxButton;
+    btnLimpiarSeleccion: TcxButton;
+    btnLimpiarFiltrosGrid: TcxButton;
     procedure RegenerarNodosDemo1Click(Sender: TObject);
     procedure RegenerarBacklogDemo1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnPlanificarClick(Sender: TObject);
-    procedure btnPlanificarExpressClick(Sender: TObject);
     procedure btnLimpiarFiltrosClick(Sender: TObject);
+    procedure pmGridRowPopup(Sender: TObject);
+    procedure miVerFormulaClick(Sender: TObject);
+    procedure miVerDocumentoClick(Sender: TObject);
+    procedure miLimpiarSeleccionClick(Sender: TObject);
+    procedure miCopiarCeldaClick(Sender: TObject);
     procedure FiltroChanged(Sender: TObject);
     procedure tvBacklogSelectionChanged(Sender: TcxCustomGridTableView);
     procedure tvBacklogCellDblClick(Sender: TcxCustomGridTableView;
@@ -244,8 +256,6 @@ type
       var ADone: Boolean);
     procedure tabModeChange(Sender: TObject);
     procedure cmbNivelVistaChange(Sender: TObject);
-    procedure btnDesplanificarSelClick(Sender: TObject);
-    procedure btnRecargarClick(Sender: TObject);
     procedure Configurar1Click(Sender: TObject);
     procedure Restablecer1Click(Sender: TObject);
     procedure Guardar1Click(Sender: TObject);
@@ -253,6 +263,13 @@ type
     procedure chkVerImpactoPropertiesChange(Sender: TObject);
     procedure chkVerFiltrosPropertiesChange(Sender: TObject);
     procedure ConfigurarVencimiento1Click(Sender: TObject);
+    procedure btnRecargarClick(Sender: TObject);
+    procedure btnPlanificarClick(Sender: TObject);
+    procedure btnPlanificarExpressClick(Sender: TObject);
+    procedure btnDesplanificarSelClick(Sender: TObject);
+    procedure btnSyncErpClick(Sender: TObject);
+    procedure btnLimpiarSeleccionClick(Sender: TObject);
+    procedure btnLimpiarFiltrosGridClick(Sender: TObject);
   private
     FRows: TList<TBacklogRow>;
     FFilteredIndices: TArray<Integer>;   // FRows index per cada fila del grid
@@ -266,31 +283,36 @@ type
     // desde memoria (~100ms). Se invalida al planificar/desplanificar/filtrar/
     // refrescar. Clave = 'tab|nivel' (p.ej. '1|3').
     FRecordsetCache: TObjectDictionary<string, TCustomADODataSet>;
-
     // Reglas utillaje del maestro, cacheadas por sesion de planificacion: se
     // consultan por cada fila y son pocas (una por operacion/articulo ligado).
     FUtilReglas: TArray<TUtillajeRegla>;
     FUtilReglasCargadas: Boolean;
-
     FCustomCols: TArray<TCustomColumnDef>;
     FBaseColumns: TArray<TcxGridColumn>;
     FCustomColumns: TArray<TcxGridColumn>;
     FColKeyByTag: TDictionary<Integer, string>;
     FLoading: Boolean;
     FFirstShow: Boolean;
-    FNivelVista: Integer;   // 1=OF/PED/PRJ, 2=OT/LINEA/TAREA, 3=OP. Tab Pendientes.
-
+    FNivelVista: Integer;   // 1=OF/PEDIDO, 2=OT/LINEA, 3=OP. Tab Pendientes.
+    // Seleccion PERSISTENTE, propiedad del DATO y no de la vista.
+    // ApplyRowsToGrid reconstruye el DataController entero en cada cambio de
+    // filtro, lo que borraba Controller.SelectedRows: el usuario marcaba 3 OF de
+    // un cliente, filtraba por otro y perdia las 3 sin aviso. Aqui guardamos la
+    // clave de cada fila marcada y la reaplicamos tras cada reconstruccion, de
+    // modo que se puede acumular seleccion filtrando varias veces.
+    // MultiSelectMode = msmPersistent solo persiste frente al clic, no frente a
+    // un rebuild del dataset.
+    FSelectedIds: TDictionary<string, Boolean>;
+    FRestoringSel: Boolean;   // evita reentrar en el OnSelectionChanged
     function CacheKey: string;
     function TryLoadFromCache(out ADataSet: TCustomADODataSet): Boolean;
     procedure StoreInCache(ADataSet: TCustomADODataSet);
     procedure InvalidateDataCache;
-
     // Colorea de verde claro las filas ya planificadas (NodeId>0). La seleccion
     // amarilla se configura via tvBacklog.Styles.Selection (no por fila).
     procedure tvBacklogGetContentStyle(Sender: TcxCustomGridTableView;
       ARecord: TcxCustomGridRecord; AItem: TcxCustomGridTableItem;
       var AStyle: TcxStyle);
-
     procedure VerOFActual(ARecordIndex: Integer = -1);
     procedure VerNodeManual(ANodeId: Integer);
     procedure BuildBaseColumns;
@@ -312,12 +334,10 @@ type
     procedure ClearRows;
     procedure OnColVerButtonClick(Sender: TObject; AButtonIndex: Integer);
     function GetRowFromGridIndex(AGridIdx: Integer): Integer;
-
     procedure LoadUserLayout;
     procedure SaveUserLayout;
     procedure EnsureNewColumnsVisible(const AKeys: array of string);
     procedure ResetLayout;
-
     // Nucleo de planificacion compartido por el boton normal y el Express.
     // AExpress=True abre el wizard directo al Resumen con la ultima config.
     procedure PlanificarSeleccion(AExpress: Boolean);
@@ -341,7 +361,13 @@ type
     // reutilizando el motor de Lotes (V057). ACreados = (NodeId, CenterId).
     procedure AplicarAgrupacion(const AParams: TSchedParams;
       const ACreados: TArray<TPair<Integer, Integer>>);
-
+    function RowMatchesQuickSearch(const Row: TBacklogRow;
+      const AQuery: string): Boolean;
+    function TryGetFocusedRow(out ARow: TBacklogRow): Boolean;
+    // Seleccion persistente por RawId (ver nota en FSelectedIds).
+    procedure CaptureSelectionToSet;
+    procedure RestoreSelectionFromSet;
+    function SelectionKey(const Row: TBacklogRow): string;
     procedure ApplyImpactoVisible(AVisible: Boolean);
     procedure ApplyFiltrosVisible(AVisible: Boolean);
     procedure ApplyTabMode;
@@ -349,18 +375,13 @@ type
     function CollectSelectedNodeIds: TArray<Integer>;
     function NodeIdsForAncestor(ARawId: Int64; ANivel: Integer): TArray<Integer>;
     procedure DoDesplanificar(const ANodeIds: TArray<Integer>);
-
     function UserLogin: string;
     function EmpresaCode: SmallInt;
     function QStr(const S: string): string;
   end;
-
 procedure ShowBacklog;
-
 implementation
-
 {$R *.dfm}
-
 uses
   uDMPlanner, uLogin, uGanttTypes, uCentreCalendar, uBacklogCustomCols,
   uBusyDialog, uSetupRules, uUtillajesRepo,
@@ -369,11 +390,9 @@ uses
   uDemoBacklog, uBacklogRegenParams, uAppConfig, uPedidoDetalle,
   uFormulaArticuloViewer, Main,
   uErpReader, uErpReaderFactory, uSyncBacklogPreview, uOFViewer, uPlanLog,
-  uPlanningRules, uNodeInspector;
-
+  uPlanningRules, uNodeInspector, Vcl.Clipbrd;
 const
   BACKLOG_MOD = 'BACKLOG';
-
 // Helpers de lectura tolerante de campos de la vista (FindField por robustez
 // ante vistas antiguas que aun no tengan la columna).
 function FieldFloat(Q: TDataSet; const AName: string): Double;
@@ -383,7 +402,6 @@ begin
   else
     Result := 0;
 end;
-
 function FieldDate(Q: TDataSet; const AName: string): TDateTime;
 begin
   if (Q.FindField(AName) <> nil) and not Q.FieldByName(AName).IsNull then
@@ -391,7 +409,6 @@ begin
   else
     Result := 0;
 end;
-
 function FieldStr(Q: TDataSet; const AName: string): string;
 begin
   if Q.FindField(AName) <> nil then
@@ -399,7 +416,6 @@ begin
   else
     Result := '';
 end;
-
 // BIT nullable: Null si la columna no existe o es NULL (filas no-OP). El
 // provider puede exponer BIT como Boolean o como entero segun driver; usamos
 // AsVariant y normalizamos, evitando AsInteger (que lanza "Cannot access field
@@ -416,14 +432,12 @@ begin
   else
     Result := F.AsInteger <> 0;
 end;
-
 // Para volcado al grid: muestra Null en vez de 0 (evita ensuciar con ceros las
 // filas que no son operacion o que no tienen ese valor).
 function FloatOrNull(V: Double): Variant;
 begin
   if V = 0 then Result := Null else Result := V;
 end;
-
 procedure ShowBacklog;
 begin
   // Backlog es ahora una vista embedded del Form1 (no modal, hermana de
@@ -432,21 +446,17 @@ begin
   if Assigned(Main.Form1) then
     Main.Form1.MostrarBacklog;
 end;
-
 { TfrmBacklog }
-
 function TfrmBacklog.QStr(const S: string): string;
 begin
   Result := 'N''' + StringReplace(S, '''', '''''', [rfReplaceAll]) + '''';
 end;
-
 function TfrmBacklog.UserLogin: string;
 begin
   Result := CurrentSession.Login;
   if Result = '' then
     Result := '(anon)';
 end;
-
 procedure TfrmBacklog.Vaciarylimpiartodalaplanificacin2Click(Sender: TObject);
 var
   Cmd: TADOCommand;
@@ -458,13 +468,11 @@ begin
     ShowMessage('No hay proyecto activo.');
     Exit;
   end;
-
   if MessageDlg(
        'Se borrara TODO lo planificado del proyecto activo (nodos, dependencias, '
        + 'marcadores y snapshots). El Backlog y los centros no se tocan.' + sLineBreak +
        sLineBreak + 'Seguro que quieres vaciar el plan?',
        mtWarning, [mbYes, mbNo], 0) <> mrYes then Exit;
-
   Cmd := TADOCommand.Create(nil);
   try
     Cmd.Connection := DMPlanner.ADOConnection;
@@ -475,18 +483,14 @@ begin
   finally
     Cmd.Free;
   end;
-
   InvalidateDataCache;   // se vacio el plan: datos de ambos tabs cambian
   LoadData;
   ShowMessage('Plan vaciado correctamente.');
-
 end;
-
 function TfrmBacklog.EmpresaCode: SmallInt;
 begin
   Result := DMPlanner.CodigoEmpresa;
 end;
-
 procedure TfrmBacklog.tvBacklogGetContentStyle(Sender: TcxCustomGridTableView;
   ARecord: TcxCustomGridRecord; AItem: TcxCustomGridTableItem;
   var AStyle: TcxStyle);
@@ -497,24 +501,25 @@ var
   Planificada: Boolean;
 begin
   if ARecord = nil then Exit;
+  // Fila seleccionada: manda el amarillo de Styles.Selection. Si aqui se devuelve
+  // el estilo del semaforo, DevExpress lo mezcla con el de seleccion y la celda
+  // enfocada queda de un tono distinto al resto de la fila (recuadro claro).
+  if ARecord.Selected then Exit;
   RecIdx := ARecord.RecordIndex;
   if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Exit;
   RowIdx := FFilteredIndices[RecIdx];
   if (RowIdx < 0) or (RowIdx >= FRows.Count) then Exit;
   Row := FRows[RowIdx];
-
   // Semaforo de cumplimiento (rojo > naranja > verde). La fecha objetivo es
   // FechaEntrega (cae a FechaCompromiso en el volcado si no habia entrega).
   //  - Planificados: se compara con NodeFin (fin de la planificacion).
   //  - Pendientes:   se compara con HOY (aun no hay fin planificado).
   FEntrega := Row.FechaEntrega;
   if FEntrega <= 0 then Exit;   // sin fecha objetivo no hay semaforo
-
   if IsPlanningTab then
     FRef := Row.NodeFin           // fin planificado (0 si aun no hay, p.ej. Nivel 1/2 sin rango)
   else
     FRef := Date;                 // pendiente: referencia = hoy
-
   if FRef > 0 then
   begin
     if FRef > FEntrega then
@@ -528,21 +533,20 @@ begin
       Exit;
     end;
   end;
-
   // Sin retraso ni riesgo: en Planificados, verde si la fila esta planificada.
   Planificada := (Row.NodeId > 0) or (Row.NumOpsPlan > 0);
   if IsPlanningTab and Planificada then
     AStyle := FStylePlanificado;  // VERDE: planificada con holgura
 end;
-
 procedure TfrmBacklog.FormCreate(Sender: TObject);
 begin
   FRows := TList<TBacklogRow>.Create;
   FColKeyByTag := TDictionary<Integer, string>.Create;
+  FSelectedIds := TDictionary<string, Boolean>.Create;
+  FRestoringSel := False;
   // Cache de recordsets por (tab,nivel). doOwnsValues: libera cada TADODataSet al
   // reemplazar/vaciar/destruir. Ver LoadData/InvalidateDataCache.
   FRecordsetCache := TObjectDictionary<string, TCustomADODataSet>.Create([doOwnsValues]);
-
   // Colores de fila personalizados. IMPRESCINDIBLE NativeStyle=False: con el skin
   // nativo activo, DevExpress ignora el Color de los estilos y las filas salen
   // blancas (mismo patron que el grid de uSincronizarERP, que si funciona).
@@ -566,6 +570,11 @@ begin
     tvBacklog.Styles.Selection := TcxStyle.Create(Self);
   tvBacklog.Styles.Selection.Color := $0000F5FF;   // amarillo (BGR)
   tvBacklog.Styles.Selection.TextColor := clBlack;
+  // Con CellSelect activo (lo activa BuildCustomColumns si hay campos custom),
+  // DevExpress dibuja un recuadro de foco sobre la celda enfocada que corta la
+  // banda amarilla de la fila seleccionada. Sin el, la fila se pinta uniforme y
+  // el foco se sigue viendo por el indicador de la izquierda.
+  tvBacklog.OptionsSelection.HideFocusRect := True;
   // Seleccion multi-fila via checkboxes: uno por fila + uno en la cabecera que
   // marca/desmarca TODO (persistente). Sustituye los botones Seleccionar/
   // Deseleccionar todo. El resto del codigo usa Controller.SelectedRows, que
@@ -577,11 +586,10 @@ begin
     dtFechaDesde.Date := Date;
     dtFechaHasta.Date := IncMonth(Date, 3);
     cmbOrigen.ItemIndex := 0;
-
     tabMode.TabIndex := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'TabIndex', 0);
-    btnPlanificar.Visible := not IsPlanningTab;
-    btnDesplanificarSel.Visible := IsPlanningTab;
-
+    btnPlanificar.Enabled := not IsPlanningTab;
+    btnPlanificarExpress.Enabled := not IsPlanningTab;
+    btnDesplanificarSel.Enabled := IsPlanningTab;
     // Nivel de vista (1/2/3). Por defecto 3 (OP), comportamiento previo.
     FNivelVista := uUserPrefs.GetPrefInt(BACKLOG_MOD, 'NivelVista', 3);
     if (FNivelVista < 1) or (FNivelVista > 3) then FNivelVista := 3;
@@ -589,15 +597,12 @@ begin
     // El nivel de vista aplica a ambos tabs (Pendientes y Planificados).
     cmbNivelVista.Visible := True;
     lblNivelVista.Visible := True;
-
     Columnas1.Enabled := uLogin.IsAdmin;
-
     // Traduccion al castellano de los textos por defecto del cxGrid (afectan a
     // todos los grids de la app; basta hacerlo una vez).
     cxSetResourceString(@scxGridGroupByBoxCaption,
       'Arrastre aqu'#237' una columna para agrupar por ella');
     cxSetResourceString(@scxGridNoDataInfoText, '<Sin datos que mostrar>');
-
     BuildBaseColumns;
     LoadCustomColumnDefs;
     BuildCustomColumns;
@@ -609,25 +614,22 @@ begin
   end;
   FFirstShow := True;
 end;
-
 procedure TfrmBacklog.FormShow(Sender: TObject);
 begin
   if not FFirstShow then Exit;
   FFirstShow := False;
-
   // LoadData ya muestra su propio dialogo de carga (con spinner animado por
   // thread); no hace falta envolverlo aqui.
   LoadData;
 end;
-
 procedure TfrmBacklog.FormDestroy(Sender: TObject);
 begin
   ClearRows;
   FRows.Free;
   FColKeyByTag.Free;
+  FSelectedIds.Free;
   FRecordsetCache.Free;   // doOwnsValues libera los recordsets cacheados
 end;
-
 procedure TfrmBacklog.ClearRows;
 var
   I: Integer;
@@ -637,7 +639,6 @@ begin
       FRows[I].Extras.Free;
   FRows.Clear;
 end;
-
 procedure TfrmBacklog.btnLimpiarFiltrosClick(Sender: TObject);
 begin
   FLoading := True;
@@ -647,6 +648,7 @@ begin
     edtProyecto.Text := '';
     edtCentro.Text := '';
     edtEstado.Text := '';
+    edtBuscar.Text := '';
     chkUsaFechaDesde.Checked := False;
     chkUsaFechaHasta.Checked := False;
   finally
@@ -654,13 +656,11 @@ begin
   end;
   ApplyRowsToGrid;
 end;
-
 procedure TfrmBacklog.FiltroChanged(Sender: TObject);
 begin
   if FLoading then Exit;
   ApplyRowsToGrid;
 end;
-
 // Construye la lista de atributos de un trabajo para el motor de tiempo de
 // cambio (uSetupRules): builtin relevantes + todos los campos personalizados
 // (Extras). Generico: no hardcodea 'Color'/'Substrato', expone lo que haya y el
@@ -681,7 +681,6 @@ begin
     P.Name := 'CodigoArticulo'; P.Value := Row.CodigoArticulo; L.Add(P);
     P.Name := 'DescripcionArticulo'; P.Value := Row.DescripcionArticulo; L.Add(P);
     P.Name := 'CodigoCliente'; P.Value := Row.CodigoCliente; L.Add(P);
-
     // Utillaje: se expone como UN atributo mas para que el usuario pueda
     // escribir la regla "Utillaje cambia -> +45 min" desde el editor, sin
     // tocar codigo. El valor es la lista de codigos que exige la operacion o
@@ -716,7 +715,6 @@ begin
     L.Free;
   end;
 end;
-
 // Mapea una fila del backlog (cualquier nivel) a un TSchedInput. Para filas de
 // OP (Nivel 3) el input es planificable directamente. Para OF/OT (Nivel 1/2) el
 // input solo sirve de portador; quien planifica debe explosionarlo a OPs antes.
@@ -743,7 +741,6 @@ begin
   end;
   Result := FUtilReglas;
 end;
-
 function TfrmBacklog.BuildUtillajeOccupancy: TUtillajeOccupancy;
 var
   Repo: TUtillajesRepo;
@@ -753,7 +750,6 @@ begin
   // exactamente como estaba (cero riesgo para quien no usa utillajes).
   if Length(GetUtillajeReglas) = 0 then Exit;
   if DMPlanner.CurrentProjectId <= 0 then Exit;
-
   Result := TUtillajeOccupancy.Create;
   try
     Repo := TUtillajesRepo.Create(DMPlanner.ADOConnection, DMPlanner.CodigoEmpresa);
@@ -773,7 +769,6 @@ begin
     end;
   end;
 end;
-
 function TfrmBacklog.BuildInputFromRow(const Row: TBacklogRow): TSchedInput;
 begin
   Result := Default(TSchedInput);
@@ -785,14 +780,13 @@ begin
   Result.HorasEstimadas := Row.HorasEstimadas;
   Result.FechaCompromiso := Row.FechaCompromiso;
   Result.Prioridad := Row.Prioridad;
-
   Result.NumeroOF := 0;
   Result.SerieOF := '';
   Result.NumeroPedido := 0;
   Result.SeriePedido := '';
   // El check correcte es per familia ERP (TipoOrigen), no per nivell del leaf
   // (Origen). Per a una operacio Nivel=3, Origen val 'OP' i la familia pot
-  // ser 'OF ', 'PED' o 'PRJ'.
+  // ser 'OF ' o 'PED' (V085: PRJ ja no arriba al Backlog).
   if Trim(Row.TipoOrigen) = 'OF' then
   begin
     // IMPORTANTE: usar NumeroOF/SerieOF (que la vista calcula con CASE por nivel,
@@ -806,7 +800,6 @@ begin
     Result.NumeroPedido := Row.NumeroDoc;
     Result.SeriePedido := Row.SerieDoc;
   end;
-
   Result.CodigoCliente := Row.CodigoCliente;
   Result.CodigoArticulo := Row.CodigoArticulo;
   Result.DescripcionArticulo := Row.DescripcionArticulo;
@@ -819,25 +812,21 @@ begin
   Result.FechaEntrega := Row.FechaCompromiso;
   Result.FechaNecesaria := Row.FechaNecesaria;
   Result.TiempoUnidadFabSecs := Row.TiempoUnidadFabSecs;
-
   // Tiempos reales de la operacion para CalcDuracionOpMin (cascada V054).
   Result.OpTiempoFabricacion := Row.OpTiempoFabricacion;
   Result.OpUnidadesHora := Row.OpUnidadesHora;
   Result.OpTiempoPreparacion := Row.OpTiempoPreparacion;
   Result.Cantidad := Row.Cantidad;
-
   // Link al modelo unificado Raw_Item (V016). La vista ya expone TipoOrigen.
   Result.RawItemClaveERP := Row.ClaveERP;
   Result.RawItemTipoOrigen := Row.TipoOrigen;
   // Secuencia dentro de la OT: con esto se encadenan las precedencias de ruta.
   Result.Orden := Row.Orden;
-
   // Atributos para el tiempo de cambio secuencia-dependiente (uSetupRules):
   // builtin relevantes + todos los campos personalizados del backlog (Extras).
   // Asi cualquier regla de setup que referencie 'Color', 'Substrato',
   // 'AnchoBobina'... (custom) o 'CodigoArticulo' (builtin) encuentra su valor.
   Result.SetupAttrs := BuildSetupAttrs(Row, GetUtillajeReglas);
-
   // Utillajes que exige esta operacion: se resuelven AQUI (fuera del motor),
   // porque RunAutoScheduling corre en los hilos del optimizador y no puede
   // tocar BD. Vacio = el nodo no restringe por utillaje.
@@ -845,7 +834,6 @@ begin
   // la etiqueta compuesta 'DEMO-PRJ-002 / MECANIZAR'.
   Result.UtillajeReqs := ResolverUtillajes(GetUtillajeReglas,
     Row.CodigoOP, Row.CodigoArticulo);
-
   PlanLog.Linea('BUILD_FROM_ROW: Tipo=[%s] Nivel=%d | Row.NumeroOF=%d ' +
     'Row.SerieOF=%s Row.NumeroDoc=%d Row.CodigoOT=%s Row.CodigoProyecto=%s | ' +
     'Row.FCompromiso=%s Row.FNecesaria=%s -> NumOF=%d SerieOF=%s NumTrab=%s ' +
@@ -856,8 +844,7 @@ begin
      Result.NumeroOF, Result.SerieOF, Result.NumeroTrabajo,
      DateToStr(Result.FechaEntrega), DateToStr(Result.FechaNecesaria)]);
 end;
-
-// Explosiona un nodo Nivel 1 (OF/PED/PRJ) o Nivel 2 (OT/LINEA/TAREA) a la lista
+// Explosiona un nodo Nivel 1 (OF/PEDIDO) o Nivel 2 (OT/LINEA) a la lista
 // de sus OP descendientes PENDIENTES (sin node), ordenadas por OT y luego por el
 // Orden de la operacion dentro de la OT (la ruta de fabricacion). Cada OP se
 // devuelve como un TSchedInput planificable. Reusa FS_PL_vw_Backlog (que ya solo
@@ -869,7 +856,6 @@ begin
   // lote para no duplicar la logica de mapeo.
   Result := ExplodeManyToOpInputs([ARawId], ANivel);
 end;
-
 function TfrmBacklog.ExplodeManyToOpInputs(const ARawIds: TArray<Int64>;
   ANivel: Integer): TArray<TSchedInput>;
 var
@@ -883,7 +869,6 @@ begin
   Q := TADOQuery.Create(nil);
   try
     if Length(ARawIds) = 0 then Exit(nil);
-
     // Lista de ancestros para IN(...). UNA sola consulta para TODOS los
     // seleccionados del mismo nivel (antes: 1 consulta por OF -> N round-trips,
     // que congelaba la UI antes de abrir el wizard con selecciones grandes).
@@ -893,7 +878,6 @@ begin
       if IdList <> '' then IdList := IdList + ',';
       IdList := IdList + IntToStr(ARawIds[K]);
     end;
-
     // Filtro de ancestro segun el nivel del nodo seleccionado:
     //   Nivel 1 -> la OP cuelga de una OT cuyo padre esta en la lista (abuelo).
     //   Nivel 2 -> la OP cuelga directamente de un ancestro de la lista (padre).
@@ -910,7 +894,6 @@ begin
         '   AND op.CodigoEmpresa = b.CodigoEmpresa' +
         ' WHERE b.CodigoEmpresa = ' + IntToStr(EmpresaCode) +
         '   AND b.Nivel = 3 AND op.ParentRawItemId IN (' + IdList + ')';
-
     Q.Connection := DMPlanner.ADOConnection;
     Q.SQL.Text :=
       'SELECT b.* FROM FS_PL_vw_Backlog b' + AncestorJoin +
@@ -927,7 +910,6 @@ begin
       if not Q.FieldByName('FechaCompromiso').IsNull then
         Inp.FechaCompromiso := Q.FieldByName('FechaCompromiso').AsDateTime;
       Inp.Prioridad := Q.FieldByName('Prioridad').AsInteger;
-
       if Trim(Q.FieldByName('TipoOrigen').AsString) = 'OF' then
       begin
         // NumeroOF/SerieOF: la vista ya los expone explicitos para la OP (heredados
@@ -940,7 +922,6 @@ begin
         Inp.NumeroPedido := Q.FieldByName('NumeroDoc').AsInteger;
         Inp.SeriePedido := Q.FieldByName('SerieDoc').AsString;
       end;
-
       Inp.CodigoCliente := Q.FieldByName('CodigoCliente').AsString;
       Inp.CodigoArticulo := Q.FieldByName('CodigoArticulo').AsString;
       Inp.DescripcionArticulo := Q.FieldByName('DescripcionArticulo').AsString;
@@ -956,16 +937,13 @@ begin
         Inp.FechaNecesaria := Q.FieldByName('FechaNecesaria').AsDateTime;
       if Q.FindField('TiempoUnidadFabSecs') <> nil then
         Inp.TiempoUnidadFabSecs := Q.FieldByName('TiempoUnidadFabSecs').AsFloat;
-
       // Tiempos reales (cascada V054).
       Inp.OpTiempoFabricacion := Q.FieldByName('OpTiempoFabricacion').AsFloat;
       Inp.OpUnidadesHora := Q.FieldByName('OpUnidadesHora').AsFloat;
       Inp.OpTiempoPreparacion := Q.FieldByName('OpTiempoPreparacion').AsFloat;
       Inp.Cantidad := Q.FieldByName('Cantidad').AsFloat;
-
       Inp.RawItemClaveERP := Q.FieldByName('ClaveERP').AsString;
       Inp.RawItemTipoOrigen := Q.FieldByName('TipoOrigen').AsString;
-
       // Secuencia de la operacion dentro de su OT: es lo que define la RUTA y
       // con lo que se encadenan las precedencias. FindField por robustez ante
       // vistas anteriores a V053, que no traen la columna.
@@ -973,7 +951,6 @@ begin
         Inp.Orden := Q.FieldByName('Orden').AsInteger
       else
         Inp.Orden := 0;
-
       L.Add(Inp);
       Q.Next;
     end;
@@ -983,10 +960,9 @@ begin
     L.Free;
   end;
 end;
-
 function TfrmBacklog.CollectSelectedInputs: TArray<TSchedInput>;
 var
-  I, RecIdx, RowIdx: Integer;
+  RowIdx: Integer;
   Row: TBacklogRow;
   L: TList<TSchedInput>;
   Exploded: TArray<TSchedInput>;
@@ -1001,15 +977,15 @@ begin
     // (Nivel 1/2). Los ancestros se acumulan para explosionarlos en UNA consulta
     // por nivel (antes: 1 consulta por fila -> N round-trips = pantalla congelada
     // con selecciones grandes, p.ej. 312 OF).
-    for I := 0 to tvBacklog.Controller.SelectedRowCount - 1 do
+    //
+    // Se recorre FRows (todas las filas cargadas) contra la seleccion PERSISTENTE
+    // y no Controller.SelectedRows: asi se planifica tambien lo que el usuario
+    // marco antes de cambiar el filtro y ahora no esta a la vista.
+    for RowIdx := 0 to FRows.Count - 1 do
     begin
-      RecIdx := tvBacklog.Controller.SelectedRows[I].RecordIndex;
-      if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Continue;
-      RowIdx := FFilteredIndices[RecIdx];
-      if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
-
       Row := FRows[RowIdx];
-
+      if (FSelectedIds = nil) or
+         not FSelectedIds.ContainsKey(SelectionKey(Row)) then Continue;
       if Row.Nivel <= 1 then
         AncN1.Add(Row.RawId)          // Nivel 1 (OF / Pedido / Proyecto)
       else if Row.Nivel = 2 then
@@ -1018,7 +994,6 @@ begin
         // Nivel 3 (OP): planificable directamente, sin consulta.
         L.Add(BuildInputFromRow(Row));
     end;
-
     // 2o: explosion en LOTE (1 consulta por nivel con los ancestros via IN).
     if AncN1.Count > 0 then
     begin
@@ -1032,7 +1007,6 @@ begin
       for J := 0 to High(Exploded) do
         L.Add(Exploded[J]);
     end;
-
     Result := L.ToArray;
   finally
     AncN1.Free;
@@ -1040,7 +1014,6 @@ begin
     L.Free;
   end;
 end;
-
 procedure TfrmBacklog.CommitScheduling(const AResult: TSchedResult;
   out ACreados: TArray<TPair<Integer, Integer>>);
 var
@@ -1056,7 +1029,6 @@ begin
   NumCreats := 0;
   Creados := TList<TPair<Integer, Integer>>.Create;
   try
-
   // Fecha objetivo del nodo (entrega/necesaria) = FechaCompromiso del backlog
   // (la fecha objetivo de la OF). Si no hay compromiso, caemos a los campos
   // especificos del input como respaldo. Devuelve 0 si no hay ninguna (=> NULL).
@@ -1067,7 +1039,6 @@ begin
       else if AInput.FechaEntrega > 0 then Result := AInput.FechaEntrega
       else Result := 0;
     end;
-
   // 1) Mapear los items PLANIFICABLES a filas de persistencia masiva. El motor
   //    BulkInsertNodes asigna los NodeId y crea Node + NodeData en lote.
   SetLength(Rows, 0);
@@ -1083,7 +1054,6 @@ begin
       Continue;
     if (Item.FechaInicio = 0) or (Item.FechaFin = 0) then Continue;
     if Item.CenterId <= 0 then Continue;
-
     SetLength(Rows, Length(Rows) + 1);
     Row := Default(TBulkNodeRow);
     Row.CenterId := Item.CenterId;
@@ -1119,7 +1089,6 @@ begin
     Row.RawItemTipoOrigen := Item.Input.RawItemTipoOrigen;
     Rows[High(Rows)] := Row;
   end;
-
   // Metodo de persistencia. El combo cmbPersistMethod esta OCULTO (Visible=False):
   // sirvio para la comparativa M1/M4/M5 (M5 ~3x sobre M4, validado). En produccion
   // va siempre por M5 (ItemIndex=0), con fallback automatico M5->M4->M1 dentro de
@@ -1129,7 +1098,6 @@ begin
     2: MetodoPref := bmPerRow;
   else MetodoPref := bmBulkFile;
   end;
-
   DMPlanner.ADOConnection.BeginTrans;
   try
     if Length(Rows) > 0 then
@@ -1137,13 +1105,11 @@ begin
       // Persistencia masiva (Node + NodeData). Asigna Rows[i].NodeId.
       MetodoUsado := BulkInsertNodes(DMPlanner.ADOConnection,
         DMPlanner.CodigoEmpresa, DMPlanner.CurrentProjectId, Rows, MetodoPref);
-
       // Y a que maquina va cada uno (V083). Va aparte del INSERT porque los
       // cinco metodos de persistencia construyen SQL distinto; aqui basta un
       // UPDATE por maquina sobre los NodeId recien creados.
       AsignarMaquinasANodos(DMPlanner.ADOConnection,
         DMPlanner.CodigoEmpresa, Rows);
-
       // Resumen (sin log por-fila: 1194 lineas de I/O son ruido y lentitud).
       for I := 0 to High(Rows) do
       begin
@@ -1155,7 +1121,6 @@ begin
         [NumCreats, BulkNodeMethodName(MetodoPref), BulkNodeMethodName(MetodoUsado),
          Rows[0].NodeId, Rows[High(Rows)].NodeId]);
     end;
-
     DMPlanner.ADOConnection.CommitTrans;
   except
     on E: Exception do
@@ -1164,21 +1129,17 @@ begin
       raise;
     end;
   end;
-
     ACreados := Creados.ToArray;
   finally
     Creados.Free;
   end;
-
   PlanLog.Linea('=== COMMIT terminado: %d nodos creados ===', [NumCreats]);
   PlanLog.Fin;
-
   ShowMessage(Format(
     'Planificacion confirmada: %d nodos creados en el plan actual.' + sLineBreak +
     'El Backlog se recargara.',
     [NumCreats]));
 end;
-
 procedure TfrmBacklog.AplicarAgrupacion(const AParams: TSchedParams;
   const ACreados: TArray<TPair<Integer, Integer>>);
 var
@@ -1189,18 +1150,15 @@ var
   CentroDestId: Integer;
   C: TCentreTreball;
   Cmd: TADOCommand;
-
   procedure CrearLoteSiProcede(const AIds: TArray<Integer>);
   begin
     // CrearLote exige >=2 nodos y mismo centro; con 1 no hay nada que agrupar.
     if Length(AIds) >= 2 then
       DMPlanner.CrearLote(AIds);
   end;
-
 begin
   if AParams.Agrupacion = agNinguna then Exit;
   if Length(ACreados) = 0 then Exit;
-
   if AParams.Agrupacion = agPorCentro then
   begin
     // Un lote por cada centro con 2+ nodos.
@@ -1221,7 +1179,6 @@ begin
     end;
     Exit;
   end;
-
   // agTodo: un unico lote con todos los nodos.
   // Si caen en varios centros, primero los reubicamos al centro destino elegido
   // por el usuario (CrearLote exige mismo centro). El reflow del Gantt afina la
@@ -1237,7 +1194,6 @@ begin
             CentroDestId := C.Id;
             Break;
           end;
-
     for P in ACreados do
     begin
       IdsTodos.Add(P.Key);
@@ -1262,7 +1218,6 @@ begin
     IdsTodos.Free;
   end;
 end;
-
 procedure TfrmBacklog.Configurar1Click(Sender: TObject);
 begin
   if uBacklogCustomCols.TfrmBacklogCustomCols.Execute then
@@ -1276,15 +1231,14 @@ begin
     LoadData;
   end;
 end;
-
 procedure TfrmBacklog.btnPlanificarClick(Sender: TObject);
 begin
-  PlanificarSeleccion(False);
+ PlanificarSeleccion(False);
 end;
 
 procedure TfrmBacklog.btnPlanificarExpressClick(Sender: TObject);
 begin
-  // Express: salta el paso a paso y abre el wizard en el Resumen con la ultima
+ // Express: salta el paso a paso y abre el wizard en el Resumen con la ultima
   // configuracion. Si aun no hay ninguna guardada, cae al asistente completo.
   if not TfrmBacklogSchedWizard.HayConfigExpress then
   begin
@@ -1296,219 +1250,9 @@ begin
   PlanificarSeleccion(True);
 end;
 
-procedure TfrmBacklog.PlanificarSeleccion(AExpress: Boolean);
-var
-  Inputs: TArray<TSchedInput>;
-  Params: TSchedParams;
-  SR: TSchedResult;
-  MR: TModalResult;
-  Creados: TArray<TPair<Integer, Integer>>;
-  TCol: TDateTime;
-  RuleSet, EddRuleSet: TPriorityRuleSet;
-  PerfilesCustom, CentrosPlan: TArray<string>;
-  PerfilSel, PCI: Integer;
-  C: TCentreTreball;
-  SetupEngine: TSetupRuleEngine;
-  UtilOcc: TUtillajeOccupancy;
-  MaqCache: TMaquinasCache;   // maquinas por centro (V083)
-begin
-  if tvBacklog.Controller.SelectedRowCount = 0 then
-  begin
-    ShowMessage('Selecciona al menos una fila del backlog para planificar.');
-    Exit;
-  end;
-
-  if DMPlanner.CurrentProjectId <= 0 then
-  begin
-    ShowMessage('No hay proyecto activo al que crear nodos.');
-    Exit;
-  end;
-
-  PlanLog.Inicio(Format('PLANIFICAR  -  %d filas seleccionadas, ProjectId=%d',
-    [tvBacklog.Controller.SelectedRowCount, DMPlanner.CurrentProjectId]));
-
-  // Recogida + explosion a OP. Instrumentado: con selecciones grandes (Nivel 1)
-  // esta fase era el cuello de botella (1 consulta por OF). Ahora es 1 consulta
-  // por nivel. El detalle por-fila se elimino (I/O de log O(n) congelaba la UI).
-  TCol := Now;
-  Inputs := CollectSelectedInputs;
-  PlanLog.Linea('--- INPUTS recogidos: %d operaciones (OP) en %d ms ---',
-    [Length(Inputs), MilliSecondsBetween(Now, TCol)]);
-
-  if Length(Inputs) = 0 then
-  begin
-    // A Nivel 1/2 puede pasar que la seleccion no tenga OP pendientes (todas ya
-    // planificadas). Damos feedback en vez de salir en silencio.
-    ShowMessage('La selecci'#243'n no tiene operaciones (OP) pendientes de ' +
-      'planificar.');
-    Exit;
-  end;
-
-  // Perfiles del cliente (motor de reglas) para el paso "Estrategia de cola"
-  // del wizard: nombres de los perfiles guardados en "Reglas de Planificacion".
-  PerfilesCustom := nil;
-  if Assigned(Main.Form1) and Assigned(Main.Form1.PlanningRuleEngine) then
-  begin
-    SetLength(PerfilesCustom, Main.Form1.PlanningRuleEngine.ProfileCount);
-    for PCI := 0 to Main.Form1.PlanningRuleEngine.ProfileCount - 1 do
-      PerfilesCustom[PCI] := Main.Form1.PlanningRuleEngine.GetProfile(PCI).Name;
-  end;
-
-  // Centros del plan (para overrides por centro en el dialogo de desempates).
-  CentrosPlan := nil;
-  if DMPlanner.CentresRepo <> nil then
-    for C in DMPlanner.CentresRepo.GetAll do
-      if Trim(C.CodiCentre) <> '' then
-        CentrosPlan := CentrosPlan + [Trim(C.CodiCentre)];
-
-  RuleSet := DefaultRuleSet;
-  // RuleSet de fallback para perfiles custom: EDD puro (fecha de compromiso).
-  EddRuleSet.Principal := prEDD;
-  EddRuleSet.Desempate1 := prEDD;
-  EddRuleSet.Desempate2 := prEDD;
-  PerfilSel := -1;
-
-  Params := Default(TSchedParams);
-  while True do
-  begin
-    // Asistente visual: analiza la seleccion y deja que el usuario decida COMO
-    // planificar (granularidad/agrupacion + direccion + fecha + ajustes +
-    // estrategia de cola: orden basico / regla canonica / perfil del cliente).
-    if not TfrmBacklogSchedWizard.Execute(Inputs, Params, RuleSet,
-       PerfilesCustom, CentrosPlan, PerfilSel, AExpress) then Exit;
-    // El salto-a-Resumen solo aplica a la PRIMERA apertura: si el bucle reabre
-    // el wizard (fecha invalida o preview no aceptado), va paso a paso normal.
-    AExpress := False;
-
-    // Validacion: la fecha base no puede ser anterior a la fecha de bloqueo
-    // del proyecto activo (si la tiene). La fecha de bloqueo marca el corte
-    // a partir del cual aun se puede replanificar; todo lo anterior esta
-    // consolidado y no se toca.
-    if DMPlanner.CurrentProjectTieneBloqueo and
-       (Trunc(Params.FechaBase) < Trunc(DMPlanner.CurrentProjectFechaBloqueo)) then
-    begin
-      ShowMessage(Format(
-        'La fecha seleccionada (%s) es anterior a la fecha de bloqueo ' +
-        'del proyecto (%s).' + sLineBreak +
-        'No se puede planificar antes de la fecha de bloqueo.',
-        [FormatDateTime('dd/mm/yyyy', Params.FechaBase),
-         FormatDateTime('dd/mm/yyyy', DMPlanner.CurrentProjectFechaBloqueo)]));
-      Continue;  // vuelve a abrir el modal de params
-    end;
-
-    // Estrategia de cola: si el wizard pidio orden PREordenado, la cola se
-    // ordena AQUI (antes del FCS, que respeta soPreordenado y no reordena).
-    //   PerfilSel < 0  -> regla canonica via SortInputsByRuleSet (RuleSet).
-    //   PerfilSel >= 0 -> perfil del cliente: ordena NODOS, no inputs; en esta
-    //                     primera planificacion aplicamos un orden equivalente
-    //                     por fecha de compromiso (EDD) como aproximacion y el
-    //                     perfil completo se aplicara al re-planificar el Gantt.
-    if Params.Order = soPreordenado then
-    begin
-      if PerfilSel < 0 then
-      begin
-        SortInputsByRuleSet(Inputs, RuleSet, Params.FechaBase);
-        PlanLog.Linea('--- COLA: regla canonica Principal=%d (preordenado) ---',
-          [Ord(RuleSet.Principal)]);
-      end
-      else
-      begin
-        // Perfil del cliente: ordena NODOS (no inputs). En la 1a planificacion
-        // aproximamos con EDD (fecha de compromiso asc.) via el RuleSet publico.
-        SortInputsByRuleSet(Inputs, EddRuleSet, Params.FechaBase);
-        PlanLog.Linea('--- COLA: perfil cliente #%d (fallback EDD en 1a planif.) ---',
-          [PerfilSel]);
-      end;
-    end;
-
-    // Precedencias de ruta: encadenar las OP de una misma OT (OP10 -> OP20 ->
-    // OP30) y hacer que el motor las respete como restriccion dura. Sin esto,
-    // cada OP se colocaba donde cupiera y la ruta solo se comprobaba DESPUES,
-    // con la alerta D01.
-    //
-    // SOLO EN FORWARD. El motor aplica la restriccion en el branch smForward;
-    // en backward habria que imponer la simetrica (una operacion no puede
-    // acabar despues de que empiece su sucesora) y recorrer en orden topologico
-    // inverso, que no esta hecho. Activarlo en backward daria falsa sensacion
-    // de que se respeta la ruta cuando no es asi.
-    if Params.Mode = smForward then
-    begin
-      BuildPrecedencesFromInputs(Inputs);
-      Params.RespetarPrecedencias := True;
-      if not TopologicalSortInputs(Inputs) then
-        // La ruta del ERP tiene un ciclo. No se aborta: las operaciones del
-        // ciclo se planifican sin encadenar (van al final) y el usuario lo vera
-        // con la alerta D01, igual que antes.
-        PlanLog.Linea('AVISO: ciclo en las precedencias; ' +
-          'esas operaciones se planifican sin encadenar.');
-    end
-    else
-      PlanLog.Linea('AVISO: modo BACKWARD, las precedencias de ruta NO se ' +
-        'aplican como restriccion (solo alerta D01 posterior).');
-
-    PlanLog.Linea('--- SCHEDULING: Mode=%d Order=%d FechaBase=%s Agrupacion=%d ---',
-      [Ord(Params.Mode), Ord(Params.Order), DateToStr(Params.FechaBase),
-       Ord(Params.Agrupacion)]);
-    TCol := Now;
-    // Motor de tiempo de cambio secuencia-dependiente (uSetupRules). Carga el
-    // perfil de reglas activo; si no hay reglas, SetupEngine actua como nil
-    // (comportamiento clasico con DistanciaMinNodos fija). El scheduler NO es
-    // propietario del engine: lo liberamos aqui tras planificar.
-    SetupEngine := TSetupRuleEngine.Create;
-    // Utillajes como restriccion dura. Mismo contrato que SetupEngine: lo crea
-    // y lo libera el caller. Si no hay reglas de utillaje, se deja nil y el
-    // motor se comporta como siempre.
-    UtilOcc := BuildUtillajeOccupancy;
-    // Maquinas de cada centro (V083): se leen UNA vez aqui, en el hilo
-    // principal, y el motor ya no toca BD para esto. Mismo contrato que
-    // SetupEngine/UtillajeOcc: lo crea y lo libera el caller.
-    MaqCache := BuildMaquinasCache;
-    try
-      SetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
-      Params.SetupEngine := SetupEngine;
-      Params.UtillajeOcc := UtilOcc;
-      SR := RunAutoScheduling(Inputs, Params, nil, MaqCache);
-    finally
-      Params.SetupEngine := nil;
-      Params.UtillajeOcc := nil;
-      SetupEngine.Free;
-      UtilOcc.Free;
-      MaqCache.Free;
-    end;
-    PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados en %d ms ---',
-      [Length(SR.Items), SR.TotalPlanificados, MilliSecondsBetween(Now, TCol)]);
-
-    MR := TfrmBacklogSchedPreview.Execute(SR);
-
-    case MR of
-      mrOk:
-        begin
-          try
-            CommitScheduling(SR, Creados);
-            // Agrupacion elegida en el wizard (via Lotes V057), si procede.
-            AplicarAgrupacion(Params, Creados);
-          except
-            on E: Exception do
-            begin
-              ShowMessage('Error creando nodos: ' + E.Message);
-              Exit;
-            end;
-          end;
-          InvalidateDataCache;  // se crearon nodos: datos de ambos tabs cambian
-          LoadData;  // recarga -> los planificados desaparecen del backlog
-          Exit;
-        end;
-      mrRetry:
-        Continue;  // vuelve al dialogo de parametros
-    else
-      Exit;
-    end;
-  end;
-end;
-
 procedure TfrmBacklog.btnRecargarClick(Sender: TObject);
 begin
-  InvalidateDataCache;   // "Refrescar" = el usuario quiere datos frescos de BD
+   InvalidateDataCache;   // "Refrescar" = el usuario quiere datos frescos de BD
   LoadData;
 end;
 
@@ -1541,7 +1285,6 @@ begin
       Exit;
     end;
   end;
-
   // Ejercicio=0 -> el reader descobreix tots els exercicis amb OFs vives
   Ejercicio := 0;
   if TfrmSyncBacklogPreview.Execute(
@@ -1551,8 +1294,210 @@ begin
     InvalidateDataCache;   // sync ERP cambio el staging
     LoadData;
   end;
+
 end;
 
+procedure TfrmBacklog.PlanificarSeleccion(AExpress: Boolean);
+var
+  Inputs: TArray<TSchedInput>;
+  Params: TSchedParams;
+  SR: TSchedResult;
+  MR: TModalResult;
+  Creados: TArray<TPair<Integer, Integer>>;
+  TCol: TDateTime;
+  RuleSet, EddRuleSet: TPriorityRuleSet;
+  PerfilesCustom, CentrosPlan: TArray<string>;
+  PerfilSel, PCI: Integer;
+  C: TCentreTreball;
+  SetupEngine: TSetupRuleEngine;
+  UtilOcc: TUtillajeOccupancy;
+  MaqCache: TMaquinasCache;   // maquinas por centro (V083)
+begin
+  // Comprobar contra la seleccion PERSISTENTE, no solo contra el grid: puede
+  // haber filas marcadas que el filtro actual esconde y que si se planificaran.
+  if (tvBacklog.Controller.SelectedRowCount = 0) and
+     ((FSelectedIds = nil) or (FSelectedIds.Count = 0)) then
+  begin
+    ShowMessage('Selecciona al menos una fila del backlog para planificar.');
+    Exit;
+  end;
+  if DMPlanner.CurrentProjectId <= 0 then
+  begin
+    ShowMessage('No hay proyecto activo al que crear nodos.');
+    Exit;
+  end;
+  PlanLog.Inicio(Format('PLANIFICAR  -  %d filas seleccionadas, ProjectId=%d',
+    [tvBacklog.Controller.SelectedRowCount, DMPlanner.CurrentProjectId]));
+  // Recogida + explosion a OP. Instrumentado: con selecciones grandes (Nivel 1)
+  // esta fase era el cuello de botella (1 consulta por OF). Ahora es 1 consulta
+  // por nivel. El detalle por-fila se elimino (I/O de log O(n) congelaba la UI).
+  TCol := Now;
+  Inputs := CollectSelectedInputs;
+  PlanLog.Linea('--- INPUTS recogidos: %d operaciones (OP) en %d ms ---',
+    [Length(Inputs), MilliSecondsBetween(Now, TCol)]);
+  if Length(Inputs) = 0 then
+  begin
+    // A Nivel 1/2 puede pasar que la seleccion no tenga OP pendientes (todas ya
+    // planificadas). Damos feedback en vez de salir en silencio.
+    ShowMessage('La selecci'#243'n no tiene operaciones (OP) pendientes de ' +
+      'planificar.');
+    Exit;
+  end;
+  // Perfiles del cliente (motor de reglas) para el paso "Estrategia de cola"
+  // del wizard: nombres de los perfiles guardados en "Reglas de Planificacion".
+  PerfilesCustom := nil;
+  if Assigned(Main.Form1) and Assigned(Main.Form1.PlanningRuleEngine) then
+  begin
+    SetLength(PerfilesCustom, Main.Form1.PlanningRuleEngine.ProfileCount);
+    for PCI := 0 to Main.Form1.PlanningRuleEngine.ProfileCount - 1 do
+      PerfilesCustom[PCI] := Main.Form1.PlanningRuleEngine.GetProfile(PCI).Name;
+  end;
+  // Centros del plan (para overrides por centro en el dialogo de desempates).
+  CentrosPlan := nil;
+  if DMPlanner.CentresRepo <> nil then
+    for C in DMPlanner.CentresRepo.GetAll do
+      if Trim(C.CodiCentre) <> '' then
+        CentrosPlan := CentrosPlan + [Trim(C.CodiCentre)];
+  RuleSet := DefaultRuleSet;
+  // RuleSet de fallback para perfiles custom: EDD puro (fecha de compromiso).
+  EddRuleSet.Principal := prEDD;
+  EddRuleSet.Desempate1 := prEDD;
+  EddRuleSet.Desempate2 := prEDD;
+  PerfilSel := -1;
+  Params := Default(TSchedParams);
+  while True do
+  begin
+    // Asistente visual: analiza la seleccion y deja que el usuario decida COMO
+    // planificar (granularidad/agrupacion + direccion + fecha + ajustes +
+    // estrategia de cola: orden basico / regla canonica / perfil del cliente).
+    if not TfrmBacklogSchedWizard.Execute(Inputs, Params, RuleSet,
+       PerfilesCustom, CentrosPlan, PerfilSel, AExpress) then Exit;
+    // El salto-a-Resumen solo aplica a la PRIMERA apertura: si el bucle reabre
+    // el wizard (fecha invalida o preview no aceptado), va paso a paso normal.
+    AExpress := False;
+    // Validacion: la fecha base no puede ser anterior a la fecha de bloqueo
+    // del proyecto activo (si la tiene). La fecha de bloqueo marca el corte
+    // a partir del cual aun se puede replanificar; todo lo anterior esta
+    // consolidado y no se toca.
+    if DMPlanner.CurrentProjectTieneBloqueo and
+       (Trunc(Params.FechaBase) < Trunc(DMPlanner.CurrentProjectFechaBloqueo)) then
+    begin
+      ShowMessage(Format(
+        'La fecha seleccionada (%s) es anterior a la fecha de bloqueo ' +
+        'del proyecto (%s).' + sLineBreak +
+        'No se puede planificar antes de la fecha de bloqueo.',
+        [FormatDateTime('dd/mm/yyyy', Params.FechaBase),
+         FormatDateTime('dd/mm/yyyy', DMPlanner.CurrentProjectFechaBloqueo)]));
+      Continue;  // vuelve a abrir el modal de params
+    end;
+    // Estrategia de cola: si el wizard pidio orden PREordenado, la cola se
+    // ordena AQUI (antes del FCS, que respeta soPreordenado y no reordena).
+    //   PerfilSel < 0  -> regla canonica via SortInputsByRuleSet (RuleSet).
+    //   PerfilSel >= 0 -> perfil del cliente: ordena NODOS, no inputs; en esta
+    //                     primera planificacion aplicamos un orden equivalente
+    //                     por fecha de compromiso (EDD) como aproximacion y el
+    //                     perfil completo se aplicara al re-planificar el Gantt.
+    if Params.Order = soPreordenado then
+    begin
+      if PerfilSel < 0 then
+      begin
+        SortInputsByRuleSet(Inputs, RuleSet, Params.FechaBase);
+        PlanLog.Linea('--- COLA: regla canonica Principal=%d (preordenado) ---',
+          [Ord(RuleSet.Principal)]);
+      end
+      else
+      begin
+        // Perfil del cliente: ordena NODOS (no inputs). En la 1a planificacion
+        // aproximamos con EDD (fecha de compromiso asc.) via el RuleSet publico.
+        SortInputsByRuleSet(Inputs, EddRuleSet, Params.FechaBase);
+        PlanLog.Linea('--- COLA: perfil cliente #%d (fallback EDD en 1a planif.) ---',
+          [PerfilSel]);
+      end;
+    end;
+    // Precedencias de ruta: encadenar las OP de una misma OT (OP10 -> OP20 ->
+    // OP30) y hacer que el motor las respete como restriccion dura. Sin esto,
+    // cada OP se colocaba donde cupiera y la ruta solo se comprobaba DESPUES,
+    // con la alerta D01.
+    //
+    // SOLO EN FORWARD. El motor aplica la restriccion en el branch smForward;
+    // en backward habria que imponer la simetrica (una operacion no puede
+    // acabar despues de que empiece su sucesora) y recorrer en orden topologico
+    // inverso, que no esta hecho. Activarlo en backward daria falsa sensacion
+    // de que se respeta la ruta cuando no es asi.
+    if Params.Mode = smForward then
+    begin
+      BuildPrecedencesFromInputs(Inputs);
+      Params.RespetarPrecedencias := True;
+      if not TopologicalSortInputs(Inputs) then
+        // La ruta del ERP tiene un ciclo. No se aborta: las operaciones del
+        // ciclo se planifican sin encadenar (van al final) y el usuario lo vera
+        // con la alerta D01, igual que antes.
+        PlanLog.Linea('AVISO: ciclo en las precedencias; ' +
+          'esas operaciones se planifican sin encadenar.');
+    end
+    else
+      PlanLog.Linea('AVISO: modo BACKWARD, las precedencias de ruta NO se ' +
+        'aplican como restriccion (solo alerta D01 posterior).');
+    PlanLog.Linea('--- SCHEDULING: Mode=%d Order=%d FechaBase=%s Agrupacion=%d ---',
+      [Ord(Params.Mode), Ord(Params.Order), DateToStr(Params.FechaBase),
+       Ord(Params.Agrupacion)]);
+    TCol := Now;
+    // Motor de tiempo de cambio secuencia-dependiente (uSetupRules). Carga el
+    // perfil de reglas activo; si no hay reglas, SetupEngine actua como nil
+    // (comportamiento clasico con DistanciaMinNodos fija). El scheduler NO es
+    // propietario del engine: lo liberamos aqui tras planificar.
+    SetupEngine := TSetupRuleEngine.Create;
+    // Utillajes como restriccion dura. Mismo contrato que SetupEngine: lo crea
+    // y lo libera el caller. Si no hay reglas de utillaje, se deja nil y el
+    // motor se comporta como siempre.
+    UtilOcc := BuildUtillajeOccupancy;
+    // Maquinas de cada centro (V083): se leen UNA vez aqui, en el hilo
+    // principal, y el motor ya no toca BD para esto. Mismo contrato que
+    // SetupEngine/UtillajeOcc: lo crea y lo libera el caller.
+    MaqCache := BuildMaquinasCache;
+    try
+      SetupEngine.LoadProfile(DMPlanner.GetActiveSetupProfile);
+      Params.SetupEngine := SetupEngine;
+      Params.UtillajeOcc := UtilOcc;
+      SR := RunAutoScheduling(Inputs, Params, nil, MaqCache);
+    finally
+      Params.SetupEngine := nil;
+      Params.UtillajeOcc := nil;
+      SetupEngine.Free;
+      UtilOcc.Free;
+      MaqCache.Free;
+    end;
+    PlanLog.Linea('--- RESULTADO scheduling: %d items, %d planificados en %d ms ---',
+      [Length(SR.Items), SR.TotalPlanificados, MilliSecondsBetween(Now, TCol)]);
+    MR := TfrmBacklogSchedPreview.Execute(SR);
+    case MR of
+      mrOk:
+        begin
+          try
+            CommitScheduling(SR, Creados);
+            // Agrupacion elegida en el wizard (via Lotes V057), si procede.
+            AplicarAgrupacion(Params, Creados);
+          except
+            on E: Exception do
+            begin
+              ShowMessage('Error creando nodos: ' + E.Message);
+              Exit;
+            end;
+          end;
+          InvalidateDataCache;  // se crearon nodos: datos de ambos tabs cambian
+          // Lo planificado ya no es pendiente: vaciar la seleccion persistente
+          // para no arrastrarla a la siguiente tanda.
+          if FSelectedIds <> nil then FSelectedIds.Clear;
+          LoadData;  // recarga -> los planificados desaparecen del backlog
+          Exit;
+        end;
+      mrRetry:
+        Continue;  // vuelve al dialogo de parametros
+    else
+      Exit;
+    end;
+  end;
+end;
 procedure TfrmBacklog.RegenerarNodosDemo1Click(Sender: TObject);
 begin
   if TfrmGenerarNodosDemo.Execute then
@@ -1561,7 +1506,6 @@ begin
     LoadData;
   end;
 end;
-
 procedure TfrmBacklog.RegenerarBacklogDemo1Click(Sender: TObject);
 var
   NumOFs, NumCom, NumPrj, PID: Integer;
@@ -1570,7 +1514,6 @@ var
 begin
   if not TfrmBacklogRegenParams.Execute(NumOFs, NumCom, NumPrj, VaciarPlan) then
     Exit;
-
   if VaciarPlan then
   begin
     PID := DMPlanner.CurrentProjectId;
@@ -1588,17 +1531,13 @@ begin
       end;
     end;
   end;
-
   uDemoBacklog.GenerarBacklogDemo(NumOFs, NumCom, NumPrj, False);
-
   InvalidateDataCache;   // se regenero el backlog (y quiza se vacio el plan)
   LoadData;
 end;
-
 procedure TfrmBacklog.ApplyImpactoVisible(AVisible: Boolean);
 begin
   pnlImpacto.Visible := AVisible;
-
   // Mantener el checkbox sincronizado (sin redisparar su OnChange).
   if chkVerImpacto.Checked <> AVisible then
   begin
@@ -1607,7 +1546,6 @@ begin
     chkVerImpacto.Properties.OnChange := chkVerImpactoPropertiesChange;
   end;
 end;
-
 procedure TfrmBacklog.ApplyFiltrosVisible(AVisible: Boolean);
 begin
   pnlFiltros.Visible := AVisible;
@@ -1618,45 +1556,41 @@ begin
     chkVerFiltros.Properties.OnChange := chkVerFiltrosPropertiesChange;
   end;
 end;
-
 procedure TfrmBacklog.chkVerImpactoPropertiesChange(Sender: TObject);
 begin
   if FLoading then Exit;
   ApplyImpactoVisible(chkVerImpacto.Checked);
   uUserPrefs.SetPrefBool(BACKLOG_MOD, 'ImpactoVisible', chkVerImpacto.Checked);
 end;
-
 procedure TfrmBacklog.chkVerFiltrosPropertiesChange(Sender: TObject);
 begin
   if FLoading then Exit;
   ApplyFiltrosVisible(chkVerFiltros.Checked);
   uUserPrefs.SetPrefBool(BACKLOG_MOD, 'FiltrosVisible', chkVerFiltros.Checked);
 end;
-
 function TfrmBacklog.IsPlanningTab: Boolean;
 begin
   Result := tabMode.TabIndex = 1;
 end;
-
 procedure TfrmBacklog.ApplyTabMode;
 begin
+  // Cambiar de tab cambia el universo de filas (pendientes vs planificados): la
+  // seleccion acumulada no es comparable y se descarta a proposito.
+  if FSelectedIds <> nil then FSelectedIds.Clear;
   // Visibilidad de botones segun tab
-  btnPlanificar.Visible := not IsPlanningTab;
-  btnDesplanificarSel.Visible := IsPlanningTab;
-
+  btnPlanificar.Enabled := not IsPlanningTab;
+  btnPlanificarExpress.Enabled := not IsPlanningTab;
+  btnDesplanificarSel.Enabled := IsPlanningTab;
   // El nivel de vista aplica a ambos tabs (Pendientes y Planificados).
   cmbNivelVista.Visible := True;
   lblNivelVista.Visible := True;
-
   // Reconstruir columnas porque cambia el set base
   BuildBaseColumns;
   BuildCustomColumns;
   LoadUserLayout;
-
   // Recargar datos segun vista
   LoadData;
 end;
-
 procedure TfrmBacklog.tabModeChange(Sender: TObject);
 var
   T: TDateTime;
@@ -1669,16 +1603,17 @@ begin
   PlanLog.Linea('=== TOGGLE total: %d ms ===', [MilliSecondsBetween(Now, T)]);
   PlanLog.Fin;
 end;
-
 procedure TfrmBacklog.cmbNivelVistaChange(Sender: TObject);
 begin
   if FLoading then Exit;
   FNivelVista := cmbNivelVista.ItemIndex + 1;
   if (FNivelVista < 1) or (FNivelVista > 3) then FNivelVista := 3;
   uUserPrefs.SetPrefInt(BACKLOG_MOD, 'NivelVista', FNivelVista);
+  // Al cambiar de nivel las filas son otras entidades (OF vs OT vs OP): lo
+  // marcado a un nivel no tiene equivalente al otro. Se descarta.
+  if FSelectedIds <> nil then FSelectedIds.Clear;
   LoadData;
 end;
-
 // Devuelve los NodeId de las OP planificadas que cuelgan de un nodo Nivel 1/2.
 // Usado para desplanificar una OF/OT entera (todos sus nodos a la vez).
 function TfrmBacklog.NodeIdsForAncestor(ARawId: Int64;
@@ -1698,7 +1633,6 @@ begin
     else
       AncestorFilter :=
         ' WHERE op.ParentRawItemId = ' + IntToStr(ARawId);
-
     Q.Connection := DMPlanner.ADOConnection;
     Q.SQL.Text :=
       'SELECT n.NodeId FROM FS_PL_Raw_Item op' +
@@ -1722,23 +1656,22 @@ begin
     L.Free;
   end;
 end;
-
 function TfrmBacklog.CollectSelectedNodeIds: TArray<Integer>;
 var
-  I, J, RecIdx, RowIdx: Integer;
+  J, RowIdx: Integer;
   L: TList<Integer>;
   Row: TBacklogRow;
   NodeIds: TArray<Integer>;
 begin
   L := TList<Integer>.Create;
   try
-    for I := 0 to tvBacklog.Controller.SelectedRowCount - 1 do
+    // Igual que CollectSelectedInputs: se recorre la seleccion PERSISTENTE para
+    // no dejar fuera lo marcado antes de cambiar el filtro.
+    for RowIdx := 0 to FRows.Count - 1 do
     begin
-      RecIdx := tvBacklog.Controller.SelectedRows[I].RecordIndex;
-      if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Continue;
-      RowIdx := FFilteredIndices[RecIdx];
-      if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
       Row := FRows[RowIdx];
+      if (FSelectedIds = nil) or
+         not FSelectedIds.ContainsKey(SelectionKey(Row)) then Continue;
       if Row.Nivel < 3 then
       begin
         // OF/OT: desplanificar todos los nodos de sus OP descendientes.
@@ -1754,16 +1687,14 @@ begin
     L.Free;
   end;
 end;
-
 procedure TfrmBacklog.DoDesplanificar(const ANodeIds: TArray<Integer>);
 begin
   // Logica compartida con el Gantt (uVistaGantt): borra Node + NodeData +
   // dependencias + asignaciones en una transaccion.
   DMPlanner.DesplanificarNodes(ANodeIds);
 end;
-
 procedure TfrmBacklog.btnDesplanificarSelClick(Sender: TObject);
-var
+ var
   Ids: TArray<Integer>;
 begin
   Ids := CollectSelectedNodeIds;
@@ -1772,12 +1703,10 @@ begin
     ShowMessage('Selecciona al menos una fila planificada para desplanificar.');
     Exit;
   end;
-
   if MessageDlg(
       Format('Se desplanificaran %d elementos (se borraran los nodos del plan).' +
         sLineBreak + sLineBreak + 'Continuar?', [Length(Ids)]),
       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-
   try
     DoDesplanificar(Ids);
   except
@@ -1788,16 +1717,16 @@ begin
     end;
   end;
   InvalidateDataCache;   // se borraron nodos: datos de ambos tabs cambian
+  // Las filas desplanificadas salen de este tab: soltar la seleccion.
+  if FSelectedIds <> nil then FSelectedIds.Clear;
   LoadData;
   ShowMessage(Format('%d elementos desplanificados.', [Length(Ids)]));
 end;
-
 
 // ---------------------------------------------------------------------------
 // Construccion de columnas base (vista FS_PL_vw_Backlog)
 // ---------------------------------------------------------------------------
 procedure TfrmBacklog.BuildBaseColumns;
-
   // AValueType: '' = texto (por defecto), 'Float' = numerico, 'Integer',
   // 'DateTime'. Fija DataBinding.ValueType para que el grid ORDENE y formatee por
   // tipo (si no, una columna unbound ordena siempre como string: "10" < "2").
@@ -1814,7 +1743,6 @@ procedure TfrmBacklog.BuildBaseColumns;
     Result.Tag := tvBacklog.ColumnCount - 1;
     FColKeyByTag.Add(Result.Tag, AKey);
   end;
-
 var
   Cols: TList<TcxGridColumn>;
 begin
@@ -1830,8 +1758,9 @@ begin
       Cols.Add(AddCol('CodigoArticulo',       'Articulo',      110));
       Cols.Add(AddCol('Cantidad',             'Cantidad',       80, 'Float'));
       Cols.Add(AddCol('UnidadMedida',         'UM',             50));
+      Cols.Add(AddCol('CodigoCliente',        'Cod. cliente',   90));
       Cols.Add(AddCol('NombreCliente',        'Cliente',       180));
-      Cols.Add(AddCol('CodigoProyecto',       'Proyecto',      100));
+      Cols.Add(AddCol('CodigoProyecto',       'Proyecto/Obra', 110));
       Cols.Add(AddCol('SerieOF',              'Serie OF',       70));
       Cols.Add(AddCol('NumeroOF',             'OF',             70, 'Integer'));
       Cols.Add(AddCol('CodigoOT',             'OT',             90));
@@ -1844,7 +1773,6 @@ begin
       Cols.Add(AddCol('HorasEstimadas',       'Horas est.',     80, 'Float'));
       Cols.Add(AddCol('EstadoERP',            'Estado',         90));
       Cols.Add(AddCol('Orden',                'Orden op.',      70, 'Integer'));
-
       // Prevision agregada (V055): solo aporta a Nivel 1/2 (cada fila resume
       // sus OP descendientes pendientes). A Nivel 3 una fila ya es una OP.
       if (not IsPlanningTab) and (FNivelVista < 3) then
@@ -1854,7 +1782,6 @@ begin
         Cols.Add(AddCol('DuracionPrevistaMin',  'Dur. prev. (h)', 100));
         Cols.Add(AddCol('FechaCompromisoMin',   'F. Compr. min', 110));
       end;
-
       // Bloque OP (Nivel 3): solo con valor en filas de operacion.
       Cols.Add(AddCol('OpTiempoPreparacion',  'T. Prep.',       70));
       Cols.Add(AddCol('OpTiempoFabricacion',  'T. Fab.',        70));
@@ -1873,7 +1800,6 @@ begin
       Cols.Add(AddCol('OpPctDedicacionOperario','% Dedic.',     70));
       Cols.Add(AddCol('OrigenERP',            'ERP',            70));
       Cols.Add(AddCol('ClaveERP',             'Clave ERP',     120));
-
       // Columnas extra visibles solo en el tab Planificados
       if IsPlanningTab then
       begin
@@ -1890,7 +1816,6 @@ begin
           Cols.Add(AddCol('NumCentros',       'Centros',        70));
         end;
       end;
-
       // Columna "Ver" - dos botons: Pedido (boto 0) + Formula (boto 1)
       var ColVer := AddCol('VerDetalle', 'Ver', 130);
       ColVer.Options.Editing := True;
@@ -1917,7 +1842,6 @@ begin
         OnButtonClick := OnColVerButtonClick;
       end;
       Cols.Add(ColVer);
-
       FBaseColumns := Cols.ToArray;
     finally
       Cols.Free;
@@ -1926,7 +1850,6 @@ begin
     tvBacklog.EndUpdate;
   end;
 end;
-
 // ---------------------------------------------------------------------------
 // Carga catalogo de columnas custom definidas para este grid
 // ---------------------------------------------------------------------------
@@ -1978,7 +1901,6 @@ begin
     L.Free;
   end;
 end;
-
 procedure TfrmBacklog.BuildCustomColumns;
 var
   I: Integer;
@@ -2011,7 +1933,6 @@ begin
       Cols.Add(Col);
     end;
     FCustomColumns := Cols.ToArray;
-
     // Habilitar edicion en la vista solo si hay alguna columna custom.
     // Las columnas base ya tienen Options.Editing=False, asi que no se podran
     // editar aunque la vista lo permita.
@@ -2036,7 +1957,6 @@ begin
     Cols.Free;
   end;
 end;
-
 // ---------------------------------------------------------------------------
 // SQL de la vista + JOINs dinamicos para campos custom
 // ---------------------------------------------------------------------------
@@ -2049,13 +1969,11 @@ begin
   // Solo unimos parent/grandparent si hay alguna columna custom que lo necesite.
   // Asi en arranque rapido (sin custom cols) la consulta queda al nivel pre-PR.
   NeedsAncestors := Length(FCustomCols) > 0;
-
   if NeedsAncestors then
     Sel := 'b.*, gp.RawItemId AS GrandRawItemId'
   else
     Sel := 'b.*';
   Joins := '';
-
   if NeedsAncestors then
   begin
     // Un solo JOIN al padre (Nivel=2) y otro al abuelo (Nivel=1). Reutilizables
@@ -2066,16 +1984,13 @@ begin
       ' LEFT JOIN FS_PL_Raw_Item gp ' +
       '   ON gp.CodigoEmpresa = pp.CodigoEmpresa AND gp.RawItemId = pp.ParentRawItemId';
   end;
-
   for I := 0 to High(FCustomCols) do
   begin
     Alias := 'x' + IntToStr(I);
-
     // Nivel del Raw_Item al que aplica el campo. Si no se ha especificado,
     // por defecto se busca al nivel del leaf que muestra el backlog (3).
     Nivel := FCustomCols[I].AppliesToNivel;
     if Nivel = 0 then Nivel := 3;
-
     // El leaf no siempre esta a Nivel=3: puede ser una OF Nivel=1 sin OTs
     // creadas, una OT Nivel=2 sin OPs, etc. Por eso el join debe escoger el
     // RawItemId segun la diferencia entre b.Nivel y el nivel objetivo.
@@ -2089,10 +2004,12 @@ begin
       '  WHEN 1 THEN b.ParentRawItemId' +
       '  WHEN 2 THEN gp.RawItemId' +
       '  ELSE NULL END';
-
     // Filtrar por TipoOrigen segun SourceEntity (un campo de PEDIDO no debe
     // pintarse en filas de OF). Lo metemos dentro del ON, no en el WHERE,
     // para que LEFT JOIN no se convierta en filtro de la fila base.
+    // V085: 'PROYECTO' se mantiene por compatibilidad con definiciones
+    // guardadas antes de sacar PRJ del Backlog. Nunca hara match: las vistas
+    // ya no devuelven filas PRJ, luego esas columnas quedan siempre vacias.
     if FCustomCols[I].SourceEntity = 'OF' then
       TipoFiltro := '''OF '''
     else if FCustomCols[I].SourceEntity = 'PEDIDO' then
@@ -2101,9 +2018,7 @@ begin
       TipoFiltro := '''PRJ'''
     else
       TipoFiltro := '';
-
     Sel := Sel + ', ' + Alias + '.FieldValue AS [X_' + FCustomCols[I].ColumnKey + ']';
-
     Joins := Joins +
       ' LEFT JOIN FS_PL_RawItem_Extra ' + Alias +
       '   ON ' + Alias + '.CodigoEmpresa = b.CodigoEmpresa' +
@@ -2113,7 +2028,6 @@ begin
       Joins := Joins +
       '  AND b.TipoOrigen = ' + TipoFiltro;
   end;
-
   if IsPlanningTab and (FNivelVista >= 3) then
     // Nivel 3 (OP): 1 fila por OP planificada, con su node. Vista ligera que ya
     // filtra por ProjectId.
@@ -2152,7 +2066,6 @@ begin
       '   AND b.Nivel = ' + IntToStr(FNivelVista) +
       ' ORDER BY b.FechaCompromiso, b.Prioridad DESC';
 end;
-
 // ---------------------------------------------------------------------------
 // Cache del recordset por (tab, nivel). El toggle Pendientes/Planificados y el
 // cambio de nivel son muy comunes y la query es ~89% del tiempo (~1s). La cache
@@ -2164,7 +2077,6 @@ function TfrmBacklog.CacheKey: string;
 begin
   Result := IntToStr(tabMode.TabIndex) + '|' + IntToStr(FNivelVista);
 end;
-
 function TfrmBacklog.TryLoadFromCache(out ADataSet: TCustomADODataSet): Boolean;
 begin
   ADataSet := nil;
@@ -2172,7 +2084,6 @@ begin
             FRecordsetCache.TryGetValue(CacheKey, ADataSet) and
             (ADataSet <> nil) and ADataSet.Active;
 end;
-
 // Adopta el recordset (ya desconectado) en la cache bajo la clave actual. La
 // cache es TObjectDictionary con doOwnsValues: al reemplazar o vaciar, libera el
 // anterior automaticamente. El recordset es client-side/desconectado, asi que se
@@ -2182,7 +2093,6 @@ begin
   if (FRecordsetCache = nil) or (ADataSet = nil) then Exit;
   FRecordsetCache.AddOrSetValue(CacheKey, ADataSet);  // libera el previo si habia
 end;
-
 // Vacia toda la cache: fuerza que el proximo LoadData vaya a BD. Se llama cuando
 // los DATOS cambian (planificar, desplanificar, cambiar filtros, refrescar).
 // El layout de columnas NO pasa por aqui (es independiente).
@@ -2190,13 +2100,11 @@ procedure TfrmBacklog.InvalidateDataCache;
 begin
   if FRecordsetCache <> nil then
     FRecordsetCache.Clear;   // doOwnsValues libera cada recordset
-
   // Tambien las reglas de utillaje: el usuario puede haber cambiado las
   // relaciones (operacion -> utillaje) desde la ficha mientras tanto.
   FUtilReglasCargadas := False;
   SetLength(FUtilReglas, 0);
 end;
-
 // ---------------------------------------------------------------------------
 // Carga datos a la estructura interna y luego los vuelca al grid
 // ---------------------------------------------------------------------------
@@ -2216,7 +2124,6 @@ begin
   Q := nil;
   SQLText := BuildSQL;
   ConnStr := DMPlanner.ConnectionStringForThreads;
-
   TQuery := Now;
   if TryLoadFromCache(Cached) then
   begin
@@ -2262,7 +2169,6 @@ begin
       [tabMode.TabIndex, FNivelVista, MilliSecondsBetween(Now, TQuery)]);
   end;
   TVolcado := Now;
-
     // A partir de aqui, ya en el hilo principal, volcamos el recordset
     // (desconectado) a las filas y al grid.
     while not DS.Eof do
@@ -2338,7 +2244,6 @@ begin
       else
         Row.TiempoUnidadFabSecs := 0;
       Row.EstadoERP           := DS.FieldByName('EstadoERP').AsString;
-
       // Bloque OP (Nivel 3). FindField por robustez ante vistas pre-V053.
       if DS.FindField('Orden') <> nil then
         Row.Orden := DS.FieldByName('Orden').AsInteger
@@ -2359,7 +2264,6 @@ begin
       Row.OpObservaciones      := FieldStr(DS, 'OpObservaciones');
       Row.OpPctParaSigOperacion   := FieldFloat(DS, 'OpPctParaSigOperacion');
       Row.OpPctDedicacionOperario := FieldFloat(DS, 'OpPctDedicacionOperario');
-
       // Agregados de prevision (V055, solo vw_BacklogTree). FindField por
       // robustez: vw_BacklogPlanned no los trae.
       Row.DuracionPrevistaMin := FieldFloat(DS, 'DuracionPrevistaMin');
@@ -2372,7 +2276,6 @@ begin
       else
         Row.NumOpsPendientes := 0;
       Row.FechaCompromisoMin := FieldDate(DS, 'FechaCompromisoMin');
-
       // Campos del nodo (solo vw_BacklogPlanned / vw_BacklogPlannedTree)
       Row.NodeId := 0;
       Row.NodeInicio := 0;
@@ -2399,7 +2302,6 @@ begin
         if DS.FindField('NumCentros') <> nil then
           Row.NumCentros := DS.FieldByName('NumCentros').AsInteger;
       end;
-
       Row.Extras := TDictionary<string, Variant>.Create;
       for I := 0 to High(FCustomCols) do
       begin
@@ -2417,7 +2319,6 @@ begin
           Row.Extras.AddOrSetValue(FCustomCols[I].ColumnKey, V);
         end;
       end;
-
       FRows.Add(Row);
       DS.Next;
     end;
@@ -2435,7 +2336,6 @@ begin
   PlanLog.Linea('LOADDATA pintado+KPIs: %d ms', [MilliSecondsBetween(Now, TPintado)]);
   // UpdateCountLabel (dins ApplyRowsToGrid) ya ha puesto el conteo real.
 end;
-
 // ---------------------------------------------------------------------------
 // KPIs de cabecera: OF / OT / OP pendientes vs planificadas (globales, no
 // afectados por los filtros de la barra lateral). Una OF/OT cuenta como
@@ -2456,19 +2356,16 @@ begin
        'Marcar como '#39'pr'#243'ximas a vencer'#39' las operaciones cuya fecha de ' +
        'compromiso est'#233' dentro de los pr'#243'ximos N d'#237'as:', S) then
     Exit;
-
   if not TryStrToInt(Trim(S), Dias) or (Dias <= 0) or (Dias > 365) then
   begin
     ShowMessage('Introduce un n'#250'mero de d'#237'as v'#225'lido (entre 1 y 365).');
     Exit;
   end;
-
   uUserPrefs.SetPrefInt(BACKLOG_MOD, 'DiasVencimiento', Dias);
   FDiasVencimiento := Dias;
   LoadKpis;                    // recalcula el semaforo KPI de cabecera
   tvBacklog.Site.Invalidate;   // repinta el grid con el nuevo umbral (sin recargar)
 end;
-
 procedure TfrmBacklog.LoadKpis;
 var
   Q: TADOQuery;
@@ -2545,7 +2442,6 @@ begin
     // Si falla la consulta, dejamos los KPIs a 0 (no bloquea el Backlog).
   end;
   Q.Free;
-
   // Valor grande = pendientes; caption = planificadas / total de documentos.
   // Valor grande = pendientes; caption compacto = 'OF  plan/tot' (cabe en 95px).
   lblKpiOFVal.Caption := IntToStr(ofP);
@@ -2554,7 +2450,6 @@ begin
   lblKpiOTCap.Caption := Format('OT  %d/%d', [otPl, otT]);
   lblKpiOPVal.Caption := IntToStr(opP);
   lblKpiOPCap.Caption := Format('OP  %d/%d', [opPl, opT]);
-
   // Semaforo de vencimiento sobre las OP pendientes (rojo / ambar / gris).
   lblKpiVencVal.Caption := IntToStr(vencidas);
   lblKpiVencCap.Caption := 'Vencidas';
@@ -2563,7 +2458,6 @@ begin
   lblKpiSinFVal.Caption := IntToStr(sinFecha);
   lblKpiSinFCap.Caption := 'Sin fecha';
 end;
-
 // ---------------------------------------------------------------------------
 // Filtro local en memoria (barra lateral)
 // ---------------------------------------------------------------------------
@@ -2575,31 +2469,156 @@ begin
   if cmbOrigen.ItemIndex > 0 then
   begin
     // Row.Origen para hojas Nivel=3 ERP siempre es 'OP'; el combo filtra por
-    // familia (OF/PEDIDO/PROYECTO), derivada del TipoOrigen heredado del padre.
+    // familia (OF/PEDIDO), derivada del TipoOrigen heredado del padre.
     // Los nodos MANUALES (V067) no tienen TipoOrigen: se filtran por Origen.
+    // V085: fuera la familia PRJ (los proyectos se planifican en Ingenieria);
+    // MANUAL pasa del indice 4 al 3 al desaparecer PROYECTO del combo.
     S := UpperCase(Trim(Row.TipoOrigen));
     if      (cmbOrigen.ItemIndex = 1) and (S <> 'OF')  then Exit
     else if (cmbOrigen.ItemIndex = 2) and (S <> 'PED') then Exit
-    else if (cmbOrigen.ItemIndex = 3) and (S <> 'PRJ') then Exit
-    else if (cmbOrigen.ItemIndex = 4) and
+    else if (cmbOrigen.ItemIndex = 3) and
             (UpperCase(Trim(Row.Origen)) <> 'MANUAL')  then Exit;
   end;
-
+  // Filtros de texto. Un campo VACIO en la fila no descarta: los nodos manuales
+  // (Source='MAN', V067) no tienen cliente, proyecto, centro preferente ni
+  // estado ERP, y con el criterio antiguo cualquier filtro con texto los hacia
+  // desaparecer aunque Origen fuese '(Todos)'. Mismo criterio que ya usan los
+  // filtros de fecha de mas abajo (que ignoran la fila si no tiene fecha).
   S := Trim(edtCliente.Text);
-  if (S <> '') and (Pos(UpperCase(S), UpperCase(Row.NombreCliente + ' ' + Row.CodigoCliente)) = 0) then Exit;
+  if (S <> '') and (Trim(Row.NombreCliente + Row.CodigoCliente) <> '') and
+     (Pos(UpperCase(S), UpperCase(Row.NombreCliente + ' ' + Row.CodigoCliente)) = 0) then Exit;
   S := Trim(edtProyecto.Text);
-  if (S <> '') and (Pos(UpperCase(S), UpperCase(Row.CodigoProyecto)) = 0) then Exit;
+  if (S <> '') and (Trim(Row.CodigoProyecto) <> '') and
+     (Pos(UpperCase(S), UpperCase(Row.CodigoProyecto)) = 0) then Exit;
   S := Trim(edtCentro.Text);
-  if (S <> '') and (Pos(UpperCase(S), UpperCase(Row.CentroPreferente)) = 0) then Exit;
+  if (S <> '') and (Trim(Row.CentroPreferente) <> '') and
+     (Pos(UpperCase(S), UpperCase(Row.CentroPreferente)) = 0) then Exit;
   S := Trim(edtEstado.Text);
-  if (S <> '') and (Pos(UpperCase(S), UpperCase(Row.EstadoERP)) = 0) then Exit;
-
+  if (S <> '') and (Trim(Row.EstadoERP) <> '') and
+     (Pos(UpperCase(S), UpperCase(Row.EstadoERP)) = 0) then Exit;
   if chkUsaFechaDesde.Checked and (Row.FechaCompromiso <> 0) then
     if Row.FechaCompromiso < dtFechaDesde.Date then Exit;
   if chkUsaFechaHasta.Checked and (Row.FechaCompromiso <> 0) then
     if Row.FechaCompromiso > dtFechaHasta.Date then Exit;
 
+  // Buscador rapido: a diferencia de los filtros de atributo de arriba, este SI
+  // descarta la fila cuando no hay coincidencia (es una busqueda, no un filtro
+  // por campo). Busca en todos los identificadores utiles a la vez para que el
+  // usuario no tenga que saber en que columna vive lo que esta tecleando.
+  S := Trim(edtBuscar.Text);
+  if S <> '' then
+    if not RowMatchesQuickSearch(Row, UpperCase(S)) then Exit;
+
   Result := True;
+end;
+
+// Devuelve True si la fila casa con el texto del buscador rapido (ya en
+// mayusculas). Concatena los identificadores de la fila en un solo texto: asi
+// 'EX3072' encuentra por serie, '1186' por OT y 'EMBALAJE' por descripcion.
+// NumeroOF/NumeroDoc se incluyen solo si son > 0 (0 = no aplica; incluirlo
+// haria que teclear '0' devolviese media pantalla).
+function TfrmBacklog.RowMatchesQuickSearch(const Row: TBacklogRow;
+  const AQuery: string): Boolean;
+var
+  Hay: string;
+begin
+  Hay := Row.CodigoDocumento + '|' + Row.CodigoOT + '|' + Row.CodigoOP + '|' +
+         Row.SerieOF + '|' + Row.SerieDoc + '|' +
+         Row.CodigoArticulo + '|' + Row.DescripcionArticulo;
+  if Row.NumeroOF > 0 then
+    Hay := Hay + '|' + IntToStr(Row.NumeroOF);
+  if Row.NumeroDoc > 0 then
+    Hay := Hay + '|' + IntToStr(Row.NumeroDoc);
+  Result := Pos(AQuery, UpperCase(Hay)) > 0;
+end;
+
+// ---------------------------------------------------------------------------
+// Seleccion persistente entre cambios de filtro.
+// ---------------------------------------------------------------------------
+
+// Clave estable de una fila. Las filas ERP se identifican por RawId; los nodos
+// manuales no tienen Raw_Item (RawId = 0) y se identifican por NodeId.
+function TfrmBacklog.SelectionKey(const Row: TBacklogRow): string;
+begin
+  if Row.RawId > 0 then
+    Result := 'R' + IntToStr(Row.RawId)
+  else if Row.NodeId > 0 then
+    Result := 'N' + IntToStr(Row.NodeId)
+  else
+    Result := '';
+end;
+
+// Volca la seleccion actual del grid al conjunto persistente. Solo toca las
+// filas VISIBLES: lo que hay marcado y filtrado fuera se conserva intacto, que
+// es justo lo que permite acumular seleccion en varias pasadas de filtro.
+procedure TfrmBacklog.CaptureSelectionToSet;
+var
+  I, RecIdx, RowIdx: Integer;
+  K: string;
+  Sel: TDictionary<string, Boolean>;
+begin
+  if FSelectedIds = nil then Exit;
+  if FRestoringSel then Exit;
+
+  // 1) Claves seleccionadas ahora mismo en el grid.
+  Sel := TDictionary<string, Boolean>.Create;
+  try
+    for I := 0 to tvBacklog.Controller.SelectedRowCount - 1 do
+    begin
+      RecIdx := tvBacklog.Controller.SelectedRows[I].RecordIndex;
+      if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Continue;
+      RowIdx := FFilteredIndices[RecIdx];
+      if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
+      K := SelectionKey(FRows[RowIdx]);
+      if K <> '' then Sel.AddOrSetValue(K, True);
+    end;
+
+    // 2) Sincronizar SOLO las filas visibles: marcar las que estan y quitar las
+    // que el usuario ha desmarcado. Las no visibles no se tocan.
+    for I := 0 to High(FFilteredIndices) do
+    begin
+      RowIdx := FFilteredIndices[I];
+      if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
+      K := SelectionKey(FRows[RowIdx]);
+      if K = '' then Continue;
+      if Sel.ContainsKey(K) then
+        FSelectedIds.AddOrSetValue(K, True)
+      else
+        FSelectedIds.Remove(K);
+    end;
+  finally
+    Sel.Free;
+  end;
+end;
+
+// Reaplica la seleccion guardada sobre el grid recien reconstruido.
+procedure TfrmBacklog.RestoreSelectionFromSet;
+var
+  I, RowIdx: Integer;
+  K: string;
+  Rec: TcxCustomGridRecord;
+begin
+  if (FSelectedIds = nil) or (FSelectedIds.Count = 0) then Exit;
+
+  FRestoringSel := True;
+  tvBacklog.BeginUpdate;
+  try
+    tvBacklog.Controller.ClearSelection;
+    for I := 0 to High(FFilteredIndices) do
+    begin
+      if I >= tvBacklog.ViewData.RecordCount then Break;
+      RowIdx := FFilteredIndices[I];
+      if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
+      K := SelectionKey(FRows[RowIdx]);
+      if (K = '') or not FSelectedIds.ContainsKey(K) then Continue;
+      Rec := tvBacklog.ViewData.Records[I];
+      if Rec <> nil then
+        Rec.Selected := True;
+    end;
+  finally
+    tvBacklog.EndUpdate;
+    FRestoringSel := False;
+  end;
 end;
 
 procedure TfrmBacklog.ApplyRowsToGrid;
@@ -2611,6 +2630,9 @@ var
   V: Variant;
   FilteredList: TList<Integer>;
 begin
+  // Guardar lo que hay marcado ANTES de destruir el dataset, para reaplicarlo al
+  // final: si no, cada cambio de filtro borraria la seleccion del usuario.
+  CaptureSelectionToSet;
   FilteredList := TList<Integer>.Create;
   tvBacklog.BeginUpdate;
   try
@@ -2620,24 +2642,22 @@ begin
     begin
       Row := FRows[I];
       if not PassesFilter(Row) then Continue;
-
       FilteredList.Add(I);
       tvBacklog.DataController.RecordCount := RowIdx + 1;
       for K := 0 to tvBacklog.ColumnCount - 1 do
       begin
         Col := tvBacklog.Columns[K];
         if not FColKeyByTag.TryGetValue(Col.Tag, Key) then Continue;
-
         if Key = 'TipoOrigen' then
         begin
-          // Mapeo CHAR(3) -> etiqueta legible (OF/PEDIDO/PROYECTO). Los nodos
-          // manuales no tienen TipoOrigen: se etiquetan por su Origen='MANUAL'.
+          // Mapeo CHAR(3) -> etiqueta legible (OF/PEDIDO). Los nodos manuales
+          // no tienen TipoOrigen: se etiquetan por su Origen='MANUAL'.
+          // V085: PRJ ya no llega (las vistas del Backlog lo excluyen).
           S := UpperCase(Trim(Row.TipoOrigen));
           if      UpperCase(Trim(Row.Origen)) = 'MANUAL' then
                             tvBacklog.DataController.Values[RowIdx, Col.Index] := 'MANUAL'
           else if S = 'OF'  then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'OF'
           else if S = 'PED' then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'PEDIDO'
-          else if S = 'PRJ' then tvBacklog.DataController.Values[RowIdx, Col.Index] := 'PROYECTO'
           else                   tvBacklog.DataController.Values[RowIdx, Col.Index] := S;
         end
         else if Key = 'CodigoDocumento' then
@@ -2650,6 +2670,8 @@ begin
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.Cantidad
         else if Key = 'UnidadMedida' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.UnidadMedida
+        else if Key = 'CodigoCliente' then
+          tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.CodigoCliente
         else if Key = 'NombreCliente' then
           tvBacklog.DataController.Values[RowIdx, Col.Index] := Row.NombreCliente
         else if Key = 'CodigoProyecto' then
@@ -2804,31 +2826,44 @@ begin
     tvBacklog.EndUpdate;
     FilteredList.Free;
   end;
+  RestoreSelectionFromSet;
   UpdateCountLabel;
   UpdateImpacto;
 end;
-
+// Contador de registros y seleccionados. El detalle de carga (horas, centros)
+// ya vive en el panel de Impacto de la derecha; aqui solo el recuento.
+// Los "ocultos" SI se indican: son filas marcadas que el filtro actual esconde
+// y que se planificaran igualmente, asi que no pueden quedar invisibles.
 procedure TfrmBacklog.UpdateCountLabel;
 var
-  Total, Sel: Integer;
+  Total, Sel, Ocultos: Integer;
+  S: string;
 begin
   Total := Length(FFilteredIndices);
   Sel := tvBacklog.Controller.SelectedRowCount;
-  if Sel > 0 then
-    lblCountRegs.Caption := Format('%d registros  (%d seleccionados)', [Total, Sel])
-  else
-    lblCountRegs.Caption := Format('%d registros', [Total]);
-end;
 
+  S := Format('%d registros', [Total]);
+  if Sel > 0 then
+    S := S + Format('  |  %d sel.', [Sel]);
+
+  if FSelectedIds <> nil then
+  begin
+    Ocultos := FSelectedIds.Count - Sel;
+    if Ocultos > 0 then
+      S := S + Format('  (+%d ocultos)', [Ocultos]);
+  end;
+  lblCountRegs.Caption := S;
+end;
 // ---------------------------------------------------------------------------
 // Impacto (version basica - sera ampliada con calendarios/torns en Pas 3)
 // ---------------------------------------------------------------------------
 procedure TfrmBacklog.tvBacklogSelectionChanged(Sender: TcxCustomGridTableView);
 begin
+  if FRestoringSel then Exit;   // no realimentar durante RestoreSelectionFromSet
+  CaptureSelectionToSet;        // la seleccion es del dato, no de la vista
   UpdateCountLabel;
   UpdateImpacto;
 end;
-
 procedure TfrmBacklog.tvBacklogCellDblClick(Sender: TcxCustomGridTableView;
   ACellViewInfo: TcxGridTableDataCellViewInfo; AButton: TMouseButton;
   AShift: TShiftState; var AHandled: Boolean);
@@ -2838,18 +2873,15 @@ begin
   // Doble-clic en una fila de OF abre el Visor de OF (jerarquia OF/OT/OP).
   // No interferir con la columna de botones "Ver" (que tiene su propio editor).
   if AButton <> mbLeft then Exit;
-
   // Usar el RecordIndex de la CELDA clicada (no FocusedRecordIndex): con sort u
   // orden activo el foco puede no coincidir con la fila pulsada y se abria la OF
   // de OTRA fila. ACellViewInfo apunta exactamente a la fila del doble-clic.
   RecIdx := -1;
   if (ACellViewInfo <> nil) and (ACellViewInfo.GridRecord <> nil) then
     RecIdx := ACellViewInfo.GridRecord.RecordIndex;
-
   VerOFActual(RecIdx);
   AHandled := True;
 end;
-
 // ---------------------------------------------------------------------------
 // Resuelve el RawItemId al que aplica un campo custom para una fila concreta,
 // segun el AppliesToNivel definido en el catalogo (mismo mapeo que BuildSQL).
@@ -2862,7 +2894,6 @@ begin
   // Nivel objetivo del campo. 0 = no especificado -> usamos el nivel del leaf.
   TargetNivel := ColDef.AppliesToNivel;
   if TargetNivel = 0 then TargetNivel := Row.Nivel;
-
   // Cuantos saltos hacia el padre necesitamos: si la fila ya esta en el
   // nivel objetivo, ninguno; si esta mas profundo, subimos.
   Diff := Row.Nivel - TargetNivel;
@@ -2877,14 +2908,12 @@ begin
     Result := 0;
   end;
 end;
-
 procedure TfrmBacklog.Restablecer1Click(Sender: TObject);
 begin
   if MessageDlg('Restablecer layout por defecto del grid?',
     mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     ResetLayout;
 end;
-
 // ---------------------------------------------------------------------------
 // Encode/Decode FieldValue: garantiza formato invariant en BD para que un
 // numero/fecha/bool guardado en una cultura se lea identico en otra.
@@ -2918,7 +2947,6 @@ begin
     Result := VarToStr(V);
   end;
 end;
-
 function TfrmBacklog.DecodeFieldValue(ADataType: Char; const S: string): Variant;
 var
   D: Double;
@@ -2956,7 +2984,6 @@ begin
     Result := S;
   end;
 end;
-
 // ---------------------------------------------------------------------------
 // UPSERT a FS_PL_RawItem_Extra con Source='MANUAL'.
 // Si Value es Null/'' borra el override (volver al valor que aporte el ERP).
@@ -2973,14 +3000,12 @@ begin
     ShowMessage('No se puede guardar el valor: la fila no tiene un Raw_Item asociado al nivel solicitado.');
     Exit;
   end;
-
   IsEmpty := VarIsNull(Value) or VarIsEmpty(Value);
   if not IsEmpty then
   begin
     StrVal := EncodeFieldValue(ADataType, Value);
     if Trim(StrVal) = '' then IsEmpty := True;
   end;
-
   Cmd := TADOCommand.Create(nil);
   try
     Cmd.Connection := DMPlanner.ADOConnection;
@@ -3032,7 +3057,6 @@ begin
     Cmd.Free;
   end;
 end;
-
 // ---------------------------------------------------------------------------
 // Handler de edicion inline para columnas custom.
 // ---------------------------------------------------------------------------
@@ -3050,7 +3074,6 @@ begin
   if AItem = nil then Exit;
   if not FColKeyByTag.TryGetValue(AItem.Tag, Key) then Exit;
   if Copy(Key, 1, 2) <> 'X:' then Exit;
-
   ColumnKey := Copy(Key, 3, MaxInt);
   Found := False;
   ColDef := Default(TCustomColumnDef);
@@ -3062,20 +3085,15 @@ begin
       Break;
     end;
   if not Found then Exit;
-
   RecIdx := Sender.Controller.FocusedRecordIndex;
   if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Exit;
   RowIdx := FFilteredIndices[RecIdx];
   if (RowIdx < 0) or (RowIdx >= FRows.Count) then Exit;
-
   Row := FRows[RowIdx];
-
   if (ColDef.SourceEntity = 'OF')       and (Trim(Row.TipoOrigen) <> 'OF')  then Exit;
   if (ColDef.SourceEntity = 'PEDIDO')   and (Trim(Row.TipoOrigen) <> 'PED') then Exit;
   if (ColDef.SourceEntity = 'PROYECTO') and (Trim(Row.TipoOrigen) <> 'PRJ') then Exit;
-
   RawItemId := ResolveExtraRawItemId(Row, ColDef);
-
   // En DevExpress, AItem.EditValue suele ser el valor cacheado del controller,
   // que durante OnEditValueChanged aun esta vacio. El valor "en vivo" del
   // editor activo se obtiene del EditingController. Si no hay edicion activa
@@ -3087,7 +3105,6 @@ begin
     NewVal := Sender.Controller.EditingController.Edit.EditingValue;
   if VarIsNull(NewVal) or VarIsEmpty(NewVal) then
     NewVal := AItem.EditValue;
-
   // Diagnostico temporal: si el RawItemId resuelve a 0/negativo, el guardado
   // se cancela silenciosamente y el usuario no entiende por que no persiste.
   if RawItemId <= 0 then
@@ -3101,7 +3118,6 @@ begin
       'No hay ancestro al nivel solicitado.');
     Exit;
   end;
-
   try
     SaveCustomFieldValue(RawItemId, ColDef.FieldKey, ColDef.DataType, NewVal);
     // Reflejar el nuevo valor en la fila en memoria para no recargar todo.
@@ -3120,7 +3136,6 @@ begin
       ShowMessage('No se pudo guardar el valor: ' + E.Message);
   end;
 end;
-
 procedure TfrmBacklog.UpdateImpacto;
 var
   I, SelCount, FueraPlazo, Sats: Integer;
@@ -3143,7 +3158,6 @@ begin
   TotalHoras := 0;
   FechaMax := 0;
   FueraPlazo := 0;
-
   Cargas := TDictionary<string, Double>.Create;
   CentreByCode := TDictionary<string, TCentreTreball>.Create;
   try
@@ -3153,38 +3167,32 @@ begin
       for C in Centres do
         CentreByCode.AddOrSetValue(UpperCase(Trim(C.CodiCentre)), C);
     end;
-
     for I := 0 to tvBacklog.Controller.SelectedRowCount - 1 do
     begin
       RecIdx := tvBacklog.Controller.SelectedRows[I].RecordIndex;
       if (RecIdx < 0) or (RecIdx > High(FFilteredIndices)) then Continue;
       RowIdx := FFilteredIndices[RecIdx];
       if (RowIdx < 0) or (RowIdx >= FRows.Count) then Continue;
-
       Row := FRows[RowIdx];
       Inc(SelCount);
       TotalHoras := TotalHoras + Row.HorasEstimadas;
-
       Key := Row.CentroPreferente;
       if Trim(Key) = '' then Key := '(sin centro)';
       if Cargas.ContainsKey(Key) then
         Cargas[Key] := Cargas[Key] + Row.HorasEstimadas
       else
         Cargas.Add(Key, Row.HorasEstimadas);
-
       if Row.FechaCompromiso <> 0 then
       begin
         if Row.FechaCompromiso > FechaMax then FechaMax := Row.FechaCompromiso;
         if Row.FechaCompromiso < Now then Inc(FueraPlazo);
       end;
     end;
-
     // Ventana de capacidad
     if FechaMax <= Now then
       WindowEnd := IncDay(Now, 30)
     else
       WindowEnd := FechaMax;
-
     // Llenar grid de detalle por centro y calcular centros saturados
     Sats := 0;
     tvCargaCentro.BeginUpdate;
@@ -3200,7 +3208,6 @@ begin
           if C.IsSequencial then Lanes := 1
           else if C.MaxLaneCount <= 0 then Lanes := 1
           else Lanes := C.MaxLaneCount;
-
           Cal := DMPlanner.CentresRepo.GetCalendarFor(C.Id);
           if Cal <> nil then
           begin
@@ -3208,7 +3215,6 @@ begin
             CapacitatHoras := (CapacitatMin / 60.0) * Lanes;
           end;
         end;
-
         tvCargaCentro.DataController.RecordCount := GridIdx + 1;
         tvCargaCentro.DataController.Values[GridIdx, colCCCentro.Index] := Pair.Key;
         tvCargaCentro.DataController.Values[GridIdx, colCCHoras.Index] :=
@@ -3234,7 +3240,6 @@ begin
     finally
       tvCargaCentro.EndUpdate;
     end;
-
     // Resumen vertical grid
     vgResumen.BeginUpdate;
     try
@@ -3256,7 +3261,6 @@ begin
     CentreByCode.Free;
   end;
 end;
-
 procedure TfrmBacklog.tvCargaCentroCustomDrawCell(
   Sender: TcxCustomGridTableView; ACanvas: TcxCanvas;
   AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean);
@@ -3273,7 +3277,6 @@ begin
   if not (AViewInfo.Item is TcxGridColumn) then Exit;
   Col := TcxGridColumn(AViewInfo.Item);
   if Col <> colCCPct then Exit;
-
   V := AViewInfo.Value;
   if VarIsNull(V) or VarIsEmpty(V) then Exit;
   try
@@ -3281,41 +3284,32 @@ begin
   except
     Exit;
   end;
-
   R := AViewInfo.Bounds;
-
   // Fondo gris claro
   BgColor := $00E8E8E8;
   ACanvas.FillRect(R, BgColor);
-
   // Color barra segun ocupacion
   if Pct < 70 then      BarColor := $0070C070   // verde
   else if Pct < 95 then BarColor := $0030A0E0   // azul
   else if Pct <= 100 then BarColor := $0020B0E0 // mostaza ok
   else                  BarColor := $004040D0;  // rojo (BGR)
-
   W := Round((R.Right - R.Left) * (Pct / 100.0));
   if W < 0 then W := 0;
   if W > (R.Right - R.Left) then W := R.Right - R.Left;
-
   BarRect := R;
   BarRect.Right := R.Left + W;
   ACanvas.FillRect(BarRect, BarColor);
-
   // Borde
   ACanvas.Canvas.Pen.Color := $00C0C0C0;
   ACanvas.Canvas.Brush.Style := bsClear;
   ACanvas.Canvas.Rectangle(R.Left, R.Top, R.Right, R.Bottom);
-
   // Texto centrado con porcentaje
   Txt := Format('%.0f %%', [Pct]);
   ACanvas.Brush.Style := bsClear;
   ACanvas.Font.Color := clBlack;
   ACanvas.DrawText(Txt, R, cxAlignCenter or cxAlignVCenter or cxSingleLine);
-
   ADone := True;
 end;
-
 // ---------------------------------------------------------------------------
 // Persistencia del layout del grid (por usuario)
 // ---------------------------------------------------------------------------
@@ -3362,7 +3356,6 @@ begin
   finally
     Q.Free;
   end;
-
   // Columnas nuevas que un layout antiguo (guardado antes de existir ellas)
   // pudo dejar ocultas: las forzamos visibles para que aparezcan. El usuario
   // puede reordenarlas/ocultarlas luego y se guardara a su gusto.
@@ -3373,7 +3366,6 @@ begin
     'OpCodigoProveedor', 'OpSeccionFabrica', 'OpStatusPlanificado',
     'OpObservaciones', 'OpPctParaSigOperacion', 'OpPctDedicacionOperario']);
 end;
-
 // Marca como visibles las columnas cuyo Key este en AKeys (util tras restaurar
 // un layout antiguo que no las contenia).
 procedure TfrmBacklog.EnsureNewColumnsVisible(const AKeys: array of string);
@@ -3394,7 +3386,6 @@ begin
       end;
   end;
 end;
-
 procedure TfrmBacklog.SaveUserLayout;
 var
   Q: TADOQuery;
@@ -3419,7 +3410,6 @@ begin
     MS.Free;
   end;
   LayoutStr := TNetEncoding.Base64.EncodeBytesToString(Bytes);
-
   Q := TADOQuery.Create(nil);
   Cmd := TADOCommand.Create(nil);
   try
@@ -3430,7 +3420,6 @@ begin
       '  AND UserId = ' + QStr(UserLogin) +
       '  AND GridId = ''' + BACKLOG_GRID_ID + '''';
     Q.Open;
-
     Cmd.Connection := DMPlanner.ADOConnection;
     Cmd.Parameters.Clear;
     if Q.Eof then
@@ -3466,7 +3455,6 @@ begin
     Cmd.Free;
   end;
 end;
-
 procedure TfrmBacklog.ResetLayout;
 var
   Cmd: TADOCommand;
@@ -3492,18 +3480,15 @@ begin
   end;
   ApplyRowsToGrid;
 end;
-
 // ---------------------------------------------------------------------------
 // Boto "Ver" - obre el form modal de detall (segons TipoOrigen)
 // ---------------------------------------------------------------------------
-
 function TfrmBacklog.GetRowFromGridIndex(AGridIdx: Integer): Integer;
 begin
   Result := -1;
   if (AGridIdx < 0) or (AGridIdx > High(FFilteredIndices)) then Exit;
   Result := FFilteredIndices[AGridIdx];
 end;
-
 // Abre el Visor de OF para la fila enfocada del grid. El visor resuelve la OF
 // raiz a partir del RawId (sea OF/OT/OP) y muestra toda la jerarquia.
 procedure TfrmBacklog.VerOFActual(ARecordIndex: Integer);
@@ -3524,14 +3509,12 @@ begin
     Exit;
   end;
   Row := FRows[RowIdx];
-
   // Nodo manual (no tiene OF detras): abrimos el NodeInspector en consulta.
   if UpperCase(Trim(Row.Origen)) = 'MANUAL' then
   begin
     VerNodeManual(Row.NodeId);
     Exit;
   end;
-
   if Trim(Row.TipoOrigen) <> 'OF' then
   begin
     ShowMessage('El visor de OF solo aplica a filas de '#243'rdenes de fabricaci'#243'n.');
@@ -3544,7 +3527,6 @@ begin
   end;
   TfrmOFViewer.Execute(Row.RawId);
 end;
-
 // Abre el NodeInspector (solo lectura) para un nodo manual del tab Planificados.
 // Lee el TNodeData de BD por NodeId; la edicion real del nodo se hace en el Gantt.
 procedure TfrmBacklog.VerNodeManual(ANodeId: Integer);
@@ -3558,7 +3540,6 @@ begin
     ShowMessage('Este nodo manual no tiene un identificador v'#225'lido.');
     Exit;
   end;
-
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := DMPlanner.ADOConnection;
@@ -3587,7 +3568,6 @@ begin
       ShowMessage('No se ha encontrado el nodo manual.');
       Exit;
     end;
-
     FillChar(D, SizeOf(D), 0);
     D.DataId := ANodeId;
     D.Operacion := Q.FieldByName('Operacion').AsString;
@@ -3610,15 +3590,164 @@ begin
   finally
     Q.Free;
   end;
-
   // Read-only (consulta) + marcado como MANUAL. La edicion se hace en el Gantt.
   TfrmNodeInspector.Execute(D, Ini, Fin, True, nil, True);
 end;
-
 procedure TfrmBacklog.Guardar1Click(Sender: TObject);
 begin
   SaveUserLayout;
   ShowMessage('Layout guardado para el usuario actual.');
+end;
+// ---------------------------------------------------------------------------
+// Menu contextual del grid (clic derecho sobre una fila).
+// Da acceso a las mismas acciones que los botones de la columna 'Ver', que solo
+// aparecen en la fila enfocada y son faciles de pasar por alto.
+// ---------------------------------------------------------------------------
+
+// Devuelve la fila bajo el foco, o False si no hay ninguna valida.
+function TfrmBacklog.TryGetFocusedRow(out ARow: TBacklogRow): Boolean;
+var
+  RowIdx: Integer;
+begin
+  Result := False;
+  RowIdx := GetRowFromGridIndex(tvBacklog.Controller.FocusedRecordIndex);
+  if (RowIdx < 0) or (RowIdx >= FRows.Count) then Exit;
+  ARow := FRows[RowIdx];
+  Result := True;
+end;
+
+// Habilita cada opcion segun lo que la fila enfocada permite: sin articulo no
+// hay formula, y un nodo manual no tiene documento de origen en el ERP.
+procedure TfrmBacklog.pmGridRowPopup(Sender: TObject);
+var
+  Row: TBacklogRow;
+  Hay: Boolean;
+  Tipo: string;
+begin
+  Hay := TryGetFocusedRow(Row);
+  miVerFormula.Enabled   := Hay and (Trim(Row.CodigoArticulo) <> '');
+  miCopiarCelda.Enabled  := Hay;
+  miLimpiarSeleccion.Enabled :=
+    (tvBacklog.Controller.SelectedRowCount > 0) or
+    ((FSelectedIds <> nil) and (FSelectedIds.Count > 0));
+  if Hay then
+  begin
+    Tipo := Trim(Row.TipoOrigen);
+    // Un nodo manual no tiene TipoOrigen pero SI tiene detalle que mostrar
+    // (el NodeInspector), igual que en el doble-clic sobre la fila.
+    if UpperCase(Trim(Row.Origen)) = 'MANUAL' then
+    begin
+      miVerDocumento.Enabled := Row.NodeId > 0;
+      miVerDocumento.Caption := 'Ver detalle del nodo...';
+    end
+    else if Tipo = 'PED' then
+    begin
+      miVerDocumento.Enabled := True;
+      miVerDocumento.Caption := 'Ver pedido de origen...';
+    end
+    else if Tipo = 'OF' then
+    begin
+      miVerDocumento.Enabled := True;
+      miVerDocumento.Caption := 'Ver OF de origen...';
+    end
+    else
+    begin
+      miVerDocumento.Enabled := False;
+      miVerDocumento.Caption := 'Ver documento de origen...';
+    end;
+  end
+  else
+  begin
+    miVerDocumento.Enabled := False;
+    miVerDocumento.Caption := 'Ver documento de origen...';
+  end;
+end;
+
+procedure TfrmBacklog.miVerFormulaClick(Sender: TObject);
+var
+  Row: TBacklogRow;
+begin
+  if not TryGetFocusedRow(Row) then Exit;
+  if Trim(Row.CodigoArticulo) = '' then
+  begin
+    ShowMessage('Esta fila no tiene art'#237'culo asociado.');
+    Exit;
+  end;
+  TfrmFormulaArticuloViewer.Execute(Row.CodigoArticulo);
+end;
+
+// Abre el detalle del documento de origen de la fila. Debe hacer LO MISMO que
+// el doble-clic sobre la fila:
+//   - OF     -> Visor de OF (jerarquia OF/OT/OP), via VerOFActual
+//   - MANUAL -> NodeInspector en solo lectura, tambien via VerOFActual
+//   - PED    -> detalle del pedido, que VerOFActual no cubre
+// Por eso PED se resuelve con el handler del boton 'Ver' y el resto se delega
+// en VerOFActual, que ya distingue OF de nodo manual.
+procedure TfrmBacklog.miVerDocumentoClick(Sender: TObject);
+var
+  Row: TBacklogRow;
+begin
+  if not TryGetFocusedRow(Row) then Exit;
+  if Trim(Row.TipoOrigen) = 'PED' then
+    OnColVerButtonClick(nil, 0)     // detalle de pedido
+  else
+    VerOFActual(-1);                // OF -> Visor de OF; MANUAL -> NodeInspector
+end;
+
+// Suelta TODA la seleccion, incluida la que el filtro actual esconde. Sin esto,
+// una seleccion acumulada en varias pasadas de filtro solo se podria deshacer
+// volviendo a cada filtro para desmarcarla.
+procedure TfrmBacklog.miLimpiarSeleccionClick(Sender: TObject);
+begin
+  if FSelectedIds <> nil then FSelectedIds.Clear;
+  tvBacklog.Controller.ClearSelection;
+  UpdateCountLabel;
+  UpdateImpacto;
+end;
+
+// Mismo efecto que la opcion del menu contextual, en la barra de herramientas.
+procedure TfrmBacklog.btnLimpiarSeleccionClick(Sender: TObject);
+begin
+  miLimpiarSeleccionClick(Sender);
+end;
+
+// Limpia los filtros DEL GRID (los de columna del cxGrid, incluida la fila de
+// filtro y el filtro personalizado), mas la agrupacion por columna. No toca los
+// filtros del panel izquierdo: esos se limpian con 'Limpiar filtros'.
+procedure TfrmBacklog.btnLimpiarFiltrosGridClick(Sender: TObject);
+var
+  I: Integer;
+begin
+  tvBacklog.BeginUpdate;
+  try
+    tvBacklog.DataController.Filter.Clear;
+    tvBacklog.DataController.Filter.Active := False;
+    // Deshacer tambien la agrupacion por columna ("Arrastre aqui una columna...").
+    // El ORDEN se deja tal cual: ordenar no es filtrar, y quien ordena por fecha
+    // no espera perderlo al limpiar filtros.
+    for I := 0 to tvBacklog.ColumnCount - 1 do
+      if tvBacklog.Columns[I].GroupIndex >= 0 then
+        tvBacklog.Columns[I].GroupIndex := -1;
+  finally
+    tvBacklog.EndUpdate;
+  end;
+  UpdateCountLabel;
+end;
+
+procedure TfrmBacklog.miCopiarCeldaClick(Sender: TObject);
+var
+  V: Variant;
+  Col: TcxGridColumn;
+  Idx: Integer;
+begin
+  Idx := tvBacklog.Controller.FocusedRecordIndex;
+  Col := tvBacklog.Controller.FocusedColumn;
+  if (Idx < 0) or (Col = nil) then Exit;
+  V := tvBacklog.DataController.Values[Idx, Col.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then
+    Clipboard.AsText := ''
+  else
+    Clipboard.AsText := VarToStr(V);
 end;
 
 procedure TfrmBacklog.OnColVerButtonClick(Sender: TObject;
@@ -3633,7 +3762,6 @@ begin
   RowIdx := GetRowFromGridIndex(GridIdx);
   if (RowIdx < 0) or (RowIdx >= FRows.Count) then Exit;
   Row := FRows[RowIdx];
-
   // Boto 1 = Ver formula del article (el reader resol la connexio i empresa)
   if AButtonIndex = 1 then
   begin
@@ -3645,8 +3773,7 @@ begin
     TfrmFormulaArticuloViewer.Execute(Row.CodigoArticulo);
     Exit;
   end;
-
-  // Boto 0 = Ver Pedido/OF/Proyecto segons TipoOrigen
+  // Boto 0 = Ver Pedido/OF segons TipoOrigen (V085: el Backlog ja no porta PRJ)
   Tipo := Trim(Row.TipoOrigen);
   if Tipo = 'PED' then
   begin
@@ -3662,10 +3789,7 @@ begin
   end
   else if Tipo = 'OF' then
     ShowMessage('Detalle de OF: pr'#243'ximamente.')
-  else if Tipo = 'PRJ' then
-    ShowMessage('Detalle de proyecto: pr'#243'ximamente.')
   else
     ShowMessage('Tipo de origen no soportado: ' + Tipo);
 end;
-
 end.

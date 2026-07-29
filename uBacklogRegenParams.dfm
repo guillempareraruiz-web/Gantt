@@ -108,6 +108,7 @@ object frmBacklogRegenParams: TfrmBacklogRegenParams
       Width = 106
       Height = 15
       Caption = 'N'#250'mero de Proyectos'
+      Visible = False
     end
     object lblAviso: TLabel
       Left = 24
@@ -152,7 +153,8 @@ object frmBacklogRegenParams: TfrmBacklogRegenParams
       Properties.MaxValue = 10000.000000000000000000
       Properties.MinValue = 0.000000000000000000
       TabOrder = 2
-      Value = 4
+      Value = 0
+      Visible = False
       Width = 120
     end
     object chkVaciarPlan: TCheckBox

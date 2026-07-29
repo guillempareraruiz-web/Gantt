@@ -71,7 +71,14 @@ type
     pnlHeader: TPanel;
     lblTitle: TLabel;
     lblSubtitle: TLabel;
+    pnlKpiComp: TPanel;
+    lblKpiCompVal: TLabel;
+    lblKpiCompCap: TLabel;
+    pnlKpiOper: TPanel;
+    lblKpiOperVal: TLabel;
+    lblKpiOperCap: TLabel;
     pnlBottom: TPanel;
+    lblFooterHint: TLabel;
     btnClose: TButton;
     pnlMain: TPanel;
     pnlLeft: TPanel;
@@ -98,6 +105,7 @@ type
     tvOperaciones: TcxGridTableView;
     lvOperaciones: TcxGridLevel;
     LookAndFeel: TcxLookAndFeelController;
+    procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnCloseClick(Sender: TObject);
@@ -126,6 +134,7 @@ type
     procedure FillOperacionesGrid(const ACodigoArticulo: string;
       AVersion: SmallInt);
     procedure ClearGridLineas(AView: TcxGridTableView);
+    procedure UpdateKpis;
   public
     class procedure Execute(const ACodigoArticulo: string);
   end;
@@ -135,7 +144,7 @@ implementation
 {$R *.dfm}
 
 uses
-  uErpReaderFactory;
+  uErpReaderFactory, uHelpViewer;
 
 class procedure TfrmFormulaArticuloViewer.Execute(const ACodigoArticulo: string);
 var
@@ -216,6 +225,21 @@ procedure TfrmFormulaArticuloViewer.SetNodeText(ANode: TcxTreeListNode;
   ACol: Integer; const S: string);
 begin
   ANode.Values[ACol] := S;
+end;
+
+procedure TfrmFormulaArticuloViewer.FormCreate(Sender: TObject);
+begin
+  // Ayuda contextual: boton '?' en el caption + F1 (igual que otros forms).
+  THelpViewer.InstallHelp(Self, 'uFormulaArticuloViewer',
+    'Visor de f'#243'rmula del art'#237'culo');
+end;
+
+// Refresca los contadores de la cabecera con lo que hay ahora en los 2 grids.
+// Se llama al final de cada volcado; asi los KPI siguen al nodo seleccionado.
+procedure TfrmFormulaArticuloViewer.UpdateKpis;
+begin
+  lblKpiCompVal.Caption := IntToStr(tvComponentes.DataController.RecordCount);
+  lblKpiOperVal.Caption := IntToStr(tvOperaciones.DataController.RecordCount);
 end;
 
 procedure TfrmFormulaArticuloViewer.FormShow(Sender: TObject);
@@ -568,6 +592,7 @@ begin
   finally
     tvComponentes.EndUpdate;
   end;
+  UpdateKpis;
 end;
 
 procedure TfrmFormulaArticuloViewer.FillOperacionesGrid(
@@ -610,6 +635,7 @@ begin
   finally
     tvOperaciones.EndUpdate;
   end;
+  UpdateKpis;
 end;
 
 procedure TfrmFormulaArticuloViewer.ShowDetailFor(AInfo: TFormulaNodeInfo);

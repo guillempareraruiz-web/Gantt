@@ -16,6 +16,9 @@ object frmBacklog: TfrmBacklog
   OnDestroy = FormDestroy
   OnShow = FormShow
   PixelsPerInch = 96
+  DesignSize = (
+    1296
+    719)
   TextHeight = 15
   object pnlHeader: TPanel
     Left = 0
@@ -46,9 +49,9 @@ object frmBacklog: TfrmBacklog
     object lblSubtitle: TLabel
       Left = 68
       Top = 38
-      Width = 261
+      Width = 203
       Height = 15
-      Caption = 'OFs, pedidos y proyectos pendientes de planificar'
+      Caption = 'OFs y pedidos pendientes de planificar'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 14869218
       Font.Height = -12
@@ -376,9 +379,9 @@ object frmBacklog: TfrmBacklog
     object lblFiltroProyecto: TLabel
       Left = 12
       Top = 136
-      Width = 47
+      Width = 84
       Height = 15
-      Caption = 'Proyecto'
+      Caption = 'Proyecto / Obra'
     end
     object lblFiltroCentro: TLabel
       Left = 12
@@ -422,6 +425,41 @@ object frmBacklog: TfrmBacklog
       Font.Style = []
       ParentFont = False
     end
+    object bvlBuscar: TBevel
+      Left = 12
+      Top = 432
+      Width = 216
+      Height = 2
+      Shape = bsTopLine
+    end
+    object lblBuscar: TLabel
+      Left = 12
+      Top = 444
+      Width = 106
+      Height = 15
+      Caption = 'Buscar OF / OT / OP'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -12
+      Font.Name = 'Segoe UI Semibold'
+      Font.Style = []
+      ParentFont = False
+    end
+    object lblBuscarHint: TLabel
+      Left = 12
+      Top = 489
+      Width = 216
+      Height = 30
+      AutoSize = False
+      Caption = 'Busca en n'#186' de OF, serie, OT, OP, art'#237'culo y descripci'#243'n.'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clGrayText
+      Font.Height = -10
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+      WordWrap = True
+    end
     object cmbOrigen: TComboBox
       Left = 12
       Top = 58
@@ -434,7 +472,6 @@ object frmBacklog: TfrmBacklog
         '(Todos)'
         'OF'
         'PEDIDO'
-        'PROYECTO'
         'MANUAL')
     end
     object edtCliente: TEdit
@@ -519,6 +556,15 @@ object frmBacklog: TfrmBacklog
       Caption = 'Limpiar filtros'
       TabOrder = 9
       OnClick = btnLimpiarFiltrosClick
+    end
+    object edtBuscar: TEdit
+      Left = 12
+      Top = 462
+      Width = 216
+      Height = 23
+      TabOrder = 10
+      TextHint = 'N'#186' OF, c'#243'digo OT u OP...'
+      OnChange = FiltroChanged
     end
   end
   object pnlImpacto: TPanel
@@ -695,6 +741,7 @@ object frmBacklog: TfrmBacklog
     Width = 736
     Height = 567
     Align = alClient
+    PopupMenu = pmGridRow
     TabOrder = 4
     object tvBacklog: TcxGridTableView
       Navigator.Buttons.CustomButtons = <>
@@ -755,57 +802,18 @@ object frmBacklog: TfrmBacklog
       ParentFont = False
       Layout = tlCenter
     end
-    object btnDesplanificarSel: TButton
-      Left = 702
-      Top = 6
-      Width = 93
-      Height = 28
-      Anchors = [akTop, akRight]
-      Caption = 'Desplanificar sel'
-      TabOrder = 0
-      Visible = False
-      OnClick = btnDesplanificarSelClick
-    end
     object cmbNivelVista: TComboBox
       Left = 514
       Top = 8
       Width = 170
       Height = 23
       Style = csDropDownList
-      TabOrder = 5
+      TabOrder = 0
       OnChange = cmbNivelVistaChange
       Items.Strings = (
-        'Nivel 1 (OF / Pedido / Proyecto)'
-        'Nivel 2 (OT / L'#237'nea / Tarea)'
+        'Nivel 1 (OF / Pedido)'
+        'Nivel 2 (OT / L'#237'nea)'
         'Nivel 3 (OP)')
-    end
-    object btnPlanificar: TButton
-      Left = 85
-      Top = 6
-      Width = 92
-      Height = 28
-      Caption = 'Planificar sel...'
-      Default = True
-      TabOrder = 1
-      OnClick = btnPlanificarClick
-    end
-    object btnPlanificarExpress: TButton
-      Left = 176
-      Top = 6
-      Width = 130
-      Height = 28
-      Caption = 'Planificaci'#243'n Express'
-      TabOrder = 2
-      OnClick = btnPlanificarExpressClick
-    end
-    object btnSyncErp: TcxButton
-      Left = 308
-      Top = 6
-      Width = 101
-      Height = 28
-      Caption = 'Sincronizar ERP...'
-      TabOrder = 9
-      OnClick = btnSyncErpClick
     end
     object cmbPersistMethod: TComboBox
       Left = 894
@@ -815,34 +823,13 @@ object frmBacklog: TfrmBacklog
       Style = csDropDownList
       Anchors = [akTop, akRight]
       ItemIndex = 0
-      TabOrder = 10
+      TabOrder = 4
       Text = 'Persist. M5 (bulk)'
       Visible = False
       Items.Strings = (
         'Persist. M5 (bulk)'
         'Persist. M4 (bulk ADO)'
         'Persist. M1 (clasica)')
-    end
-    object btnRecargar: TcxButton
-      Left = 12
-      Top = 6
-      Width = 67
-      Height = 25
-      Caption = 'Refrescar'
-      Colors.Normal = 13492942
-      Colors.Hot = 11522481
-      Colors.Disabled = 14737632
-      Colors.DisabledText = clSilver
-      LookAndFeel.SkinName = ''
-      SpeedButtonOptions.CanBeFocused = False
-      TabOrder = 4
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWindowText
-      Font.Height = -11
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-      OnClick = btnRecargarClick
     end
     object cxButton9: TcxButton
       Left = 1266
@@ -881,7 +868,7 @@ object frmBacklog: TfrmBacklog
       SpeedButtonOptions.CanBeFocused = False
       SpeedButtonOptions.Flat = True
       SpeedButtonOptions.Transparent = True
-      TabOrder = 6
+      TabOrder = 1
     end
     object chkVerImpacto: TcxCheckBox
       Left = 1036
@@ -901,7 +888,7 @@ object frmBacklog: TfrmBacklog
       StyleHot.LookAndFeel.SkinName = 'DevExpressDarkStyle'
       StyleReadOnly.LookAndFeel.NativeStyle = False
       StyleReadOnly.LookAndFeel.SkinName = 'DevExpressDarkStyle'
-      TabOrder = 7
+      TabOrder = 2
     end
     object chkVerFiltros: TcxCheckBox
       Left = 1143
@@ -922,8 +909,167 @@ object frmBacklog: TfrmBacklog
       StyleHot.LookAndFeel.SkinName = 'DevExpressDarkStyle'
       StyleReadOnly.LookAndFeel.NativeStyle = False
       StyleReadOnly.LookAndFeel.SkinName = 'DevExpressDarkStyle'
-      TabOrder = 8
+      TabOrder = 3
     end
+    object btnPlanificar: TcxButton
+      AlignWithMargins = True
+      Left = 12
+      Top = 10
+      Width = 93
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Caption = 'Planificar sel...'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 5
+      OnClick = btnPlanificarClick
+    end
+    object btnPlanificarExpress: TcxButton
+      AlignWithMargins = True
+      Left = 111
+      Top = 10
+      Width = 129
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Caption = 'Planificaci'#243'n Express'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 6
+      OnClick = btnPlanificarExpressClick
+    end
+    object btnDesplanificarSel: TcxButton
+      AlignWithMargins = True
+      Left = 246
+      Top = 10
+      Width = 113
+      Height = 23
+      Margins.Top = 5
+      Margins.Bottom = 5
+      Caption = 'Desplanificar sel'
+      LookAndFeel.Kind = lfOffice11
+      LookAndFeel.NativeStyle = False
+      LookAndFeel.SkinName = 'Office2010Silver'
+      SpeedButtonOptions.GroupIndex = 1
+      SpeedButtonOptions.CanBeFocused = False
+      SpeedButtonOptions.Flat = True
+      TabOrder = 7
+      OnClick = btnDesplanificarSelClick
+    end
+  end
+  object btnRecargar: TcxButton
+    AlignWithMargins = True
+    Left = 1225
+    Top = 117
+    Width = 60
+    Height = 23
+    Margins.Top = 5
+    Margins.Bottom = 5
+    Anchors = [akTop, akRight]
+    Caption = 'Refrescar'
+    LookAndFeel.Kind = lfOffice11
+    LookAndFeel.NativeStyle = False
+    LookAndFeel.SkinName = 'Office2010Silver'
+    SpeedButtonOptions.GroupIndex = 1
+    SpeedButtonOptions.CanBeFocused = False
+    SpeedButtonOptions.Flat = True
+    TabOrder = 6
+    OnClick = btnRecargarClick
+  end
+  object btnSyncErp: TcxButton
+    AlignWithMargins = True
+    Left = 1111
+    Top = 117
+    Width = 107
+    Height = 23
+    Margins.Top = 5
+    Margins.Bottom = 5
+    Anchors = [akTop, akRight]
+    Caption = 'Sincronizar ERP...'
+    LookAndFeel.Kind = lfOffice11
+    LookAndFeel.NativeStyle = False
+    LookAndFeel.SkinName = 'Office2010Silver'
+    SpeedButtonOptions.GroupIndex = 1
+    SpeedButtonOptions.CanBeFocused = False
+    SpeedButtonOptions.Flat = True
+    TabOrder = 7
+    OnClick = btnSyncErpClick
+  end
+  object btnLimpiarSeleccion: TcxButton
+    AlignWithMargins = True
+    Left = 1072
+    Top = 117
+    Width = 29
+    Height = 23
+    Margins.Top = 5
+    Margins.Bottom = 5
+    Anchors = [akTop, akRight]
+    LookAndFeel.Kind = lfOffice11
+    LookAndFeel.NativeStyle = False
+    LookAndFeel.SkinName = 'Office2010Silver'
+    OptionsImage.Glyph.SourceDPI = 96
+    OptionsImage.Glyph.Data = {
+      89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+      610000001F744558745469746C6500496E736572745461626C6543617074696F
+      6E3B5461626C653B819BCC38000001C749444154785EA5524F4BD451143D6F18
+      84FA025104B58870D12750AC08A4F52C82FE8088D1B65A887B5BB86C3F538894
+      7E8668146C682A9082A05D09A5528886818B99C69977AFE7722F3E8870E30F0E
+      F7DC73DEBBEFDEF77E09C0FF8063F3A2E5549B7DBBAA295D870A44A988428D33
+      4A0EAE8C999EE6E00265ECF7BA1F52ED495BA76F0DE36040612038A0D9EF0B7A
+      831C5A769DE89B177C40BC7EFF03551141A797D1FCBC6355210A42A0623C2060
+      2EC10958EE9D548DECFEF98BDDBD8E2D281B25C62072E8A69112CC611148330B
+      5F746EE20ACD30282EB67FE2EEE8390839E05DCDAF7CC7E48D8BE4A5C0E3FA47
+      54C44BBA18468C02780C2F4E8771043882902DBDDB6652DA36FEB2B5891C6D67
+      03B567CD75E79988E25525B93D72C647004CC4626B0BF7C6CE334F845FE2F3E5
+      754C8D5F824AE9F25163CD47504D8811A26D5FE41EA2BB180331963101AA662C
+      B57FF90D93678BC4C2EA86BF4016F754517FF535468A75507FC63B2367CBFBAA
+      E2C59B0D4C5CBB50BAA0D7687EC3839B978F2E11C4C3FA9A5FA2A26C365304E5
+      6781733F118144E623A7FB4F5BADCAD0A9AB2AF1076A39D5627946CF61115EA9
+      BBFFFB93953A4D0C1115221D837F7D25BAC92A9FE43B043810F45DBEFACC9500
+      00000049454E44AE426082}
+    SpeedButtonOptions.GroupIndex = 1
+    SpeedButtonOptions.CanBeFocused = False
+    SpeedButtonOptions.Flat = True
+    TabOrder = 8
+    OnClick = btnLimpiarSeleccionClick
+  end
+  object btnLimpiarFiltrosGrid: TcxButton
+    AlignWithMargins = True
+    Left = 1037
+    Top = 117
+    Width = 29
+    Height = 23
+    Margins.Top = 5
+    Margins.Bottom = 5
+    Anchors = [akTop, akRight]
+    LookAndFeel.Kind = lfOffice11
+    LookAndFeel.NativeStyle = False
+    LookAndFeel.SkinName = 'Office2010Silver'
+    OptionsImage.Glyph.SourceDPI = 96
+    OptionsImage.Glyph.Data = {
+      89504E470D0A1A0A0000000D49484452000000100000001008060000001FF3FF
+      610000001974455874536F6674776172650041646F626520496D616765526561
+      647971C9653C0000002D744558745469746C6500436C6561722046696C746572
+      3B46696C7465723B52656D6F76652046696C7465723B436C65617229F58C0200
+      00007B49444154785EB5D1C109C0200C055077CA0ABD768A82037483ECD6213A
+      455748B508C921FC44A487AF78F80F498A882CE53B9EEB9499FC02F004C01E90
+      45B8A5B88022B80C0145FC320210B22B9E07EC66CA32701F5B6D9116EAA57E8F
+      77CD026242F69D056CC98630A07BF710C23318E5CC0FA244330803B7F002CE38
+      AC29FE0CE78A0000000049454E44AE426082}
+    SpeedButtonOptions.GroupIndex = 1
+    SpeedButtonOptions.CanBeFocused = False
+    SpeedButtonOptions.Flat = True
+    TabOrder = 9
+    OnClick = btnLimpiarFiltrosGridClick
   end
   object PopupMenu1: TPopupMenu
     Left = 528
@@ -933,7 +1079,7 @@ object frmBacklog: TfrmBacklog
       OnClick = RegenerarNodosDemo1Click
     end
     object RegenerarBacklogDemo1: TMenuItem
-      Caption = 'Regenerar Backlog (demo: OF / Comandas / Proyectos)...'
+      Caption = 'Regenerar Backlog (demo: OF / Comandas)...'
       OnClick = RegenerarBacklogDemo1Click
     end
   end
@@ -968,6 +1114,34 @@ object frmBacklog: TfrmBacklog
     object Vaciarylimpiartodalaplanificacin2: TMenuItem
       Caption = 'Vaciar y limpiar toda la planificaci'#243'n'
       OnClick = Vaciarylimpiartodalaplanificacin2Click
+    end
+  end
+  object pmGridRow: TPopupMenu
+    OnPopup = pmGridRowPopup
+    Left = 560
+    Top = 80
+    object miVerFormula: TMenuItem
+      Caption = 'Ver f'#243'rmula del art'#237'culo...'
+      OnClick = miVerFormulaClick
+    end
+    object miVerDocumento: TMenuItem
+      Caption = 'Ver documento de origen...'
+      OnClick = miVerDocumentoClick
+    end
+    object N5: TMenuItem
+      Caption = '-'
+    end
+    object miLimpiarSeleccion: TMenuItem
+      Caption = 'Limpiar selecci'#243'n (incluida la oculta)'
+      OnClick = miLimpiarSeleccionClick
+    end
+    object N6: TMenuItem
+      Caption = '-'
+    end
+    object miCopiarCelda: TMenuItem
+      Caption = 'Copiar celda'
+      ShortCut = 16451
+      OnClick = miCopiarCeldaClick
     end
   end
 end
