@@ -4,11 +4,11 @@ unit uBulkNodePersist;
   Persistencia MASIVA de nodos nuevos (FS_PL_Node + FS_PL_NodeData) para el
   camino de creacion desde el Backlog (CommitScheduling).
 
-  Sustituye el patron clasico M1 (por cada nodo: INSERT Node + SELECT MAX(NodeId)
+  Sustituye el patron clasico M1 (por cada nodo: INSERT Node + SCOPE_IDENTITY()
   + INSERT NodeData = 3 round-trips) por persistencia en lote:
 
     M5 (bmBulkFile)  CSV a disco + BULK INSERT (streaming en el servidor) + volcado
-                     set-based con IDENTITY_INSERT. La mas rapida (~8x sobre M1).
+                     set-based. La mas rapida (~8x sobre M1).
     M4 (bmBulkADO)   #temp via recordsets ADO batch (binario) + volcado set-based.
                      Fallback fiable cuando la cuenta de servicio SQL no puede leer
                      el TEMP (BULK INSERT falla).
@@ -20,10 +20,18 @@ unit uBulkNodePersist;
   el cuello de botella al escribir muchas filas desde ADO NO es la BD sino el
   overhead POR FILA del provider OLE DB; solo BULK INSERT desde fichero lo rompe.
 
-  El motor RESERVA el rango de NodeIds una sola vez (SELECT MAX+1) y los asigna en
-  memoria (NodeId := Base + idx), por eso el volcado necesita IDENTITY_INSERT. Asi
-  se eliminan los N SELECT MAX(NodeId) del camino M1 y se devuelven los NodeId
-  asignados al llamante (los usa AplicarAgrupacion para crear lotes).
+  IDENTIDAD DE LOS NODOS (V086)
+  Los NodeId los genera el IDENTITY de FS_PL_Node; nunca los asignamos nosotros.
+  El camino masivo mete en #tmpNode un RowIdx (indice de la fila dentro del lote,
+  en la columna NodeId de la #temp), inserta SIN IDENTITY_INSERT y recupera con
+  'OUTPUT INSERTED.RowIdx, INSERTED.NodeId' que id le ha tocado a cada fila. Ese
+  mapeo reescribe #tmpData y se devuelve al llamante en ARows[].NodeId (los usa
+  AplicarAgrupacion para crear lotes).
+
+  Antes se reservaba el rango con 'SELECT MAX(NodeId)+1'. NO era atomico: dos
+  usuarios planificando a la vez reservaban el MISMO rango -> clave duplicada o
+  filas mezcladas entre planes. Corrupcion silenciosa, en la ruta comercial
+  central. No reintroducir ese patron.
 
   El paralelo vivo de este patron es uDemoPlanEngine (modo demo). Aqui esta
   recortado a 2 tablas (Node + NodeData); alli ademas escribe asignaciones y
@@ -277,12 +285,14 @@ begin
       Cmd.Free;
     end;
 
+    // SCOPE_IDENTITY() = el IDENTITY generado por ESTA sesion (misma AConn que
+    // el INSERT de arriba). NO usar MAX(NodeId): con dos usuarios planificando
+    // a la vez leia la fila del OTRO y el NodeData se enganchaba al nodo
+    // equivocado. Tampoco @@IDENTITY: cruza ambitos.
     Q := TADOQuery.Create(nil);
     try
       Q.Connection := AConn;
-      Q.SQL.Text :=
-        'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
-        'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+      Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
       Q.Open;
       ARows[I].NodeId := Q.FieldByName('NewId').AsInteger;
       R.NodeId := ARows[I].NodeId;
@@ -323,15 +333,16 @@ begin
 end;
 
 { --------------------------------------------------------------------------
-  Camino BULK (M5 / M4): reservar rango de NodeIds, crear #temp, llenar por el
-  metodo elegido, y volcar set-based con IDENTITY_INSERT.
+  Camino BULK (M5 / M4): crear #temp, llenar por el metodo elegido, volcar
+  set-based dejando que el IDENTITY genere los NodeId, y recuperarlos por
+  OUTPUT via RowIdx (ver cabecera del unit).
   -------------------------------------------------------------------------- }
 procedure PersistBulk(AConn: TADOConnection; ACE, APID: Integer;
   var ARows: TArray<TBulkNodeRow>; AUseFile: Boolean);
 var
   Cmd: TADOCommand;
   Q: TADOQuery;
-  BaseId, I: Integer;
+  I: Integer;
   CE: string;
 
   procedure ExecNoRec(const ASql: string);
@@ -544,24 +555,29 @@ begin
   try
     Cmd.Connection := AConn;
 
-    // 1) Reservar rango de NodeIds (una sola vez). Los asignamos nosotros.
-    Q := TADOQuery.Create(nil);
-    try
-      Q.Connection := AConn;
-      Q.SQL.Text := 'SELECT ISNULL(MAX(NodeId),0) AS M FROM FS_PL_Node WHERE CodigoEmpresa = ' + CE;
-      Q.Open;
-      BaseId := Q.FieldByName('M').AsInteger + 1;
-    finally
-      Q.Free;
-    end;
+    // 1) NO reservamos rango: los NodeId los genera el IDENTITY de FS_PL_Node
+    //    en el propio INSERT (paso 4) y los recuperamos con OUTPUT.
+    //
+    //    Antes esto hacia 'SELECT MAX(NodeId)+1' y asignaba los ids a mano. NO
+    //    era atomico: dos usuarios planificando a la vez reservaban el MISMO
+    //    rango -> clave duplicada o filas mezcladas entre planes (corrupcion
+    //    silenciosa). Se descarto la alternativa de una tabla de secuencia
+    //    porque convivir con el IDENTITY deja DOS fuentes de ids que hay que
+    //    mantener sincronizadas para siempre (y obliga a reseeds).
+    //
+    //    La columna NodeId de #tmpNode pasa a ser RowIdx: el indice de la fila
+    //    dentro de ARows. Es la clave que permite casar cada fila de entrada
+    //    con el NodeId que le ha tocado (el orden del OUTPUT no esta
+    //    garantizado, asi que no se puede casar por posicion).
     for I := 0 to High(ARows) do
-      ARows[I].NodeId := BaseId + I;
+      ARows[I].NodeId := I;
 
     // 2) Crear #temp (misma sesion = esta conexion). Columnas y orden que
     //    espera el volcado set-based. DROP previo: si un intento anterior (p.ej.
     //    M5) fallo a mitad, las #temp sobreviven en la sesion (no en la
     //    transaccion) y el fallback a M4 chocaria con "ya existe".
-    ExecNoRec('DROP TABLE IF EXISTS #tmpNode; DROP TABLE IF EXISTS #tmpData;');
+    ExecNoRec('DROP TABLE IF EXISTS #tmpNode; DROP TABLE IF EXISTS #tmpData; ' +
+              'DROP TABLE IF EXISTS #tmpMap;');
     ExecNoRec(
       'CREATE TABLE #tmpNode (CodigoEmpresa INT, NodeId INT, ProjectId INT, ' +
       '  CenterId INT NULL, FechaInicio DATETIME NULL, FechaFin DATETIME NULL, ' +
@@ -579,14 +595,34 @@ begin
     // 3) Llenar #temp.
     if AUseFile then LlenarBulkFile else LlenarBulkADO;
 
-    // 4) Volcado set-based a las tablas reales. FS_PL_Node necesita IDENTITY_INSERT.
+    // 4) Volcado set-based. SIN IDENTITY_INSERT: el IDENTITY genera los NodeId
+    //    y OUTPUT nos devuelve cual le ha tocado a cada fila.
+    //
+    //    #tmpMap (RowIdx -> NodeId) es la pieza clave. OUTPUT no garantiza el
+    //    orden de las filas devueltas, por eso arrastramos RowIdx (que viaja en
+    //    la columna NodeId de #tmpNode) hasta la tabla de mapeo: casar por
+    //    posicion seria incorrecto.
+    //
+    //    ORDER BY RowIdx en el SELECT de origen no garantiza que el IDENTITY se
+    //    asigne en ese orden, pero SI hace que los ids salgan contiguos en la
+    //    practica; el mapeo es correcto en cualquier caso.
+    ExecNoRec('CREATE TABLE #tmpMap (RowIdx INT PRIMARY KEY, NodeId INT);');
+
+    //    RowIdx viaja como columna REAL de FS_PL_Node (V086) porque OUTPUT solo
+    //    sabe devolver columnas de la tabla destino. Se descarto 'MERGE ON 1=0'
+    //    (que si permite OUTPUT de la origen): MERGE arrastra bugs conocidos
+    //    bajo concurrencia y es justo lo que este arreglo viene a blindar.
     ExecNoRec(
-      'SET IDENTITY_INSERT FS_PL_Node ON; ' +
-      'INSERT INTO FS_PL_Node (CodigoEmpresa, NodeId, ProjectId, CenterId, FechaInicio, ' +
-      '  FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde) ' +
-      'SELECT CodigoEmpresa, NodeId, ProjectId, CenterId, FechaInicio, FechaFin, ' +
-      '  DuracionMin, Caption, ColorFondo, ColorBorde FROM #tmpNode; ' +
-      'SET IDENTITY_INSERT FS_PL_Node OFF;');
+      'INSERT INTO FS_PL_Node (CodigoEmpresa, ProjectId, CenterId, FechaInicio, ' +
+      '  FechaFin, DuracionMin, Caption, ColorFondo, ColorBorde, RowIdx) ' +
+      'OUTPUT INSERTED.RowIdx, INSERTED.NodeId INTO #tmpMap (RowIdx, NodeId) ' +
+      'SELECT CodigoEmpresa, ProjectId, CenterId, FechaInicio, FechaFin, ' +
+      '  DuracionMin, Caption, ColorFondo, ColorBorde, NodeId FROM #tmpNode;');
+
+    // 4b) Reescribir #tmpData.NodeId (que aun lleva RowIdx) con el id real.
+    ExecNoRec(
+      'UPDATE D SET D.NodeId = M.NodeId ' +
+      'FROM #tmpData D INNER JOIN #tmpMap M ON M.RowIdx = D.NodeId;');
 
     ExecNoRec(
       'INSERT INTO FS_PL_NodeData (CodigoEmpresa, NodeId, Operacion, NumeroOF, SerieOF, ' +
@@ -599,8 +635,26 @@ begin
       '  DuracionMin, DuracionMinOriginal, UnidadesAFabricar, TiempoUnidadFabSecs, OperariosNecesarios, ' +
       '  Prioridad, RawItemClaveERP, RawItemTipoOrigen, ColorFondoOp, ColorBordeOp FROM #tmpData;');
 
+    // 4c) Devolver los NodeId reales al llamante (AplicarAgrupacion los usa
+    //     para crear lotes). Hasta aqui ARows[I].NodeId valia I (RowIdx).
+    Q := TADOQuery.Create(nil);
+    try
+      Q.Connection := AConn;
+      Q.SQL.Text := 'SELECT RowIdx, NodeId FROM #tmpMap';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        I := Q.FieldByName('RowIdx').AsInteger;
+        if (I >= 0) and (I <= High(ARows)) then
+          ARows[I].NodeId := Q.FieldByName('NodeId').AsInteger;
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
     // 5) Limpiar #temp (viven en la conexion; la transaccion sigue abierta).
-    ExecNoRec('DROP TABLE #tmpNode; DROP TABLE #tmpData;');
+    ExecNoRec('DROP TABLE #tmpNode; DROP TABLE #tmpData; DROP TABLE #tmpMap;');
   finally
     Cmd.Free;
   end;

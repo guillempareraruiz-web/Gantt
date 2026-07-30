@@ -149,8 +149,9 @@ begin
   Exec('INSERT INTO FS_PL_Area (CodigoEmpresa, Codigo, Nombre) VALUES (' +
     IntToStr(DMPlanner.CodigoEmpresa) + ', ' + QStr(Codigo) + ', ' + QStr(Nombre) + ')');
 
-  Q := OpenQuery('SELECT MAX(AreaId) AS NewId FROM FS_PL_Area WHERE CodigoEmpresa = ' +
-    IntToStr(DMPlanner.CodigoEmpresa));
+  // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma conexion que Exec).
+  // NO usar MAX(): con dos altas simultaneas devuelve la fila del OTRO usuario.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -172,12 +173,19 @@ end;
 procedure TfrmGestionAreas.btnDelClick(Sender: TObject);
 var
   Idx, AreaId: Integer;
+  V: Variant;
 begin
+  // AreaId de la PROPIA celda del grid, no de FIds[Idx]: el indice es el de la
+  // fila VISIBLE (cambia al ordenar por una columna) y FIds va en orden de carga
+  // (ORDER BY Orden, Nombre) -> apuntaba a OTRA area.
   Idx := GetSelectedIdx;
-  if (Idx < 0) or (Idx > High(FIds)) then Exit;
+  if Idx < 0 then Exit;
+  V := tvAreas.DataController.Values[Idx, colAreaId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  AreaId := V;
+  if AreaId <= 0 then Exit;
   if MessageDlg('¿Eliminar esta área?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
 
-  AreaId := FIds[Idx];
   Exec('DELETE FROM FS_PL_Area WHERE CodigoEmpresa = ' +
     IntToStr(DMPlanner.CodigoEmpresa) + ' AND AreaId = ' + IntToStr(AreaId));
   LoadAreas;
@@ -194,8 +202,13 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvAreas.DataController.RecordCount - 1 do
   begin
-    if I > High(FIds) then Continue;
-    AreaId := FIds[I];
+    // AreaId de la PROPIA fila, no de FIds[I]: con el grid ordenado (y "Orden"
+    // es justo una columna que invita a ordenar) se guardaban codigo y nombre
+    // de un area ENCIMA de otra.
+    V := tvAreas.DataController.Values[I, colAreaId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    AreaId := V;
+    if AreaId <= 0 then Continue;
     Codigo := VarToStr(tvAreas.DataController.Values[I, colAreaCodigo.Index]);
     Nombre := VarToStr(tvAreas.DataController.Values[I, colAreaNombre.Index]);
     V := tvAreas.DataController.Values[I, colAreaOrden.Index];

@@ -68,6 +68,7 @@ type
     FColors: TArray<Integer>;
     procedure LoadMarkers;
     function GetSelectedIdx: Integer;
+    function GetSelectedMarkerId: Integer;
     function Exec(const ASQL: string): Integer;
     function OpenQuery(const ASQL: string): TADOQuery;
     function QStr(const S: string): string;
@@ -206,6 +207,24 @@ begin
   Result := tvMarkers.Controller.FocusedRecordIndex;
 end;
 
+// MarkerId de la PROPIA celda del grid, NO de FIds[Idx]: el indice de fila es el
+// de la fila VISIBLE (cambia si el usuario ordena por una columna) mientras que
+// FIds va en orden de carga (ORDER BY FechaHora). Con el grid ordenado por
+// Caption el indice apunta a OTRO marcador: el editor se abria cargando de BD un
+// marcador distinto del que se habia hecho doble clic, y lo guardaba encima.
+function TfrmGestionMarkers.GetSelectedMarkerId: Integer;
+var
+  Idx: Integer;
+  V: Variant;
+begin
+  Result := 0;
+  Idx := tvMarkers.Controller.FocusedRecordIndex;
+  if Idx < 0 then Exit;
+  V := tvMarkers.DataController.Values[Idx, colId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
+end;
+
 procedure TfrmGestionMarkers.btnAddClick(Sender: TObject);
 var
   Caption: string;
@@ -228,8 +247,9 @@ begin
   Exec('INSERT INTO FS_PL_Marker (CodigoEmpresa, ProjectId, FechaHora, Caption) VALUES (' +
     CE + ', ' + PID + ', GETDATE(), ' + QStr(Caption) + ')');
 
-  Q := OpenQuery('SELECT MAX(MarkerId) AS NewId FROM FS_PL_Marker WHERE CodigoEmpresa = ' +
-    CE + ' AND ProjectId = ' + PID);
+  // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma conexion que Exec).
+  // NO usar MAX(): con dos altas simultaneas devuelve la fila del OTRO usuario.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -267,12 +287,12 @@ var
   FontStyleByte: Integer;
 begin
   Idx := GetSelectedIdx;
-  if (Idx < 0) or (Idx > High(FIds)) then
+  MarkerId := GetSelectedMarkerId;
+  if (Idx < 0) or (MarkerId <= 0) then
   begin
     ShowMessage('Selecciona un marcador.');
     Exit;
   end;
-  MarkerId := FIds[Idx];
   CE := IntToStr(DMPlanner.CodigoEmpresa);
 
   // Cargar el marcador COMPLETO desde BD (la grid solo muestra 6 campos; el
@@ -347,10 +367,10 @@ var
   Idx, MarkerId: Integer;
 begin
   Idx := GetSelectedIdx;
-  if (Idx < 0) or (Idx > High(FIds)) then Exit;
+  MarkerId := GetSelectedMarkerId;
+  if (Idx < 0) or (MarkerId <= 0) then Exit;
   if MessageDlg('¿Eliminar este marcador?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
 
-  MarkerId := FIds[Idx];
   Exec('DELETE FROM FS_PL_Marker WHERE CodigoEmpresa = ' +
     IntToStr(DMPlanner.CodigoEmpresa) + ' AND MarkerId = ' + IntToStr(MarkerId));
   LoadMarkers;
@@ -387,8 +407,13 @@ begin
   try
     for I := 0 to tvMarkers.DataController.RecordCount - 1 do
     begin
-      if I > High(FIds) then Continue;
-      MarkerId := FIds[I];
+      // MarkerId de la PROPIA fila, no de FIds[I]: con el grid ordenado se
+      // guardaban los datos de un marcador ENCIMA de otro.
+      Paso := Format('fila %d - MarkerId', [I]);
+      V := tvMarkers.DataController.Values[I, colId.Index];
+      if VarIsNull(V) or VarIsEmpty(V) then Continue;
+      MarkerId := V;
+      if MarkerId <= 0 then Continue;
 
       Paso := Format('fila %d - Caption', [I]);
       Caption := VarToStr(tvMarkers.DataController.Values[I, colCaption.Index]);
@@ -415,6 +440,10 @@ begin
       Exec('UPDATE FS_PL_Marker SET ' +
         'Caption = ' + QStr(Caption) + ', ' +
         'FechaHora = ''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FechaHora) + ''', ' +
+        // DEUDA CONOCIDA: FColors sigue indexado por fila, asi que con el grid
+        // ordenado se guarda el color de otra fila. Se deja porque es cosmetico
+        // y visible al instante (no corrupcion silenciosa como los demas
+        // campos, que ya van por MarkerId). Mismo criterio que uGestionCentres.
         'Color = ' + IntToStr(FColors[I]) + ', ' +
         'Visible = ' + IntToStr(Ord(Visible)) + ', ' +
         'Movible = ' + IntToStr(Ord(Movible)) +

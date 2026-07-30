@@ -256,6 +256,15 @@ var
     end;
 
     // Rango de NodeIds a reservar (los asignamos nosotros -> IDENTITY_INSERT).
+    //
+    // OJO: esta reserva NO es atomica (mismo bug que se arreglo en
+    // uBulkNodePersist con INSERT ... OUTPUT + RowIdx, V086). Aqui se mantiene
+    // A PROPOSITO: los NodeId se incrustan en 4 tablas a la vez (Node, NodeData,
+    // Asignacion, Dependencia) y las dependencias referencian NodeId de OTRAS
+    // operaciones, asi que migrarlo obliga a rehacer el mapeo de dependencias.
+    // Es codigo de modo DEMO: lo lanza un comercial sobre su propia empresa,
+    // nunca concurrentemente con otro usuario, luego el riesgo real es nulo.
+    // Si algun dia la demo deja de ser monousuario, esto hay que migrarlo.
     Q := TADOQuery.Create(nil);
     try
       Q.Connection := Conn;

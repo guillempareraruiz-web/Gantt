@@ -143,8 +143,9 @@ begin
   Exec('INSERT INTO FS_PL_Department (CodigoEmpresa, Nombre) VALUES (' +
     IntToStr(DMPlanner.CodigoEmpresa) + ', ' + QStr(Nombre) + ')');
 
-  Q := OpenQuery('SELECT MAX(DepartmentId) AS NewId FROM FS_PL_Department WHERE CodigoEmpresa = ' +
-    IntToStr(DMPlanner.CodigoEmpresa));
+  // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma conexion que Exec).
+  // NO usar MAX(): con dos altas simultaneas devuelve la fila del OTRO usuario.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -164,12 +165,19 @@ end;
 procedure TfrmGestionDepartamentos.btnDelClick(Sender: TObject);
 var
   Idx, DeptId: Integer;
+  V: Variant;
 begin
+  // DeptId de la PROPIA celda del grid, no de FIds[Idx]: el indice es el de la
+  // fila VISIBLE (cambia al ordenar por una columna) y FIds va en orden de carga
+  // (ORDER BY Nombre) -> apuntaba a OTRO departamento.
   Idx := GetSelectedIdx;
-  if (Idx < 0) or (Idx > High(FIds)) then Exit;
+  if Idx < 0 then Exit;
+  V := tvDepts.DataController.Values[Idx, colDeptId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  DeptId := V;
+  if DeptId <= 0 then Exit;
   if MessageDlg('¿Eliminar este departamento?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
 
-  DeptId := FIds[Idx];
   Exec('DELETE FROM FS_PL_Department WHERE CodigoEmpresa = ' +
     IntToStr(DMPlanner.CodigoEmpresa) + ' AND DepartmentId = ' + IntToStr(DeptId));
   LoadDepts;
@@ -180,12 +188,17 @@ var
   I, DeptId: Integer;
   Nombre, Descripcion: string;
   CE: string;
+  V: Variant;
 begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvDepts.DataController.RecordCount - 1 do
   begin
-    if I > High(FIds) then Continue;
-    DeptId := FIds[I];
+    // DeptId de la PROPIA fila, no de FIds[I]: con el grid ordenado se guardaba
+    // el nombre/descripcion de un departamento ENCIMA de otro.
+    V := tvDepts.DataController.Values[I, colDeptId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    DeptId := V;
+    if DeptId <= 0 then Continue;
     Nombre := VarToStr(tvDepts.DataController.Values[I, colDeptNombre.Index]);
     Descripcion := VarToStr(tvDepts.DataController.Values[I, colDeptDescripcion.Index]);
 

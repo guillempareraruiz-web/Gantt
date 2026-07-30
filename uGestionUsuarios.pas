@@ -244,11 +244,19 @@ end;
 function TfrmGestionUsuarios.GetSelectedUserId: Integer;
 var
   Idx: Integer;
+  V: Variant;
 begin
+  // UserId de la PROPIA celda del grid, NO de FUserIds[Idx]: el indice de fila
+  // es el de la fila VISIBLE (cambia si el usuario ordena por una columna)
+  // mientras que FUserIds va en orden de carga (ORDER BY u.Login). Con el grid
+  // ordenado, el indice apunta a OTRO usuario: btnResetPwd ponia la contrasena
+  // en la cuenta equivocada y la desbloqueaba.
   Result := -1;
   Idx := GetSelectedRecIdx;
-  if (Idx >= 0) and (Idx <= High(FUserIds)) then
-    Result := FUserIds[Idx];
+  if Idx < 0 then Exit;
+  V := tvUsers.DataController.Values[Idx, colUserId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
 end;
 
 // ════════════════════════════════════════════════════════════════════
@@ -282,8 +290,10 @@ begin
     QStr('') + ', ' +
     IntToStr(RoleId) + ')');
 
-  Q := OpenQuery('SELECT MAX(UserId) AS NewId FROM FS_PL_User WHERE CodigoEmpresa = ' +
-    IntToStr(DMPlanner.CodigoEmpresa));
+  // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma conexion que
+  // ExecSQL). NO usar MAX(): con dos altas simultaneas devuelve la fila del
+  // OTRO usuario.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -332,8 +342,13 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvUsers.DataController.RecordCount - 1 do
   begin
-    if I > High(FUserIds) then Continue;
-    UserId := FUserIds[I];
+    // UserId de la PROPIA fila, no de FUserIds[I]: con el grid ordenado por una
+    // columna se guardaban los datos de un usuario ENCIMA de otro, incluido el
+    // RoleId (escalada de privilegios accidental).
+    V := tvUsers.DataController.Values[I, colUserId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    UserId := V;
+    if UserId <= 0 then Continue;
     Login := VarToStr(tvUsers.DataController.Values[I, colUserLogin.Index]);
     Nombre := VarToStr(tvUsers.DataController.Values[I, colUserNombre.Index]);
     Email := VarToStr(tvUsers.DataController.Values[I, colUserEmail.Index]);

@@ -603,13 +603,16 @@ begin
       Cmd.Free;
     end;
 
-    // 2) Recuperar el NodeId creado (MAX dentro del mismo proyecto).
+    // 2) Recuperar el NodeId creado. SCOPE_IDENTITY() devuelve el IDENTITY que
+    //    ha generado ESTA sesion y este ambito, no el ultimo de la tabla.
+    //    NO usar MAX(NodeId): con dos usuarios planificando a la vez leia la
+    //    fila del OTRO usuario y el NodeData se enganchaba al nodo equivocado
+    //    (corrupcion silenciosa, no error). Tampoco @@IDENTITY: cruza ambitos
+    //    y devolveria el id de un trigger.
     Q := TADOQuery.Create(nil);
     try
       Q.Connection := ADOConnection;
-      Q.SQL.Text :=
-        'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
-        'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+      Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
       Q.Open;
       Result := Q.FieldByName('NewId').AsInteger;
     finally
@@ -707,13 +710,14 @@ begin
         '''' + FormatDateTime('yyyy-mm-dd hh:nn:ss', FFin) + ''')';
       Cmd.Execute;
 
-      // Recuperar el LoteId recien creado.
+      // Recuperar el LoteId recien creado. SCOPE_IDENTITY(): el id generado por
+      // ESTA sesion (misma ADOConnection que el INSERT). NO usar MAX(): con dos
+      // usuarios creando lotes a la vez devolvia el LoteId del OTRO, y el
+      // UPDATE de aqui abajo enganchaba estos nodos a un lote ajeno.
       Q := TADOQuery.Create(nil);
       try
         Q.Connection := ADOConnection;
-        Q.SQL.Text :=
-          'SELECT MAX(LoteId) AS NewId FROM FS_PL_Lote ' +
-          'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+        Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
         Q.Open;
         Result := Q.FieldByName('NewId').AsInteger;
       finally

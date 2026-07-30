@@ -146,6 +146,11 @@ object frmGestionRoles: TfrmGestionRoles
           OptionsData.Inserting = False
           OptionsView.GroupByBox = False
           OptionsView.Indicator = True
+          object colRoleId: TcxGridColumn
+            Caption = 'RoleId'
+            Visible = False
+            Options.Editing = False
+          end
           object colRoleCodigo: TcxGridColumn
             Caption = 'C'#243'digo'
             Width = 120
@@ -211,6 +216,11 @@ object frmGestionRoles: TfrmGestionRoles
             OptionsView.GroupByBox = False
             OptionsView.Indicator = True
             OnFocusedRecordChanged = tvPermRolesFocusedRecordChanged
+            object colPermRolId: TcxGridColumn
+              Caption = 'RoleId'
+              Visible = False
+              Options.Editing = False
+            end
             object colPermRolNombre: TcxGridColumn
               Caption = 'Rol'
               Width = 230
@@ -263,6 +273,11 @@ object frmGestionRoles: TfrmGestionRoles
             OptionsData.Inserting = False
             OptionsView.GroupByBox = False
             OptionsView.Indicator = True
+            object colPermId: TcxGridColumn
+              Caption = 'PermissionId'
+              Visible = False
+              Options.Editing = False
+            end
             object colPermModulo: TcxGridColumn
               Caption = 'M'#243'dulo'
               Width = 120

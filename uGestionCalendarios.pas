@@ -1277,8 +1277,11 @@ begin
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := DMPlanner.ADOConnection;
-    Q.SQL.Text := 'SELECT MAX(CalendarId) AS NewId FROM FS_PL_Calendar ' +
-      'WHERE CodigoEmpresa = ' + CE;
+    // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma conexion que el
+    // INSERT de arriba, que inserta 1 sola fila). NO usar MAX(): con dos
+    // usuarios clonando calendarios a la vez devuelve el id del OTRO y los
+    // pasos 3-4 clonarian las reglas dentro del calendario equivocado.
+    Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
     Q.Open;
     if not Q.Eof then NewCalId := Q.FieldByName('NewId').AsInteger;
   finally

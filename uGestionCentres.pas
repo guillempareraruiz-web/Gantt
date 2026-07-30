@@ -88,6 +88,12 @@ type
         WidthDefault: Integer;
       end;
   private
+    // OJO: estos arrays van en ORDEN DE CARGA, mientras que el indice de fila
+    // del grid (FocusedRecordIndex) cambia si el usuario ordena por una
+    // columna. NO indexarlos por indice de fila para identificar un centro:
+    // usar GetSelectedCenterId (lee el CenterId de la propia celda del grid).
+    // FColors sigue haciendolo (deuda conocida): el peor caso es un color
+    // aplicado a la fila equivocada, cosmetico y visible al instante.
     FCenterIds: TArray<Integer>;
     FColors: TArray<Integer>;
     FAreaIds: TArray<Integer>;
@@ -104,6 +110,7 @@ type
     procedure LoadCentros;
     procedure SetupCombos;
     function GetSelectedIdx: Integer;
+    function GetSelectedCenterId: Integer;
     function AreaIdFromName(const AName: string): Integer;
     function AreaNameFromId(AAreaId: Integer): string;
     function CalendarIdFromName(const AName: string): Integer;
@@ -391,6 +398,26 @@ function TfrmGestionCentres.GetSelectedIdx: Integer;
 begin
   Result := tvCentros.Controller.FocusedRecordIndex;
 end;
+
+// CenterId de la fila enfocada, leido de la PROPIA celda del grid.
+//
+// NO usar FCenterIds[FocusedRecordIndex]: FocusedRecordIndex es el indice de la
+// fila VISIBLE (cambia si el usuario ordena por una columna) mientras que
+// FCenterIds va en orden de carga. En cuanto se reordena el grid, el indice
+// apunta a OTRO centro: el DELETE lo paraba la FK, pero el UPDATE de btnSave
+// llegaba a guardar los datos de un centro encima de otro.
+function TfrmGestionCentres.GetSelectedCenterId: Integer;
+var
+  Idx: Integer;
+  V: Variant;
+begin
+  Result := 0;
+  Idx := tvCentros.Controller.FocusedRecordIndex;
+  if Idx < 0 then Exit;
+  V := tvCentros.DataController.Values[Idx, colCentroId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
+end;
 procedure TfrmGestionCentres.btnAddClick(Sender: TObject);
 var
   Codigo, Titulo: string;
@@ -403,8 +430,10 @@ begin
   if Titulo = '' then Exit;
   Exec('INSERT INTO FS_PL_Center (CodigoEmpresa, CodigoCentro, Titulo) VALUES (' +
     IntToStr(DMPlanner.CodigoEmpresa) + ', ' + QStr(Codigo) + ', ' + QStr(Titulo) + ')');
-  Q := OpenQuery('SELECT MAX(CenterId) AS NewId FROM FS_PL_Center WHERE CodigoEmpresa = ' +
-    IntToStr(DMPlanner.CodigoEmpresa));
+  // SCOPE_IDENTITY(): el id que ha generado ESTA sesion (Exec y OpenQuery usan
+  // la misma DMPlanner.ADOConnection). NO usar MAX(): con dos usuarios dando de
+  // alta a la vez devuelve la fila del OTRO.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -437,15 +466,14 @@ begin
 end;
 procedure TfrmGestionCentres.btnDelClick(Sender: TObject);
 var
-  Idx, CenterId: Integer;
+  CenterId: Integer;
   CE: string;
 begin
-  Idx := GetSelectedIdx;
-  if (Idx < 0) or (Idx > High(FCenterIds)) then Exit;
+  CenterId := GetSelectedCenterId;
+  if CenterId <= 0 then Exit;
   if MessageDlg('¿Eliminar este centro?' + sLineBreak +
     'Se eliminará también su asignación de calendario.',
     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-  CenterId := FCenterIds[Idx];
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   Exec('DELETE FROM FS_PL_CenterCalendar WHERE CodigoEmpresa = ' + CE +
     ' AND CenterId = ' + IntToStr(CenterId));
@@ -490,8 +518,12 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvCentros.DataController.RecordCount - 1 do
   begin
-    if I > High(FCenterIds) then Continue;
-    CenterId := FCenterIds[I];
+    // CenterId de la PROPIA fila, no de FCenterIds[I]: si el usuario ha
+    // ordenado el grid por una columna, el indice de fila ya no coincide con el
+    // orden de carga del array y se guardarian los datos de un centro ENCIMA de
+    // otro (silenciosamente).
+    CenterId := AsInt(tvCentros.DataController.Values[I, colCentroId.Index]);
+    if CenterId <= 0 then Continue;
     Codigo := VarToStr(tvCentros.DataController.Values[I, colCentroCodigo.Index]);
     Titulo := VarToStr(tvCentros.DataController.Values[I, colCentroTitulo.Index]);
     Subtitulo := VarToStr(tvCentros.DataController.Values[I, colCentroSubtitulo.Index]);
@@ -828,8 +860,9 @@ begin
   if not Found then Exit;
 
   RecIdx := Sender.Controller.FocusedRecordIndex;
-  if (RecIdx < 0) or (RecIdx > High(FCenterIds)) then Exit;
-  CenterId := FCenterIds[RecIdx];
+  if RecIdx < 0 then Exit;
+  // De la PROPIA fila, no de FCenterIds[RecIdx] (ver GetSelectedCenterId).
+  CenterId := GetSelectedCenterId;
   if CenterId <= 0 then Exit;
 
   // Capturar valor del editor en vivo
@@ -865,12 +898,13 @@ var
   Caption: string;
 begin
   Idx := GetSelectedIdx;
-  if (Idx < 0) or (Idx > High(FCenterIds)) then
+  // De la PROPIA fila, no de FCenterIds[Idx] (ver GetSelectedCenterId).
+  CenterId := GetSelectedCenterId;
+  if (Idx < 0) or (CenterId <= 0) then
   begin
     ShowMessage('Selecciona primero un centro.');
     Exit;
   end;
-  CenterId := FCenterIds[Idx];
   Caption := VarToStr(tvCentros.DataController.Values[Idx, colCentroCodigo.Index]) +
              ' - ' + VarToStr(tvCentros.DataController.Values[Idx, colCentroTitulo.Index]);
   TfrmAsignarMaquinasCentro.Execute(CenterId, Caption);

@@ -97,6 +97,7 @@ type
     // Precarga en bloque (1 consulta cada una) para evitar N+1 al abrir el form.
     function LoadAllDeptsCSV: TDictionary<Integer, string>;
     function LoadAllSkillsCount: TDictionary<Integer, Integer>;
+    function OperatorIdOfRow(ARecIdx: Integer): Integer;
     procedure RefreshDeptsCell(ARecIdx: Integer);
     procedure RefreshSkillsCell(ARecIdx: Integer);
     function Exec(const ASQL: string): Integer;
@@ -677,14 +678,23 @@ function TfrmGestionOperaris.GetSelectedIdx: Integer;
 begin
   Result := tvOperaris.Controller.FocusedRecordIndex;
 end;
+// OperatorId de la PROPIA celda del grid, NO de FOperatorIds[Idx]: el indice de
+// fila es el de la fila VISIBLE (cambia si el usuario ordena por una columna)
+// mientras que FOperatorIds va en orden de carga (ORDER BY o.Nombre). Con el
+// grid ordenado el indice apunta a OTRO operario: los dialogos de departamentos
+// y polivalencia escribian sobre el operario equivocado (y mostraban el nombre
+// correcto con el id de otro).
 function TfrmGestionOperaris.SelectedOperatorId: Integer;
 var
   Idx: Integer;
+  V: Variant;
 begin
   Result := -1;
   Idx := GetSelectedIdx;
-  if (Idx >= 0) and (Idx <= High(FOperatorIds)) then
-    Result := FOperatorIds[Idx];
+  if Idx < 0 then Exit;
+  V := tvOperaris.DataController.Values[Idx, colOpId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
 end;
 function TfrmGestionOperaris.SelectedOperatorName: string;
 var
@@ -695,17 +705,35 @@ begin
   if Idx >= 0 then
     Result := VarToStr(tvOperaris.DataController.Values[Idx, colOpNombre.Index]);
 end;
-procedure TfrmGestionOperaris.RefreshDeptsCell(ARecIdx: Integer);
+// Id de la PROPIA fila (ver SelectedOperatorId): si no, con el grid ordenado la
+// celda mostraba los departamentos / capacitaciones de OTRO operario.
+function TfrmGestionOperaris.OperatorIdOfRow(ARecIdx: Integer): Integer;
+var
+  V: Variant;
 begin
-  if (ARecIdx < 0) or (ARecIdx > High(FOperatorIds)) then Exit;
+  Result := 0;
+  if ARecIdx < 0 then Exit;
+  V := tvOperaris.DataController.Values[ARecIdx, colOpId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
+end;
+procedure TfrmGestionOperaris.RefreshDeptsCell(ARecIdx: Integer);
+var
+  OpId: Integer;
+begin
+  OpId := OperatorIdOfRow(ARecIdx);
+  if OpId <= 0 then Exit;
   tvOperaris.DataController.Values[ARecIdx, colOpDepartamentos.Index] :=
-    GetDeptsCSV(FOperatorIds[ARecIdx]);
+    GetDeptsCSV(OpId);
 end;
 procedure TfrmGestionOperaris.RefreshSkillsCell(ARecIdx: Integer);
+var
+  OpId: Integer;
 begin
-  if (ARecIdx < 0) or (ARecIdx > High(FOperatorIds)) then Exit;
+  OpId := OperatorIdOfRow(ARecIdx);
+  if OpId <= 0 then Exit;
   tvOperaris.DataController.Values[ARecIdx, colOpCapacitaciones.Index] :=
-    GetSkillsCount(FOperatorIds[ARecIdx]);
+    GetSkillsCount(OpId);
 end;
 procedure TfrmGestionOperaris.btnAddClick(Sender: TObject);
 var
@@ -717,8 +745,9 @@ begin
   if Nombre = '' then Exit;
   Exec('INSERT INTO FS_PL_Operator (CodigoEmpresa, Nombre, Activo) VALUES (' +
     IntToStr(DMPlanner.CodigoEmpresa) + ', ' + QStr(Nombre) + ', 1)');
-  Q := OpenQuery('SELECT MAX(OperatorId) AS NewId FROM FS_PL_Operator WHERE CodigoEmpresa = ' +
-    IntToStr(DMPlanner.CodigoEmpresa));
+  // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma conexion que Exec).
+  // NO usar MAX(): con dos altas simultaneas devuelve la fila del OTRO usuario.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -771,8 +800,13 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvOperaris.DataController.RecordCount - 1 do
   begin
-    if I > High(FOperatorIds) then Continue;
-    OpId := FOperatorIds[I];
+    // OpId de la PROPIA fila, no de FOperatorIds[I]: con el grid ordenado se
+    // guardaban los datos de un operario ENCIMA de otro, incluidos todos los
+    // campos custom (SaveCustomFieldsForRow mas abajo).
+    V := tvOperaris.DataController.Values[I, colOpId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    OpId := V;
+    if OpId <= 0 then Continue;
     Nombre := VarToStr(tvOperaris.DataController.Values[I, colOpNombre.Index]);
     CalName := VarToStr(tvOperaris.DataController.Values[I, colOpCalendario.Index]);
     V := tvOperaris.DataController.Values[I, colOpActivo.Index];

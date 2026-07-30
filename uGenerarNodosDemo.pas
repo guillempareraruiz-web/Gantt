@@ -444,8 +444,10 @@ begin
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := AConn;
-    Q.SQL.Text := 'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
-      'WHERE CodigoEmpresa = ' + ACE + ' AND ProjectId = ' + APID;
+    // SCOPE_IDENTITY(): el IDENTITY de ESTA sesion (misma AConn que el INSERT).
+    // NO usar MAX(NodeId): leeria la fila de otro usuario concurrente y el
+    // NodeData se enganchaba al nodo equivocado.
+    Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
     Q.Open;
     NodeId := Q.FieldByName('NewId').AsInteger;
   finally

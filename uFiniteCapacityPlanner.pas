@@ -5775,17 +5775,20 @@ begin
           Cmd.Free;
         end;
 
+        // SCOPE_IDENTITY() = el IDENTITY generado por ESTA sesion (misma
+        // conexion que el INSERT). NO usar MAX(NodeId): con dos usuarios
+        // planificando a la vez leia la fila del OTRO y el NodeData se
+        // enganchaba al nodo equivocado.
         Q := TADOQuery.Create(nil);
         try
           Q.Connection := DMPlanner.ADOConnection;
-          Q.SQL.Text :=
-            'SELECT MAX(NodeId) AS NewId FROM FS_PL_Node ' +
-            'WHERE CodigoEmpresa = ' + CE + ' AND ProjectId = ' + PID;
+          Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
           Q.Open;
           NodeId := Q.FieldByName('NewId').AsInteger;
         finally
           Q.Free;
         end;
+
 
         if D.UnidadesAFabricar > 0 then
           UdsStr := FloatToStr(D.UnidadesAFabricar, TFormatSettings.Invariant)

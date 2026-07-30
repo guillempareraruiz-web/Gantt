@@ -205,24 +205,38 @@ begin
     Result := tvProyectos.Controller.FocusedRecord.RecordIndex;
 end;
 
+// ProjectId de la PROPIA celda del grid, NO de FProjectIds[Idx]: el indice de
+// fila es el de la fila VISIBLE (cambia si el usuario ordena por una columna)
+// mientras que FProjectIds va en orden de carga (ORDER BY EsMaster DESC,
+// FechaCreacion DESC). Con el grid ordenado el indice apunta a OTRO proyecto, y
+// btnEliminar borra a mano Dependency/OperatorAssignment/NodeData/Node antes del
+// proyecto: NINGUNA FK lo para, se cargaba el plan entero del proyecto erroneo.
 function TfrmGestionProyectos.GetSelectedProjectId: Integer;
 var
   Idx: Integer;
+  V: Variant;
 begin
   Result := -1;
   Idx := GetSelectedIdx;
-  if (Idx >= 0) and (Idx <= High(FProjectIds)) then
-    Result := FProjectIds[Idx];
+  if Idx < 0 then Exit;
+  V := tvProyectos.DataController.Values[Idx, colProjId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
 end;
 
+// Igual que arriba: se deriva de la columna Tipo de la PROPIA fila y no de
+// FIsMaster[Idx]. Si no, la guarda que impide borrar/degradar el MASTER queda
+// desincronizada por el MISMO indice que el id -> podia dejar pasar el borrado
+// del MASTER, o bloquear el de un escenario cualquiera.
 function TfrmGestionProyectos.IsSelectedMaster: Boolean;
 var
   Idx: Integer;
 begin
   Result := False;
   Idx := GetSelectedIdx;
-  if (Idx >= 0) and (Idx <= High(FIsMaster)) then
-    Result := FIsMaster[Idx];
+  if Idx < 0 then Exit;
+  Result := SameText(
+    VarToStr(tvProyectos.DataController.Values[Idx, colProjTipo.Index]), 'MASTER');
 end;
 
 procedure TfrmGestionProyectos.ClonarProyecto(ASourceId, ANewId: Integer);
@@ -320,8 +334,10 @@ begin
       Exec('INSERT INTO FS_PL_Project (CodigoEmpresa, Codigo, Nombre, EsEscenario, BasedOnProjectId, Activo) VALUES (' +
         CE + ', ' + QStr(Codigo) + ', ' + QStr(Nombre) + ', 1, ' + IntToStr(SourceId) + ', 1)');
 
-      // Obtener ID del nuevo proyecto
-      Q := OpenQuery('SELECT MAX(ProjectId) AS NewId FROM FS_PL_Project WHERE CodigoEmpresa = ' + CE);
+      // Obtener ID del nuevo proyecto. SCOPE_IDENTITY(): el id generado por
+      // ESTA sesion (misma conexion que Exec). NO usar MAX(): con dos altas
+      // simultaneas devuelve la fila del OTRO usuario.
+      Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
       try
         NewId := Q.FieldByName('NewId').AsInteger;
       finally
@@ -484,8 +500,13 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvProyectos.DataController.RecordCount - 1 do
   begin
-    if I > High(FProjectIds) then Continue;
-    ProjId := FProjectIds[I];
+    // ProjId de la PROPIA fila, no de FProjectIds[I]: con el grid ordenado se
+    // guardaban los datos de un proyecto ENCIMA de otro, incluidos RowMode y
+    // NivelAgrupacion (cambian como se dibuja todo su Gantt).
+    V := tvProyectos.DataController.Values[I, colProjId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    ProjId := V;
+    if ProjId <= 0 then Continue;
     Codigo := SafeStr(tvProyectos.DataController.Values[I, colProjCodigo.Index]);
     Nombre := SafeStr(tvProyectos.DataController.Values[I, colProjNombre.Index]);
     Descripcion := SafeStr(tvProyectos.DataController.Values[I, colProjDescripcion.Index]);

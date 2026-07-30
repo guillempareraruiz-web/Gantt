@@ -340,11 +340,10 @@ begin
   Q := TADOQuery.Create(nil);
   try
     Q.Connection := FConnection;
-    Q.SQL.Text :=
-      'SELECT MAX(SetId) AS NewId FROM FS_PL_CardLayoutSet ' +
-      'WHERE CodigoEmpresa = :Emp AND UserId = :Uid';
-    Q.Parameters.ParamByName('Emp').Value := FCodigoEmpresa;
-    Q.Parameters.ParamByName('Uid').Value := TargetUid;
+    // SCOPE_IDENTITY(): el id generado por ESTA sesion (misma FConnection que
+    // el INSERT). NO usar MAX(): con dos altas simultaneas devuelve la fila del
+    // OTRO usuario.
+    Q.SQL.Text := 'SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId';
     Q.Open;
     if not Q.Eof then Result := Q.FieldByName('NewId').AsInteger;
   finally

@@ -33,6 +33,7 @@ type
     btnRoleSave: TButton;
     gridRoles: TcxGrid;
     tvRoles: TcxGridTableView;
+    colRoleId: TcxGridColumn;
     colRoleCodigo: TcxGridColumn;
     colRoleNombre: TcxGridColumn;
     colRoleDescripcion: TcxGridColumn;
@@ -45,6 +46,7 @@ type
     lblPermRol: TLabel;
     gridPermRoles: TcxGrid;
     tvPermRoles: TcxGridTableView;
+    colPermRolId: TcxGridColumn;
     colPermRolNombre: TcxGridColumn;
     lvPermRoles: TcxGridLevel;
     pnlPermRight: TPanel;
@@ -52,6 +54,7 @@ type
     btnPermSave: TButton;
     gridPermisos: TcxGrid;
     tvPermisos: TcxGridTableView;
+    colPermId: TcxGridColumn;
     colPermModulo: TcxGridColumn;
     colPermCodigo: TcxGridColumn;
     colPermNombre: TcxGridColumn;
@@ -157,6 +160,7 @@ begin
       while not Q.Eof do
       begin
         tvRoles.DataController.RecordCount := I + 1;
+        tvRoles.DataController.Values[I, colRoleId.Index] := Q.FieldByName('RoleId').AsInteger;
         tvRoles.DataController.Values[I, colRoleCodigo.Index] := Q.FieldByName('Codigo').AsString;
         tvRoles.DataController.Values[I, colRoleNombre.Index] := Q.FieldByName('Nombre').AsString;
         tvRoles.DataController.Values[I, colRoleDescripcion.Index] := Q.FieldByName('Descripcion').AsString;
@@ -173,15 +177,22 @@ begin
   end;
 end;
 
+// RoleId de la PROPIA celda del grid (colRoleId, columna oculta), NO de
+// FRoleIds[Idx]: el indice es el de la fila VISIBLE (cambia si el usuario
+// ordena por una columna) mientras que FRoleIds va en orden de carga
+// (ORDER BY RoleId) -> apuntaba a OTRO rol.
 function TfrmGestionRoles.GetSelectedRoleId: Integer;
 var
   Idx: Integer;
+  V: Variant;
 begin
   Result := -1;
   if tvRoles.Controller.FocusedRecord = nil then Exit;
   Idx := tvRoles.Controller.FocusedRecord.RecordIndex;
-  if (Idx >= 0) and (Idx <= High(FRoleIds)) then
-    Result := FRoleIds[Idx];
+  if Idx < 0 then Exit;
+  V := tvRoles.DataController.Values[Idx, colRoleId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  Result := V;
 end;
 
 procedure TfrmGestionRoles.btnRoleAddClick(Sender: TObject);
@@ -197,9 +208,10 @@ begin
     IntToStr(DMPlanner.CodigoEmpresa) + ', ' +
     QStr(Codigo) + ', ' + QStr(Codigo) + ', ' + QStr('') + ')');
 
-  // Obtenir el nou ID
-  Q := OpenQuery('SELECT MAX(RoleId) AS NewId FROM FS_PL_Role WHERE CodigoEmpresa = ' +
-    IntToStr(DMPlanner.CodigoEmpresa));
+  // Obtenir el nou ID. SCOPE_IDENTITY(): el id generado por ESTA sesion (misma
+  // conexion que ExecSQL). NO usar MAX(): con dos altas simultaneas devuelve la
+  // fila del OTRO usuario.
+  Q := OpenQuery('SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewId');
   try
     NewId := Q.FieldByName('NewId').AsInteger;
   finally
@@ -250,8 +262,12 @@ begin
   CE := IntToStr(DMPlanner.CodigoEmpresa);
   for I := 0 to tvRoles.DataController.RecordCount - 1 do
   begin
-    if I > High(FRoleIds) then Continue;
-    RoleId := FRoleIds[I];
+    // RoleId de la PROPIA fila, no de FRoleIds[I]: con el grid ordenado se
+    // guardaban codigo/nombre/descripcion de un rol ENCIMA de otro.
+    V := tvRoles.DataController.Values[I, colRoleId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    RoleId := V;
+    if RoleId <= 0 then Continue;
     Codigo := VarToStr(tvRoles.DataController.Values[I, colRoleCodigo.Index]);
     Nombre := VarToStr(tvRoles.DataController.Values[I, colRoleNombre.Index]);
     Desc := VarToStr(tvRoles.DataController.Values[I, colRoleDescripcion.Index]);
@@ -292,6 +308,7 @@ begin
       while not Q.Eof do
       begin
         tvPermRoles.DataController.RecordCount := I + 1;
+        tvPermRoles.DataController.Values[I, colPermRolId.Index] := Q.FieldByName('RoleId').AsInteger;
         tvPermRoles.DataController.Values[I, colPermRolNombre.Index] := Q.FieldByName('Nombre').AsString;
         Inc(I);
         Q.Next;
@@ -310,25 +327,23 @@ procedure TfrmGestionRoles.tvPermRolesFocusedRecordChanged(
   ANewItemRecordFocusingChanged: Boolean);
 var
   Idx, RoleId: Integer;
-  Q: TADOQuery;
+  V: Variant;
 begin
   if AFocusedRecord = nil then Exit;
   Idx := AFocusedRecord.RecordIndex;
-  // Buscar RoleId
-  Q := OpenQuery(
-    'SELECT RoleId FROM FS_PL_Role ' +
-    'WHERE CodigoEmpresa = ' + IntToStr(DMPlanner.CodigoEmpresa) +
-    ' ORDER BY RoleId OFFSET ' + IntToStr(Idx) + ' ROWS FETCH NEXT 1 ROWS ONLY');
-  try
-    if not Q.Eof then
-    begin
-      RoleId := Q.FieldByName('RoleId').AsInteger;
-      FSelectedRoleId := RoleId;
-      LoadPermisosForRole(RoleId);
-    end;
-  finally
-    Q.Free;
-  end;
+  if Idx < 0 then Exit;
+
+  // RoleId de la PROPIA celda (colPermRolId, oculta). Antes esto mapeaba el
+  // indice de la fila VISIBLE a un OFFSET de SQL en orden RoleId: al ordenar el
+  // grid por Nombre seleccionabas el rol A y editabas los permisos del rol B,
+  // que luego btnPermSave escribia (borrando antes TODOS los del rol B).
+  V := tvPermRoles.DataController.Values[Idx, colPermRolId.Index];
+  if VarIsNull(V) or VarIsEmpty(V) then Exit;
+  RoleId := V;
+  if RoleId <= 0 then Exit;
+
+  FSelectedRoleId := RoleId;
+  LoadPermisosForRole(RoleId);
 end;
 
 procedure TfrmGestionRoles.LoadPermisosForRole(ARoleId: Integer);
@@ -353,6 +368,7 @@ begin
       while not Q.Eof do
       begin
         tvPermisos.DataController.RecordCount := I + 1;
+        tvPermisos.DataController.Values[I, colPermId.Index] := Q.FieldByName('PermissionId').AsInteger;
         tvPermisos.DataController.Values[I, colPermModulo.Index] := Q.FieldByName('Modulo').AsString;
         tvPermisos.DataController.Values[I, colPermCodigo.Index] := Q.FieldByName('Codigo').AsString;
         tvPermisos.DataController.Values[I, colPermNombre.Index] := Q.FieldByName('Nombre').AsString;
@@ -371,7 +387,7 @@ end;
 
 procedure TfrmGestionRoles.btnPermSaveClick(Sender: TObject);
 var
-  I: Integer;
+  I, PermId: Integer;
   Checked: Boolean;
   CE: string;
   V: Variant;
@@ -383,14 +399,23 @@ begin
   ExecSQL('DELETE FROM FS_PL_RolePermission WHERE CodigoEmpresa = ' + CE +
     ' AND RoleId = ' + IntToStr(FSelectedRoleId));
 
-  // Insertar las marcadas
+  // Insertar las marcadas. El PermissionId sale de la PROPIA fila (colPermId,
+  // oculta) y NO de FPermIds[I]: tvPermisos se puede ordenar por Modulo/Codigo/
+  // Nombre, y con el grid ordenado se concedian y revocaban permisos
+  // EQUIVOCADOS (agravado por el DELETE de todos los del rol que hay arriba).
   for I := 0 to tvPermisos.DataController.RecordCount - 1 do
   begin
     V := tvPermisos.DataController.Values[I, colPermAsignado.Index];
     Checked := (not VarIsNull(V)) and (not VarIsEmpty(V)) and Boolean(V);
-    if Checked then
-      ExecSQL('INSERT INTO FS_PL_RolePermission (CodigoEmpresa, RoleId, PermissionId) VALUES (' +
-        CE + ', ' + IntToStr(FSelectedRoleId) + ', ' + IntToStr(FPermIds[I]) + ')');
+    if not Checked then Continue;
+
+    V := tvPermisos.DataController.Values[I, colPermId.Index];
+    if VarIsNull(V) or VarIsEmpty(V) then Continue;
+    PermId := V;
+    if PermId <= 0 then Continue;
+
+    ExecSQL('INSERT INTO FS_PL_RolePermission (CodigoEmpresa, RoleId, PermissionId) VALUES (' +
+      CE + ', ' + IntToStr(FSelectedRoleId) + ', ' + IntToStr(PermId) + ')');
   end;
 
   ShowMessage('Permisos guardados correctamente.');
